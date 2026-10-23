@@ -43,15 +43,15 @@ struct AgentSessionView: View {
             .help("Back to Agents")
             .accessibilityLabel("Back to Agents")
 
-            AgentAvatar(size: 40)
+            AgentAvatar(size: 40, appearance: RoleAppearance(role: model.role(for: agent, in: project)))
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 10) {
                     Text(agent.name).font(.system(size: 17, weight: .bold)).lineLimit(1)
-                    StatusLabel(status: agent.status).fixedSize()
+                    StatusLabel(status: agent.status, isQueued: session.isQueued).fixedSize()
                 }
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
-                        Text("Claude Code · \(session.transcript.session?.model ?? agent.model)")
+                        Text("\(model.role(for: agent, in: project)?.name ?? "Claude Code") · \(session.transcript.session?.model ?? agent.model.modelTitle)")
                         Text(agent.tokensAndCost).font(.system(size: 12, design: .monospaced))
                         Text("started \(Text(agent.createdAt, style: .relative)) ago")
                     }
@@ -82,7 +82,7 @@ struct AgentSessionView: View {
             .fixedSize()
             .accessibilityLabel("Take Over")
             .help("Pauses the agent and hands its worktree to you")
-            .disabled(agent.status == .takenOver || session.isStopping)
+            .disabled(agent.readOnly || agent.status == .takenOver || session.isStopping)
         }
     }
 }

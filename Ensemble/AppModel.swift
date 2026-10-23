@@ -53,6 +53,7 @@ final class AppModel {
     private(set) var openProjects: [Project] = []
     private(set) var recentProjects: [Project] = []
     private(set) var projectStates: [Int64: ProjectState] = [:]
+    private(set) var configs: [Int64: ProjectConfig] = [:]
     var selectedAgents: [Int64: Int64] = [:]
     var isNewAgentPresented = false
 
@@ -150,16 +151,79 @@ final class AppModel {
         if session != nil { setTab(.agents, for: project) }
     }
 
-    func nextAgentName(in project: Project) -> String {
-        let taken = Set(agentSessions(in: project).map { Slug.make($0.agent.name) })
-        return (1...).lazy.map { "Claude Code \($0)" }.first { !taken.contains(Slug.make($0)) }!
+    func config(for project: Project) -> ProjectConfig {
+        guard let id = project.id else { return ProjectConfig() }
+        if let config = configs[id] { return config }
+        return ProjectConfigLoader.load(repository: project.url)
     }
 
-    func spawnAgent(in project: Project, name: String, model: AgentModel, task: String) async throws {
+    func hasConfig(_ project: Project) -> Bool {
+        _ = configs[project.id ?? -1]
+        return ProjectConfigLoader.hasConfig(repository: project.url)
+    }
+
+    func reloadConfig(for project: Project) {
+        guard let id = project.id else { return }
+        configs[id] = ProjectConfigLoader.load(repository: project.url)
+    }
+
+    func reloadAllConfigs() {
+        for project in openProjects {
+            reloadConfig(for: project)
+        }
+    }
+
+    func installDefaultConfig(in project: Project) {
+        perform("Couldn’t add the default roles and workflows") {
+            try ProjectConfigLoader.installDefaults(repository: project.url)
+        }
+        reloadConfig(for: project)
+    }
+
+    func role(for agent: Agent, in project: Project) -> RoleDefinition? {
+        config(for: project).role(agent.role)
+    }
+
+    func agentNames(for base: String, count: Int, in project: Project) -> [String] {
+        guard let id = project.id else { return [] }
+        _ = agents.usageRevision
+        return (try? agents.agentNames(for: base, count: count, inProject: id)) ?? []
+    }
+
+    func spawnAgents(in project: Project, role: RoleDefinition, count: Int, name: String, pinned: Bool, task: String) async throws {
         guard let git = requireGit() else { return }
-        let session = try await agents.spawn(in: project, name: name, model: model, task: task, git: git)
-        select(session, in: project)
+        let sessions = try await agents.spawn(
+            in: project,
+            role: role,
+            count: count,
+            config: config(for: project),
+            git: git,
+            pinned: pinned,
+            name: name,
+            task: task
+        )
+        if sessions.count == 1 {
+            select(sessions.first, in: project)
+        }
         await refresh(project)
+    }
+
+    func updateSettings(_ settings: ProjectSettings, for project: Project) {
+        guard let id = project.id else { return }
+        perform("Couldn’t save project settings") {
+            try database.updateSettings(settings, forProject: id)
+        }
+        reloadProjects()
+        agents.startQueuedTurns(inProject: id)
+    }
+
+    func runs(for sessions: [AgentSession]) -> [Run] {
+        let ids = Array(Set(sessions.compactMap(\.agent.runId)))
+        return (try? database.runs(withIDs: ids)) ?? []
+    }
+
+    func project(withID id: Int64) -> Project? {
+        openProjects.first { $0.id == id }
     }
 
     func deleteAgent(_ session: AgentSession, in project: Project, deleteBranch: Bool) async {
@@ -246,6 +310,7 @@ final class AppModel {
             let recovery = try await manager.recover()
             let branch = try await git.currentBranch(in: project.url)
             projectStates[id] = ProjectState(branch: branch, worktrees: recovery.worktrees, recovery: recovery)
+            reloadConfig(for: project)
         } catch {
             alert = AppAlert(title: "Couldn’t read worktrees for \(project.name)", message: error.localizedDescription)
         }

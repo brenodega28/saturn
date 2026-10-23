@@ -30,6 +30,29 @@ public enum ProviderError: Error, LocalizedError, Equatable {
     }
 }
 
+public enum AgentLaunchError: Error, LocalizedError, Equatable {
+    case missingWorktree(String)
+    case missingProject(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .missingWorktree(let name): "The worktree for \(name) is missing."
+        case .missingProject(let name): "The project folder for \(name) is missing."
+        }
+    }
+}
+
+struct TurnSetup {
+    let directory: URL
+    let systemPrompt: String
+    let readOnly: Bool
+    let additionalDirectories: [URL]
+}
+
+extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
 @MainActor
 @Observable
 public final class AgentRuntime {
@@ -44,6 +67,7 @@ public final class AgentRuntime {
     @ObservationIgnored let launcher: any AgentProcessLauncher
     @ObservationIgnored let stopGracePeriod: Duration
     @ObservationIgnored private var sessions: [Int64: AgentSession] = [:]
+    private var turnQueue: [Int64: [Int64]] = [:]
 
     public init(
         database: AppDatabase,
@@ -125,7 +149,149 @@ public final class AgentRuntime {
         return session
     }
 
+    public static let maxSpawnCount = 8
+
+    public func agentNames(for base: String, count: Int, inProject projectId: Int64) throws -> [String] {
+        AgentNaming.names(base: base, count: count, existing: try database.agents(inProject: projectId).map(\.name))
+    }
+
+    @discardableResult
+    public func spawn(
+        in project: Project,
+        role: RoleDefinition,
+        count: Int,
+        config: ProjectConfig,
+        git: GitClient,
+        pinned: Bool = false,
+        name: String? = nil,
+        task: String = "",
+        now: Date = .now
+    ) async throws -> [AgentSession] {
+        guard providerMode != nil else { throw AgentError.providerNotChosen }
+        guard let projectId = project.id else { throw AgentError.emptyTask }
+        let count = min(max(count, 1), Self.maxSpawnCount)
+        let base = name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? role.name
+        guard !Slug.make(base).isEmpty else { throw WorktreeError.invalidName(base) }
+        let names = try agentNames(for: base, count: count, inProject: projectId)
+        let task = task.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseBranch = try await git.currentBranch(in: project.url)
+        let manager = WorktreeManager(repository: project.url, git: git)
+        let taskSlug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
+
+        var spawned: [AgentSession] = []
+        for agentName in names {
+            var worktreePath: String?
+            var branch: String?
+            var base = baseBranch
+            if role.editsCode {
+                let worktree = try await manager.create(agent: agentName, slug: taskSlug.isEmpty ? "task" : taskSlug)
+                worktreePath = worktree.path.path
+                branch = worktree.branch
+                base = baseBranch ?? worktree.head
+            }
+            let agent = try database.insert(Agent(
+                projectId: projectId,
+                role: role.id,
+                name: agentName,
+                worktreePath: worktreePath,
+                branch: branch,
+                status: .idle,
+                isPinned: pinned,
+                model: role.model,
+                task: task,
+                baseBranch: base,
+                readOnly: !role.editsCode,
+                createdAt: now,
+                updatedAt: now
+            ))
+            guard let session = session(for: agent) else { continue }
+            spawned.append(session)
+        }
+        usageDidChange()
+        if !task.isEmpty {
+            for session in spawned { session.start() }
+        }
+        return spawned
+    }
+
+    func turnSetup(for agent: Agent) throws -> TurnSetup {
+        let project = try database.project(id: agent.projectId)
+        let repository = project?.url
+        let directory: URL
+        if agent.readOnly {
+            guard let repository else { throw AgentLaunchError.missingProject(agent.name) }
+            directory = repository
+        } else {
+            guard let worktree = agent.worktreeURL else { throw AgentLaunchError.missingWorktree(agent.name) }
+            directory = worktree
+        }
+        guard FileManager.default.fileExists(atPath: directory.path) else {
+            throw agent.readOnly ? AgentLaunchError.missingProject(agent.name) : AgentLaunchError.missingWorktree(agent.name)
+        }
+
+        var prompt = agent.readOnly
+            ? ClaudeLaunch.readOnlySystemPrompt(agentName: agent.name, directory: directory)
+            : ClaudeLaunch.systemPrompt(agentName: agent.name, worktree: directory, branch: agent.branch)
+        if let repository {
+            let config = ProjectConfigLoader.load(repository: repository)
+            if let role = config.role(agent.role) {
+                let context = RoleContext.build(role: role, config: config, repository: repository).systemPrompt
+                if !context.isEmpty { prompt += "\n\n" + context }
+            }
+        }
+
+        var additional: [URL] = []
+        if agent.readOnly, let runId = agent.runId {
+            let root = realPath(of: directory) + "/"
+            additional = try database.agents(inProject: agent.projectId)
+                .filter { $0.runId == runId && $0.id != agent.id }
+                .compactMap(\.worktreeURL)
+                .filter { FileManager.default.fileExists(atPath: $0.path) && !(realPath(of: $0) + "/").hasPrefix(root) }
+        }
+        return TurnSetup(directory: directory, systemPrompt: prompt, readOnly: agent.readOnly, additionalDirectories: additional)
+    }
+
+    public func maxConcurrentAgents(inProject projectId: Int64) -> Int {
+        let limit = (try? database.project(id: projectId))??.settings.maxConcurrentAgents ?? ProjectSettings().maxConcurrentAgents
+        return max(1, limit)
+    }
+
+    public func runningCount(inProject projectId: Int64) -> Int {
+        sessions.values.filter { $0.agent.projectId == projectId && $0.isRunning }.count
+    }
+
+    public func queuedSessions(inProject projectId: Int64) -> [AgentSession] {
+        (turnQueue[projectId] ?? []).compactMap { sessions[$0] }
+    }
+
+    func shouldQueue(_ session: AgentSession) -> Bool {
+        let projectId = session.agent.projectId
+        let waiting = turnQueue[projectId] ?? []
+        if waiting.contains(session.id) { return true }
+        return !waiting.isEmpty || runningCount(inProject: projectId) >= maxConcurrentAgents(inProject: projectId)
+    }
+
+    func enqueue(_ session: AgentSession) {
+        let projectId = session.agent.projectId
+        if !(turnQueue[projectId] ?? []).contains(session.id) {
+            turnQueue[projectId, default: []].append(session.id)
+        }
+    }
+
+    func dequeue(_ session: AgentSession) {
+        turnQueue[session.agent.projectId]?.removeAll { $0 == session.id }
+    }
+
+    public func startQueuedTurns(inProject projectId: Int64) {
+        let limit = maxConcurrentAgents(inProject: projectId)
+        while runningCount(inProject: projectId) < limit, let next = turnQueue[projectId]?.first {
+            turnQueue[projectId]?.removeFirst()
+            sessions[next]?.startQueuedTurn()
+        }
+    }
+
     public func delete(_ session: AgentSession, in project: Project, git: GitClient, deleteBranch: Bool) async throws {
+        dequeue(session)
         session.terminateForDeletion()
         let manager = WorktreeManager(repository: project.url, git: git)
         if let path = session.agent.worktreeURL,
@@ -138,6 +304,9 @@ public final class AgentRuntime {
         sessions[session.id] = nil
         try? FileManager.default.removeItem(at: paths.agentDirectory(session.id))
         usageDidChange()
+        if let projectId = project.id {
+            startQueuedTurns(inProject: projectId)
+        }
     }
 
     public func recoverAfterLaunch() throws {
@@ -146,6 +315,9 @@ public final class AgentRuntime {
                 Self.terminateLeftoverClaude(pid: pid)
             }
             session(for: agent)?.markInterrupted(detail: "Ensemble wasn’t running when this turn ended.")
+        }
+        for agent in try database.agentsQueuedOutsideRuns() {
+            session(for: agent)?.markInterrupted(detail: "Ensemble quit while this agent was queued.")
         }
     }
 

@@ -37,15 +37,54 @@ extension Agent {
     }
 }
 
+struct RoleAppearance: Hashable {
+    let palette: RolePalette
+    let symbol: String
+
+    static let claude = RoleAppearance(palette: .claude, symbol: "terminal")
+
+    init(palette: RolePalette, symbol: String) {
+        self.palette = palette
+        self.symbol = symbol
+    }
+
+    init(role: RoleDefinition?) {
+        guard let role else {
+            self = .claude
+            return
+        }
+        self.palette = RolePalette(rawValue: role.color) ?? .neutral
+        self.symbol = Self.symbol(for: role.icon)
+    }
+
+    static let iconChoices = ["terminal", "lead", "reviewer", "qa", "django", "react", "scrum", "sparkle"]
+    static let colorChoices = RolePalette.allCases.map(\.rawValue)
+
+    static func symbol(for icon: String) -> String {
+        switch icon {
+        case "terminal", "claude": "terminal"
+        case "lead", "compass": "safari"
+        case "reviewer", "review": "text.magnifyingglass"
+        case "qa", "test": "checkmark.shield"
+        case "django", "database", "backend": "cylinder.split.1x2"
+        case "react", "frontend", "web": "macwindow"
+        case "scrum", "team": "person.3"
+        case let name where NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil: name
+        default: "sparkle"
+        }
+    }
+}
+
 struct AgentAvatar: View {
     var size: CGFloat = 44
+    var appearance: RoleAppearance = .claude
 
     var body: some View {
-        Image(systemName: "terminal")
+        Image(systemName: appearance.symbol)
             .font(.system(size: size * 0.45, weight: .medium))
             .foregroundStyle(.white)
             .frame(width: size, height: size)
-            .background(RolePalette.claude.gradient, in: .rect(cornerRadius: size * 0.3, style: .continuous))
+            .background(appearance.palette.gradient, in: .rect(cornerRadius: size * 0.3, style: .continuous))
             .shadow(color: .black.opacity(0.35), radius: 8, y: 6)
             .accessibilityHidden(true)
     }
@@ -53,14 +92,26 @@ struct AgentAvatar: View {
 
 struct StatusLabel: View {
     let status: AgentStatus
+    var isQueued = false
 
     var body: some View {
+        let color = isQueued ? Theme.neutral : status.color
         HStack(spacing: 6) {
-            StatusDot(status.color)
-            Text(status.label)
+            StatusDot(color)
+            Text(isQueued ? "Queued" : status.label)
         }
         .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(status.color)
+        .foregroundStyle(color)
+    }
+}
+
+extension AgentSession {
+    var statusText: String { isQueued ? "Queued" : agent.status.label }
+}
+
+extension String {
+    var modelTitle: String {
+        AgentModel(rawValue: self)?.title ?? self
     }
 }
 

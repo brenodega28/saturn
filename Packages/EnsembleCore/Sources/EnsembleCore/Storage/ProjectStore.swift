@@ -24,6 +24,18 @@ extension AppDatabase {
         }
     }
 
+    public func project(id: Int64) throws -> Project? {
+        try writer.read { db in try Project.fetchOne(db, id: id) }
+    }
+
+    public func updateSettings(_ settings: ProjectSettings, forProject id: Int64) throws {
+        try writer.write { db in
+            guard var project = try Project.fetchOne(db, id: id) else { return }
+            project.settings = settings
+            try project.update(db)
+        }
+    }
+
     public func closeProject(id: Int64) throws {
         _ = try writer.write { db in
             try Project.filter(id: id).updateAll(db, Project.Columns.isOpen.set(to: false))

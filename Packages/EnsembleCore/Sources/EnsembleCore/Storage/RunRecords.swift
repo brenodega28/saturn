@@ -63,6 +63,7 @@ public enum RunStepStatus: String, Codable, Sendable, CaseIterable {
     case succeeded
     case failed
     case cancelled
+    case interrupted
 }
 
 public struct RunStep: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
@@ -105,6 +106,7 @@ public struct RunStep: Codable, Sendable, Hashable, Identifiable, FetchableRecor
     public enum Columns {
         public static let runId = Column(CodingKeys.runId)
         public static let stepId = Column(CodingKeys.stepId)
+        public static let iteration = Column(CodingKeys.iteration)
         public static let status = Column(CodingKeys.status)
         public static let startedAt = Column(CodingKeys.startedAt)
     }
@@ -170,6 +172,8 @@ public enum InboxKind: String, Codable, Sendable, CaseIterable {
     case approval
     case failure
     case notice
+    case loopLimit = "loop_limit"
+    case budget
 }
 
 public enum InboxStatus: String, Codable, Sendable, CaseIterable {

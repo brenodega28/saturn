@@ -174,6 +174,12 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v4-workflow-engine") { db in
+            try db.alter(table: "run") { t in
+                t.add(column: "engineState", .text).notNull().defaults(to: "{}")
+            }
+        }
+
         return migrator
     }
 }

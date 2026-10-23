@@ -207,10 +207,19 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
 
         let feedback = context.feedback
+        var conflictMessages: [Int64: String] = [:]
+        if context.step.isLoopBack, let conflict = try await firstConflict(for: context.step.run, project: project, git: git),
+           let session = builders.first(where: { $0.session.agent.branch == conflict.branch })?.session,
+           let worktree = session.agent.worktreeURL {
+            conflictMessages[session.id] = try await stageConflict(conflict, in: worktree, git: git)
+        }
         let startCosts = Dictionary(uniqueKeysWithValues: builders.map { ($0.session.id, $0.session.agent.costUSD) })
         var active: [(AgentSession, String)] = []
         for (session, task) in builders {
-            if context.step.isLoopBack, let feedback {
+            if let conflictMessage = conflictMessages[session.id] {
+                clearHandoffs(session.id)
+                active.append((session, conflictMessage))
+            } else if context.step.isLoopBack, let feedback {
                 let issues = relevantIssues(feedback.issues, for: session, task: task)
                 guard !issues.isEmpty || feedback.issues.allSatisfy({ $0.agent == nil && $0.file == nil }) else { continue }
                 clearHandoffs(session.id)
@@ -557,6 +566,60 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     enum IntegrationResult {
         case ready(URL, String?)
         case conflict(branch: String, files: [String])
+    }
+
+    struct BranchConflict: Equatable {
+        let branch: String
+        let mergedBefore: [String]
+        let files: [String]
+    }
+
+    func firstConflict(for run: Run, project: Project, git: GitClient) async throws -> BranchConflict? {
+        let runId = try requireRunID(run)
+        let branches = try builderBranches(runId: runId, projectId: run.projectId)
+        guard branches.count > 1 else { return nil }
+        let base = try await baseBranch(runId: runId, project: project, git: git)
+        var tree = try await git.run(["rev-parse", "\(base)^{tree}"], in: project.url).trimmingCharacters(in: .whitespacesAndNewlines)
+        var mergedBefore: [String] = []
+        var head = base
+        for branch in branches {
+            let result = try await git.runner.run(git.executable, ["merge-tree", "--write-tree", "--name-only", "--no-messages", head, branch], in: project.url)
+            let lines = result.standardOutput.split(separator: "\n").map(String.init)
+            if result.exitCode == 1 {
+                return BranchConflict(branch: branch, mergedBefore: mergedBefore, files: Array(lines.dropFirst()))
+            }
+            guard result.succeeded, let newTree = lines.first else { return nil }
+            tree = newTree
+            let identity = ["-c", "user.name=Ensemble", "-c", "user.email=ensemble@localhost"]
+            head = try await git.run(identity + ["commit-tree", tree, "-p", head, "-p", branch, "-m", "Ensemble trial merge"], in: project.url)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            mergedBefore.append(branch)
+        }
+        return nil
+    }
+
+    func stageConflict(_ conflict: BranchConflict, in worktree: URL, git: GitClient) async throws -> String {
+        let identity = ["-c", "user.name=Ensemble", "-c", "user.email=ensemble@localhost"]
+        let status = try await git.run(["status", "--porcelain", "--untracked-files=no"], in: worktree)
+        if !status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            try await git.run(identity + ["commit", "-am", "Work in progress before merging the other branches"], in: worktree)
+        }
+        var conflicted: [String] = []
+        for branch in conflict.mergedBefore {
+            let result = try await git.runner.run(git.executable, identity + ["merge", "--no-ff", "--no-edit", branch], in: worktree)
+            if !result.succeeded {
+                conflicted = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: worktree))?
+                    .split(separator: "\n").map(String.init) ?? conflict.files
+                break
+            }
+        }
+        let files = conflicted.isEmpty ? conflict.files : conflicted
+        return """
+            # Resolve a merge conflict
+            Your branch conflicts with work the other builders already finished. Ensemble merged \(conflict.mergedBefore.map { "`\($0)`" }.joined(separator: ", ")) into your worktree\(conflicted.isEmpty ? "" : ", and git stopped with conflicts in \(files.joined(separator: ", "))").
+
+            \(conflicted.isEmpty ? "The merge went through, but check that both changes still work together." : "Open each file, keep both sides' changes so all functions and tests remain, and remove every conflict marker (<<<<<<<, =======, >>>>>>>) with the Edit tool.") Run the tests, then `git add` the files and `git commit --no-edit`. Finally call `\(HandoffTool.submitResult.qualifiedName)` describing the resolution, and end your turn.
+            """
     }
 
     func prepareIntegrationWorktree(for run: Run, project: Project, git: GitClient, purpose: String) async throws -> IntegrationResult {

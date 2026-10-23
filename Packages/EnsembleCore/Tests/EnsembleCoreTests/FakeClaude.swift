@@ -45,6 +45,16 @@ enum FakeClaude {
         fi
         return
       fi
+      if printf '%s' "$1" | grep -q 'Resolve a merge conflict'; then
+        for conflicted in $(git diff --name-only --diff-filter=U); do
+          grep -v '^<<<<<<<\|^=======\|^>>>>>>>' "$conflicted" > "$conflicted.resolved"
+          mv "$conflicted.resolved" "$conflicted"
+          git add "$conflicted"
+        done
+        git -c user.name=Fake -c user.email=fake@x commit -q --no-edit >/dev/null 2>&1
+        call_tool submit_result '{"summary":"Resolved the conflict keeping both sides"}'
+        return
+      fi
       if printf '%s' "$1" | grep -q 'submit_result'; then
         name=$(basename "$PWD")
         file="$name.txt"

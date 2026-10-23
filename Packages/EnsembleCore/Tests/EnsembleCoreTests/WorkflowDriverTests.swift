@@ -116,7 +116,7 @@ import Testing
         }
     }
 
-    @Test func conflictingBranchesFailQAWithoutRunningIt() async throws {
+    @Test func conflictingBranchesAreResolvedByTheBuilderAfterQAFails() async throws {
         let setup = try await makeSetup()
         defer { setup.harness.cleanUp() }
         let run = try startRun(setup)
@@ -126,14 +126,19 @@ import Testing
         plan.tasks = plan.tasks.map { var task = $0; task.title = "Add alpha"; return task }
         try setup.engine.approvePlan(run, plan: plan)
 
-        try await waitUntil(timeout: .seconds(60)) {
-            ((try? setup.harness.database.runSteps(runId: run.id!)) ?? []).contains { $0.stepId == "qa" && $0.outcome != nil }
-        }
-        let qa = try #require(try setup.harness.database.runSteps(runId: run.id!).first { $0.stepId == "qa" })
-        let verdict = try #require(qa.output.flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) }?.verdict)
-        #expect(qa.outcome == "failed")
+        try await waitForHold(setup, run: run, .approval, timeout: .seconds(60))
+
+        let steps = try setup.harness.database.runSteps(runId: run.id!)
+        #expect(steps.filter { $0.stepId == "qa" }.map(\.outcome) == ["failed", "passed"])
+        let firstQA = try #require(steps.first { $0.stepId == "qa" })
+        let verdict = try #require(firstQA.output.flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) }?.verdict)
         #expect(verdict.issues.first?.description.contains("alpha.txt") == true)
-        #expect(try setup.harness.database.agents(inProject: setup.project.id!).filter { $0.role == "qa-engineer" }.isEmpty)
-        try await setup.engine.cancel(run)
+        #expect(try setup.harness.database.agents(inProject: setup.project.id!).filter { $0.role == "qa-engineer" }.count == 1)
+
+        try setup.engine.resolveApproval(run, approved: true)
+        try await waitUntil(timeout: .seconds(30)) { (try? setup.harness.database.run(id: run.id!))??.status == .succeeded }
+        let alpha = try await setup.harness.repo.git.run(["show", "main:alpha.txt"], in: setup.harness.repo.root)
+        #expect(alpha.split(separator: "\n").count == 2)
+        #expect(!alpha.contains("<<<<<<<"))
     }
 }

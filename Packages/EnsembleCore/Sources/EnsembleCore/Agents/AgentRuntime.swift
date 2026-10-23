@@ -6,12 +6,14 @@ public enum AgentError: Error, LocalizedError, Equatable {
     case nameTaken(String)
     case emptyTask
     case providerNotChosen
+    case unknownModel(String)
 
     public var errorDescription: String? {
         switch self {
         case .nameTaken(let name): "An agent named \(name) already exists in this project."
         case .emptyTask: "Describe a task for the agent."
         case .providerNotChosen: "Choose whether agents use an Anthropic API key or your Claude sign-in before starting one."
+        case .unknownModel(let model): "“\(model)” isn’t a model Claude Code knows. Use an alias like sonnet or a full name starting with claude-."
         }
     }
 }
@@ -173,11 +175,14 @@ public final class AgentRuntime {
         git: GitClient,
         pinned: Bool = false,
         name: String? = nil,
+        model: String? = nil,
         task: String = "",
         now: Date = .now
     ) async throws -> [AgentSession] {
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
+        let model = model?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? role.model
+        guard ModelCatalog.isValid(model) else { throw AgentError.unknownModel(model) }
         let count = min(max(count, 1), Self.maxSpawnCount)
         let base = name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? role.name
         guard !Slug.make(base).isEmpty else { throw WorktreeError.invalidName(base) }
@@ -206,7 +211,7 @@ public final class AgentRuntime {
                 branch: branch,
                 status: .idle,
                 isPinned: pinned,
-                model: role.model,
+                model: model,
                 task: task,
                 baseBranch: base,
                 readOnly: !role.editsCode,

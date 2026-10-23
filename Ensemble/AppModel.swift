@@ -215,7 +215,7 @@ final class AppModel {
         return (try? agents.agentNames(for: base, count: count, inProject: id)) ?? []
     }
 
-    func spawnAgents(in project: Project, role: RoleDefinition, count: Int, name: String, pinned: Bool, task: String) async throws {
+    func spawnAgents(in project: Project, role: RoleDefinition, count: Int, name: String, model: String, pinned: Bool, task: String) async throws {
         guard let git = requireGit() else { return }
         let sessions = try await agents.spawn(
             in: project,
@@ -225,6 +225,7 @@ final class AppModel {
             git: git,
             pinned: pinned,
             name: name,
+            model: model,
             task: task
         )
         if sessions.count == 1 {

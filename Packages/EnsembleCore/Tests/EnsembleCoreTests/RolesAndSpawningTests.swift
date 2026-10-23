@@ -197,6 +197,30 @@ import Testing
         #expect(try harness.database.agents(inProject: harness.project.id!).count == 3)
     }
 
+    @Test func chosenModelOverridesTheRoleModel() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+
+        let sessions = try await harness.runtime.spawn(
+            in: harness.project, role: django, count: 2, config: config(), git: harness.repo.git, model: " claude-opus-5-5 "
+        )
+        #expect(sessions.map(\.agent.model) == ["claude-opus-5-5", "claude-opus-5-5"])
+        #expect(try harness.database.agents(inProject: harness.project.id!).map(\.model) == ["claude-opus-5-5", "claude-opus-5-5"])
+
+        let fallback = try await harness.runtime.spawn(in: harness.project, role: django, count: 1, config: config(), git: harness.repo.git, model: "  ")
+        #expect(fallback.map(\.agent.model) == ["haiku"])
+    }
+
+    @Test func unknownModelIsRejectedBeforeAnythingIsCreated() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+
+        await #expect(throws: AgentError.unknownModel("gpt-5")) {
+            try await harness.runtime.spawn(in: harness.project, role: django, count: 1, config: config(), git: harness.repo.git, model: "gpt-5")
+        }
+        #expect(try harness.database.agents(inProject: harness.project.id!).isEmpty)
+    }
+
     @Test func readOnlyRoleRunsFromTheProjectRootWithoutWritingTools() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }

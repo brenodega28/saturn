@@ -4,6 +4,7 @@ public enum AgentModel: String, CaseIterable, Sendable, Identifiable {
     case sonnet
     case opus
     case haiku
+    case fable
 
     public var id: Self { self }
 
@@ -12,6 +13,7 @@ public enum AgentModel: String, CaseIterable, Sendable, Identifiable {
         case .sonnet: "Sonnet"
         case .opus: "Opus"
         case .haiku: "Haiku"
+        case .fable: "Fable"
         }
     }
 }

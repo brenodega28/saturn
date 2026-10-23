@@ -9,6 +9,7 @@ struct NewAgentSheet: View {
 
     @State private var roleID: String?
     @State private var name = ""
+    @State private var modelName = ""
     @State private var count = 1
     @State private var isPinned = false
     @State private var task = ""
@@ -16,6 +17,7 @@ struct NewAgentSheet: View {
     @State private var errorMessage: String?
 
     @FocusState private var isTaskFocused: Bool
+    @FocusState private var isModelFocused: Bool
 
     var body: some View {
         let config = model.config(for: project)
@@ -35,7 +37,7 @@ struct NewAgentSheet: View {
                 roleGroup("Writes code", roles: config.roles.filter(\.editsCode))
                 roleGroup("Reviews, plans and tests", roles: config.roles.filter { !$0.editsCode })
                 if let role = selectedRole(in: config) {
-                    details(for: role)
+                    details(for: role, projectModels: config.roles.map(\.model))
                 }
             }
 
@@ -68,7 +70,7 @@ struct NewAgentSheet: View {
         }
     }
 
-    private func details(for role: RoleDefinition) -> some View {
+    private func details(for role: RoleDefinition, projectModels: [String]) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .bottom, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -79,6 +81,12 @@ struct NewAgentSheet: View {
                         .help("Agents are numbered after this name when there is more than one")
                 }
                 VStack(alignment: .leading, spacing: 8) {
+                    Text("Model").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+                    ModelField(model: $modelName, roleModel: role.model, projectModels: projectModels)
+                        .focused($isModelFocused)
+                }
+                .frame(width: 220)
+                VStack(alignment: .leading, spacing: 8) {
                     Text("How many").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
                     CountStepper(count: $count, range: 1...AgentRuntime.maxSpawnCount)
                 }
@@ -88,6 +96,12 @@ struct NewAgentSheet: View {
                 .toggleStyle(.button)
                 .help("Pinned agents are kept between runs")
                 .padding(.bottom, 4)
+            }
+
+            if !isModelValid && !isModelFocused {
+                Text(AgentError.unknownModel(modelName).localizedDescription)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.danger)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -145,7 +159,7 @@ struct NewAgentSheet: View {
             Button(count > 1 ? "Create \(count) Agents" : "Create Agent") { Task { await create() } }
                 .buttonStyle(.primaryPill)
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(isCreating || role == nil)
+                .disabled(isCreating || role == nil || !isModelValid)
         }
     }
 
@@ -163,6 +177,15 @@ struct NewAgentSheet: View {
     private func pick(_ role: RoleDefinition) {
         roleID = role.id
         name = ""
+        modelName = role.model
+    }
+
+    private var trimmedModel: String {
+        modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isModelValid: Bool {
+        trimmedModel.isEmpty || ModelCatalog.isValid(trimmedModel)
     }
 
     private func previewNames(for role: RoleDefinition) -> [String] {
@@ -180,7 +203,7 @@ struct NewAgentSheet: View {
         errorMessage = nil
         defer { isCreating = false }
         do {
-            try await model.spawnAgents(in: project, role: role, count: count, name: baseName(for: role), pinned: isPinned, task: task)
+            try await model.spawnAgents(in: project, role: role, count: count, name: baseName(for: role), model: trimmedModel, pinned: isPinned, task: task)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -275,6 +298,28 @@ struct CountStepper: View {
         .overlay(Capsule().strokeBorder(Theme.hairline))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("How many")
+    }
+}
+
+private struct ModelField: View {
+    @Binding var model: String
+    let roleModel: String
+    let projectModels: [String]
+
+    var body: some View {
+        TextField("Model", text: $model, prompt: Text(roleModel))
+            .textFieldStyle(.roundedBorder)
+            .labelsHidden()
+            .autocorrectionDisabled()
+            .textInputSuggestions(ModelCatalog.suggestions(matching: model, including: projectModels), id: \.self) { suggestion in
+                HStack {
+                    Text(suggestion).lineLimit(1).fixedSize()
+                    Spacer(minLength: 12)
+                    Text(ModelCatalog.detail(for: suggestion)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                }
+                .textInputCompletion(suggestion)
+            }
+            .help("An alias like sonnet always uses the latest model; a full claude- name pins a version. The role’s model is \(roleModel).")
     }
 }
 

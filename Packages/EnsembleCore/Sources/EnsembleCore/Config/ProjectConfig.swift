@@ -264,7 +264,7 @@ public enum ConfigValidator {
 
         for role in config.roles {
             let file = "\(ProjectConfig.directoryName)/roles/\(role.id).yaml"
-            if AgentModel(rawValue: role.model) == nil && !role.model.hasPrefix("claude-") {
+            if !ModelCatalog.isValid(role.model) {
                 issues.append(ConfigIssue(file: file, message: "model “\(role.model)” isn’t a known model"))
             }
             if role.provider != "claude-code" {

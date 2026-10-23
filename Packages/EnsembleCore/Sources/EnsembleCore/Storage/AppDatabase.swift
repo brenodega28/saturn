@@ -188,6 +188,11 @@ public final class AppDatabase: Sendable {
                 t.add(column: "archivedAt", .datetime)
             }
         }
+        migrator.registerMigration("v7-inbox-questions") { db in
+            try db.alter(table: "inboxItem") { t in
+                t.add(column: "questions", .text)
+            }
+        }
 
         return migrator
     }

@@ -5,7 +5,6 @@ import SwiftUI
 struct InboxItemCard: View {
     @Environment(AppModel.self) private var model
     let item: InboxItem
-    @State private var reply = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -28,7 +27,7 @@ struct InboxItemCard: View {
             Text(item.title)
                 .font(.system(size: 13.5, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
-            if !item.body.isEmpty {
+            if !item.body.isEmpty && item.kind != .question {
                 Text(item.body)
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.secondaryText)
@@ -47,17 +46,10 @@ struct InboxItemCard: View {
     private var actions: some View {
         switch item.kind {
         case .question:
-            HStack(spacing: 8) {
-                TextField("Reply…", text: $reply, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...4)
-                    .accessibilityLabel("Answer to \(item.title)")
-                    .onSubmit(send)
-                Button("Send", action: send)
-                    .buttonStyle(PillButtonStyle(.primary, height: 28))
-                    .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .help(item.agentId == nil ? "Answer and close this question" : "Send the answer to the agent that asked")
+            QuestionFormView(form: QuestionForm(item: item), recipient: nil, compact: true) { reply in
+                model.answerInboxQuestion(item: item, text: reply)
             }
+            .id(item.id)
         case .notice:
             HStack {
                 Spacer()
@@ -79,13 +71,6 @@ struct InboxItemCard: View {
                 .buttonStyle(PillButtonStyle(.primary, height: 28))
                 .help(help)
         }
-    }
-
-    private func send() {
-        let text = reply
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        model.answerInboxQuestion(item: item, text: text)
-        reply = ""
     }
 }
 

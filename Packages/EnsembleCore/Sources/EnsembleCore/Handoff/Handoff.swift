@@ -113,11 +113,31 @@ public struct PinDraft: Sendable, Hashable, Codable {
     }
 }
 
+public struct HumanQuestion: Sendable, Hashable, Codable {
+    public var question: String
+    public var options: [String]
+
+    public init(question: String, options: [String] = []) {
+        self.question = question
+        self.options = options
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case question, options
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.question = try container.decode(String.self, forKey: .question)
+        self.options = try container.decodeIfPresent([String].self, forKey: .options) ?? []
+    }
+}
+
 public enum HandoffMessage: Sendable, Hashable {
     case plan(Plan)
     case verdict(Verdict)
     case pin(PinDraft)
-    case question(String)
+    case question(String, [HumanQuestion] = [])
     case result(String)
 }
 
@@ -143,7 +163,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .createPin:
             "Flag lines a human must read before this work ships: risky logic, security, migrations, money, data loss. Lines refer to the file in your worktree."
         case .askHuman:
-            "Ask the user a question you can't answer from the code or docs. After calling it, end your turn; the answer arrives as your next message."
+            "Ask the user questions you can't answer from the code or docs. Put shared context in question. When you need several decisions, list each one in questions, with options when there are clear choices; the user answers them one at a time. After calling it, end your turn; the answers arrive as your next message, numbered like your questions."
         }
     }
 
@@ -187,7 +207,13 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "explanation": string("Why a human must read this"),
             ], required: ["file", "start_line", "end_line", "title", "explanation"])
         case .askHuman:
-            return object(["question": string("The question, with the options you see")], required: ["question"])
+            return object([
+                "question": string("The question, or the context shared by all questions when you list them in questions"),
+                "questions": array(object([
+                    "question": string("One decision, with what it affects"),
+                    "options": array(string("A short answer the user can pick")),
+                ], required: ["question"])),
+            ], required: ["question"])
         }
     }
 
@@ -200,7 +226,8 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .createPin: return .pin(try decoder.decode(PinDraft.self, from: data))
         case .askHuman:
             guard let question = arguments["question"]?.string, !question.isEmpty else { throw HandoffError.missing("question") }
-            return .question(question)
+            let questions = try arguments["questions"].map { try decoder.decode([HumanQuestion].self, from: Data($0.compactJSON.utf8)) } ?? []
+            return .question(question, questions.filter { !$0.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         case .submitResult:
             guard let summary = arguments["summary"]?.string else { throw HandoffError.missing("summary") }
             return .result(summary)

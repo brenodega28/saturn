@@ -113,10 +113,10 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 try pin.insert(db)
             }
             return "Pinned \(file):\(draft.startLine)-\(draft.endLine) for the user."
-        case .question(let question):
+        case .question(let question, let questions):
             _ = try runtime.database.createInboxItem(InboxItem(
                 projectId: agent.projectId, runId: agent.runId, agentId: agentID, kind: .question,
-                title: "\(agent.name) asks", body: question, createdAt: .now
+                title: "\(agent.name) asks", body: question, questions: questions.isEmpty ? nil : questions, createdAt: .now
             ))
             return "Your question was sent to the user. End your turn now; the answer arrives as your next message."
         }

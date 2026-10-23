@@ -211,13 +211,14 @@ public struct InboxItem: Codable, Sendable, Hashable, Identifiable, FetchableRec
     public var body: String
     public var status: InboxStatus
     public var response: String?
+    public var questions: [HumanQuestion]?
     public var createdAt: Date
     public var resolvedAt: Date?
 
     public init(
         id: Int64? = nil, projectId: Int64, runId: Int64? = nil, agentId: Int64? = nil, kind: InboxKind,
         title: String, body: String = "", status: InboxStatus = .open, response: String? = nil,
-        createdAt: Date, resolvedAt: Date? = nil
+        questions: [HumanQuestion]? = nil, createdAt: Date, resolvedAt: Date? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -228,6 +229,7 @@ public struct InboxItem: Codable, Sendable, Hashable, Identifiable, FetchableRec
         self.body = body
         self.status = status
         self.response = response
+        self.questions = questions
         self.createdAt = createdAt
         self.resolvedAt = resolvedAt
     }

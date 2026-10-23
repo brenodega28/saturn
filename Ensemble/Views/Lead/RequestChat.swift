@@ -537,6 +537,7 @@ private struct FinalStateCard: View {
     let reload: () -> Void
     @State private var isChoosingMergeMethod = false
     @State private var isMerging = false
+    @State private var isOpeningPullRequest = false
 
     var body: some View {
         let color = model.statusColor(of: run)
@@ -562,6 +563,21 @@ private struct FinalStateCard: View {
                         .buttonStyle(.primaryPill)
                         .help(link)
                 }
+                if canOpenPullRequest, let delivery = run.deliveryBranch {
+                    Button(action: openPullRequest) {
+                        if isOpeningPullRequest {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Opening PR…")
+                            }
+                        } else {
+                            Label("Open PR", systemImage: "arrow.triangle.pull")
+                        }
+                    }
+                    .buttonStyle(.primaryPill)
+                    .disabled(isOpeningPullRequest || isMerging)
+                    .help("Push \(delivery) and open a pull request into \(baseName)")
+                }
                 if canMerge, let delivery = run.deliveryBranch {
                     Button { isChoosingMergeMethod = true } label: {
                         if isMerging {
@@ -574,7 +590,7 @@ private struct FinalStateCard: View {
                         }
                     }
                     .buttonStyle(.pill)
-                    .disabled(isMerging)
+                    .disabled(isMerging || isOpeningPullRequest)
                     .help("Merge \(delivery) into \(baseName) and push")
                     .confirmationDialog("Merge \(delivery) into \(baseName)?", isPresented: $isChoosingMergeMethod, titleVisibility: .visible) {
                         ForEach(MergeMethod.allCases, id: \.self) { method in
@@ -607,7 +623,20 @@ private struct FinalStateCard: View {
     }
 
     private var canMerge: Bool {
-        run.status == .succeeded && run.pullRequestURL != nil && run.deliveryBranch != nil && run.mergedAt == nil
+        run.status == .succeeded && run.deliveryBranch != nil && run.mergedAt == nil
+    }
+
+    private var canOpenPullRequest: Bool {
+        canMerge && run.pullRequestURL == nil
+    }
+
+    private func openPullRequest() {
+        isOpeningPullRequest = true
+        Task {
+            await model.performRunAction("Couldn’t open the pull request") { try await model.engine.openPullRequest(run) }
+            isOpeningPullRequest = false
+            reload()
+        }
     }
 
     private var baseName: String {
@@ -626,7 +655,9 @@ private struct FinalStateCard: View {
     private var headline: String {
         switch run.status {
         case .succeeded where run.mergedAt != nil: "Run finished and merged"
-        case .succeeded: run.pullRequestURL == nil ? "Run finished" : "Run finished with a pull request"
+        case .succeeded where run.pullRequestURL != nil: "Run finished with a pull request"
+        case .succeeded where run.deliveryBranch != nil: "Run finished, ready to open a PR or merge"
+        case .succeeded: "Run finished"
         case .failed: "Run failed"
         case .cancelled: "Run cancelled"
         default: model.statusLabel(of: run)

@@ -55,7 +55,7 @@ final class RecordingWriteBack: IssueWriteBack {
         RunWriteBackObserver(engine: h.engine, retryDelay: .seconds(3600)) { writeBack }
     }
 
-    @Test func postsStartThenSuccessWithPullRequestWhenRunsChange() async throws {
+    @Test func postsStartThenSuccessWithoutAPullRequestWhenRunsChange() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
         let writeBack = RecordingWriteBack()
@@ -75,7 +75,7 @@ final class RecordingWriteBack: IssueWriteBack {
         try await waitUntil { writeBack.calls.count == 2 }
 
         #expect(try h.run(id).status == .succeeded)
-        #expect(writeBack.calls.last == .ended(issue: 42, conclusion: .succeeded, summary: nil, pullRequest: "https://github.com/acme/shop/pull/\(id)"))
+        #expect(writeBack.calls.last == .ended(issue: 42, conclusion: .succeeded, summary: nil, pullRequest: nil))
         try await waitUntil { (try? h.database.writeBackEvents(runId: id)) == [.started, .ended] }
         observer.stop()
     }

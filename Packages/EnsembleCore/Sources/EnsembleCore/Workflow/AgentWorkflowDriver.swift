@@ -415,9 +415,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 try await git.run(["push", "-u", "origin", deliveryBranch], in: project.url)
                 result = FinishResult(summary: "Pushed \(deliveryBranch) to origin.", deliveryBranch: deliveryBranch, baseBranch: base)
             case .pullRequest:
-                try await git.run(["push", "-u", "origin", deliveryBranch], in: project.url)
-                let url = try await openPullRequest(run: run, project: project, branch: deliveryBranch, base: base, git: git)
-                result = FinishResult(pullRequestURL: url, summary: "Opened \(url).", deliveryBranch: deliveryBranch, baseBranch: base)
+                result = FinishResult(summary: "Combined work is on \(deliveryBranch), ready to open a pull request or merge into \(base).", deliveryBranch: deliveryBranch, baseBranch: base)
             }
         }
 
@@ -859,6 +857,16 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
         try await deleteBranch(branch, local: localBranch, in: repository, git: git)
         return "Merged \(branch) into \(base)."
+    }
+
+    public func openPullRequest(_ run: Run) async throws -> String {
+        let git = try requireGit()
+        guard let project = try runtime.database.project(id: run.projectId) else { throw WorkflowDriverError.notReady("The project is gone.") }
+        guard let branch = run.deliveryBranch, let base = run.baseBranch else {
+            throw WorkflowDriverError.notReady("This run has no delivery branch to open a pull request for.")
+        }
+        try await git.run(["push", "-u", "origin", branch], in: project.url)
+        return try await openPullRequest(run: run, project: project, branch: branch, base: base, git: git)
     }
 
     private func commitIdentity(in repository: URL, git: GitClient) async throws -> [String] {

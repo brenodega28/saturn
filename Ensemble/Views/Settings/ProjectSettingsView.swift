@@ -37,6 +37,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .agents: "Agents"
         case .claudeAccess: "Access"
         case .tools: "Tools"
+        case .github: "GitHub"
         }
     }
 

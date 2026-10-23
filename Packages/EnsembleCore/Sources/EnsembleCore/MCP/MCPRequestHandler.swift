@@ -15,7 +15,16 @@ struct MCPRequestHandler: Sendable {
     let registry: MCPTokenRegistry
     let sink: any HandoffSink
 
+    static func isLoopbackHost(_ host: String?) -> Bool {
+        guard let host else { return false }
+        let name = host.hasPrefix("[") ? String(host.prefix { $0 != "]" }.dropFirst()) : String(host.split(separator: ":").first ?? "")
+        return ["127.0.0.1", "localhost", "::1"].contains(name.lowercased())
+    }
+
     func respond(to request: HTTPRequest) async -> HTTPResponse {
+        guard Self.isLoopbackHost(request.headers["host"]) else {
+            return .text(403, "Forbidden.")
+        }
         let path = request.path
         guard path.hasPrefix(Self.pathPrefix) else { return .text(404, "Not found.") }
         let token = String(path.dropFirst(Self.pathPrefix.count))

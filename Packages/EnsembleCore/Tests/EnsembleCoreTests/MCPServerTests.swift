@@ -402,3 +402,14 @@ enum RawConnection {
         }
     }
 }
+
+@Suite struct MCPHostCheckTests {
+    @Test func acceptsOnlyLoopbackHosts() {
+        #expect(MCPRequestHandler.isLoopbackHost("127.0.0.1:5123"))
+        #expect(MCPRequestHandler.isLoopbackHost("localhost:80"))
+        #expect(MCPRequestHandler.isLoopbackHost("[::1]:5123"))
+        #expect(!MCPRequestHandler.isLoopbackHost("evil.example:5123"))
+        #expect(!MCPRequestHandler.isLoopbackHost("127.0.0.1.evil.example"))
+        #expect(!MCPRequestHandler.isLoopbackHost(nil))
+    }
+}

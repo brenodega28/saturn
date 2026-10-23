@@ -51,6 +51,7 @@ final class AppModel {
     let gitHub: GitHubIntegration
     let inbox: InboxFeed
     let inboxNotifier = InboxNotifier()
+    var runDetailIDs: [Int64: Int64] = [:]
 
     private(set) var environment: EnvironmentReport?
     private(set) var providerMode: ProviderMode?

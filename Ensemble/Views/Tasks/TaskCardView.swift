@@ -95,6 +95,15 @@ struct TaskCardView: View {
             HStack(spacing: 8) {
                 StepChip(text: stepText(for: run), column: column)
                 Spacer(minLength: 4)
+                Button {
+                    model.openRunDetail(run)
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.secondaryText)
+                .accessibilityLabel("Run details")
+                .help("Show the run’s workflow, timeline, agents and logs")
                 Text(run.costUSD.formatted(.currency(code: "USD")))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(Theme.secondaryText)

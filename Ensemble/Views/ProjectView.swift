@@ -15,13 +15,20 @@ struct ProjectView: View {
             if let recovery = state.recovery, !recovery.isClean {
                 RecoveryBanner(recovery: recovery) { openWindow(id: WindowID.debugWorktrees) }
             }
-            content(for: model.tab(for: project), state: state)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            Group {
+                if let runID = model.runDetailID(in: project) {
+                    RunDetailView(runID: runID, project: project).id(runID)
+                } else {
+                    content(for: model.tab(for: project), state: state)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .padding(EdgeInsets(top: 10, leading: 26, bottom: 24, trailing: 22))
         .sheet(isPresented: $model.isNewAgentPresented) {
             NewAgentSheet(project: project)
         }
+        .onChange(of: model.tab(for: project)) { model.closeRunDetail(in: project) }
     }
 
     private func header(branch: String?) -> some View {
@@ -57,7 +64,10 @@ struct ProjectView: View {
         HStack(spacing: 14) {
             CapsuleTabs(ProjectTab.allCases, selection: Binding(
                 get: { model.tab(for: project) },
-                set: { model.setTab($0, for: project) }
+                set: {
+                    model.closeRunDetail(in: project)
+                    model.setTab($0, for: project)
+                }
             ), title: \.title)
             .fixedSize()
             Button {

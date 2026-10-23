@@ -2,7 +2,7 @@ import Foundation
 
 public struct GitClient: Sendable {
     public let executable: URL
-    private let runner: CommandRunner
+    let runner: CommandRunner
 
     public init(executable: URL, runner: CommandRunner) {
         self.executable = executable

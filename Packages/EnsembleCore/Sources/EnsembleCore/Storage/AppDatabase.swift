@@ -180,6 +180,8 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v5-review", migrate: createReviewTables)
+
         return migrator
     }
 }

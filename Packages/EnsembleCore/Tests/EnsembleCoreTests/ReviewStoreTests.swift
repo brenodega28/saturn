@@ -110,6 +110,20 @@ import Testing
         #expect(try h.database.pins(runId: runId).map(\.file) == ["a.py"])
     }
 
+    @Test func agentPinListingLeavesOutUserComments() throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let runId = try #require(try Self.makeRun(h).id)
+        let agent = try h.database.insert(Agent(projectId: try #require(h.project.id), runId: runId, role: "claude-code", name: "Dev 1", status: .idle, createdAt: .now, updatedAt: .now))
+        let agentId = try #require(agent.id)
+
+        try h.database.createPin(PinDraft(file: "a.py", startLine: 3, endLine: 3, title: "Agent pin", explanation: ""), runId: runId, agentId: agentId)
+        try h.database.createComment(runId: runId, branchAgentId: agentId, file: "a.py", side: .old, startLine: 1, endLine: 1, text: "Put this back.")
+
+        #expect(try h.database.pins(agentId: agentId).map(\.title) == ["Agent pin"])
+        #expect(try h.database.pins(runId: runId).count == 2)
+    }
+
     @Test func summarisesUserComments() throws {
         let h = try H.make()
         defer { h.cleanUp() }

@@ -171,7 +171,7 @@ public struct CodeWorkspace: Sendable {
 extension AppDatabase {
     public func pins(agentId: Int64) throws -> [Pin] {
         try writer.read { db in
-            try Pin.filter(Column("agentId") == agentId).order(Column("file"), Column("startLine")).fetchAll(db)
+            try Pin.filter(Column("agentId") == agentId).filter(Column("byUser") == false).order(Column("file"), Column("startLine")).fetchAll(db)
         }
     }
 }

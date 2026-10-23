@@ -22,7 +22,7 @@ extension AppModel {
         do {
             try memory.write(text)
         } catch {
-            alert = AppAlert(title: "Couldn’t save \(session.agent.name)’s memory", message: error.localizedDescription)
+            alert = AppAlert(title: "Couldn’t save \(displayName(of: session.agent))’s memory", message: error.localizedDescription)
         }
     }
 
@@ -31,7 +31,7 @@ extension AppModel {
         do {
             try memory.clear()
         } catch {
-            alert = AppAlert(title: "Couldn’t clear \(session.agent.name)’s memory", message: error.localizedDescription)
+            alert = AppAlert(title: "Couldn’t clear \(displayName(of: session.agent))’s memory", message: error.localizedDescription)
         }
     }
 

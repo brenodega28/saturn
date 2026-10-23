@@ -144,7 +144,7 @@ private struct SourceSwatch: View {
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.white)
                     }
-                    .help(agent.name)
+                    .help(AgentNaming.displayName(of: agent.name, role: source?.role))
             } else {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(Color.white.opacity(0.1))

@@ -47,7 +47,7 @@ struct AgentSessionView: View {
             AgentAvatar(size: 40, appearance: RoleAppearance(role: model.role(for: agent, in: project)))
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 10) {
-                    Text(agent.name).font(.system(size: 17, weight: .bold)).lineLimit(1)
+                    Text(model.displayName(of: agent, in: project)).font(.system(size: 17, weight: .bold)).lineLimit(1)
                     StatusLabel(status: model.displayStatus(of: agent), isQueued: session.isQueued).fixedSize()
                 }
                 ViewThatFits(in: .horizontal) {
@@ -147,6 +147,7 @@ private struct StatusBanner: View {
 }
 
 private struct Composer: View {
+    @Environment(AppModel.self) private var model
     let session: AgentSession
     @State private var text = ""
     @FocusState private var isFocused: Bool
@@ -162,7 +163,7 @@ private struct Composer: View {
                 .foregroundStyle(Theme.secondaryText)
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Message \(session.agent.name)", text: $text, axis: .vertical)
+                TextField("Message \(model.displayName(of: session.agent))", text: $text, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13.5))
                     .lineLimit(1...6)

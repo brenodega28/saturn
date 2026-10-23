@@ -76,6 +76,7 @@ final class RecordingWriteBack: IssueWriteBack {
 
         #expect(try h.run(id).status == .succeeded)
         #expect(writeBack.calls.last == .ended(issue: 42, conclusion: .succeeded, summary: nil, pullRequest: "https://github.com/acme/shop/pull/\(id)"))
+        try await waitUntil { (try? h.database.writeBackEvents(runId: id)) == [.started, .ended] }
         #expect(try h.database.writeBackEvents(runId: id) == [.started, .ended])
         observer.stop()
     }

@@ -414,3 +414,37 @@ import Testing
         #expect(status.isEmpty)
     }
 }
+
+@Suite struct PortProbeTests {
+    func bindLoopback(listening: Bool) throws -> (descriptor: Int32, port: Int) {
+        let descriptor = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = 0
+        address.sin_addr = in_addr(s_addr: INADDR_LOOPBACK.bigEndian)
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafeMutablePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(descriptor, $0, length) == 0 && getsockname(descriptor, $0, &length) == 0 }
+        }
+        try #require(bound && (!listening || Darwin.listen(descriptor, 4) == 0))
+        return (descriptor, Int(UInt16(bigEndian: address.sin_port)))
+    }
+
+    @Test func detectsAListeningPort() async throws {
+        let (descriptor, port) = try bindLoopback(listening: true)
+        defer { close(descriptor) }
+        #expect(await PortProbe.isListening(port: port))
+    }
+
+    @Test func aBoundPortWithoutAListenerIsNotRunning() throws {
+        let (descriptor, port) = try bindLoopback(listening: false)
+        defer { close(descriptor) }
+        #expect(!PortProbe.connects(ipv4: port))
+    }
+
+    @Test func invalidPortsAreNeverListening() async {
+        #expect(!(await PortProbe.isListening(port: 0)))
+        #expect(!(await PortProbe.isListening(port: 70000)))
+    }
+}

@@ -1,0 +1,61 @@
+name: Ensemble
+options:
+  bundleIdPrefix: dev.monoliti
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+configFiles:
+  Debug: Configs/Base.xcconfig
+  Release: Configs/Base.xcconfig
+
+packages:
+  EnsembleCore:
+    path: Packages/EnsembleCore
+  EnsembleUI:
+    path: Packages/EnsembleUI
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.0
+
+targets:
+  Ensemble:
+    type: application
+    platform: macOS
+    sources:
+      - Ensemble
+    dependencies:
+      - package: EnsembleCore
+      - package: EnsembleUI
+      - package: Sparkle
+    entitlements:
+      path: Ensemble/Ensemble.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    info:
+      path: Ensemble/Info.plist
+      properties:
+        CFBundleDisplayName: Ensemble
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHumanReadableCopyright: ""
+        SUFeedURL: $(SPARKLE_FEED_URL)
+        SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
+        SUEnableAutomaticChecks: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.monoliti.Ensemble
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+schemes:
+  Ensemble:
+    build:
+      targets:
+        Ensemble: all
+    run:
+      config: Debug
+    archive:
+      config: Release

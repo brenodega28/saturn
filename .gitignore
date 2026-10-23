@@ -1,0 +1,13 @@
+.DS_Store
+/Ensemble.xcodeproj/
+/Ensemble/Info.plist
+/Ensemble/Ensemble.entitlements
+/build/
+/dist/
+DerivedData/
+.build/
+.swiftpm/
+Packages/*/Package.resolved
+Configs/Local.xcconfig
+*.xcuserstate
+xcuserdata/

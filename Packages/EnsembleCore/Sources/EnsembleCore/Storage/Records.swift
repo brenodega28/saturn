@@ -1,0 +1,237 @@
+import Foundation
+import GRDB
+
+public struct Project: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "project"
+
+    public var id: Int64?
+    public var name: String
+    public var path: String
+    public var isOpen: Bool
+    public var createdAt: Date
+    public var lastOpenedAt: Date
+
+    public init(id: Int64? = nil, name: String, path: String, isOpen: Bool, createdAt: Date, lastOpenedAt: Date) {
+        self.id = id
+        self.name = name
+        self.path = path
+        self.isOpen = isOpen
+        self.createdAt = createdAt
+        self.lastOpenedAt = lastOpenedAt
+    }
+
+    public var url: URL { URL(fileURLWithPath: path, isDirectory: true) }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+
+    public enum Columns {
+        public static let path = Column(CodingKeys.path)
+        public static let name = Column(CodingKeys.name)
+        public static let isOpen = Column(CodingKeys.isOpen)
+        public static let lastOpenedAt = Column(CodingKeys.lastOpenedAt)
+    }
+}
+
+public enum TaskSource: String, Codable, Sendable, CaseIterable {
+    case chat
+    case github
+}
+
+public enum TaskStatus: String, Codable, Sendable, CaseIterable {
+    case incoming
+    case running
+    case waitingOnYou
+    case done
+    case failed
+    case dismissed
+}
+
+public struct ProjectTask: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "task"
+
+    public var id: Int64?
+    public var projectId: Int64
+    public var title: String
+    public var body: String
+    public var source: TaskSource
+    public var sourceURL: String?
+    public var workflow: String?
+    public var status: TaskStatus
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: Int64? = nil, projectId: Int64, title: String, body: String, source: TaskSource,
+        sourceURL: String? = nil, workflow: String? = nil, status: TaskStatus, createdAt: Date, updatedAt: Date
+    ) {
+        self.id = id
+        self.projectId = projectId
+        self.title = title
+        self.body = body
+        self.source = source
+        self.sourceURL = sourceURL
+        self.workflow = workflow
+        self.status = status
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
+public enum RunStatus: String, Codable, Sendable, CaseIterable {
+    case pending
+    case running
+    case waitingOnYou
+    case paused
+    case interrupted
+    case succeeded
+    case failed
+    case cancelled
+}
+
+public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "run"
+
+    public var id: Int64?
+    public var projectId: Int64
+    public var taskId: Int64
+    public var workflow: String
+    public var workflowVersion: String?
+    public var currentStep: String?
+    public var status: RunStatus
+    public var outcome: String?
+    public var costUSD: Double
+    public var startedAt: Date
+    public var endedAt: Date?
+
+    public init(
+        id: Int64? = nil, projectId: Int64, taskId: Int64, workflow: String, workflowVersion: String? = nil,
+        currentStep: String? = nil, status: RunStatus, outcome: String? = nil, costUSD: Double = 0,
+        startedAt: Date, endedAt: Date? = nil
+    ) {
+        self.id = id
+        self.projectId = projectId
+        self.taskId = taskId
+        self.workflow = workflow
+        self.workflowVersion = workflowVersion
+        self.currentStep = currentStep
+        self.status = status
+        self.outcome = outcome
+        self.costUSD = costUSD
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
+public enum AgentStatus: String, Codable, Sendable, CaseIterable {
+    case idle
+    case working
+    case needsInput
+    case waiting
+    case reviewing
+    case paused
+    case interrupted
+    case stopped
+    case failed
+}
+
+public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "agent"
+
+    public var id: Int64?
+    public var projectId: Int64
+    public var runId: Int64?
+    public var role: String
+    public var name: String
+    public var step: String?
+    public var worktreePath: String?
+    public var branch: String?
+    public var status: AgentStatus
+    public var sessionId: String?
+    public var inputTokens: Int
+    public var outputTokens: Int
+    public var costUSD: Double
+    public var isPinned: Bool
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: Int64? = nil, projectId: Int64, runId: Int64? = nil, role: String, name: String, step: String? = nil,
+        worktreePath: String? = nil, branch: String? = nil, status: AgentStatus, sessionId: String? = nil,
+        inputTokens: Int = 0, outputTokens: Int = 0, costUSD: Double = 0, isPinned: Bool = false,
+        createdAt: Date, updatedAt: Date
+    ) {
+        self.id = id
+        self.projectId = projectId
+        self.runId = runId
+        self.role = role
+        self.name = name
+        self.step = step
+        self.worktreePath = worktreePath
+        self.branch = branch
+        self.status = status
+        self.sessionId = sessionId
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.costUSD = costUSD
+        self.isPinned = isPinned
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
+public struct UsageEntry: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "usage"
+
+    public var id: Int64?
+    public var projectId: Int64
+    public var runId: Int64?
+    public var agentId: Int64?
+    public var model: String
+    public var inputTokens: Int
+    public var outputTokens: Int
+    public var cacheReadTokens: Int
+    public var cacheWriteTokens: Int
+    public var costUSD: Double
+    public var recordedAt: Date
+
+    public init(
+        id: Int64? = nil, projectId: Int64, runId: Int64? = nil, agentId: Int64? = nil, model: String,
+        inputTokens: Int = 0, outputTokens: Int = 0, cacheReadTokens: Int = 0, cacheWriteTokens: Int = 0,
+        costUSD: Double, recordedAt: Date
+    ) {
+        self.id = id
+        self.projectId = projectId
+        self.runId = runId
+        self.agentId = agentId
+        self.model = model
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheReadTokens = cacheReadTokens
+        self.cacheWriteTokens = cacheWriteTokens
+        self.costUSD = costUSD
+        self.recordedAt = recordedAt
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+
+    public enum Columns {
+        public static let costUSD = Column(CodingKeys.costUSD)
+        public static let recordedAt = Column(CodingKeys.recordedAt)
+    }
+}

@@ -161,6 +161,11 @@ private struct RunCard: View {
                 Text(run.status.label)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(run.status.color)
+                Button("Details") { model.openRunDetail(run) }
+                    .buttonStyle(PillButtonStyle(height: 24))
+                    .font(.system(size: 11.5))
+                    .fixedSize()
+                    .help("Show the workflow graph, timeline, agents and logs for this run")
             }
             if let stages = timeline?.stages, !stages.isEmpty {
                 HStack(spacing: 4) {

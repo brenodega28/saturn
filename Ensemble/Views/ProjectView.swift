@@ -88,7 +88,7 @@ struct ProjectView: View {
         case .changes:
             ChangesView(project: project)
         case .workflows:
-            EmptyState("No workflows yet", message: "Workflows live in .ensemble/workflows/ in this repository, versioned with your code.")
+            WorkflowsView(project: project)
         case .settings:
             ProjectSettingsView(project: project, branch: state.branch)
         }

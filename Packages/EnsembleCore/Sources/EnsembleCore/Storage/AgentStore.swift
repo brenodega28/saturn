@@ -39,6 +39,14 @@ extension AppDatabase {
         }
     }
 
+    public func agentsQueuedOutsideRuns() throws -> [Agent] {
+        try writer.read { db in
+            try Agent
+                .filter(Agent.Columns.status == AgentStatus.waiting.rawValue && Agent.Columns.runId == nil)
+                .fetchAll(db)
+        }
+    }
+
     public func agentsWithLiveProcesses() throws -> [Agent] {
         try writer.read { db in
             try Agent.filter(Agent.Columns.status == AgentStatus.working.rawValue).fetchAll(db)

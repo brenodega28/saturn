@@ -29,8 +29,18 @@ public enum AgentPermissions {
         "make", "bundle exec", "rake", "rspec", "mix test", "./gradlew", "gradle", "mvn", "dotnet build", "dotnet test",
     ]
 
+    public static let writingGitCommands = ["git add", "git commit", "git restore", "git stash", "git mv", "git rm"]
+
+    public static var readOnlyCommands: [String] {
+        commands.filter { !writingGitCommands.contains($0) }
+    }
+
     public static let tools = ["Read", "Glob", "Grep", "TodoWrite"]
     public static let fileWritingTools = ["Edit", "MultiEdit", "Write", "NotebookEdit"]
+
+    public static func readOnlyAllowedTools() -> [String] {
+        tools + readOnlyCommands.map { "Bash(\($0):*)" }
+    }
 
     public static func allowedTools(worktree: URL) -> [String] {
         let scope = "/" + realPath(of: worktree) + "/**"
@@ -64,15 +74,36 @@ public struct ClaudeLaunch: Sendable, Equatable {
     public let model: String
     public let systemPrompt: String
     public let environment: [String: String]
+    public var readOnly: Bool
+    public var additionalDirectories: [URL]
+    public var extraArguments: [String]
+    public var extraAllowedTools: [String]
 
-    public init(executable: URL, worktree: URL, session: Session, model: String, systemPrompt: String, environment: [String: String]) {
+    public init(
+        executable: URL,
+        worktree: URL,
+        session: Session,
+        model: String,
+        systemPrompt: String,
+        environment: [String: String],
+        readOnly: Bool = false,
+        additionalDirectories: [URL] = [],
+        extraArguments: [String] = [],
+        extraAllowedTools: [String] = []
+    ) {
         self.executable = executable
         self.worktree = worktree
         self.session = session
         self.model = model
         self.systemPrompt = systemPrompt
         self.environment = environment
+        self.readOnly = readOnly
+        self.additionalDirectories = additionalDirectories
+        self.extraArguments = extraArguments
+        self.extraAllowedTools = extraAllowedTools
     }
+
+    public var workingDirectory: URL { worktree }
 
     public var arguments: [String] {
         var arguments = [
@@ -89,9 +120,27 @@ public struct ClaudeLaunch: Sendable, Equatable {
         case .new(let id): arguments += ["--session-id", id]
         case .resume(let id): arguments += ["--resume", id]
         }
+        for directory in additionalDirectories {
+            arguments += ["--add-dir", realPath(of: directory)]
+        }
+        if readOnly {
+            arguments.append("--disallowedTools")
+            arguments += AgentPermissions.fileWritingTools
+        }
+        arguments += extraArguments
         arguments.append("--allowedTools")
-        arguments += AgentPermissions.allowedTools(worktree: worktree)
+        arguments += readOnly ? AgentPermissions.readOnlyAllowedTools() : AgentPermissions.allowedTools(worktree: worktree)
+        arguments += extraAllowedTools
         return arguments
+    }
+
+    public static func readOnlySystemPrompt(agentName: String, directory: URL) -> String {
+        """
+        You are \(agentName), a read-only agent run by Ensemble. You work from \(directory.path) and can read every file \
+        and worktree you are given, run tests and inspect history, but you never edit, create or delete files and never commit. \
+        Report what you find; the coding agents and the user make the changes. \
+        Some shell commands are blocked: if one is denied, use another approach or say what you need from the user.
+        """
     }
 
     public static func systemPrompt(agentName: String, worktree: URL, branch: String?) -> String {

@@ -137,6 +137,11 @@ public struct ProjectConfig: Sendable, Hashable {
 }
 
 public enum ProjectConfigLoader {
+    public static func hasConfig(repository: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: ProjectConfig.directory(in: repository).path, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+
     public static func load(repository: URL) -> ProjectConfig {
         let root = ProjectConfig.directory(in: repository)
         var issues: [ConfigIssue] = []

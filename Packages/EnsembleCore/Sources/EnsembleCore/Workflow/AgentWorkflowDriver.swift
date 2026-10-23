@@ -407,17 +407,17 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
             switch end.action {
             case .leave:
-                result = FinishResult(summary: "Branches left in place; combined work is on \(deliveryBranch).")
+                result = FinishResult(summary: "Branches left in place; combined work is on \(deliveryBranch).", deliveryBranch: deliveryBranch, baseBranch: base)
             case .merge:
                 try await mergeIntoBase(deliveryBranch, base: base, project: project, git: git)
                 result = FinishResult(summary: "Merged \(deliveryBranch) into \(base).")
             case .push:
                 try await git.run(["push", "-u", "origin", deliveryBranch], in: project.url)
-                result = FinishResult(summary: "Pushed \(deliveryBranch) to origin.")
+                result = FinishResult(summary: "Pushed \(deliveryBranch) to origin.", deliveryBranch: deliveryBranch, baseBranch: base)
             case .pullRequest:
                 try await git.run(["push", "-u", "origin", deliveryBranch], in: project.url)
                 let url = try await openPullRequest(run: run, project: project, branch: deliveryBranch, base: base, git: git)
-                result = FinishResult(pullRequestURL: url, summary: "Opened \(url).")
+                result = FinishResult(pullRequestURL: url, summary: "Opened \(url).", deliveryBranch: deliveryBranch, baseBranch: base)
             }
         }
 
@@ -803,6 +803,11 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func mergeIntoBase(_ branch: String, base: String, project: Project, git: GitClient) async throws {
+        try await requireSafeMerge(into: base, project: project, git: git)
+        try await git.run(["merge", "--no-ff", "--no-edit", branch], in: project.url)
+    }
+
+    private func requireSafeMerge(into base: String, project: Project, git: GitClient) async throws {
         let current = try await git.currentBranch(in: project.url)
         guard current == base else {
             throw WorkflowDriverError.unsafeMerge("\(project.name) has \(current ?? "a detached HEAD") checked out, not \(base). Check out \(base) and retry.")
@@ -811,7 +816,115 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         guard status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw WorkflowDriverError.unsafeMerge("\(project.name) has uncommitted changes on \(base). Commit or stash them and retry.")
         }
-        try await git.run(["merge", "--no-ff", "--no-edit", branch], in: project.url)
+    }
+
+    public func mergeDelivery(_ run: Run, method: MergeMethod) async throws -> String {
+        let git = try requireGit()
+        guard let project = try runtime.database.project(id: run.projectId) else { throw WorkflowDriverError.notReady("The project is gone.") }
+        guard let branch = run.deliveryBranch, let base = run.baseBranch else {
+            throw WorkflowDriverError.notReady("This run has no delivery branch to merge.")
+        }
+        try await requireSafeMerge(into: base, project: project, git: git)
+        let repository = project.url
+        let original = try await git.run(["rev-parse", "HEAD"], in: repository).trimmed
+        try await git.run(["fetch", "origin"], in: repository)
+        if try await git.hasCommit("refs/remotes/origin/\(base)", in: repository) {
+            try await git.run(["merge", "--ff-only", "origin/\(base)"], in: repository)
+        }
+        let localBranch = try await git.hasCommit("refs/heads/\(branch)", in: repository)
+        let ref = localBranch ? branch : "origin/\(branch)"
+        let remoteBranch = try await git.hasCommit("refs/remotes/origin/\(branch)", in: repository)
+        guard localBranch || remoteBranch else {
+            try await restore(repository, to: original, git: git)
+            throw WorkflowDriverError.notReady("\(branch) no longer exists locally or on origin.")
+        }
+        let identity = try await commitIdentity(in: repository, git: git)
+
+        do {
+            switch method {
+            case .mergeCommit:
+                try await mergeOrAbort(identity + ["merge", "--no-ff", "--no-edit", ref], branch: branch, in: repository, git: git)
+            case .squash:
+                try await mergeOrAbort(["merge", "--squash", ref], branch: branch, in: repository, git: git)
+                try await git.run(identity + ["commit", "-m", run.title.isEmpty ? "Merge \(branch)" : run.title], in: repository)
+            case .rebase:
+                let rebased = try await rebase(ref, onto: base, branch: branch, run: run, repository: repository, identity: identity, git: git)
+                try await git.run(["merge", "--ff-only", rebased], in: repository)
+            }
+            try await git.run(["push", "origin", base], in: repository)
+        } catch {
+            try? await restore(repository, to: original, git: git)
+            throw error
+        }
+
+        try await deleteBranch(branch, local: localBranch, in: repository, git: git)
+        return "Merged \(branch) into \(base)."
+    }
+
+    private func commitIdentity(in repository: URL, git: GitClient) async throws -> [String] {
+        let name = try await git.runner.run(git.executable, ["config", "user.name"], in: repository)
+        let email = try await git.runner.run(git.executable, ["config", "user.email"], in: repository)
+        if name.succeeded, email.succeeded, !name.standardOutput.trimmed.isEmpty, !email.standardOutput.trimmed.isEmpty {
+            return []
+        }
+        return ["-c", "user.name=Ensemble", "-c", "user.email=ensemble@localhost"]
+    }
+
+    private func mergeOrAbort(_ arguments: [String], branch: String, in repository: URL, git: GitClient) async throws {
+        let result = try await git.runner.run(git.executable, arguments, in: repository)
+        guard !result.succeeded else { return }
+        let conflicted = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: repository))?
+            .split(separator: "\n").map(String.init) ?? []
+        _ = try? await git.run(["merge", "--abort"], in: repository)
+        if conflicted.isEmpty {
+            throw WorkflowDriverError.unsafeMerge("Merging \(branch) failed: \(result.standardError.trimmed).")
+        }
+        throw WorkflowDriverError.mergeConflict(branch: branch, files: conflicted)
+    }
+
+    private func rebase(_ ref: String, onto base: String, branch: String, run: Run, repository: URL, identity: [String], git: GitClient) async throws -> String {
+        let manager = WorktreeManager(repository: repository, git: git)
+        let path = try manager.path(forAgent: "rebase-run-\(try requireRunID(run))")
+        if FileManager.default.fileExists(atPath: path.path) {
+            _ = try? await git.run(["worktree", "remove", "--force", path.path], in: repository)
+        }
+        try await manager.ensureExcluded()
+        try FileManager.default.createDirectory(at: manager.crewDirectory, withIntermediateDirectories: true)
+        try await git.run(["worktree", "add", "--detach", path.path, ref], in: repository)
+        let result = try? await git.runner.run(git.executable, identity + ["rebase", base], in: path)
+        var head: String?
+        var conflicted: [String] = []
+        if result?.succeeded == true {
+            head = try? await git.run(["rev-parse", "HEAD"], in: path).trimmed
+        } else {
+            conflicted = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: path))?
+                .split(separator: "\n").map(String.init) ?? []
+            _ = try? await git.run(["rebase", "--abort"], in: path)
+        }
+        _ = try? await git.run(["worktree", "remove", "--force", path.path], in: repository)
+        if let head { return head }
+        if !conflicted.isEmpty { throw WorkflowDriverError.mergeConflict(branch: branch, files: conflicted) }
+        throw WorkflowDriverError.unsafeMerge("Rebasing \(branch) onto \(base) failed: \(result?.standardError.trimmed ?? "git didn’t run").")
+    }
+
+    private func restore(_ repository: URL, to commit: String, git: GitClient) async throws {
+        _ = try? await git.run(["merge", "--abort"], in: repository)
+        try await git.run(["reset", "--merge", commit], in: repository)
+    }
+
+    private func deleteBranch(_ branch: String, local: Bool, in repository: URL, git: GitClient) async throws {
+        if try await git.hasCommit("refs/remotes/origin/\(branch)", in: repository) {
+            let result = try await git.runner.run(git.executable, ["push", "origin", "--delete", branch], in: repository)
+            if !result.succeeded {
+                _ = try? await git.run(["fetch", "--prune", "origin"], in: repository)
+            }
+        }
+        guard local else { return }
+        let manager = WorktreeManager(repository: repository, git: git)
+        for worktree in (try? await manager.list()) ?? [] where worktree.branch == branch {
+            try? await manager.remove(worktree, force: true, deleteBranch: false)
+        }
+        _ = try? await git.run(["branch", "-D", branch], in: repository)
     }
 
     private func openPullRequest(run: Run, project: Project, branch: String, base: String, git: GitClient) async throws -> String {

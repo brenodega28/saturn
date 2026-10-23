@@ -52,6 +52,7 @@ private struct LeadRequestList: View {
     let selectedID: Int64?
 
     var body: some View {
+        let needsYouTaskIDs = model.needsYouTaskIDs()
         VStack(alignment: .leading, spacing: 10) {
             Button {
                 model.startNewLeadRequest(in: project)
@@ -64,14 +65,14 @@ private struct LeadRequestList: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     ForEach(requests) { request in
-                        row(request)
+                        row(request, needsYouTaskIDs: needsYouTaskIDs)
                     }
                 }
             }
         }
     }
 
-    private func row(_ request: ProjectTask) -> some View {
+    private func row(_ request: ProjectTask, needsYouTaskIDs: Set<Int64>) -> some View {
         let isSelected = request.id == selectedID
         let run = model.latestRun(of: request)
         let detail = run.map { run in
@@ -83,7 +84,7 @@ private struct LeadRequestList: View {
             model.showRequest(request)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StatusDot(model.statusColor(of: request, latestRun: run))
+                StatusDot(model.statusColor(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(request.title.isEmpty ? "Request #\(request.id ?? 0)" : request.title)
                         .font(.system(size: 13, weight: isSelected ? .semibold : .regular))

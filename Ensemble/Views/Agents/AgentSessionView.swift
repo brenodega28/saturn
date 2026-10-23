@@ -48,7 +48,7 @@ struct AgentSessionView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 10) {
                     Text(agent.name).font(.system(size: 17, weight: .bold)).lineLimit(1)
-                    StatusLabel(status: agent.status, isQueued: session.isQueued).fixedSize()
+                    StatusLabel(status: model.displayStatus(of: agent), isQueued: session.isQueued).fixedSize()
                 }
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {

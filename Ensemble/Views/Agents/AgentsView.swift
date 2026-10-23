@@ -18,11 +18,6 @@ struct AgentGroup: Identifiable {
 
     var id: Kind { kind }
 
-    var isRun: Bool {
-        if case .run = kind { return true }
-        return false
-    }
-
     @MainActor
     static func make(_ sessions: [AgentSession], runs: [Run], idleCleanupMinutes: Int = 0, describe: (Run) -> (workflow: String?, step: String?) = { ($0.workflow, $0.currentStep) }) -> [AgentGroup] {
         var groups: [AgentGroup] = []
@@ -97,9 +92,10 @@ struct AgentsView: View {
     private func section(_ group: AgentGroup) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                if group.isRun {
+                if case .run(let runID) = group.kind {
+                    let needsYou = model.liveRun(id: runID).map(model.runNeedsYou) == true
                     HStack(spacing: 8) {
-                        StatusDot(Theme.success, size: 8)
+                        StatusDot(AppModel.statusColor(needsYou: needsYou, otherwise: Theme.success), size: 8)
                         Text(group.title).font(.system(size: 15, weight: .semibold))
                     }
                 } else {

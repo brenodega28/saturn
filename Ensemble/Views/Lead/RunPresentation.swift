@@ -51,6 +51,16 @@ extension RunStepStatus {
     }
 }
 
+extension RunStepStatus {
+    func displayColor(needsYou: Bool) -> Color {
+        needsYou ? Theme.warning : color
+    }
+
+    func displayLabel(needsYou: Bool) -> String {
+        needsYou ? RunStepStatus.waitingOnYou.label : label
+    }
+}
+
 extension RunTimeline.StageState {
     var color: Color {
         switch self {
@@ -86,8 +96,9 @@ extension AppModel {
         runNeedsYou(run) ? RunStatus.waitingOnYou.label : run.status.label
     }
 
-    func statusColor(of request: ProjectTask, latestRun: Run?) -> Color {
-        Self.statusColor(needsYou: requestNeedsYou(request, latestRun: latestRun), otherwise: latestRun?.status.color ?? Theme.secondaryText)
+    func statusColor(of request: ProjectTask, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> Color {
+        let needsYou = requestNeedsYou(request, latestRun: latestRun, needsYouTaskIDs: needsYouTaskIDs)
+        return Self.statusColor(needsYou: needsYou, otherwise: latestRun?.status.color ?? Theme.secondaryText)
     }
 }
 

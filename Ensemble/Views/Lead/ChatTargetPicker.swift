@@ -77,7 +77,7 @@ struct ChatTargetPicker: View {
         let lead = model.chatLeadRole(in: project)
         let request = model.selectedRequest(in: project)
         let leadSession = request.flatMap(model.leadSession(for:))
-        let requestNeedsYou = request.map { model.requestNeedsYou($0, latestRun: model.latestRun(of: $0)) } == true
+        let requestNeedsYou = request.map { model.requestNeedsYou($0, latestRun: model.latestRun(of: $0), needsYouTaskIDs: model.needsYouTaskIDs()) } == true
         let status: AgentStatus? = requestNeedsYou ? .needsInput : leadSession.map { model.displayStatus(of: $0.agent) }
         return (lead?.name ?? "No lead role", RoleAppearance(role: lead), status)
     }

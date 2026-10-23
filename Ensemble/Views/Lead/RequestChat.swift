@@ -84,8 +84,8 @@ struct RequestChat: View {
                 Text("Started the run.").font(.system(size: 14))
                 RunCard(run: live(run), workflow: model.runWorkflow(run), timeline: run.id.flatMap { data.timelines[$0] }, agentCount: agentCount(run))
             }
-        case .step(_, let entry):
-            StepEvent(entry: entry)
+        case .step(let run, let entry):
+            StepEvent(entry: entry, needsYou: model.stepNeedsYou(entry.status, in: live(run)))
         case .answeredQuestion(let question):
             AnsweredQuestion(item: question)
         case .runEnded(let run):
@@ -219,9 +219,10 @@ private struct ProposalCard: View {
 
 private struct StepEvent: View {
     let entry: RunTimeline.Entry
+    let needsYou: Bool
 
     var body: some View {
-        StepRow(entry: entry)
+        StepRow(entry: entry, needsYou: needsYou)
             .padding(.horizontal, 14)
             .padding(.vertical, 2)
             .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 12, style: .continuous))
@@ -457,18 +458,20 @@ private struct FinalStateCard: View {
         case .succeeded: run.pullRequestURL == nil ? "Run finished" : "Run finished with a pull request"
         case .failed: "Run failed"
         case .cancelled: "Run cancelled"
-        default: run.status.label
+        default: model.statusLabel(of: run)
         }
     }
 }
 
 private struct StepRow: View {
     let entry: RunTimeline.Entry
+    let needsYou: Bool
 
     var body: some View {
+        let statusColor = entry.status.displayColor(needsYou: needsYou)
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StatusDot(entry.status.color)
+                StatusDot(statusColor)
                 Text(entry.title).font(.system(size: 13, weight: .medium))
                 if entry.iteration > 1 {
                     Text("pass \(entry.iteration)").font(.system(size: 11.5)).foregroundStyle(Theme.tertiaryText)
@@ -476,7 +479,7 @@ private struct StepRow: View {
                 if let outcome = entry.outcomeTitle {
                     Chip(text: outcome, foreground: outcomeColor, background: outcomeColor.opacity(0.14))
                 } else {
-                    Chip(text: entry.status.label, foreground: entry.status.color, background: entry.status.color.opacity(0.14))
+                    Chip(text: entry.status.displayLabel(needsYou: needsYou), foreground: statusColor, background: statusColor.opacity(0.14))
                 }
                 Spacer(minLength: 8)
                 if entry.costUSD > 0 {
@@ -510,7 +513,7 @@ private struct StepRow: View {
 
     private var outcomeColor: Color {
         switch entry.outcome {
-        case _ where entry.status == .waitingOnYou: Theme.warning
+        case _ where needsYou: Theme.warning
         case StepOutcome.changesRequested, StepOutcome.failed, "rejected": Theme.warning
         default: entry.status == .failed ? Theme.danger : Theme.successText
         }

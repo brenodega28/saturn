@@ -79,7 +79,7 @@ private struct TimelineRow: View {
                 .padding(.leading, 32)
             }
             if isExpanded {
-                TimelineDetails(entry: entry, workflow: snapshot.workflow)
+                TimelineDetails(entry: entry, workflow: snapshot.workflow, needsYou: needsYou)
                     .padding(.leading, 32)
                     .padding(.top, 2)
             }
@@ -107,7 +107,7 @@ private struct TimelineRow: View {
                     }
                 }
                 FlowLayout(spacing: 6) {
-                    StatusChip(text: entry.outcomeTitle ?? entry.status.label, color: outcomeColor)
+                    StatusChip(text: entry.outcomeTitle ?? entry.status.displayLabel(needsYou: needsYou), color: outcomeColor)
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text(metrics(now: context.date))
                             .font(.system(size: 11.5).monospacedDigit())
@@ -135,9 +135,13 @@ private struct TimelineRow: View {
         ].compactMap(\.self).joined(separator: " · ")
     }
 
+    private var needsYou: Bool {
+        model.stepNeedsYou(entry.status, in: snapshot.run, agentIDs: entry.agentIDs)
+    }
+
     private var outcomeColor: Color {
         switch entry.outcome {
-        case _ where entry.status == .waitingOnYou: Theme.warning
+        case _ where needsYou: Theme.warning
         case StepOutcome.changesRequested, StepOutcome.failed, "rejected": Theme.warning
         case nil: entry.status.color
         default: entry.status == .failed ? Theme.danger : Theme.successText
@@ -194,6 +198,7 @@ struct AgentLink: View {
 private struct TimelineDetails: View {
     let entry: RunHistory.Entry
     let workflow: WorkflowDefinition?
+    let needsYou: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -229,7 +234,7 @@ private struct TimelineDetails: View {
             }
             detailBlock(entry.attempts.count == 1 ? "Attempt" : "Attempts") {
                 ForEach(entry.attempts) { attempt in
-                    AttemptRow(attempt: attempt)
+                    AttemptRow(attempt: attempt, needsYou: needsYou && attempt.id == entry.latest?.id)
                 }
             }
         }
@@ -267,12 +272,13 @@ private struct TimelineDetails: View {
 
 private struct AttemptRow: View {
     let attempt: RunHistory.Attempt
+    let needsYou: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
-                StatusDot(attempt.status.color, size: 6)
-                Text("#\(attempt.number) \(attempt.status.label)").fontWeight(.medium)
+                StatusDot(attempt.status.displayColor(needsYou: needsYou), size: 6)
+                Text("#\(attempt.number) \(attempt.status.displayLabel(needsYou: needsYou))").fontWeight(.medium)
                 Text(details).foregroundStyle(Theme.tertiaryText).lineLimit(1)
             }
             if let summary = attempt.summary, !summary.isEmpty, attempt.status != .succeeded {

@@ -67,13 +67,19 @@ import Testing
         let allowed = try allowedTools(launch.split(separator: " ").map(String.init))
         #expect(allowed.contains("WebFetch"))
         #expect(allowed.contains("WebSearch"))
+        #expect(allowed.contains("ArtifactData"))
+        #expect(allowed.contains("ArtifactComments"))
+        #expect(allowed.contains("ArtifactCheck"))
+        #expect(!allowed.contains("Artifact"))
         #expect(allowed.contains("mcp__ensemble__propose_run"))
         #expect(allowed.contains("mcp__ensemble__message_agent"))
 
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         let turn = try setup.harness.runtime.turnSetup(for: leadAgent)
         #expect(Array(turn.extraAllowedTools.prefix(2)) == AgentPermissions.webTools)
+        #expect(Array(turn.extraAllowedTools.dropFirst(2).prefix(3)) == AgentPermissions.artifactTools)
         #expect(turn.systemPrompt.contains("`WebFetch` and `WebSearch`"))
+        #expect(turn.systemPrompt.contains("open claude.ai artifact links the user shares, use `ArtifactData`, `ArtifactComments` and `ArtifactCheck`"))
     }
 
     @Test func agentsOutsideTheChatGetNoWebTools() async throws {
@@ -98,6 +104,7 @@ import Testing
             #expect(session.agent.taskId == nil)
             let allowed = try allowedTools(launchArguments(try runtime.turnSetup(for: session.agent)))
             #expect(!allowed.contains { AgentPermissions.webTools.contains($0) }, "\(session.agent.name)")
+            #expect(!allowed.contains { AgentPermissions.artifactTools.contains($0) || $0 == "Artifact" }, "\(session.agent.name)")
         }
     }
 

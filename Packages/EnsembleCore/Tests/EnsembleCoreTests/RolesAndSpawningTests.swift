@@ -249,6 +249,49 @@ import Testing
         #expect(try await harness.repo.branches() == ["main"])
     }
 
+    @Test func requestAgentsMayReadClaudeArtifactsAndTheWebButNoAgentMayWriteArtifacts() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        let projectId = try #require(harness.project.id)
+        let task = try harness.database.insert(ProjectTask(projectId: projectId, title: "Refunds", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
+        let run = try harness.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: .running, startedAt: .now, title: "Refunds"), state: RunEngineState())
+        let runID = try #require(run.id)
+
+        let lead = try harness.runtime.createLeadAgent(in: harness.project, role: RoleDefinition(id: "lead", name: "Lead", editsCode: false), taskId: try #require(task.id))
+        let builders = try await harness.runtime.spawn(in: harness.project, role: django, count: 2, config: config(), git: harness.repo.git)
+        let reviewers = try await harness.runtime.spawn(in: harness.project, role: reviewer, count: 2, config: config(), git: harness.repo.git)
+        builders[0].attach(toRun: runID)
+        reviewers[0].attach(toRun: runID)
+        let bound = [lead, builders[0], reviewers[0]]
+        let unbound = [builders[1], reviewers[1]]
+
+        for session in bound + unbound {
+            let setup = try harness.runtime.turnSetup(for: session.agent)
+            let arguments = ClaudeLaunch(
+                executable: URL(fileURLWithPath: "/usr/bin/true"),
+                worktree: setup.directory,
+                session: .new("abc"),
+                model: "sonnet",
+                systemPrompt: setup.systemPrompt,
+                environment: [:],
+                readOnly: setup.readOnly,
+                additionalDirectories: setup.additionalDirectories,
+                extraArguments: setup.extraArguments,
+                extraAllowedTools: setup.extraAllowedTools
+            ).arguments
+            let index = try #require(arguments.lastIndex(of: "--allowedTools"))
+            let allowed = Set(arguments[(index + 1)...])
+            let isBound = bound.contains { $0 === session }
+
+            #expect(!allowed.contains("Artifact"), "\(session.agent.name)")
+            #expect(allowed.isSuperset(of: AgentPermissions.artifactTools) == isBound, "\(session.agent.name)")
+            #expect(allowed.isDisjoint(with: AgentPermissions.artifactTools) == !isBound, "\(session.agent.name)")
+            #expect(allowed.isSuperset(of: AgentPermissions.webTools) == isBound, "\(session.agent.name)")
+            #expect(allowed.isDisjoint(with: AgentPermissions.webTools) == !isBound, "\(session.agent.name)")
+            #expect(setup.systemPrompt.contains("`ArtifactData`, `ArtifactComments` and `ArtifactCheck`") == isBound, "\(session.agent.name)")
+        }
+    }
+
     @Test func roleContextIsAppendedToTheSystemPrompt() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }

@@ -11,6 +11,15 @@ struct RequestChat: View {
     var body: some View {
         let session = model.leadSession(for: task)
         let isThinking = session.map { $0.isRunning || $0.isQueued } ?? false
+        VStack(spacing: 10) {
+            RequestHeader(task: task, project: project)
+                .frame(maxWidth: 820)
+                .frame(maxWidth: .infinity)
+            thread(isThinking: isThinking)
+        }
+    }
+
+    private func thread(isThinking: Bool) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
@@ -62,27 +71,38 @@ struct RequestChat: View {
     private func row(_ item: RequestThread.Item, data: RequestThreadData) -> some View {
         switch item {
         case .request(let task):
-            RequestBubble(text: task.body.isEmpty ? task.title : task.body, date: task.createdAt)
+            let request = ChatAttachment.splitPrompt(task.body)
+            RequestBubble(
+                text: request.text.isEmpty && request.pastes.isEmpty ? task.title : request.text,
+                date: task.createdAt,
+                attachments: request.pastes.compactMap { paste in
+                    guard case .pastedText(let id, let index, let text) = paste else { return nil }
+                    return .pastedText(id: id, index: index, text: text)
+                }
+            )
         case .message(let message):
             switch message.kind {
             case .user:
-                RequestBubble(text: message.text, date: message.createdAt)
+                RequestBubble(text: message.text, date: message.createdAt, attachments: message.storedAttachments)
             case .lead:
                 LeadBubble(role: data.leadRole, name: data.leadName, date: message.createdAt) {
                     ChatText(message.text)
                 }
             case .proposal:
                 LeadBubble(role: data.leadRole, name: data.leadName, date: message.createdAt) {
-                    ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil)
+                    ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed)
                 }
+            case .note:
+                DirectMessageNote(text: message.text)
+                    .padding(.leading, 42)
             }
         case .runStarted(let run):
             LeadBubble(role: data.leadRole, name: data.leadName, date: run.startedAt) {
                 Text("Started the run.").font(.system(size: 14))
                 RunCard(run: live(run), workflow: model.runWorkflow(run), timeline: run.id.flatMap { data.timelines[$0] }, agentCount: agentCount(run))
             }
-        case .step(_, let entry):
-            StepEvent(entry: entry)
+        case .step(let run, let entry):
+            StepEvent(entry: entry, needsYou: model.stepNeedsYou(entry.status, in: live(run)))
         case .answeredQuestion(let question):
             AnsweredQuestion(item: question)
         case .runEnded(let run):
@@ -129,7 +149,62 @@ struct RequestChat: View {
     }
 }
 
-private struct ChatText: View {
+private struct RequestHeader: View {
+    @Environment(AppModel.self) private var model
+    let task: ProjectTask
+    let project: Project
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(task.title.isEmpty ? "Request #\(task.id ?? 0)" : task.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.secondaryText)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if let reason = task.closeReason {
+                closedBanner(reason)
+            } else {
+                closeMenu
+            }
+        }
+    }
+
+    private func closedBanner(_ reason: RequestCloseReason) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: reason == .done ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(reason.color)
+                .accessibilityHidden(true)
+            Text("Closed as \(reason.title) · Send a message to reopen")
+                .foregroundStyle(Theme.secondaryText)
+        }
+        .font(.system(size: 12))
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(reason.color.opacity(0.1), in: Capsule())
+        .accessibilityElement(children: .combine)
+    }
+
+    private var closeMenu: some View {
+        let hasActiveRun = model.requestHasActiveRun(task)
+        return Menu {
+            ForEach(RequestCloseReason.allCases, id: \.self) { reason in
+                Button(reason.title) {
+                    Task { await model.closeRequest(task, as: reason, in: project) }
+                }
+            }
+        } label: {
+            Label("Close", systemImage: "checkmark.circle")
+        }
+        .menuStyle(.button)
+        .buttonStyle(PillButtonStyle(height: 26))
+        .font(.system(size: 12))
+        .fixedSize()
+        .disabled(hasActiveRun)
+        .help(hasActiveRun ? RequestCloseReason.blockedHelp : "Close this request as done or dropped and clean up its worktrees")
+    }
+}
+
+struct ChatText: View {
     let text: String
 
     init(_ text: String) {
@@ -149,7 +224,7 @@ private struct ChatText: View {
     }
 }
 
-private struct ThinkingRow: View {
+struct ThinkingRow: View {
     let role: RoleDefinition?
     let name: String
 
@@ -170,6 +245,7 @@ private struct ProposalCard: View {
     let proposal: LeadMessage
     let project: Project
     let hasActiveRun: Bool
+    let isRequestClosed: Bool
 
     var body: some View {
         let workflow = proposal.workflow.flatMap { model.config(for: project).workflow($0) }
@@ -190,8 +266,8 @@ private struct ProposalCard: View {
                 HStack(spacing: 8) {
                     Button { model.startProposal(proposal, in: project) } label: { Label("Start Run", systemImage: "play.fill") }
                         .buttonStyle(PillButtonStyle(.primary, height: 30))
-                        .disabled(hasActiveRun || workflow == nil)
-                        .help(hasActiveRun ? "Wait for the current run to end" : "Start the run; the lead plans it first")
+                        .disabled(hasActiveRun || isRequestClosed || workflow == nil)
+                        .help(startHelp)
                     Button("Dismiss") { model.dismissProposal(proposal) }
                         .buttonStyle(PillButtonStyle(height: 30))
                         .help("Don’t run this; keep talking to the lead")
@@ -202,6 +278,11 @@ private struct ProposalCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.accent.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.accent.opacity(0.28)))
+    }
+
+    private var startHelp: String {
+        if isRequestClosed { return "This request is closed. Send a message to reopen it first." }
+        return hasActiveRun ? "Wait for the current run to end" : "Start the run; the lead plans it first"
     }
 
     @ViewBuilder
@@ -216,9 +297,10 @@ private struct ProposalCard: View {
 
 private struct StepEvent: View {
     let entry: RunTimeline.Entry
+    let needsYou: Bool
 
     var body: some View {
-        StepRow(entry: entry)
+        StepRow(entry: entry, needsYou: needsYou)
             .padding(.horizontal, 14)
             .padding(.vertical, 2)
             .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 12, style: .continuous))
@@ -260,30 +342,66 @@ private struct AnsweredQuestion: View {
     }
 }
 
-private struct RequestBubble: View {
+struct RequestBubble: View {
     let text: String
     let date: Date
+    var attachments: [StoredChatAttachment] = []
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            Text(text)
-                .font(.system(size: 14))
-                .lineSpacing(3)
-                .foregroundStyle(.white)
-                .textSelection(.enabled)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Theme.accent.opacity(0.85), in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 6, topTrailingRadius: 20, style: .continuous))
+            if !attachments.isEmpty {
+                SentAttachments(attachments: attachments)
+            }
+            if !text.isEmpty {
+                Text(text)
+                    .font(.system(size: 14))
+                    .lineSpacing(3)
+                    .foregroundStyle(.white)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Theme.accent.opacity(0.85), in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 6, topTrailingRadius: 20, style: .continuous))
+                    .accessibilityLabel("You: \(text)")
+            }
             Text(date.formatted(.relative(presentation: .named))).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
         }
         .frame(maxWidth: 640, alignment: .trailing)
         .frame(maxWidth: .infinity, alignment: .trailing)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("You: \(text)")
+        .accessibilityElement(children: attachments.isEmpty ? .combine : .contain)
     }
 }
 
-private struct LeadBubble<Content: View>: View {
+private struct SentAttachments: View {
+    let attachments: [StoredChatAttachment]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(attachments.enumerated()), id: \.offset) { _, attachment in
+                switch attachment {
+                case .image(_, _, let fileName, let path):
+                    SentImage(url: URL(fileURLWithPath: path), name: fileName)
+                case .pastedText(_, _, let text):
+                    PastedTextChip(label: attachment.label, text: text)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("You attached \(attachments.map(\.label).joined(separator: ", "))")
+    }
+}
+
+private struct SentImage: View {
+    let url: URL
+    let name: String
+    @State private var image: NSImage?
+
+    var body: some View {
+        ImageAttachmentThumbnail(image: image, name: name, size: 120)
+            .task(id: url) { image = NSImage(contentsOf: url) }
+    }
+}
+
+struct LeadBubble<Content: View>: View {
     let role: RoleDefinition?
     let name: String
     let date: Date
@@ -322,16 +440,16 @@ private struct RunCard: View {
         ].compactMap(\.self)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                StatusDot(run.status.color, size: 8)
+                StatusDot(model.statusColor(of: run), size: 8)
                 Text(run.title).font(.system(size: 14, weight: .semibold)).lineLimit(2)
                 Text(meta.joined(separator: " · "))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
                     .lineLimit(2)
                 Spacer(minLength: 8)
-                Text(run.status.label)
+                Text(model.statusLabel(of: run))
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(run.status.color)
+                    .foregroundStyle(model.statusColor(of: run))
                 Button("Details") { model.openRunDetail(run) }
                     .buttonStyle(PillButtonStyle(height: 24))
                     .font(.system(size: 11.5))
@@ -410,9 +528,10 @@ private struct FinalStateCard: View {
     let reload: () -> Void
 
     var body: some View {
+        let color = model.statusColor(of: run)
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                StatusDot(run.status.color, size: 8)
+                StatusDot(color, size: 8)
                 Text(headline).font(.system(size: 14, weight: .semibold))
                 if let ended = run.endedAt {
                     Text(ended.formatted(date: .abbreviated, time: .shortened))
@@ -444,8 +563,8 @@ private struct FinalStateCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(run.status.color.opacity(0.09), in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(run.status.color.opacity(0.3)))
+        .background(color.opacity(0.09), in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(color.opacity(0.3)))
     }
 
     private var headline: String {
@@ -453,18 +572,20 @@ private struct FinalStateCard: View {
         case .succeeded: run.pullRequestURL == nil ? "Run finished" : "Run finished with a pull request"
         case .failed: "Run failed"
         case .cancelled: "Run cancelled"
-        default: run.status.label
+        default: model.statusLabel(of: run)
         }
     }
 }
 
 private struct StepRow: View {
     let entry: RunTimeline.Entry
+    let needsYou: Bool
 
     var body: some View {
+        let statusColor = entry.status.displayColor(needsYou: needsYou)
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StatusDot(entry.status.color)
+                StatusDot(statusColor)
                 Text(entry.title).font(.system(size: 13, weight: .medium))
                 if entry.iteration > 1 {
                     Text("pass \(entry.iteration)").font(.system(size: 11.5)).foregroundStyle(Theme.tertiaryText)
@@ -472,7 +593,7 @@ private struct StepRow: View {
                 if let outcome = entry.outcomeTitle {
                     Chip(text: outcome, foreground: outcomeColor, background: outcomeColor.opacity(0.14))
                 } else {
-                    Chip(text: entry.status.label, foreground: entry.status.color, background: entry.status.color.opacity(0.14))
+                    Chip(text: entry.status.displayLabel(needsYou: needsYou), foreground: statusColor, background: statusColor.opacity(0.14))
                 }
                 Spacer(minLength: 8)
                 if entry.costUSD > 0 {
@@ -506,8 +627,28 @@ private struct StepRow: View {
 
     private var outcomeColor: Color {
         switch entry.outcome {
+        case _ where needsYou: Theme.warning
         case StepOutcome.changesRequested, StepOutcome.failed, "rejected": Theme.warning
         default: entry.status == .failed ? Theme.danger : Theme.successText
         }
+    }
+}
+
+private struct DirectMessageNote: View {
+    let text: String
+
+    var body: some View {
+        Label {
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        } icon: {
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.tertiaryText)
+        }
+        .accessibilityLabel("Direct message summary: \(text)")
     }
 }

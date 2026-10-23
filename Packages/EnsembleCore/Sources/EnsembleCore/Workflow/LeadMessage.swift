@@ -5,6 +5,7 @@ public enum LeadMessageKind: String, Codable, Sendable, Hashable {
     case user
     case lead
     case proposal
+    case note
 }
 
 public enum ProposalStatus: String, Codable, Sendable, Hashable {
@@ -26,10 +27,12 @@ public struct LeadMessage: Codable, Sendable, Hashable, Identifiable, FetchableR
     public var status: ProposalStatus?
     public var runId: Int64?
     public var createdAt: Date
+    public var attachments: [StoredChatAttachment]?
 
     public init(
         id: Int64? = nil, projectId: Int64, taskId: Int64, kind: LeadMessageKind, text: String,
-        workflow: String? = nil, title: String? = nil, status: ProposalStatus? = nil, runId: Int64? = nil, createdAt: Date
+        workflow: String? = nil, title: String? = nil, status: ProposalStatus? = nil, runId: Int64? = nil, createdAt: Date,
+        attachments: [StoredChatAttachment]? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -41,7 +44,12 @@ public struct LeadMessage: Codable, Sendable, Hashable, Identifiable, FetchableR
         self.status = status
         self.runId = runId
         self.createdAt = createdAt
+        self.attachments = attachments
     }
+
+    public var storedAttachments: [StoredChatAttachment] { attachments ?? [] }
+
+    public var chatAttachments: [ChatAttachment] { storedAttachments.attachments }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
@@ -97,6 +105,28 @@ extension AppDatabase {
     public func leadAgent(taskId: Int64) throws -> Agent? {
         try writer.read { db in
             try Agent.filter(Column("taskId") == taskId).order(Column("id")).fetchOne(db)
+        }
+    }
+
+    public func requestAgents(taskId: Int64) throws -> [Agent] {
+        try writer.read { db in
+            try Agent.fetchAll(db, sql: """
+                SELECT agent.* FROM agent
+                WHERE agent.taskId = ?
+                   OR agent.runId IN (SELECT id FROM run WHERE run.taskId = ?)
+                ORDER BY agent.id
+                """, arguments: [taskId, taskId])
+        }
+    }
+
+    @discardableResult
+    public func setClosed(taskId: Int64, reason: RequestCloseReason?, at date: Date) throws -> ProjectTask? {
+        try writer.write { db in
+            try db.execute(
+                sql: "UPDATE task SET closedAt = ?, closeReason = ?, updatedAt = ? WHERE id = ?",
+                arguments: [reason == nil ? nil : date, reason?.rawValue, date, taskId]
+            )
+            return try ProjectTask.fetchOne(db, id: taskId)
         }
     }
 

@@ -9,7 +9,7 @@ import Testing
         let tables = try database.writer.read { db in
             try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%' ORDER BY name")
         }
-        #expect(tables == ["agent", "githubWriteBack", "inboxItem", "leadMessage", "pin", "project", "reviewViewedFile", "run", "runStep", "task", "usage"])
+        #expect(tables == ["agent", "directMessage", "githubWriteBack", "inboxItem", "leadMessage", "pin", "project", "reviewViewedFile", "run", "runStep", "task", "usage"])
     }
 
     @Test func reopeningAProjectUpdatesInsteadOfDuplicating() throws {

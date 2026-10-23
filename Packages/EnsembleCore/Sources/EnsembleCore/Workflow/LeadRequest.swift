@@ -22,6 +22,18 @@ public enum LeadRequest {
             status: .incoming, createdAt: now, updatedAt: now
         )
     }
+
+    public static func partition(_ requests: [ProjectTask]) -> (open: [ProjectTask], closed: [ProjectTask]) {
+        let open = requests.filter { !$0.isClosed }
+        let closed = requests.enumerated()
+            .filter { $0.element.isClosed }
+            .sorted { lhs, rhs in
+                let (left, right) = (lhs.element.closedAt ?? .distantPast, rhs.element.closedAt ?? .distantPast)
+                return left == right ? lhs.offset < rhs.offset : left > right
+            }
+            .map(\.element)
+        return (open, closed)
+    }
 }
 
 extension WorkflowDefinition {

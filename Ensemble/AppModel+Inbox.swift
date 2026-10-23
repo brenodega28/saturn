@@ -51,6 +51,57 @@ extension AppModel {
         }
     }
 
+    static let needsYouKinds: Set<InboxKind> = [.question, .planApproval, .approval]
+
+    var needsYouItems: [InboxItem] {
+        inbox.items.filter { Self.needsYouKinds.contains($0.kind) }
+    }
+
+    func runNeedsYou(_ run: Run) -> Bool {
+        if run.status == .waitingOnYou { return true }
+        guard let runID = run.id else { return false }
+        return needsYouItems.contains { $0.runId == runID }
+    }
+
+    func agentNeedsYou(_ agent: Agent) -> Bool {
+        guard let agentID = agent.id else { return false }
+        return needsYouItems.contains { $0.agentId == agentID }
+    }
+
+    func stepNeedsYou(_ status: RunStepStatus, in run: Run, agentIDs: [Int64] = []) -> Bool {
+        switch status {
+        case .waitingOnYou:
+            return true
+        case .running:
+            if runNeedsYou(run) { return true }
+            let items = needsYouItems
+            return agentIDs.contains { id in items.contains { $0.agentId == id } }
+        case .succeeded, .failed, .cancelled, .interrupted:
+            return false
+        }
+    }
+
+    func displayStatus(of agent: Agent) -> AgentStatus {
+        agentNeedsYou(agent) ? .needsInput : agent.status
+    }
+
+    func needsYouTaskIDs() -> Set<Int64> {
+        var taskIDs: Set<Int64> = []
+        for item in needsYouItems {
+            if let runID = item.runId, let run = liveRun(id: runID) {
+                taskIDs.insert(run.taskId)
+            } else if let taskID = item.agentId.flatMap({ agent(id: $0) })?.taskId {
+                taskIDs.insert(taskID)
+            }
+        }
+        return taskIDs
+    }
+
+    func requestNeedsYou(_ task: ProjectTask, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> Bool {
+        if let latestRun, runNeedsYou(latestRun) { return true }
+        return task.id.map(needsYouTaskIDs.contains) == true
+    }
+
     func runTitle(for item: InboxItem) -> String? {
         guard let runID = item.runId else { return nil }
         if let live = engine.runs[runID] { return live.title }

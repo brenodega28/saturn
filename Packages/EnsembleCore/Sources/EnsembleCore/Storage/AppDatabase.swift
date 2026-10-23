@@ -213,6 +213,29 @@ public final class AppDatabase: Sendable {
                 t.column("createdAt", .datetime).notNull()
             }
         }
+        migrator.registerMigration("v9-direct-messages") { db in
+            try db.create(table: "directMessage") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("projectId", .integer).notNull().indexed().references("project", onDelete: .cascade)
+                t.column("agentId", .integer).notNull().indexed().references("agent", onDelete: .cascade)
+                t.column("kind", .text).notNull()
+                t.column("text", .text).notNull().defaults(to: "")
+                t.column("awaitingReply", .boolean).notNull().defaults(to: false)
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
+        migrator.registerMigration("v10-request-closing") { db in
+            try db.alter(table: "task") { t in
+                t.add(column: "closedAt", .datetime)
+                t.add(column: "closeReason", .text)
+        migrator.registerMigration("v10-chat-attachments") { db in
+            try db.alter(table: "leadMessage") { t in
+                t.add(column: "attachments", .text)
+            }
+            try db.alter(table: "directMessage") { t in
+                t.add(column: "attachments", .text)
+            }
+        }
 
         return migrator
     }

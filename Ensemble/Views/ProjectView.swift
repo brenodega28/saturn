@@ -48,36 +48,40 @@ struct ProjectView: View {
 
     private func title(branch: String?) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(project.name)
-                .font(.system(size: 17, weight: .bold))
-                .kerning(-0.2)
-                .lineLimit(1)
-            Text([project.path.abbreviatingHome, branch].compactMap(\.self).joined(separator: " · "))
+            Text([project.name, branch].compactMap(\.self).joined(separator: " · "))
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Theme.secondaryText)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .help(project.path.abbreviatingHome)
+            Text(sectionTitle)
+                .font(.system(size: 17, weight: .bold))
+                .kerning(-0.2)
+                .lineLimit(1)
         }
     }
 
+    private var sectionTitle: String {
+        model.runDetailID(in: project) == nil ? model.tab(for: project).title : "Run"
+    }
+
+    @ViewBuilder
     private var headerControls: some View {
-        HStack(spacing: 14) {
-            CapsuleTabs(ProjectTab.allCases, selection: Binding(
-                get: { model.tab(for: project) },
-                set: {
-                    model.closeRunDetail(in: project)
-                    model.setTab($0, for: project)
-                }
-            ), title: \.title)
-            .fixedSize()
-            Button {
-                model.isNewAgentPresented = true
-            } label: {
-                Label("New Agent", systemImage: "plus")
-            }
-            .buttonStyle(.primaryPill)
-            .fixedSize()
+        if model.tab(for: project) == .lead, model.runDetailID(in: project) == nil {
+            ChatTargetPicker(project: project)
+        } else {
+            newAgentButton
         }
+    }
+
+    private var newAgentButton: some View {
+        Button {
+            model.isNewAgentPresented = true
+        } label: {
+            Label("New Agent", systemImage: "plus")
+        }
+        .buttonStyle(.primaryPill)
+        .fixedSize()
     }
 
     @ViewBuilder
@@ -101,6 +105,8 @@ struct ProjectView: View {
             WorkflowsView(project: project)
         case .settings:
             ProjectSettingsView(project: project, branch: state.branch)
+        case .code:
+            CodeView(project: project)
         }
     }
 }

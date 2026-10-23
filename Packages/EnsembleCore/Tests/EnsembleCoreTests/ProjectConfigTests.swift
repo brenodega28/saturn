@@ -17,8 +17,11 @@ import Testing
         let config = ProjectConfigLoader.load(repository: repository)
 
         #expect(config.issues.isEmpty)
-        #expect(config.roles.map(\.id) == ["claude-code", "pr-reviewer", "qa-engineer", "tech-lead"])
+        #expect(config.roles.map(\.id) == ["claude-code", "pr-reviewer", "project-manager", "qa-engineer", "tech-lead"])
         #expect(config.role("tech-lead")?.canSpawn == true)
+        #expect(config.role("project-manager")?.canSpawn == true)
+        #expect(config.role("project-manager")?.editsCode == false)
+        #expect(config.leadRoles.map(\.id) == ["tech-lead", "project-manager"])
         #expect(config.role("qa-engineer")?.editsCode == false)
         let feature = try #require(config.workflow("feature-delivery"))
         #expect(feature.steps.map(\.id) == ["plan", "build", "review", "qa", "approve"])

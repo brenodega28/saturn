@@ -27,29 +27,70 @@ public final class LeadChat {
         self.runtime = runtime
         self.engine = engine
         self.driver = driver
-        runtime.turnReplied = { [weak self] agent, reply in self?.record(reply: reply, from: agent) }
+        runtime.observeReplies { [weak self] agent, reply in self?.record(reply: reply, from: agent) }
     }
 
     @discardableResult
-    public func createRequest(_ text: String, lead: RoleDefinition?, in project: Project, now: Date = .now) async throws -> ProjectTask {
-        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let projectId = project.id, !body.isEmpty else { throw AgentError.emptyTask }
+    public func createRequest(
+        _ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, in project: Project, now: Date = .now
+    ) async throws -> ProjectTask {
+        let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let projectId = project.id, !typed.isEmpty || !attachments.isEmpty else { throw AgentError.emptyTask }
         guard let lead else { throw LeadChatError.noLeadRole }
         let task = try database.insert(ProjectTask(
-            projectId: projectId, title: LeadRequest.title(for: body), body: body, source: .chat,
+            projectId: projectId, title: Self.title(text: typed, attachments: attachments),
+            body: ChatAttachment.prompt(text: typed, attachments: attachments), source: .chat,
             status: .incoming, createdAt: now, updatedAt: now
         ))
-        try await send(body, to: task, lead: lead, in: project, now: now)
+        try await send(typed, attachments: attachments, to: task, lead: lead, in: project, now: now)
         return task
     }
 
-    public func send(_ text: String, to task: ProjectTask, lead: RoleDefinition?, in project: Project, now: Date = .now) async throws {
+    public func send(
+        _ text: String, attachments: [ChatAttachment] = [], to task: ProjectTask, lead: RoleDefinition?, in project: Project, now: Date = .now
+    ) async throws {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let taskId = task.id, !body.isEmpty else { return }
+        guard let taskId = task.id, !body.isEmpty || !attachments.isEmpty else { return }
         try await driver.ensureServer()
         let session = try leadSession(for: task, lead: lead, in: project)
+        if try database.task(id: taskId)?.isClosed == true {
+            try database.setClosed(taskId: taskId, reason: nil, at: now)
+        }
         try database.insert(LeadMessage(projectId: task.projectId, taskId: taskId, kind: .user, text: body, createdAt: now))
         session.send(body + (try statusNote(taskId: taskId).map { "\n\n---\n" + $0 } ?? ""))
+        try database.insert(LeadMessage(
+            projectId: task.projectId, taskId: taskId, kind: .user, text: body, createdAt: now,
+            attachments: try ChatAttachmentStore(paths: runtime.paths).store(attachments)
+        ))
+        let prompt = ChatAttachment.prompt(text: body, attachments: attachments)
+        let status = try statusNote(taskId: taskId).map { (prompt.isEmpty ? "" : "\n\n---\n") + $0 } ?? ""
+        session.send(prompt + status, images: attachments.filter(\.isImage))
+    }
+
+    static func title(text: String, attachments: [ChatAttachment]) -> String {
+        if !text.isEmpty { return LeadRequest.title(for: text) }
+        if let pasted = attachments.lazy.compactMap(\.pastedText).first(where: { !LeadRequest.title(for: $0).isEmpty }) {
+            return LeadRequest.title(for: pasted)
+        }
+        return "Image"
+    }
+
+    @discardableResult
+    public func close(_ task: ProjectTask, as reason: RequestCloseReason, in project: Project, git: GitClient, now: Date = .now) async throws -> ProjectTask {
+        guard let taskId = task.id, try database.task(id: taskId) != nil else { throw RunEngineError.invalidState("The request is gone.") }
+        guard !(try hasActiveRun(taskId: taskId)) else { throw LeadChatError.runInProgress }
+        for agent in try database.requestAgents(taskId: taskId) {
+            guard let session = runtime.session(for: agent), !session.isRetired else { continue }
+            try await runtime.retire(session, in: project, git: git, detail: "The request was closed as \(reason.title).", now: now)
+        }
+        guard !(try hasActiveRun(taskId: taskId)), let closed = try database.setClosed(taskId: taskId, reason: reason, at: now) else {
+            throw LeadChatError.runInProgress
+        }
+        return closed
+    }
+
+    private func hasActiveRun(taskId: Int64) throws -> Bool {
+        try database.runs(taskId: taskId).contains { (engine.runs[$0.id ?? -1] ?? $0).isActive }
     }
 
     public func leadSession(for task: ProjectTask) -> AgentSession? {
@@ -68,6 +109,9 @@ public final class LeadChat {
         let lead = try database.leadAgent(taskId: proposal.taskId)
         let leadRoleIDs = Set(config.roles.filter(\.canSpawn).map(\.id))
         let assigned = lead.map { workflow.assigningLead($0.role, replacing: leadRoleIDs) } ?? workflow
+        if task.isClosed {
+            try database.setClosed(taskId: proposal.taskId, reason: nil, at: .now)
+        }
         let run = try engine.start(task: task, workflow: assigned, project: project, title: proposal.title, brief: proposal.text)
         if let lead, let runID = run.id {
             runtime.session(for: lead)?.attach(toRun: runID)

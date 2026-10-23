@@ -119,6 +119,13 @@ public struct ProjectConfig: Sendable, Hashable {
         roles.first { $0.id == id }
     }
 
+    public static let defaultLeadID = "tech-lead"
+
+    public var leadRoles: [RoleDefinition] {
+        let leads = roles.filter(\.canSpawn)
+        return leads.filter { $0.id == Self.defaultLeadID } + leads.filter { $0.id != Self.defaultLeadID }
+    }
+
     public func workflow(_ id: String) -> WorkflowDefinition? {
         workflows.first { $0.id == id }
     }

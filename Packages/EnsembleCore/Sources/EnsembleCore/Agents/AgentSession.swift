@@ -1,6 +1,23 @@
 import Foundation
 import Observation
 
+public struct AgentTurn: Sendable, Hashable {
+    public var text: String
+    public var images: [ChatAttachment]
+
+    public init(_ text: String, images: [ChatAttachment] = []) {
+        self.text = text
+        self.images = images
+    }
+
+    static func joining(_ turns: [AgentTurn]) -> AgentTurn {
+        AgentTurn(
+            turns.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n\n"),
+            images: turns.flatMap(\.images)
+        )
+    }
+}
+
 @MainActor
 @Observable
 public final class AgentSession: Identifiable {
@@ -13,9 +30,9 @@ public final class AgentSession: Identifiable {
     public nonisolated let id: Int64
     public private(set) var agent: Agent
     public private(set) var transcript: Transcript
-    public private(set) var queuedMessages: [String] = []
-    public private(set) var waitingTurn: String?
-    @ObservationIgnored private var deferredTurn: String?
+    public private(set) var queuedTurns: [AgentTurn] = []
+    public private(set) var waitingTurn: AgentTurn?
+    @ObservationIgnored private var deferredTurn: AgentTurn?
 
     @ObservationIgnored private unowned let runtime: AgentRuntime
     @ObservationIgnored private let log: TranscriptLog
@@ -36,11 +53,15 @@ public final class AgentSession: Identifiable {
         self.transcript = Transcript(lines: log.readLines())
     }
 
+    public var queuedMessages: [String] { queuedTurns.map(\.text) }
+
     public var isRunning: Bool { handle != nil }
 
     public var isStopping: Bool { stopTarget != nil }
 
     public var isQueued: Bool { waitingTurn != nil }
+
+    var isRetired: Bool { agent.archivedAt != nil && agent.status == .stopped && handle == nil && !isQueued }
 
     public var canResume: Bool {
         handle == nil && !isQueued && [.paused, .interrupted, .stopped, .failed].contains(agent.status)
@@ -63,13 +84,13 @@ public final class AgentSession: Identifiable {
         persist()
     }
 
-    public func send(_ message: String) {
-        let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+    public func send(_ message: String, images: [ChatAttachment] = []) {
+        let turn = AgentTurn(message.trimmingCharacters(in: .whitespacesAndNewlines), images: images.filter(\.isImage))
+        guard !turn.text.isEmpty || !turn.images.isEmpty else { return }
         if handle != nil || isQueued {
-            queuedMessages.append(text)
+            queuedTurns.append(turn)
         } else {
-            beginTurn(with: text)
+            beginTurn(with: turn)
         }
     }
 
@@ -78,7 +99,7 @@ public final class AgentSession: Identifiable {
     }
 
     public func stop() {
-        queuedMessages.removeAll()
+        queuedTurns.removeAll()
         requestStop(.stopped)
     }
 
@@ -88,22 +109,22 @@ public final class AgentSession: Identifiable {
 
     public func resume() {
         guard handle == nil, !isQueued else { return }
-        let message = deferredTurn ?? (transcript.session == nil && !agent.task.isEmpty ? agent.task : Self.continuePrompt)
+        let turn = deferredTurn ?? AgentTurn(transcript.session == nil && !agent.task.isEmpty ? agent.task : Self.continuePrompt)
         record(notice: .resumed)
-        beginTurn(with: message)
+        beginTurn(with: turn)
     }
 
     public func handBack() {
         guard handle == nil, agent.status == .takenOver else { return }
         record(notice: .handedBack)
-        beginTurn(with: Self.handBackPrompt)
+        beginTurn(with: AgentTurn(Self.handBackPrompt))
     }
 
     public func restart() {
         leaveQueue()
         if handle != nil {
             restartAfterStop = true
-            queuedMessages.removeAll()
+            queuedTurns.removeAll()
             requestStop(.stopped)
         } else {
             performRestart()
@@ -113,13 +134,13 @@ public final class AgentSession: Identifiable {
     func start() {
         guard !agent.task.isEmpty else { return }
         record(notice: .started)
-        beginTurn(with: agent.task)
+        beginTurn(with: AgentTurn(agent.task))
     }
 
     func startQueuedTurn() {
-        guard let message = waitingTurn else { return }
+        guard let turn = waitingTurn else { return }
         waitingTurn = nil
-        launchTurn(with: message)
+        launchTurn(with: turn)
     }
 
     @discardableResult
@@ -143,6 +164,21 @@ public final class AgentSession: Identifiable {
         handle = nil
     }
 
+    func retire(detail: String) {
+        leaveQueue()
+        queuedMessages.removeAll()
+        deferredTurn = nil
+        restartAfterStop = false
+        pendingFailure = nil
+        stopTarget = nil
+        handle?.terminate()
+        handle = nil
+        agent.status = .stopped
+        agent.processID = nil
+        record(notice: .stopped, detail: detail)
+        persist()
+    }
+
     func failSetup(_ message: String) {
         fail(message)
     }
@@ -164,11 +200,11 @@ public final class AgentSession: Identifiable {
     }
 
     @discardableResult
-    private func leaveQueue() -> String? {
-        guard let message = waitingTurn else { return nil }
+    private func leaveQueue() -> AgentTurn? {
+        guard let turn = waitingTurn else { return nil }
         waitingTurn = nil
         runtime.dequeue(self)
-        return message
+        return turn
     }
 
     private func performRestart() {
@@ -181,12 +217,12 @@ public final class AgentSession: Identifiable {
             persist()
             return
         }
-        beginTurn(with: agent.task)
+        beginTurn(with: AgentTurn(agent.task))
     }
 
     private func requestStop(_ target: AgentStatus) {
-        if let message = leaveQueue(), target != .stopped {
-            deferredTurn = message
+        if let turn = leaveQueue(), target != .stopped {
+            deferredTurn = turn
         }
         guard let handle else {
             if agent.status != target {
@@ -210,19 +246,19 @@ public final class AgentSession: Identifiable {
         }
     }
 
-    private func beginTurn(with message: String) {
+    private func beginTurn(with turn: AgentTurn) {
         deferredTurn = nil
         if runtime.shouldQueue(self) {
-            waitingTurn = message
+            waitingTurn = turn
             runtime.enqueue(self)
             agent.status = .waiting
             persist()
             return
         }
-        launchTurn(with: message)
+        launchTurn(with: turn)
     }
 
-    private func launchTurn(with message: String) {
+    private func launchTurn(with turn: AgentTurn) {
         latestReply = nil
         guard let executable = runtime.claudeExecutable else {
             fail("Claude Code isn’t available. Check Settings › Tools.")
@@ -273,9 +309,8 @@ public final class AgentSession: Identifiable {
             pendingFailure = nil
             costInProcess = 0
             turnCompletedInProcess = false
-            let line = ClaudeEvent.userLine(message)
-            try handle.send(line: line)
-            record(line: line)
+            try handle.send(line: ClaudeEvent.userLine(turn.text, images: turn.images))
+            record(line: ClaudeEvent.userLine(turn.text, images: turn.images, includingImageData: false))
             agent.status = .working
             agent.processID = handle.processIdentifier
             agent.lastError = nil
@@ -314,7 +349,7 @@ public final class AgentSession: Identifiable {
                     source.closeInput()
                     if let reply = latestReply?.trimmingCharacters(in: .whitespacesAndNewlines), !reply.isEmpty {
                         latestReply = nil
-                        runtime.turnReplied?(agent, reply)
+                        runtime.turnReplied(agent, reply)
                     }
                 }
             }
@@ -377,9 +412,9 @@ public final class AgentSession: Identifiable {
         if turnCompletedInProcess {
             agent.status = .idle
             persist()
-            if !queuedMessages.isEmpty {
-                let next = queuedMessages.joined(separator: "\n\n")
-                queuedMessages.removeAll()
+            if !queuedTurns.isEmpty {
+                let next = AgentTurn.joining(queuedTurns)
+                queuedTurns.removeAll()
                 beginTurn(with: next)
             }
             return
@@ -392,7 +427,7 @@ public final class AgentSession: Identifiable {
     private func fail(_ message: String) {
         agent.status = .failed
         agent.lastError = message
-        queuedMessages.removeAll()
+        queuedTurns.removeAll()
         record(notice: .failed, detail: message)
         persist()
     }

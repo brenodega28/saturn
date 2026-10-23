@@ -75,6 +75,9 @@ struct RequestChat: View {
                 LeadBubble(role: data.leadRole, name: data.leadName, date: message.createdAt) {
                     ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil)
                 }
+            case .note:
+                DirectMessageNote(text: message.text)
+                    .padding(.leading, 42)
             }
         case .runStarted(let run):
             LeadBubble(role: data.leadRole, name: data.leadName, date: run.startedAt) {
@@ -129,7 +132,7 @@ struct RequestChat: View {
     }
 }
 
-private struct ChatText: View {
+struct ChatText: View {
     let text: String
 
     init(_ text: String) {
@@ -149,7 +152,7 @@ private struct ChatText: View {
     }
 }
 
-private struct ThinkingRow: View {
+struct ThinkingRow: View {
     let role: RoleDefinition?
     let name: String
 
@@ -260,7 +263,7 @@ private struct AnsweredQuestion: View {
     }
 }
 
-private struct RequestBubble: View {
+struct RequestBubble: View {
     let text: String
     let date: Date
 
@@ -283,7 +286,7 @@ private struct RequestBubble: View {
     }
 }
 
-private struct LeadBubble<Content: View>: View {
+struct LeadBubble<Content: View>: View {
     let role: RoleDefinition?
     let name: String
     let date: Date
@@ -509,5 +512,24 @@ private struct StepRow: View {
         case StepOutcome.changesRequested, StepOutcome.failed, "rejected": Theme.warning
         default: entry.status == .failed ? Theme.danger : Theme.successText
         }
+    }
+}
+
+private struct DirectMessageNote: View {
+    let text: String
+
+    var body: some View {
+        Label {
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        } icon: {
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.tertiaryText)
+        }
+        .accessibilityLabel("Direct message summary: \(text)")
     }
 }

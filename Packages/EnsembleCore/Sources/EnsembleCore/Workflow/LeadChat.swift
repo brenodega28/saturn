@@ -27,7 +27,7 @@ public final class LeadChat {
         self.runtime = runtime
         self.engine = engine
         self.driver = driver
-        runtime.turnReplied = { [weak self] agent, reply in self?.record(reply: reply, from: agent) }
+        runtime.observeReplies { [weak self] agent, reply in self?.record(reply: reply, from: agent) }
     }
 
     @discardableResult

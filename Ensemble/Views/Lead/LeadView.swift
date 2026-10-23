@@ -7,6 +7,16 @@ struct LeadView: View {
     let project: Project
 
     var body: some View {
+        if let session = model.directChatSession(in: project) {
+            DirectChatView(session: session, project: project)
+                .id(session.id)
+        } else {
+            leadChat
+        }
+    }
+
+    @ViewBuilder
+    private var leadChat: some View {
         let requests = model.leadRequests(in: project)
         let selected = model.selectedRequest(in: project)
         GeometryReader { proxy in
@@ -110,7 +120,7 @@ private struct NewRequestIntro: View {
             } else if model.leadRoles(in: project).isEmpty {
                 EmptyState("No lead role", message: "A lead is a role with can_spawn: true. Add one in Settings › Roles, or pick a workflow that needs no lead.")
             } else {
-                EmptyState("Talk to the lead", message: "Ask a question or describe what you need. The lead answers here, and proposes a run when there’s work to do.")
+                EmptyState("Talk to an agent", message: "Ask a question or describe what you need. The lead answers here, and proposes a run when there’s work to do.")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

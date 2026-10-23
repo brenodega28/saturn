@@ -213,6 +213,17 @@ public final class AppDatabase: Sendable {
                 t.column("createdAt", .datetime).notNull()
             }
         }
+        migrator.registerMigration("v9-direct-messages") { db in
+            try db.create(table: "directMessage") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("projectId", .integer).notNull().indexed().references("project", onDelete: .cascade)
+                t.column("agentId", .integer).notNull().indexed().references("agent", onDelete: .cascade)
+                t.column("kind", .text).notNull()
+                t.column("text", .text).notNull().defaults(to: "")
+                t.column("awaitingReply", .boolean).notNull().defaults(to: false)
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
 
         return migrator
     }

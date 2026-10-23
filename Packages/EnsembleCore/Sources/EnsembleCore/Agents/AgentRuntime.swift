@@ -67,7 +67,6 @@ public final class AgentRuntime {
     public var providerMode: ProviderMode?
     public var mcpServer: EnsembleMCPServer?
     public var handoffTools: @MainActor (Agent) -> Set<HandoffTool> = { _ in [] }
-    public var turnReplied: (@MainActor (Agent, String) -> Void)?
     public var worktreePrepared: (@MainActor (WorktreePreparation) async throws -> Void)?
     public internal(set) var settingUp: Set<Int64> = []
     public private(set) var usageRevision = 0
@@ -76,6 +75,7 @@ public final class AgentRuntime {
     @ObservationIgnored let launcher: any AgentProcessLauncher
     @ObservationIgnored let stopGracePeriod: Duration
     @ObservationIgnored private var sessions: [Int64: AgentSession] = [:]
+    @ObservationIgnored private var replyObservers: [@MainActor (Agent, String) -> Void] = []
     private var turnQueue: [Int64: [Int64]] = [:]
     @ObservationIgnored public internal(set) var memoryUpdateAgents: Set<Int64> = []
     @ObservationIgnored var reservedPorts: [String: Int] = [:]
@@ -98,6 +98,16 @@ public final class AgentRuntime {
         self.claudeExecutable = claudeExecutable
         self.processEnvironment = processEnvironment
         self.stopGracePeriod = stopGracePeriod
+    }
+
+    public func observeReplies(_ observer: @escaping @MainActor (Agent, String) -> Void) {
+        replyObservers.append(observer)
+    }
+
+    func turnReplied(_ agent: Agent, _ reply: String) {
+        for observer in replyObservers {
+            observer(agent, reply)
+        }
     }
 
     public func session(for agent: Agent) -> AgentSession? {

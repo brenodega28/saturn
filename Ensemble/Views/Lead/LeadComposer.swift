@@ -7,12 +7,10 @@ struct LeadComposer: View {
     let project: Project
     let request: ProjectTask?
     @State private var text = ""
-    @State private var leadID: String?
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        let leads = model.leadRoles(in: project)
-        let lead = leads.first { $0.id == leadID } ?? leads.first
+        let lead = model.chatLeadRole(in: project)
         let leadName = request.flatMap { model.leadSession(for: $0)?.agent.name } ?? lead?.name ?? "the lead"
         VStack(alignment: .leading, spacing: 10) {
             TextField(
@@ -27,9 +25,7 @@ struct LeadComposer: View {
             .focused($isFocused)
             .accessibilityLabel(request == nil ? "New request for the lead" : "Message to \(leadName)")
             HStack(spacing: 8) {
-                if request.flatMap(model.leadSession(for:)) == nil {
-                    leadMenu(leads: leads, selected: lead)
-                }
+                ChatTargetPicker(project: project, style: .chip)
                 Spacer()
                 Button(action: { send(lead: lead) }) {
                     Image(systemName: "arrow.up")
@@ -63,33 +59,5 @@ struct LeadComposer: View {
                 text = message
             }
         }
-    }
-
-    private func leadMenu(leads: [RoleDefinition], selected: RoleDefinition?) -> some View {
-        Menu {
-            ForEach(leads) { role in
-                Toggle(isOn: Binding(get: { role.id == selected?.id }, set: { if $0 { leadID = role.id } })) {
-                    Text(role.name)
-                    if !role.description.isEmpty { Text(role.description) }
-                }
-            }
-            if !leads.isEmpty { Divider() }
-            Button("Edit Lead Roles…") { model.setTab(.settings, for: project) }
-        } label: {
-            HStack(spacing: 6) {
-                RoleBadge(role: selected, size: 22)
-                Text(selected.map { "Lead: \($0.name)" } ?? "No lead role")
-                    .font(.system(size: 12))
-            }
-            .padding(.leading, 4)
-            .padding(.trailing, 10)
-            .frame(height: 30)
-            .background(Color.white.opacity(0.08), in: Capsule())
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Choose the lead for this request")
     }
 }

@@ -314,7 +314,7 @@ public final class AgentSession: Identifiable {
                     source.closeInput()
                     if let reply = latestReply?.trimmingCharacters(in: .whitespacesAndNewlines), !reply.isEmpty {
                         latestReply = nil
-                        runtime.turnReplied?(agent, reply)
+                        runtime.turnReplied(agent, reply)
                     }
                 }
             }

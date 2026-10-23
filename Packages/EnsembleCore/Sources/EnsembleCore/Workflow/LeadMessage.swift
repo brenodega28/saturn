@@ -5,6 +5,7 @@ public enum LeadMessageKind: String, Codable, Sendable, Hashable {
     case user
     case lead
     case proposal
+    case note
 }
 
 public enum ProposalStatus: String, Codable, Sendable, Hashable {

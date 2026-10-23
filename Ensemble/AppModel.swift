@@ -8,6 +8,13 @@ enum SidebarItem: Hashable, Codable {
     case project(Int64)
 }
 
+enum SidebarDestination: Hashable {
+    case inbox
+    case usage
+    case section(project: Int64, tab: ProjectTab)
+    case run(project: Int64, run: Int64)
+}
+
 enum ProjectTab: String, CaseIterable, Identifiable, Codable {
     case tasks
     case lead
@@ -15,17 +22,31 @@ enum ProjectTab: String, CaseIterable, Identifiable, Codable {
     case changes
     case workflows
     case settings
+    case code
 
     var id: Self { self }
 
     var title: String {
         switch self {
         case .tasks: "Tasks"
-        case .lead: "Lead"
+        case .lead: "Chat"
         case .agents: "Agents"
         case .changes: "Changes"
         case .workflows: "Workflows"
         case .settings: "Settings"
+        case .code: "Code"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .tasks: "checkmark.square"
+        case .lead: "bubble.left"
+        case .agents: "person.2"
+        case .changes: "plus.forwardslash.minus"
+        case .workflows: "flowchart"
+        case .settings: "gearshape"
+        case .code: "chevron.left.forwardslash.chevron.right"
         }
     }
 }
@@ -67,6 +88,8 @@ final class AppModel {
     var skillPlugins: [Int64: [SkillPlugin]] = [:]
     var leadChatRevision = 0
     let leadChat: LeadChat
+    let directChat: DirectChat
+    var chatTargets: [Int64: ChatTarget] = [:]
 
     var selection: SidebarItem? {
         didSet { persistNavigation() }
@@ -93,6 +116,7 @@ final class AppModel {
         self.driver = driver
         self.engine = RunEngine(database: database, driver: driver)
         self.leadChat = LeadChat(runtime: agents, engine: engine, driver: driver)
+        self.directChat = DirectChat(runtime: agents)
         self.gitHub = GitHubIntegration(engine: engine, secrets: secrets)
         self.inbox = InboxFeed(database: database)
         self.idleCleanup = IdleCleanupScheduler(runtime: agents)
@@ -114,7 +138,43 @@ final class AppModel {
     }
 
     func tab(for project: Project) -> ProjectTab {
-        project.id.flatMap { tabs[$0] } ?? .agents
+        project.id.map(tab(forProjectID:)) ?? .agents
+    }
+
+    private func tab(forProjectID id: Int64) -> ProjectTab {
+        tabs[id] ?? .agents
+    }
+
+    var sidebarDestination: SidebarDestination? {
+        get {
+            switch selection {
+            case .inbox: .inbox
+            case .usage: .usage
+            case .project(let id):
+                if let runID = runDetailIDs[id] {
+                    .run(project: id, run: runID)
+                } else {
+                    .section(project: id, tab: tab(forProjectID: id))
+                }
+            case nil: nil
+            }
+        }
+        set {
+            switch newValue {
+            case .inbox:
+                selection = .inbox
+            case .usage:
+                selection = .usage
+            case .section(let id, let tab):
+                runDetailIDs[id] = nil
+                tabs[id] = tab
+                selection = .project(id)
+            case .run(let id, let runID):
+                openRunDetail(runID: runID, in: id)
+            case nil:
+                break
+            }
+        }
     }
 
     func setTab(_ tab: ProjectTab, for project: Project) {

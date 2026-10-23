@@ -5,6 +5,7 @@ public enum Theme {
     public static let link = Color(hex: 0x64A8FF)
     public static let windowBackground = Color(hex: 0x1A1A1E)
     public static let canvas = Color(hex: 0x0B0D12)
+    public static let sidebarBackground = Color(hex: 0x2E2F34, opacity: 0.6)
 
     public static let primaryText = Color.white.opacity(0.92)
     public static let secondaryText = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.65)

@@ -166,7 +166,7 @@ public final class AgentSession: Identifiable {
 
     func retire(detail: String) {
         leaveQueue()
-        queuedMessages.removeAll()
+        queuedTurns.removeAll()
         deferredTurn = nil
         restartAfterStop = false
         pendingFailure = nil

@@ -322,6 +322,8 @@ import Testing
         #expect(builder.transcript.entries.count == noticesAfterFirstClose)
         #expect(builder.agent.archivedAt == archivedAt)
         #expect(try stored(setup, task).closeReason == .dropped)
+    }
+
     @Test func aRequestCanBeOnlyAttachments() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }

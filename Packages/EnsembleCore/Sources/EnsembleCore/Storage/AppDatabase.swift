@@ -228,7 +228,9 @@ public final class AppDatabase: Sendable {
             try db.alter(table: "task") { t in
                 t.add(column: "closedAt", .datetime)
                 t.add(column: "closeReason", .text)
-        migrator.registerMigration("v10-chat-attachments") { db in
+            }
+        }
+        migrator.registerMigration("v11-chat-attachments") { db in
             try db.alter(table: "leadMessage") { t in
                 t.add(column: "attachments", .text)
             }

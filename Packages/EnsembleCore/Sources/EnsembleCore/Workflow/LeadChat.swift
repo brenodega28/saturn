@@ -56,8 +56,6 @@ public final class LeadChat {
         if try database.task(id: taskId)?.isClosed == true {
             try database.setClosed(taskId: taskId, reason: nil, at: now)
         }
-        try database.insert(LeadMessage(projectId: task.projectId, taskId: taskId, kind: .user, text: body, createdAt: now))
-        session.send(body + (try statusNote(taskId: taskId).map { "\n\n---\n" + $0 } ?? ""))
         try database.insert(LeadMessage(
             projectId: task.projectId, taskId: taskId, kind: .user, text: body, createdAt: now,
             attachments: try ChatAttachmentStore(paths: runtime.paths).store(attachments)

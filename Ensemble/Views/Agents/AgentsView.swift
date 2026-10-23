@@ -23,7 +23,7 @@ struct AgentGroup: Identifiable {
     }
 
     @MainActor
-    static func make(_ sessions: [AgentSession], runs: [Run]) -> [AgentGroup] {
+    static func make(_ sessions: [AgentSession], runs: [Run], describe: (Run) -> (workflow: String?, step: String?) = { ($0.workflow, $0.currentStep) }) -> [AgentGroup] {
         var groups: [AgentGroup] = []
         let runsByID = Dictionary(uniqueKeysWithValues: runs.compactMap { run in run.id.map { ($0, run) } })
         let runIDs = sessions.compactMap(\.agent.runId).reduce(into: [Int64]()) { ids, id in
@@ -34,7 +34,8 @@ struct AgentGroup: Identifiable {
             let run = runsByID[runID]
             let title = run.map { $0.title.isEmpty ? "Run #\(runID)" : $0.title } ?? "Run #\(runID)"
             let cost = members.reduce(0) { $0 + $1.agent.costUSD }.formatted(.currency(code: "USD"))
-            let meta = [run?.workflow, run?.currentStep.map { "step \($0)" }, cost].compactMap(\.self).joined(separator: " · ")
+            let described = run.map(describe)
+            let meta = [described?.workflow, described?.step.map { "Step: \($0)" }, cost].compactMap(\.self).joined(separator: " · ")
             groups.append(AgentGroup(kind: .run(runID), title: title, meta: meta, sessions: members))
         }
         let outsideRuns = sessions.filter { $0.agent.runId == nil }
@@ -79,7 +80,7 @@ struct AgentsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     summary(sessions)
-                    ForEach(AgentGroup.make(sessions, runs: model.runs(for: sessions))) { group in
+                    ForEach(AgentGroup.make(sessions, runs: model.runs(for: sessions), describe: model.runGroupDescription)) { group in
                         section(group)
                     }
                 }

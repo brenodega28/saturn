@@ -76,7 +76,7 @@ struct ProjectView: View {
         case .tasks:
             EmptyState("No tasks yet", message: "Tasks come from Lead chat and GitHub Issues, and move through Incoming, Running, Waiting on you, Done and Failed.")
         case .lead:
-            EmptyState("Lead chat", message: "Talk to a lead role here to turn a request into a task and a plan before any agent starts.")
+            LeadView(project: project)
         case .agents:
             if let session = model.selectedAgent(in: project) {
                 AgentSessionView(session: session, project: project)

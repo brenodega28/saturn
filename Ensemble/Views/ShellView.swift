@@ -69,6 +69,7 @@ struct SidebarView: View {
                     if let id = project.id {
                         ProjectRow(project: project)
                             .tag(SidebarItem.project(id))
+                        SidebarRunRows(project: project)
                     }
                 }
             } header: {

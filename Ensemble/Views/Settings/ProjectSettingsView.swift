@@ -5,7 +5,6 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case general
-    case roles
     case documentation
     case skills
     case agents
@@ -19,7 +18,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: "General"
-        case .roles: "Roles"
         case .documentation: "Documentation"
         case .skills: "Skills"
         case .agents: "Agents & models"
@@ -33,7 +31,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var shortTitle: String {
         switch self {
         case .general: "General"
-        case .roles: "Roles"
         case .documentation: "Docs"
         case .skills: "Skills"
         case .agents: "Agents"
@@ -47,7 +44,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .general: "gearshape"
-        case .roles: "person.2"
         case .documentation: "doc.text"
         case .skills: "sparkles"
         case .agents: "cpu"
@@ -61,7 +57,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .general: Color(hex: 0x636366)
-        case .roles: Color(hex: 0xC46A10)
         case .documentation: Color(hex: 0x0A84FF)
         case .skills: Color(hex: 0x8E4FD9)
         case .agents: Color(hex: 0x2E9C5A)
@@ -102,7 +97,6 @@ struct SettingsContainer: View {
             Group {
                 switch section {
                 case .general: GeneralSettings(project: project, branch: branch)
-                case .roles: RolesSettingsView(project: project)
                 case .documentation: DocsSettingsView(project: project)
                 case .skills: SkillsSettingsView(project: project)
                 case .agents: AgentsSettings(project: project)
@@ -322,7 +316,7 @@ private struct AgentsSettings: View {
 
             ProjectBudgetCard(project: project)
 
-            Text("Each role picks its model in Settings › Roles.")
+            Text("Each role picks its model in Crew › Roles.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.secondaryText)
         }

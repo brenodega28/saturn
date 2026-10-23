@@ -2,7 +2,7 @@ import EnsembleCore
 import EnsembleUI
 import SwiftUI
 
-struct RolesSettingsView: View {
+struct RolesView: View {
     static let sideBySideMinimumWidth: CGFloat = 1000
     static let pickerRowMinimumWidth: CGFloat = 520
     private static let contextPreviewID = "contextPreview"
@@ -19,29 +19,38 @@ struct RolesSettingsView: View {
 
     var body: some View {
         let config = model.config(for: project)
-        SettingsPage("Roles", subtitle: "Reusable agent templates in .ensemble/roles. Each role sets the model, prompt, skills and documents its agents load.") {
-            if !model.hasConfig(project) {
-                InstallDefaultsCard(project: project)
-            }
-            IssueList(issues: unreadableRoleIssues(config))
-            ScrollViewReader { proxy in
-                Group {
-                    if contentWidth >= Self.sideBySideMinimumWidth {
-                        HStack(alignment: .top, spacing: 16) {
-                            roleList(config)
-                            editorOrPlaceholder(config: config, proxy: proxy)
-                        }
-                    } else {
-                        VStack(alignment: .leading, spacing: 16) {
-                            rolePicker(config)
-                            editorOrPlaceholder(config: config, proxy: proxy)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Reusable agent templates in .ensemble/roles. Each role sets the model, prompt, skills and documents its agents load.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !model.hasConfig(project) {
+                    InstallDefaultsCard(project: project)
+                }
+                IssueList(issues: unreadableRoleIssues(config))
+                ScrollViewReader { proxy in
+                    Group {
+                        if contentWidth >= Self.sideBySideMinimumWidth {
+                            HStack(alignment: .top, spacing: 16) {
+                                roleList(config)
+                                editorOrPlaceholder(config: config, proxy: proxy)
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 16) {
+                                rolePicker(config)
+                                editorOrPlaceholder(config: config, proxy: proxy)
+                            }
                         }
                     }
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
                 }
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
             }
+            .padding(.trailing, 6)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         }
+        .frame(minWidth: 0, maxWidth: .infinity)
         .onAppear { selectFirst(in: config) }
         .task(id: project.path) { try? await model.loadSkillPlugins(for: project) }
         .confirmationDialog("Delete \(draft?.name ?? "role")?", isPresented: $isConfirmingDelete) {

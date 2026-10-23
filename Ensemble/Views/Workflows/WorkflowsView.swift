@@ -350,7 +350,7 @@ private struct WorkflowSidebar: View {
             VStack(alignment: .leading, spacing: 18) {
                 workflows
                 if !hasConfig {
-                    Text("This project has no .ensemble/ folder yet. Add the defaults in Settings › Roles, or start a new workflow.")
+                    Text("This project has no .ensemble/ folder yet. Add the defaults in Crew › Roles, or start a new workflow.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)

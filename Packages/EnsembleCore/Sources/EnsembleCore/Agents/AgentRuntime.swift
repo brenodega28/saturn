@@ -394,23 +394,6 @@ public final class AgentRuntime {
         }
     }
 
-    public func retire(_ session: AgentSession, in project: Project, git: GitClient, detail: String, now: Date = .now) async throws {
-        dequeue(session)
-        session.retire(detail: detail)
-        defer {
-            usageDidChange()
-            if let projectId = project.id { startQueuedTurns(inProject: projectId) }
-        }
-        guard let path = session.agent.worktreeURL, session.agent.archivedAt == nil else { return }
-        let manager = WorktreeManager(repository: project.url, git: git)
-        let target = realPath(of: path)
-        if let worktree = try await manager.list().first(where: { realPath(of: $0.path) == target }) {
-            try await manager.remove(worktree, force: true, deleteBranch: false)
-        }
-        let branch = session.agent.branch.map { " Branch \($0) is kept." } ?? ""
-        session.archive(detail: "Closing the request removed this agent’s worktree.\(branch)", at: now)
-    }
-
     public func recoverAfterLaunch() throws {
         for agent in try database.agentsWithLiveProcesses() {
             if let pid = agent.processID {

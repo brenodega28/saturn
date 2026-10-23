@@ -191,6 +191,7 @@ final class AppModel {
         perform("Couldn’t recover agents") { try agents.recoverAfterLaunch() }
         await checkEnvironment()
         perform("Couldn’t recover runs") { try engine.recover() }
+        await deleteAgentsOfClosedRequests()
         startInbox()
         startBudgetMonitor()
         startMemoryUpdates()

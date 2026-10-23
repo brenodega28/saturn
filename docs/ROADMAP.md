@@ -130,12 +130,12 @@ Goal: run a single Claude Code agent in its own worktree and watch it work.
 
 Goal: agents come from roles, and several run in parallel.
 
-- [ ] Role schema and loader for `.ensemble/roles/*.yaml`, with validation errors shown in the UI
-- [ ] Settings › Roles: role editor with a live preview of the context the agent will load (prompt, skills, docs, token sizes)
-- [ ] Settings › Documentation and Skills: link repo files or write prompts; who reads what; SKILLS.md sync; missing-skill warning
-- [ ] Spawn sheet: pick a role, a count, optionally Pin; "Will add" preview
-- [ ] Parallel agents, each in its own worktree, with project caps on concurrent agents
-- [ ] Agents tab: cards grouped by run, plus Pinned and Idle groups; status, model, cost, current step; Pause / Stop / Restart / Pin
+- [x] Role schema and loader for `.ensemble/roles/*.yaml`, with validation errors shown in the UI
+- [x] Settings › Roles: role editor with a live preview of the context the agent will load (prompt, skills, docs, token sizes)
+- [x] Settings › Documentation and Skills: link repo files or write prompts; who reads what; SKILLS.md sync; missing-skill warning
+- [x] Spawn sheet: pick a role, a count, optionally Pin; "Will add" preview
+- [x] Parallel agents, each in its own worktree, with project caps on concurrent agents
+- [x] Agents tab: cards grouped by run, plus Pinned and Idle groups; status, model, cost, current step; Pause / Stop / Restart / Pin
 
 **Exit check:** spawn two Django developers and one React developer from roles; all three work in parallel in separate worktrees.
 

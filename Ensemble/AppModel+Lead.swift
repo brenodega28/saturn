@@ -62,9 +62,17 @@ extension AppModel {
             return
         }
         leadChatRevision += 1
+        if selectedAgent(in: project) == nil { select(nil, in: project) }
         guard let projectID = project.id else { return }
         let next = LeadRequest.partition(leadRequests(in: project)).open.first { $0.id != task.id }
         leadSelections[projectID] = next?.id.map(LeadSelection.request) ?? .newRequest
+    }
+
+    func deleteAgentsOfClosedRequests() async {
+        guard let git else { return }
+        for project in openProjects {
+            await leadChat.deleteAgentsOfClosedRequests(in: project, git: git)
+        }
     }
 
     func latestRun(of task: ProjectTask) -> Run? {

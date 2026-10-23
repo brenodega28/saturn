@@ -78,13 +78,23 @@ public final class LeadChat {
         guard let taskId = task.id, try database.task(id: taskId) != nil else { throw RunEngineError.invalidState("The request is gone.") }
         guard !(try hasActiveRun(taskId: taskId)) else { throw LeadChatError.runInProgress }
         for agent in try database.requestAgents(taskId: taskId) {
-            guard let session = runtime.session(for: agent), !session.isRetired else { continue }
-            try await runtime.retire(session, in: project, git: git, detail: "The request was closed as \(reason.title).", now: now)
+            guard let session = runtime.session(for: agent) else { continue }
+            try await runtime.delete(session, in: project, git: git, deleteBranch: true)
         }
         guard !(try hasActiveRun(taskId: taskId)), let closed = try database.setClosed(taskId: taskId, reason: reason, at: now) else {
             throw LeadChatError.runInProgress
         }
         return closed
+    }
+
+    public func deleteAgentsOfClosedRequests(in project: Project, git: GitClient) async {
+        guard let projectId = project.id, let tasks = try? database.closedTasks(projectId: projectId) else { return }
+        for taskId in tasks.compactMap(\.id) where (try? hasActiveRun(taskId: taskId)) == false {
+            for agent in (try? database.requestAgents(taskId: taskId)) ?? [] {
+                guard let session = runtime.session(for: agent) else { continue }
+                try? await runtime.delete(session, in: project, git: git, deleteBranch: true)
+            }
+        }
     }
 
     private func hasActiveRun(taskId: Int64) throws -> Bool {

@@ -119,6 +119,16 @@ extension AppDatabase {
         }
     }
 
+    public func closedTasks(projectId: Int64) throws -> [ProjectTask] {
+        try writer.read { db in
+            try ProjectTask.fetchAll(db, sql: """
+                SELECT task.* FROM task
+                WHERE task.projectId = ? AND task.closedAt IS NOT NULL
+                ORDER BY task.id
+                """, arguments: [projectId])
+        }
+    }
+
     @discardableResult
     public func setClosed(taskId: Int64, reason: RequestCloseReason?, at date: Date) throws -> ProjectTask? {
         try writer.write { db in

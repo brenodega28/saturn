@@ -6,70 +6,7 @@ enum ChatTarget: Hashable {
     case agent(Int64)
 }
 
-struct SidebarChat: Identifiable, Hashable {
-    let target: ChatTarget
-    let name: String
-    let activity: ChatActivity
-    var requestID: Int64?
-
-    var id: ChatTarget { target }
-}
-
 extension AppModel {
-    func sidebarChats(in project: Project) -> [SidebarChat] {
-        leadSidebarChats(in: project) + directSidebarChats(in: project)
-    }
-
-    func openChat(_ target: ChatTarget, inProjectID id: Int64) {
-        if let project = project(withID: id) {
-            if let requestID = sidebarChats(in: project).first(where: { $0.target == target })?.requestID {
-                leadSelections[id] = .request(requestID)
-            }
-            chooseChatTarget(target, in: project)
-        }
-        runDetailIDs[id] = nil
-        tabs[id] = .lead
-        selection = .project(id)
-    }
-
-    func sidebarChatDestination(inProjectID id: Int64) -> SidebarDestination? {
-        guard let project = project(withID: id), let target = chatTarget(in: project),
-              sidebarChats(in: project).contains(where: { $0.target == target }) else { return nil }
-        return .chat(project: id, target: target)
-    }
-
-    private func leadSidebarChats(in project: Project) -> [SidebarChat] {
-        let roles = leadRoles(in: project)
-        guard !roles.isEmpty else { return [] }
-        let needsYouTaskIDs = needsYouTaskIDs()
-        var chats: [String: SidebarChat] = [:]
-        for request in LeadRequest.partition(leadRequests(in: project)).open {
-            guard let taskID = request.id, let session = leadSession(for: request),
-                  let role = roles.first(where: { $0.id == session.agent.role }) else { continue }
-            let activity = ChatActivity.lead(
-                needsYou: requestNeedsYou(request, latestRun: latestRun(of: request), needsYouTaskIDs: needsYouTaskIDs),
-                messages: (try? database.leadMessages(taskId: taskID)) ?? [],
-                status: displayStatus(of: session.agent),
-                isQueued: session.isQueued
-            )
-            guard let activity, chats[role.id].map({ activity > $0.activity }) ?? true else { continue }
-            chats[role.id] = SidebarChat(target: .lead(role.id), name: role.name, activity: activity, requestID: taskID)
-        }
-        return roles.compactMap { chats[$0.id] }
-    }
-
-    private func directSidebarChats(in project: Project) -> [SidebarChat] {
-        directChatSessions(in: project).compactMap { session in
-            let activity = ChatActivity.directChat(
-                status: displayStatus(of: session.agent),
-                awaitingReply: directMessages(with: session).contains(where: \.awaitingReply),
-                isQueued: session.isQueued
-            )
-            return activity.map { SidebarChat(target: .agent(session.id), name: displayName(of: session.agent, in: project), activity: $0) }
-        }
-    }
-
-
     func chatTarget(in project: Project) -> ChatTarget? {
         guard let id = project.id else { return nil }
         switch chatTargets[id] {

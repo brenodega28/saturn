@@ -16,7 +16,6 @@ enum DiffPalette {
     static let pinTitle = Color(hex: 0xFFE266)
     static let pinCard = Color(hex: 0x24231C)
     static let lineNumber = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.45)
-    static let code = Color(red: 240 / 255, green: 240 / 255, blue: 245 / 255).opacity(0.92)
     static let cardBackground = Color(hex: 0x141417)
     static let conflict = Color(hex: 0xFF8A80)
     static let selection = Color(red: 56 / 255, green: 139 / 255, blue: 253 / 255).opacity(0.2)
@@ -49,6 +48,7 @@ enum DiffPalette {
 struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
     let rows: DiffRows
     let layout: DiffLayout
+    let language: CodeLanguage
     let selection: LineSelection?
     let onSelectLine: (LineTarget, Bool) -> Void
     @ViewBuilder let pinContent: (Pin) -> PinContent
@@ -203,8 +203,7 @@ struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
 
     private func codeText(_ line: PatchLine) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(line.text.isEmpty ? " " : line.text)
-                .foregroundStyle(DiffPalette.code)
+            Text(line.text.isEmpty ? AttributedString(" ") : CodeStyle.highlighted(line.text, language: language))
                 .fixedSize(horizontal: false, vertical: true)
             if line.missingNewlineAtEnd {
                 Image(systemName: "return")

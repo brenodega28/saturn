@@ -13,7 +13,8 @@ enum SidebarDestination: Hashable {
     case usage
     case section(project: Int64, tab: ProjectTab)
     case run(project: Int64, run: Int64)
-    case chat(project: Int64, target: ChatTarget)
+    case request(project: Int64, request: Int64)
+    case requests(project: Int64)
 }
 
 enum ProjectTab: String, CaseIterable, Identifiable, Codable {
@@ -86,6 +87,7 @@ final class AppModel {
     var selectedAgents: [Int64: Int64] = [:]
     var isNewAgentPresented = false
     var leadSelections: [Int64: LeadSelection] = [:]
+    var requestPageProjectIDs: Set<Int64> = []
     var changesRunSelections: [Int64: Int64] = [:]
     var skillPlugins: [Int64: [SkillPlugin]] = [:]
     var leadChatRevision = 0
@@ -155,8 +157,10 @@ final class AppModel {
             case .project(let id):
                 if let runID = runDetailIDs[id] {
                     .run(project: id, run: runID)
-                } else if tab(forProjectID: id) == .lead, let chat = sidebarChatDestination(inProjectID: id) {
-                    chat
+                } else if tab(forProjectID: id) == .lead, requestPageProjectIDs.contains(id) {
+                    .requests(project: id)
+                } else if tab(forProjectID: id) == .lead, let requestID = selectedOpenRequestID(inProjectID: id) {
+                    .request(project: id, request: requestID)
                 } else {
                     .section(project: id, tab: tab(forProjectID: id))
                 }
@@ -173,10 +177,16 @@ final class AppModel {
                 runDetailIDs[id] = nil
                 tabs[id] = tab
                 selection = .project(id)
+                requestPageProjectIDs.remove(id)
             case .run(let id, let runID):
                 openRunDetail(runID: runID, in: id)
-            case .chat(let id, let target):
-                openChat(target, inProjectID: id)
+            case .request(let id, let requestID):
+                runDetailIDs[id] = nil
+                tabs[id] = .lead
+                selection = .project(id)
+                showRequest(id: requestID, inProjectID: id)
+            case .requests(let id):
+                showRequestPage(inProjectID: id)
             case nil:
                 break
             }

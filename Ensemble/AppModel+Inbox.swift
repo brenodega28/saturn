@@ -44,7 +44,7 @@ extension AppModel {
             tabs[item.projectId] = .changes
         } else if item.runId == nil, let taskID = item.agentId.flatMap({ agent(id: $0) })?.taskId {
             selection = .project(item.projectId)
-            leadSelections[item.projectId] = .request(taskID)
+            showRequest(id: taskID, inProjectID: item.projectId)
             tabs[item.projectId] = .lead
         } else {
             openLead(forRun: item.runId, in: item.projectId)

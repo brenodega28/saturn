@@ -183,6 +183,7 @@ struct FileCard: View {
             DiffBodyView(
                 rows: rows,
                 layout: store.layout,
+                language: CodeLanguage(path: entry.diff.path),
                 selection: selection,
                 onSelectLine: { target, extending in store.selectLine(target, in: entry.id, extending: extending) },
                 pinContent: { pin in pinCard(pin) },

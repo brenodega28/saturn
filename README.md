@@ -29,7 +29,7 @@ swift test --package-path Packages/EnsembleCore
 Ensemble/              macOS app target (SwiftUI)
 Packages/EnsembleCore  UI-free engine: storage, git, worktrees, environment checks, Keychain
 Packages/EnsembleUI    shared SwiftUI components and theme
-Configs/               build settings (copy Local.xcconfig.example to Local.xcconfig for Sparkle keys)
+Configs/               build settings (copy Local.xcconfig.example to Local.xcconfig for Sparkle keys and the GitHub OAuth client ID)
 scripts/release.sh     Developer ID archive, notarization, DMG and Sparkle appcast
 ```
 

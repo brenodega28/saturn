@@ -68,6 +68,15 @@ import Testing
         #expect(agents.filter { $0.planTaskId != nil }.count == 2)
         #expect(agents.filter { $0.role == "qa-engineer" }.count == 1)
 
+        let lead = try #require(agents.first { $0.role == "tech-lead" })
+        let leadLaunches = setup.harness.launches().filter { $0.contains("You are \(lead.name),") }
+        #expect(leadLaunches.count == 3)
+        #expect(leadLaunches.allSatisfy { $0.contains("--session-id") && !$0.contains("--resume") })
+        let leadTranscript = try String(contentsOf: setup.harness.runtime.paths.transcript(lead.id!), encoding: .utf8)
+        #expect(leadTranscript.components(separatedBy: "Your last check (round 1)").count == 2)
+        #expect(leadTranscript.contains("Add a second line to alpha.txt (alpha.txt)"))
+        #expect(leadTranscript.contains("` was at `"))
+
         let alphaBuilder = try #require(agents.first { $0.planTaskId != nil && $0.task == "Add alpha" })
         let alpha = try String(contentsOf: alphaBuilder.worktreeURL!.appending(path: "alpha.txt"), encoding: .utf8)
         #expect(alpha.split(separator: "\n").count == 2)

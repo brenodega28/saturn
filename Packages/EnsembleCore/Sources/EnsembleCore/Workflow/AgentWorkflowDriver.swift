@@ -173,10 +173,14 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
         }
 
-        let session = try await stepAgent(for: role, context: context, runId: runId, git: git, worktree: qaWorktree)
+        let session = try await stepAgent(for: role, context: context, runId: runId, git: git, worktree: qaWorktree, expected: expected)
         let startCost = session.agent.costUSD
         clearHandoffs(session.id)
-        let message = context.isResuming && session.transcript.session != nil
+        let resuming = context.isResuming && session.transcript.session != nil
+        if expected == .verdict, !resuming {
+            session.startNewSession()
+        }
+        let message = resuming
             ? resumeMessage(expected: expected)
             : stepMessage(context: context, role: role, expected: expected, config: config)
 
@@ -423,7 +427,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         results[agentID] = nil
     }
 
-    private func stepAgent(for role: RoleDefinition, context: StepContext, runId: Int64, git: GitClient, worktree: (path: URL, branch: String?)?) async throws -> AgentSession {
+    private func stepAgent(
+        for role: RoleDefinition, context: StepContext, runId: Int64, git: GitClient, worktree: (path: URL, branch: String?)?, expected: ExpectedHandoff
+    ) async throws -> AgentSession {
         let sessions = try runtime.runSessions(runId: runId, projectId: context.project.id ?? -1)
         if let worktree {
             if let qa = sessions.first(where: { $0.agent.role == role.id && $0.agent.planTaskId == nil && $0.agent.worktreeURL.map(realPath(of:)) == realPath(of: worktree.path) }) {
@@ -433,7 +439,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
         let reusable = sessions.first { session in
             let agent = session.agent
-            guard agent.role == role.id, agent.planTaskId == nil else { return false }
+            guard agent.role == role.id, agent.planTaskId == nil, expected != .verdict || agent.taskId == nil else { return false }
             return role.editsCode ? !agent.readOnly : agent.readOnly && agent.worktreePath == nil
         }
         if let reusable { return reusable }
@@ -486,6 +492,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 parts.append("## What the builders report\n" + builds.output.taskResults.map { "- \($0.agentName ?? "Agent"): \($0.summary)" }.joined(separator: "\n"))
             }
             parts.append(branchGuide(for: context))
+            if let lastCheck = previousCheck(in: context) {
+                parts.append(lastCheck)
+            }
             let outcomes = isTestingStep(context.step) ? "`passed` or `failed`" : "`approved` or `changes_requested`"
             parts.append("When you’re done, call `\(HandoffTool.submitVerdict.qualifiedName)` with outcome \(outcomes), a summary, and concrete issues naming the agent and file. Pin anything a human must read with `\(HandoffTool.createPin.qualifiedName)`. Then end your turn.")
         case .result:
@@ -505,6 +514,27 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         guard !rows.isEmpty else { return "" }
         let base = sessions.first?.agent.baseBranch ?? "main"
         return "## Branches in this run\n" + rows.joined(separator: "\n") + "\n\nRead each with `git diff \(base)...<branch>` and `git log \(base)..<branch>` from the repository root, or open files in the worktrees."
+    }
+
+    func previousCheck(in context: StepContext) -> String? {
+        let outputs = context.inputs.previousOutputs
+        guard let index = outputs.lastIndex(where: { $0.stepId == context.step.id && $0.output.verdict != nil }),
+              let verdict = outputs[index].output.verdict else { return nil }
+        var parts = ["## Your last check (round \(outputs[index].iteration))", verdict.summary]
+        if !verdict.issues.isEmpty {
+            parts.append("Issues you raised:\n" + verdict.issues.map { issue in
+                "- \(issue.description)" + ([issue.agent, issue.file].compactMap(\.self).isEmpty ? "" : " (\([issue.agent, issue.file].compactMap(\.self).joined(separator: ", ")))")
+            }.joined(separator: "\n"))
+        }
+        let reviewedHeads = outputs[..<index].last { !$0.output.branchHeads.isEmpty }?.output.branchHeads ?? [:]
+        if reviewedHeads.isEmpty {
+            parts.append("This is a new session. Check whether those issues are fixed, and read only what changed since your last check.")
+        } else {
+            let rows = reviewedHeads.sorted { $0.key < $1.key }.map { "- `\($0.key)` was at `\($0.value)`" }
+            parts.append("Last time you checked these commits:\n" + rows.joined(separator: "\n"))
+            parts.append("This is a new session. See what changed with `git diff <commit>..<branch>` for each branch, check whether those issues are fixed, and don't re-read files that didn't change.")
+        }
+        return parts.joined(separator: "\n\n")
     }
 
     private func resumeMessage(expected: ExpectedHandoff) -> String {

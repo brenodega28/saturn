@@ -146,6 +146,9 @@ private struct ProjectSidebarGroup: View {
                     SectionRow(tab: tab, badge: badge(for: tab, waiting: waiting))
                         .tag(SidebarDestination.section(project: projectID, tab: tab))
                         .projectCard(tab == SidebarGroup.lastTab ? .bottom : .middle)
+                    if tab == .lead {
+                        SidebarChatRows(project: project, projectID: projectID)
+                    }
                     if tab == .tasks {
                         SidebarRunRows(project: project, projectID: projectID)
                     }
@@ -318,6 +321,38 @@ private struct SidebarRunRows: View {
                 .accessibilityLabel("Run \(run.title), \(status), step \(step)")
                 .accessibilityHint("Shows the run’s details")
             }
+        }
+    }
+}
+
+private struct SidebarChatRows: View {
+    @Environment(AppModel.self) private var model
+    let project: Project
+    let projectID: Int64
+
+    var body: some View {
+        ForEach(model.sidebarChats(in: project)) { chat in
+            let color = chat.activity.waitsOnYou ? Theme.warning : Theme.success
+            let status = chat.activity.label
+            HStack(spacing: 8) {
+                StatusDot(color, size: 6)
+                Text(chat.name)
+                    .font(.system(size: 12.5))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 4)
+                Text(status)
+                    .font(.system(size: 11))
+                    .foregroundStyle(chat.activity.waitsOnYou ? Theme.warning : Theme.secondaryText)
+                    .lineLimit(1)
+            }
+            .padding(.leading, 24)
+            .tag(SidebarDestination.chat(project: projectID, target: chat.target))
+            .projectCard(.middle)
+            .help("\(chat.name) — \(status)")
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Chat with \(chat.name), \(status)")
+            .accessibilityHint("Opens the chat")
         }
     }
 }

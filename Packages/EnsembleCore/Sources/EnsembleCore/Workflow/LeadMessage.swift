@@ -108,6 +108,28 @@ extension AppDatabase {
         }
     }
 
+    public func requestAgents(taskId: Int64) throws -> [Agent] {
+        try writer.read { db in
+            try Agent.fetchAll(db, sql: """
+                SELECT agent.* FROM agent
+                WHERE agent.taskId = ?
+                   OR agent.runId IN (SELECT id FROM run WHERE run.taskId = ?)
+                ORDER BY agent.id
+                """, arguments: [taskId, taskId])
+        }
+    }
+
+    @discardableResult
+    public func setClosed(taskId: Int64, reason: RequestCloseReason?, at date: Date) throws -> ProjectTask? {
+        try writer.write { db in
+            try db.execute(
+                sql: "UPDATE task SET closedAt = ?, closeReason = ?, updatedAt = ? WHERE id = ?",
+                arguments: [reason == nil ? nil : date, reason?.rawValue, date, taskId]
+            )
+            return try ProjectTask.fetchOne(db, id: taskId)
+        }
+    }
+
     public func runs(taskId: Int64) throws -> [Run] {
         try writer.read { db in
             try Run.filter(Column("taskId") == taskId).order(Column("startedAt"), Column("id")).fetchAll(db)

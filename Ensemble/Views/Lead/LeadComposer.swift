@@ -16,6 +16,8 @@ struct LeadComposer: View {
         VStack(alignment: .leading, spacing: 10) {
             ChatComposerInput(
                 text: $text,
+                prompt: Text(placeholder(leadName: leadName)),
+                axis: .vertical
                 attachments: $attachments,
                 isDropTargeted: $isDropTargeted,
                 placeholder: request == nil ? "Ask or describe what you need. The lead replies and proposes a run when it’s time." : "Message \(leadName)",
@@ -43,6 +45,11 @@ struct LeadComposer: View {
         .background(Color(white: 0.19).opacity(0.7), in: .rect(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
         .chatAttachmentDrop($attachments, isTargeted: $isDropTargeted)
+    }
+
+    private func placeholder(leadName: String) -> String {
+        guard let request else { return "Ask or describe what you need. The lead replies and proposes a run when it’s time." }
+        return request.isClosed ? "Send a message to reopen…" : "Message \(leadName)"
     }
 
     private func canSend(lead: RoleDefinition?) -> Bool {

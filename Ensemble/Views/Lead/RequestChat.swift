@@ -11,6 +11,15 @@ struct RequestChat: View {
     var body: some View {
         let session = model.leadSession(for: task)
         let isThinking = session.map { $0.isRunning || $0.isQueued } ?? false
+        VStack(spacing: 10) {
+            RequestHeader(task: task, project: project)
+                .frame(maxWidth: 820)
+                .frame(maxWidth: .infinity)
+            thread(isThinking: isThinking)
+        }
+    }
+
+    private func thread(isThinking: Bool) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
@@ -81,7 +90,7 @@ struct RequestChat: View {
                 }
             case .proposal:
                 LeadBubble(role: data.leadRole, name: data.leadName, date: message.createdAt) {
-                    ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil)
+                    ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed)
                 }
             case .note:
                 DirectMessageNote(text: message.text)
@@ -140,6 +149,61 @@ struct RequestChat: View {
     }
 }
 
+private struct RequestHeader: View {
+    @Environment(AppModel.self) private var model
+    let task: ProjectTask
+    let project: Project
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(task.title.isEmpty ? "Request #\(task.id ?? 0)" : task.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.secondaryText)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if let reason = task.closeReason {
+                closedBanner(reason)
+            } else {
+                closeMenu
+            }
+        }
+    }
+
+    private func closedBanner(_ reason: RequestCloseReason) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: reason == .done ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(reason.color)
+                .accessibilityHidden(true)
+            Text("Closed as \(reason.title) · Send a message to reopen")
+                .foregroundStyle(Theme.secondaryText)
+        }
+        .font(.system(size: 12))
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(reason.color.opacity(0.1), in: Capsule())
+        .accessibilityElement(children: .combine)
+    }
+
+    private var closeMenu: some View {
+        let hasActiveRun = model.requestHasActiveRun(task)
+        return Menu {
+            ForEach(RequestCloseReason.allCases, id: \.self) { reason in
+                Button(reason.title) {
+                    Task { await model.closeRequest(task, as: reason, in: project) }
+                }
+            }
+        } label: {
+            Label("Close", systemImage: "checkmark.circle")
+        }
+        .menuStyle(.button)
+        .buttonStyle(PillButtonStyle(height: 26))
+        .font(.system(size: 12))
+        .fixedSize()
+        .disabled(hasActiveRun)
+        .help(hasActiveRun ? RequestCloseReason.blockedHelp : "Close this request as done or dropped and clean up its worktrees")
+    }
+}
+
 struct ChatText: View {
     let text: String
 
@@ -181,6 +245,7 @@ private struct ProposalCard: View {
     let proposal: LeadMessage
     let project: Project
     let hasActiveRun: Bool
+    let isRequestClosed: Bool
 
     var body: some View {
         let workflow = proposal.workflow.flatMap { model.config(for: project).workflow($0) }
@@ -201,8 +266,8 @@ private struct ProposalCard: View {
                 HStack(spacing: 8) {
                     Button { model.startProposal(proposal, in: project) } label: { Label("Start Run", systemImage: "play.fill") }
                         .buttonStyle(PillButtonStyle(.primary, height: 30))
-                        .disabled(hasActiveRun || workflow == nil)
-                        .help(hasActiveRun ? "Wait for the current run to end" : "Start the run; the lead plans it first")
+                        .disabled(hasActiveRun || isRequestClosed || workflow == nil)
+                        .help(startHelp)
                     Button("Dismiss") { model.dismissProposal(proposal) }
                         .buttonStyle(PillButtonStyle(height: 30))
                         .help("Don’t run this; keep talking to the lead")
@@ -213,6 +278,11 @@ private struct ProposalCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.accent.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.accent.opacity(0.28)))
+    }
+
+    private var startHelp: String {
+        if isRequestClosed { return "This request is closed. Send a message to reopen it first." }
+        return hasActiveRun ? "Wait for the current run to end" : "Start the run; the lead plans it first"
     }
 
     @ViewBuilder

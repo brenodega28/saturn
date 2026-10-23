@@ -85,6 +85,7 @@ final class AppModel {
     var selectedAgents: [Int64: Int64] = [:]
     var isNewAgentPresented = false
     var leadSelections: [Int64: LeadSelection] = [:]
+    var changesRunSelections: [Int64: Int64] = [:]
     var skillPlugins: [Int64: [SkillPlugin]] = [:]
     var leadChatRevision = 0
     let leadChat: LeadChat

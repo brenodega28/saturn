@@ -165,6 +165,9 @@ private struct ApprovalCard: View {
                     Button("Request Changes") { isRequestingChanges = true }
                         .buttonStyle(PillButtonStyle(height: 30))
                         .help("Send the work back with a note")
+                    Button("Review Changes") { model.openChanges(for: run) }
+                        .buttonStyle(PillButtonStyle(height: 30))
+                        .help("Open the run’s diffs in Changes")
                 }
             }
         }

@@ -8,6 +8,19 @@ struct ChangesView: View {
     @State private var store = ChangesStore()
 
     var body: some View {
+        reviewContent
+            .task(id: requestedRunID) {
+                guard let requestedRunID, requestedRunID != store.selectedRunID else { return }
+                store.select(runID: requestedRunID)
+            }
+    }
+
+    private var requestedRunID: Int64? {
+        project.id.flatMap { model.changesRunSelections[$0] }
+    }
+
+    @ViewBuilder
+    private var reviewContent: some View {
         let runs = model.reviewableRuns(in: project)
         if let run = store.selectedRun(from: runs) {
             content(run: run, runs: runs)

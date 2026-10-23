@@ -33,7 +33,11 @@ final class ChangesStore {
 
     func select(_ run: Run, replacing current: Run) {
         guard run.id != current.id else { return }
-        selectedRunID = run.id
+        select(runID: run.id)
+    }
+
+    func select(runID: Int64?) {
+        selectedRunID = runID
         agentFilter = nil
         changeSet = nil
         loadedRunID = nil

@@ -9,6 +9,13 @@ extension AppModel {
         return ((try? database.runs(projectId: id)) ?? []).reversed()
     }
 
+    func openChanges(for run: Run) {
+        guard let runID = run.id else { return }
+        changesRunSelections[run.projectId] = runID
+        selection = .project(run.projectId)
+        tabs[run.projectId] = .changes
+    }
+
     func holdsForApproval(_ run: Run) -> Bool {
         guard let id = run.id else { return false }
         return engine.waitingReason(runID: id)?.reason == .approval

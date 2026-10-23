@@ -1,3 +1,4 @@
+import AppKit
 import EnsembleUI
 import SwiftUI
 import UniformTypeIdentifiers
@@ -10,6 +11,9 @@ struct RootView: View {
         content
             .frame(minWidth: 960, minHeight: 620)
             .task { await model.launch() }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                model.reloadAllConfigs()
+            }
             .fileImporter(isPresented: $model.isOpenPanelPresented, allowedContentTypes: [.folder]) { result in
                 if case .success(let url) = result {
                     Task { await model.openFolder(url) }

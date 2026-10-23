@@ -15,9 +15,9 @@ struct WorkspacePanel: View {
         let agent = session.agent
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                section("Workspace", trailing: "own worktree") {
+                section("Workspace", trailing: agent.readOnly ? "read-only" : "own worktree") {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(agent.worktreePath?.abbreviatingHome ?? "—")
+                        Text(agent.worktreePath?.abbreviatingHome ?? (agent.readOnly ? "Reads the project folder" : "—"))
                             .font(.system(size: 12, design: .monospaced))
                             .textSelection(.enabled)
                         Text(status?.branch ?? agent.branch ?? "—")

@@ -8,6 +8,7 @@ public protocol WorkflowDriver: AnyObject, Sendable {
     func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult
     func cancel(_ run: Run) async
     func mergeDelivery(_ run: Run, method: MergeMethod) async throws -> String
+    func openPullRequest(_ run: Run) async throws -> String
 }
 
 public enum MergeMethod: String, Sendable, Codable, CaseIterable {

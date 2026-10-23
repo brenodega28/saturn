@@ -10,10 +10,6 @@ extension AppDatabase {
         try writer.read { db in try ProjectTask.fetchOne(db, id: id) }
     }
 
-    public func project(id: Int64) throws -> Project? {
-        try writer.read { db in try Project.fetchOne(db, id: id) }
-    }
-
     @discardableResult
     public func insert(_ task: ProjectTask) throws -> ProjectTask {
         try writer.write { db in

@@ -21,7 +21,7 @@ public enum AgentModel: String, CaseIterable, Sendable, Identifiable {
 public enum AgentPermissions {
     public static let commands = [
         "git status", "git diff", "git log", "git show", "git add", "git commit", "git restore",
-        "git stash", "git branch", "git rev-parse", "git ls-files", "git mv", "git rm", "git grep",
+        "git stash", "git branch", "git rev-parse", "git ls-files", "git mv", "git rm", "git grep", "git merge",
         "ls", "cat", "head", "tail", "wc", "grep", "rg", "pwd", "which", "mkdir", "touch", "echo",
         "npm test", "npm run", "npm ci", "npm install", "npx", "pnpm", "yarn", "bun",
         "pytest", "python -m pytest", "python3 -m pytest", "python -m unittest", "python3 -m unittest", "node --test", "uv run", "uv sync", "poetry run", "pip install",
@@ -31,7 +31,7 @@ public enum AgentPermissions {
         "make", "bundle exec", "rake", "rspec", "mix test", "./gradlew", "gradle", "mvn", "dotnet build", "dotnet test",
     ]
 
-    public static let writingGitCommands = ["git add", "git commit", "git restore", "git stash", "git mv", "git rm"]
+    public static let writingGitCommands = ["git add", "git commit", "git restore", "git stash", "git mv", "git rm", "git merge"]
 
     public static var readOnlyCommands: [String] {
         commands.filter { !writingGitCommands.contains($0) }

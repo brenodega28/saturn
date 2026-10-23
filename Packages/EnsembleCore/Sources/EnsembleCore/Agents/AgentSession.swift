@@ -143,6 +143,21 @@ public final class AgentSession: Identifiable {
         handle = nil
     }
 
+    func retire(detail: String) {
+        leaveQueue()
+        queuedMessages.removeAll()
+        deferredTurn = nil
+        restartAfterStop = false
+        pendingFailure = nil
+        stopTarget = nil
+        handle?.terminate()
+        handle = nil
+        agent.status = .stopped
+        agent.processID = nil
+        record(notice: .stopped, detail: detail)
+        persist()
+    }
+
     func failSetup(_ message: String) {
         fail(message)
     }

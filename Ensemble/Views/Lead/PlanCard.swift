@@ -108,23 +108,25 @@ private struct PlanTaskRow: View {
 
     var body: some View {
         let role = roles.first { $0.id == task.role }
-        HStack(spacing: 10) {
-            VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(String(format: "%02d", number))
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Theme.tertiaryText)
+                    .frame(width: 22, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title).font(.system(size: 13.5, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+                    if !task.details.isEmpty {
+                        Text(task.details).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(3)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack(spacing: 10) {
                 arrow("chevron.up", label: "Move up", disabled: isFirst) { plan.moveTask(id: task.id, by: -1) }
                 arrow("chevron.down", label: "Move down", disabled: isLast) { plan.moveTask(id: task.id, by: 1) }
-            }
-            Text(String(format: "%02d", number))
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Theme.tertiaryText)
-                .frame(width: 22, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.title).font(.system(size: 13.5, weight: .medium)).fixedSize(horizontal: false, vertical: true)
-                if !task.details.isEmpty {
-                    Text(task.details).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(2)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            roleMenu(selected: role)
+                Spacer(minLength: 8)
+                roleMenu(selected: role)
             stepper
             Button {
                 plan.removeTask(id: task.id)
@@ -138,9 +140,9 @@ private struct PlanTaskRow: View {
             .foregroundStyle(Theme.secondaryText)
             .help("Remove this task from the plan")
             .accessibilityLabel("Delete task \(number)")
+            }
         }
-        .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 12))
-        .frame(minHeight: 54)
+        .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
     }
 
     private func arrow(_ symbol: String, label: String, disabled: Bool, action: @escaping () -> Void) -> some View {

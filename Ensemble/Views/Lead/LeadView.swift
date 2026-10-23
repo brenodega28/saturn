@@ -9,22 +9,28 @@ struct LeadView: View {
     var body: some View {
         let runs = model.leadRuns(in: project)
         let selected = model.selectedLeadRun(in: project)
-        HStack(alignment: .top, spacing: 18) {
-            if !runs.isEmpty {
-                LeadRunList(project: project, runs: runs, selectedID: selected?.id)
-                    .frame(width: 236)
-            }
-            VStack(spacing: 14) {
-                if let selected {
-                    RunConversation(run: selected, project: project)
-                        .id(selected.id)
-                } else {
-                    NewRequestIntro(project: project)
+        GeometryReader { proxy in
+            let showsList = !runs.isEmpty && proxy.size.width >= 860
+            HStack(alignment: .top, spacing: 18) {
+                if showsList {
+                    LeadRunList(project: project, runs: runs, selectedID: selected?.id)
+                        .frame(width: 236)
                 }
-                LeadComposer(project: project)
-                    .frame(maxWidth: 820)
+                VStack(spacing: 14) {
+                    if !showsList, !runs.isEmpty {
+                        CompactRunPicker(project: project, runs: runs, selected: selected)
+                    }
+                    if let selected {
+                        RunConversation(run: selected, project: project)
+                            .id(selected.id)
+                    } else {
+                        NewRequestIntro(project: project)
+                    }
+                    LeadComposer(project: project)
+                        .frame(maxWidth: 820)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -106,3 +112,33 @@ private struct NewRequestIntro: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+
+private struct CompactRunPicker: View {
+    @Environment(AppModel.self) private var model
+    let project: Project
+    let runs: [Run]
+    let selected: Run?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Menu {
+                ForEach(runs) { run in
+                    Button(run.title) { model.showRun(run) }
+                }
+            } label: {
+                Label(selected?.title ?? "Runs", systemImage: "list.bullet")
+                    .lineLimit(1)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button {
+                model.startNewLeadRequest(in: project)
+            } label: {
+                Label("New request", systemImage: "plus")
+            }
+            .buttonStyle(.pill)
+            .fixedSize()
+        }
+    }
+}
+

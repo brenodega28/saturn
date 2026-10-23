@@ -26,8 +26,7 @@ struct RealGitHubTests {
         try await writeBack.runStarted(issue: issueNumber, workflow: "Feature delivery v1")
         #expect(try await eventually { try await client.issue(issueNumber, in: repository).labelNames.contains("ensemble:running") })
 
-        let existing = try await client.pullRequest(forHead: branch, in: repository)
-        let pull = try await existing ?? client.createPullRequest(
+        let pull = try await client.createPullRequest(
             NewPullRequest(title: "Ensemble real API check", head: branch, base: "main", body: "Created by Ensemble's GitHub client test.", draft: false),
             in: repository
         )

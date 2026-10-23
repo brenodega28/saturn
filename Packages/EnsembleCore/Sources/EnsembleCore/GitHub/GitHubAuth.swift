@@ -154,7 +154,7 @@ public struct GitHubAuth: Sendable {
         components.host = Self.webHost
         components.path = path
         guard let url = components.url else { throw GitHubError.invalidResponse }
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")

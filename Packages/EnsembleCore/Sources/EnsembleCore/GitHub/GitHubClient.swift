@@ -169,7 +169,7 @@ extension GitHubClient {
     }
 
     func request(_ method: Method, url: URL, body: Data? = nil) -> URLRequest {
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpMethod = method.rawValue
         request.setValue(Self.mediaType, forHTTPHeaderField: "Accept")
         request.setValue(Self.apiVersion, forHTTPHeaderField: "X-GitHub-Api-Version")

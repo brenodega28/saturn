@@ -9,6 +9,7 @@ struct WorkflowsView: View {
     @State private var pendingAction: PendingAction?
     @State private var isConfirmingDelete = false
     @State private var isTestRunPresented = false
+    @State private var isInspectorPanelOpen = false
 
     private struct PendingAction: Identifiable {
         let id = UUID()
@@ -17,39 +18,48 @@ struct WorkflowsView: View {
 
     var body: some View {
         let config = model.config(for: project)
-        HStack(alignment: .top, spacing: 14) {
-            WorkflowSidebar(
-                config: config,
-                editor: editor,
-                hasConfig: model.hasConfig(project),
-                project: project,
-                open: { workflow in
-                    guard editor?.isNew == true || editor?.saved?.id != workflow.id else { return }
-                    confirmLeaving { open(workflow, isNew: false) }
-                },
-                newBlank: { confirmLeaving { newWorkflow(from: nil, config: config) } },
-                duplicate: { workflow in confirmLeaving { newWorkflow(from: workflow, config: config) } },
-                delete: { workflow in
-                    confirmLeaving {
-                        open(workflow, isNew: false)
-                        isConfirmingDelete = true
+        GeometryReader { proxy in
+            let mode = WorkflowsLayoutMode(width: proxy.size.width)
+            HStack(alignment: .top, spacing: WorkflowsLayoutMode.columnSpacing) {
+                if mode.showsSidebar {
+                    WorkflowSidebar(
+                        config: config,
+                        editor: editor,
+                        hasConfig: model.hasConfig(project),
+                        project: project,
+                        open: openFromList,
+                        newBlank: { newBlank(config: config) },
+                        duplicate: { duplicate($0, config: config) },
+                        delete: confirmDelete
+                    )
+                    .frame(width: WorkflowsLayoutMode.sidebarWidth)
+                }
+                if let editor {
+                    editorArea(editor, config: config, mode: mode, height: proxy.size.height)
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if !mode.showsSidebar {
+                            workflowMenu(config: config)
+                        }
+                        EmptyState("No workflow selected", message: "Workflows live in .ensemble/workflows/ in this repository, versioned with your code. Pick one, or start a new one.") {
+                            Button("New workflow") { newWorkflow(from: nil, config: config) }
+                                .buttonStyle(.primaryPill)
+                        }
                     }
                 }
-            )
-            .frame(width: 236)
-            if let editor {
-                editorArea(editor, config: config)
-            } else {
-                EmptyState("No workflow selected", message: "Workflows live in .ensemble/workflows/ in this repository, versioned with your code. Pick one, or start a new one.") {
-                    Button("New workflow") { newWorkflow(from: nil, config: config) }
-                        .buttonStyle(.primaryPill)
-                }
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
         }
         .onAppear { openFirst(in: config) }
         .onChange(of: project.id) { _, _ in
             editor = nil
             openFirst(in: model.config(for: project))
+        }
+        .onChange(of: editor?.selection) { _, selection in
+            isInspectorPanelOpen = selection != nil && selection != .workflow
+        }
+        .onChange(of: editor?.report != nil || editor?.errorMessage != nil) { _, hasNews in
+            if hasNews { isInspectorPanelOpen = true }
         }
         .confirmationDialog("Discard unsaved changes to “\(editor?.draft.name ?? "")”?", isPresented: Binding(
             get: { pendingAction != nil },
@@ -69,60 +79,162 @@ struct WorkflowsView: View {
         }
     }
 
-    private func editorArea(_ editor: WorkflowEditor, config: ProjectConfig) -> some View {
+    private func openFromList(_ workflow: WorkflowDefinition) {
+        guard editor?.isNew == true || editor?.saved?.id != workflow.id else { return }
+        confirmLeaving { open(workflow, isNew: false) }
+    }
+
+    private func newBlank(config: ProjectConfig) {
+        confirmLeaving { newWorkflow(from: nil, config: config) }
+    }
+
+    private func duplicate(_ workflow: WorkflowDefinition, config: ProjectConfig) {
+        confirmLeaving { newWorkflow(from: workflow, config: config) }
+    }
+
+    private func confirmDelete(_ workflow: WorkflowDefinition) {
+        confirmLeaving {
+            open(workflow, isNew: false)
+            isConfirmingDelete = true
+        }
+    }
+
+    private func workflowMenu(config: ProjectConfig) -> some View {
+        WorkflowListMenu(
+            config: config,
+            editor: editor,
+            hasConfig: model.hasConfig(project),
+            open: openFromList,
+            newBlank: { newBlank(config: config) },
+            duplicate: { duplicate($0, config: config) },
+            delete: confirmDelete
+        )
+    }
+
+    private func editorArea(_ editor: WorkflowEditor, config: ProjectConfig, mode: WorkflowsLayoutMode, height: CGFloat) -> some View {
         let issues = liveIssues(editor, config: config)
         let runs = editor.saved.map { model.activeRuns(ofWorkflow: $0.id, in: project) } ?? []
+        let inspector = WorkflowInspector(
+            editor: editor,
+            roles: config.roles,
+            issues: issues,
+            activeRuns: runs,
+            suggestedLabels: suggestedLabels(config)
+        )
         return VStack(alignment: .leading, spacing: 12) {
-            header(editor, issueCount: issues.count)
-            HStack(alignment: .top, spacing: 14) {
-                WorkflowCanvas(editor: editor, roles: config.roles)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .layoutPriority(1)
-                WorkflowInspector(
+            header(editor, config: config, issueCount: issues.count, mode: mode)
+            if mode.showsInspectorColumn {
+                HStack(alignment: .top, spacing: WorkflowsLayoutMode.columnSpacing) {
+                    WorkflowCanvas(editor: editor, roles: config.roles)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .layoutPriority(1)
+                    inspector
+                        .frame(width: WorkflowsLayoutMode.inspectorWidth)
+                }
+            } else {
+                CanvasWithInspectorPanel(
                     editor: editor,
                     roles: config.roles,
-                    issues: issues,
-                    activeRuns: runs,
-                    suggestedLabels: suggestedLabels(config)
+                    isPanelOpen: isInspectorPanelOpen,
+                    panelHeight: max(220, min(440, height * 0.45)),
+                    closePanel: { closeInspectorPanel(editor) },
+                    inspector: { inspector }
                 )
-                .frame(width: 310)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .sheet(isPresented: $isTestRunPresented) {
             TestRunSheet(editor: editor)
         }
     }
 
-    private func header(_ editor: WorkflowEditor, issueCount: Int) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
+    private func closeInspectorPanel(_ editor: WorkflowEditor) {
+        isInspectorPanelOpen = false
+        editor.select(.workflow)
+    }
+
+    private func header(_ editor: WorkflowEditor, config: ProjectConfig, issueCount: Int, mode: WorkflowsLayoutMode) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(editor.draft.name.isEmpty ? "Untitled workflow" : editor.draft.name)
                         .font(.system(size: 15, weight: .bold))
                         .lineLimit(1)
+                        .help(editor.draft.name)
                     Text("v\(editor.draft.version)")
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(Theme.secondaryText)
-                    if editor.isDirty {
-                        Text(editor.isNew ? "Not saved" : editor.willBumpVersion ? "Edited · saves as v\(editor.nextVersion)" : "Layout edited")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Theme.warning)
-                    }
+                        .fixedSize()
                 }
-                Button {
-                    editor.select(.trigger)
-                } label: {
-                    Text(editor.draft.trigger.summary)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Theme.successText)
-                        .padding(.horizontal, 8)
-                        .frame(height: 20)
-                        .background(Theme.success.opacity(0.15), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .help("Edit what starts this workflow")
+                .layoutPriority(1)
+                Spacer(minLength: 12)
+                headerActions(editor, issueCount: issueCount)
+                    .fixedSize()
             }
-            Spacer(minLength: 12)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    triggerAndStatus(editor)
+                    Spacer(minLength: 12)
+                    editingTools(editor, config: config, mode: mode)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    triggerAndStatus(editor)
+                    editingTools(editor, config: config, mode: mode)
+                }
+            }
+        }
+    }
+
+    private func triggerAndStatus(_ editor: WorkflowEditor) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                editor.select(.trigger)
+            } label: {
+                Text(editor.draft.trigger.summary)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.successText)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .frame(height: 20)
+                    .background(Theme.success.opacity(0.15), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Edit what starts this workflow")
+            if editor.isDirty {
+                Text(editor.isNew ? "Not saved" : editor.willBumpVersion ? "Edited · saves as v\(editor.nextVersion)" : "Layout edited")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.warning)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func editingTools(_ editor: WorkflowEditor, config: ProjectConfig, mode: WorkflowsLayoutMode) -> some View {
+        if !mode.showsSidebar {
+            HStack(spacing: 8) {
+                workflowMenu(config: config)
+                AddStepMenu(roles: config.roles, editor: editor)
+                if !mode.showsInspectorColumn {
+                    Toggle(isOn: Binding(
+                        get: { isInspectorPanelOpen },
+                        set: { isOpen in
+                            if isOpen { isInspectorPanelOpen = true } else { closeInspectorPanel(editor) }
+                        }
+                    )) {
+                        Label("Inspector", systemImage: "rectangle.bottomthird.inset.filled")
+                    }
+                    .toggleStyle(.button)
+                    .fixedSize()
+                    .help("Show the settings for the selected step, or for the whole workflow")
+                }
+            }
+        }
+    }
+
+    private func headerActions(_ editor: WorkflowEditor, issueCount: Int) -> some View {
+        HStack(spacing: 10) {
             if !editor.isNew {
                 Button("Revert") { editor.revert() }
                     .buttonStyle(.pill)
@@ -283,7 +395,7 @@ private struct WorkflowSidebar: View {
             }
             ForEach(config.workflows) { workflow in
                 let isSelected = editor?.isNew == false && editor?.saved?.id == workflow.id
-                let issueCount = config.issues.filter { $0.file.hasSuffix("/workflows/\(workflow.id).yaml") || $0.file.hasSuffix("/workflows/\(workflow.id).yml") }.count
+                let issueCount = config.issueCount(forWorkflow: workflow.id)
                 row(name: workflow.name, detail: "v\(workflow.version) · \(workflow.steps.count) step\(workflow.steps.count == 1 ? "" : "s")", issueCount: issueCount, isSelected: isSelected) {
                     open(workflow)
                 }
@@ -311,8 +423,7 @@ private struct WorkflowSidebar: View {
     }
 
     private var unreadable: [ConfigIssue] {
-        let known = Set(config.workflows.flatMap { ["\(ProjectConfig.directoryName)/workflows/\($0.id).yaml", "\(ProjectConfig.directoryName)/workflows/\($0.id).yml"] })
-        return config.issues.filter { $0.file.contains("/workflows/") && !known.contains($0.file) }
+        config.unreadableWorkflowIssues
     }
 
     private func row(name: String, detail: String, issueCount: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -441,5 +552,71 @@ private struct PaletteRow<Icon: View, Title: View, Trailing: View>: View {
             .background(Color(hex: 0x2A2A30), in: .rect(cornerRadius: 9))
         }
         .help(help)
+    }
+}
+
+struct CanvasWithInspectorPanel<Inspector: View>: View {
+    let editor: WorkflowEditor
+    let roles: [RoleDefinition]
+    let isPanelOpen: Bool
+    let panelHeight: CGFloat
+    let closePanel: () -> Void
+    @ViewBuilder let inspector: Inspector
+
+    var body: some View {
+        VStack(spacing: 12) {
+            WorkflowCanvas(editor: editor, roles: roles)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
+            if isPanelOpen {
+                InspectorPanel(title: panelTitle, close: closePanel) {
+                    inspector
+                }
+                .frame(height: panelHeight)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: isPanelOpen)
+    }
+
+    private var panelTitle: String {
+        switch editor.selection {
+        case .workflow: "Workflow settings"
+        case .trigger: "Trigger"
+        case .end: "End"
+        case .step: editor.selectedStep?.title ?? "Step"
+        }
+    }
+}
+
+private struct InspectorPanel<Content: View>: View {
+    let title: String
+    let close: () -> Void
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+                Spacer()
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(width: 24, height: 24)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.secondaryText)
+                .accessibilityLabel("Close inspector")
+                .help("Close the inspector")
+            }
+            content
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .card(cornerRadius: 20)
     }
 }

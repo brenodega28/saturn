@@ -50,17 +50,20 @@ struct WelcomeView: View {
     }
 
     private var recents: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionLabel("Recent projects").padding(.bottom, 4)
-            if model.recentProjects.isEmpty {
-                Text("Projects you open show up here.")
-                    .foregroundStyle(Theme.tertiaryText)
-                    .padding(.vertical, 10)
-            } else {
-                ForEach(model.recentProjects) { project in
-                    RecentProjectRow(project: project)
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 6) {
+                SectionLabel("Recent projects").padding(.bottom, 4)
+                if model.recentProjects.isEmpty {
+                    Text("Projects you open show up here.")
+                        .foregroundStyle(Theme.tertiaryText)
+                        .padding(.vertical, 10)
+                } else {
+                    ForEach(model.recentProjects) { project in
+                        RecentProjectRow(project: project)
+                    }
                 }
             }
+            CrewTemplatesSection()
         }
         .padding(EdgeInsets(top: 22, leading: 26, bottom: 22, trailing: 22))
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,6 +96,7 @@ private struct RecentProjectRow: View {
     @Environment(AppModel.self) private var model
     let project: Project
     @State private var isHovered = false
+    @State private var crew: [RolePalette] = []
 
     var body: some View {
         Button {
@@ -112,6 +116,7 @@ private struct RecentProjectRow: View {
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 8)
+                CrewStack(palettes: crew)
                 Text(project.lastOpenedAt.relativeDay)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
@@ -123,6 +128,9 @@ private struct RecentProjectRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .task(id: project.path) {
+            crew = ProjectConfigLoader.load(repository: project.url).roles.map(\.palette)
+        }
         .contextMenu {
             Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
             Button("Remove from Recents") { model.forgetRecent(project) }

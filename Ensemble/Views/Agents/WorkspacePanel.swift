@@ -24,11 +24,16 @@ struct WorkspacePanel: View {
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(Theme.successText)
                             .textSelection(.enabled)
-                        Text(aheadText)
+                        Text(agent.archivedAt == nil ? aheadText : "Archived · worktree removed, branch kept")
                             .font(.system(size: 12))
                             .foregroundStyle(Theme.secondaryText)
+                        if let port = agent.port, agent.archivedAt == nil {
+                            DevServerRow(port: port).padding(.top, 4)
+                        }
                     }
                 }
+
+                SetupLogSection(session: session)
 
                 if let worktree = agent.worktreeURL {
                     VStack(alignment: .leading, spacing: 8) {
@@ -121,7 +126,7 @@ struct WorkspacePanel: View {
     }
 
     private func refresh() async {
-        guard let git = model.git, let worktree = session.agent.worktreeURL else { return }
+        guard let git = model.git, let worktree = session.agent.worktreeURL, session.agent.archivedAt == nil else { return }
         do {
             status = try await git.status(of: worktree, base: session.agent.baseBranch)
             errorMessage = nil

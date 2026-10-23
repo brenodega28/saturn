@@ -646,6 +646,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 return .conflict(branch: branch, files: conflicted)
             }
         }
+        if purpose == "qa" {
+            try await runtime.prepareIntegrationWorktree(at: worktree.path, name: agent, projectId: run.projectId)
+        }
         return .ready(worktree.path, worktree.branch)
     }
 

@@ -190,9 +190,13 @@ public enum ProjectConfigLoader {
 
     public static func installDefaults(repository: URL) throws {
         guard let defaults = Bundle.module.url(forResource: "Defaults", withExtension: nil) else { return }
+        try install(from: defaults, repository: repository)
+    }
+
+    static func install(from bundle: URL, repository: URL) throws {
         let root = ProjectConfig.directory(in: repository)
         for folder in ["roles", "workflows"] {
-            let source = defaults.appending(path: folder)
+            let source = bundle.appending(path: folder)
             let destination = root.appending(path: folder)
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
             for file in try FileManager.default.contentsOfDirectory(at: source, includingPropertiesForKeys: nil) {

@@ -20,4 +20,8 @@ public struct AppPaths: Sendable {
     public func transcript(_ agentID: Int64) -> URL {
         agentDirectory(agentID).appending(path: "transcript.jsonl")
     }
+
+    public func pendingWorkspaceDirectory(_ name: String) -> URL {
+        root.appending(path: "workspaces/\(Slug.make(name))", directoryHint: .isDirectory)
+    }
 }

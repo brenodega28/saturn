@@ -52,6 +52,7 @@ final class AppModel {
     let inbox: InboxFeed
     let inboxNotifier = InboxNotifier()
     var runDetailIDs: [Int64: Int64] = [:]
+    let idleCleanup: IdleCleanupScheduler
 
     private(set) var environment: EnvironmentReport?
     private(set) var providerMode: ProviderMode?
@@ -90,7 +91,9 @@ final class AppModel {
         self.engine = RunEngine(database: database, driver: driver)
         self.gitHub = GitHubIntegration(engine: engine, secrets: secrets)
         self.inbox = InboxFeed(database: database)
+        self.idleCleanup = IdleCleanupScheduler(runtime: agents)
         driver.gitProvider = { [weak self] in self?.git }
+        connectWorkspaces()
         driver.gitHubProvider = { try? GitHubAuth(secrets: secrets).client() }
         restoreNavigation()
         connectGitHub()
@@ -128,6 +131,7 @@ final class AppModel {
         startBudgetMonitor()
         startMemoryUpdates()
         gitHub.start()
+        idleCleanup.start()
         await refreshAllProjects()
     }
 

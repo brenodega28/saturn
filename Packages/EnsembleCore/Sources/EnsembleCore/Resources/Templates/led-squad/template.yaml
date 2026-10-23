@@ -1,0 +1,4 @@
+name: Led squad
+description: Tech Lead plans and assigns to 3 Claude Code agents; QA tests
+order: 3
+crew: [tech-lead, claude-code, claude-code, claude-code, qa-engineer]

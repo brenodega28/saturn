@@ -17,12 +17,14 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
 
     var replies: [String: [Reply]] = [:]
     var finishReplies: [Result<FinishResult, ScriptedFailure>] = []
+    var mergeReplies: [Result<String, ScriptedFailure>] = []
     var diff = DiffInfo()
     private(set) var agentCalls: [StepContext] = []
     private(set) var spawnCalls: [SpawnContext] = []
     private(set) var finishCalls: [WorkflowEnd] = []
     private(set) var diffRequests = 0
     private(set) var cancelledRuns: [Int64] = []
+    private(set) var mergeCalls: [MergeMethod] = []
 
     func script(_ stepId: String, _ replies: Reply...) {
         self.replies[stepId, default: []] += replies
@@ -55,6 +57,12 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
 
     func cancel(_ run: Run) async {
         if let id = run.id { cancelledRuns.append(id) }
+    }
+
+    func mergeDelivery(_ run: Run, method: MergeMethod) async throws -> String {
+        mergeCalls.append(method)
+        guard !mergeReplies.isEmpty else { return "Merged \(run.deliveryBranch ?? "") into \(run.baseBranch ?? "")." }
+        return try mergeReplies.removeFirst().get()
     }
 
     private func reply(for stepId: String) async throws -> StepResult {

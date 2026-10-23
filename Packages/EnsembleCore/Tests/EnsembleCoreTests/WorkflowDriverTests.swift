@@ -176,4 +176,206 @@ import Testing
         #expect(alpha.contains("work by"))
         #expect(!alpha.contains("<<<<<<<"))
     }
+
+    struct MergeSetup {
+        let harness: AgentHarness
+        let driver: AgentWorkflowDriver
+        let engine: RunEngine
+        let origin: URL
+        let run: Run
+
+        var git: GitClient { harness.repo.git }
+        var root: URL { harness.repo.root }
+        static let branch = "crew/delivery-run-1/add-delivery-notes"
+        static let title = "Add delivery notes"
+
+        func head(_ ref: String = "HEAD", in directory: URL? = nil) async throws -> String {
+            try await git.run(["rev-parse", ref], in: directory ?? root).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        func originHead() async throws -> String {
+            try await head("main", in: origin)
+        }
+
+        func localBranchExists() async throws -> Bool {
+            try await git.hasCommit("refs/heads/\(Self.branch)", in: root)
+        }
+
+        func originBranchExists() async throws -> Bool {
+            try await git.hasCommit("refs/heads/\(Self.branch)", in: origin)
+        }
+
+        func pushFromAnotherClone(file: String, contents: String) async throws -> String {
+            let clone = harness.data.appending(path: "clone-\(UUID().uuidString)", directoryHint: .isDirectory)
+            try await git.clone(origin.path, to: clone)
+            try contents.write(to: clone.appending(path: file), atomically: true, encoding: .utf8)
+            try await git.run(["add", file], in: clone)
+            try await git.run(["commit", "-m", "Change \(file) elsewhere"], in: clone)
+            try await git.run(["push", "origin", "main"], in: clone)
+            return try await head(in: clone)
+        }
+    }
+
+    func makeMergeSetup() async throws -> MergeSetup {
+        let harness = try await AgentHarness.make()
+        let git = harness.repo.git
+        let root = harness.repo.root
+        let origin = harness.data.appending(path: "origin.git", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: origin, withIntermediateDirectories: true)
+        try await git.run(["init", "--bare", "-b", "main"], in: origin)
+        try await git.run(["remote", "add", "origin", origin.path], in: root)
+        try await git.run(["push", "-u", "origin", "main"], in: root)
+
+        try await git.run(["checkout", "-b", "crew/builder/notes"], in: root)
+        try "one\n".write(to: root.appending(path: "delivery.txt"), atomically: true, encoding: .utf8)
+        try await git.run(["add", "delivery.txt"], in: root)
+        try await git.run(["commit", "-m", "Add delivery notes"], in: root)
+        try "hello\nfrom the builder\n".write(to: root.appending(path: "README.md"), atomically: true, encoding: .utf8)
+        try "one\ntwo\n".write(to: root.appending(path: "delivery.txt"), atomically: true, encoding: .utf8)
+        try await git.run(["commit", "-am", "Extend delivery notes"], in: root)
+        try await git.run(["checkout", "-b", MergeSetup.branch, "main"], in: root)
+        try await git.run(["merge", "--no-ff", "--no-edit", "crew/builder/notes"], in: root)
+        try await git.run(["checkout", "main"], in: root)
+        try await git.run(["branch", "-D", "crew/builder/notes"], in: root)
+        try await git.run(["push", "-u", "origin", MergeSetup.branch], in: root)
+
+        let driver = AgentWorkflowDriver(runtime: harness.runtime)
+        driver.gitProvider = { harness.repo.git }
+        let engine = RunEngine(database: harness.database, driver: driver)
+        let projectId = try #require(harness.project.id)
+        let now = Date()
+        let task = try harness.database.insert(ProjectTask(
+            projectId: projectId, title: MergeSetup.title, body: "", source: .chat, status: .done, createdAt: now, updatedAt: now
+        ))
+        let run = try harness.database.insert(Run(
+            projectId: projectId, taskId: try #require(task.id), workflow: "feature-delivery", status: .succeeded,
+            startedAt: now, endedAt: now, title: MergeSetup.title, pullRequestURL: "https://github.com/acme/shop/pull/1",
+            deliveryBranch: MergeSetup.branch, baseBranch: "main"
+        ), state: RunEngineState())
+        return MergeSetup(harness: harness, driver: driver, engine: engine, origin: origin, run: run)
+    }
+
+    @Test(arguments: MergeMethod.allCases)
+    func mergeNowLandsTheDeliveryOnBaseAndOrigin(method: MergeMethod) async throws {
+        let setup = try await makeMergeSetup()
+        defer { setup.harness.cleanUp() }
+        let elsewhere = try await setup.pushFromAnotherClone(file: "other.txt", contents: "from elsewhere\n")
+
+        try await setup.engine.mergeDelivery(setup.run, method: method)
+
+        let head = try await setup.head()
+        #expect(try await setup.originHead() == head)
+        #expect(try await setup.git.currentBranch(in: setup.root) == "main")
+        #expect(try await setup.git.run(["status", "--porcelain", "--untracked-files=no"], in: setup.root).isEmpty)
+        #expect(try await setup.git.run(["merge-base", "--is-ancestor", elsewhere, "HEAD"], in: setup.root).isEmpty)
+        #expect(try await setup.git.run(["show", "HEAD:delivery.txt"], in: setup.root) == "one\ntwo\n")
+        #expect(try await setup.git.run(["show", "HEAD:README.md"], in: setup.root) == "hello\nfrom the builder\n")
+        #expect(try await setup.git.run(["show", "HEAD:other.txt"], in: setup.root) == "from elsewhere\n")
+        #expect(try await setup.git.run(["show", "main:delivery.txt"], in: setup.origin) == "one\ntwo\n")
+
+        let parents = try await setup.git.run(["rev-list", "--parents", "-n", "1", "HEAD"], in: setup.root).split(separator: " ").count - 1
+        let added = try await setup.git.run(["rev-list", "--count", "\(elsewhere)..HEAD"], in: setup.root).trimmingCharacters(in: .whitespacesAndNewlines)
+        let merges = try await setup.git.run(["rev-list", "--merges", "--count", "\(elsewhere)..HEAD"], in: setup.root).trimmingCharacters(in: .whitespacesAndNewlines)
+        switch method {
+        case .mergeCommit:
+            #expect(parents == 2)
+            #expect(try await setup.git.run(["rev-parse", "HEAD^1"], in: setup.root).trimmingCharacters(in: .whitespacesAndNewlines) == elsewhere)
+        case .squash:
+            #expect(parents == 1)
+            #expect(added == "1")
+            #expect(try await setup.git.run(["log", "-1", "--format=%s"], in: setup.root).trimmingCharacters(in: .whitespacesAndNewlines) == MergeSetup.title)
+        case .rebase:
+            #expect(parents == 1)
+            #expect(added == "2")
+            #expect(merges == "0")
+        }
+
+        #expect(try await !setup.localBranchExists())
+        #expect(try await !setup.originBranchExists())
+        #expect(try await setup.harness.repo.manager.list().isEmpty)
+        let run = try #require(try setup.harness.database.run(id: setup.run.id!))
+        #expect(run.mergedAt != nil)
+        #expect(run.outcome == "Merged \(MergeSetup.branch) into main.")
+    }
+
+    @Test func mergeNowRefusesWhenBaseIsNotCheckedOut() async throws {
+        let setup = try await makeMergeSetup()
+        defer { setup.harness.cleanUp() }
+        try await setup.git.run(["checkout", "-b", "elsewhere"], in: setup.root)
+        let before = try await setup.head()
+        let originBefore = try await setup.originHead()
+
+        await #expect(throws: WorkflowDriverError.self) { _ = try await setup.driver.mergeDelivery(setup.run, method: .mergeCommit) }
+
+        #expect(try await setup.git.currentBranch(in: setup.root) == "elsewhere")
+        #expect(try await setup.head() == before)
+        #expect(try await setup.head("main") == before)
+        #expect(try await setup.originHead() == originBefore)
+        #expect(try await setup.localBranchExists())
+        #expect(try await setup.originBranchExists())
+    }
+
+    @Test func mergeNowRefusesWhenTheWorkingTreeIsDirty() async throws {
+        let setup = try await makeMergeSetup()
+        defer { setup.harness.cleanUp() }
+        try "uncommitted\n".write(to: setup.root.appending(path: "README.md"), atomically: true, encoding: .utf8)
+        let before = try await setup.head()
+        let originBefore = try await setup.originHead()
+
+        await #expect(throws: WorkflowDriverError.self) { try await setup.engine.mergeDelivery(setup.run, method: .squash) }
+
+        #expect(try await setup.head() == before)
+        #expect(try await setup.originHead() == originBefore)
+        #expect(try String(contentsOf: setup.root.appending(path: "README.md"), encoding: .utf8) == "uncommitted\n")
+        #expect(try await setup.localBranchExists())
+        #expect(try await setup.originBranchExists())
+        #expect(try setup.harness.database.run(id: setup.run.id!)?.mergedAt == nil)
+    }
+
+    @Test(arguments: MergeMethod.allCases)
+    func aConflictingMergeLeavesBaseWhereItWas(method: MergeMethod) async throws {
+        let setup = try await makeMergeSetup()
+        defer { setup.harness.cleanUp() }
+        let elsewhere = try await setup.pushFromAnotherClone(file: "README.md", contents: "hello\nfrom elsewhere\n")
+        let before = try await setup.head()
+
+        await #expect(throws: WorkflowDriverError.self) { _ = try await setup.driver.mergeDelivery(setup.run, method: method) }
+
+        #expect(try await setup.head() == before)
+        #expect(try await setup.originHead() == elsewhere)
+        #expect(try await setup.git.currentBranch(in: setup.root) == "main")
+        #expect(try await setup.git.run(["status", "--porcelain", "--untracked-files=no"], in: setup.root).isEmpty)
+        #expect(try await setup.localBranchExists())
+        #expect(try await setup.originBranchExists())
+        #expect(try await setup.harness.repo.manager.list().isEmpty)
+    }
+
+    @Test func mergeNowFallsBackToTheOriginBranchWhenTheLocalOneIsGone() async throws {
+        let setup = try await makeMergeSetup()
+        defer { setup.harness.cleanUp() }
+        try await setup.git.run(["branch", "-D", MergeSetup.branch], in: setup.root)
+
+        let summary = try await setup.driver.mergeDelivery(setup.run, method: .mergeCommit)
+
+        #expect(summary == "Merged \(MergeSetup.branch) into main.")
+        #expect(try await setup.git.run(["show", "HEAD:delivery.txt"], in: setup.root) == "one\ntwo\n")
+        #expect(try await setup.originHead() == setup.head())
+        #expect(try await !setup.originBranchExists())
+        #expect(try await !setup.git.hasCommit("refs/remotes/origin/\(MergeSetup.branch)", in: setup.root))
+    }
+
+    @Test func mergeNowRemovesAWorktreeThatStillHoldsTheDeliveryBranch() async throws {
+        let setup = try await makeMergeSetup()
+        defer { setup.harness.cleanUp() }
+        let worktree = try setup.harness.repo.manager.path(forAgent: "delivery-run-1")
+        try await setup.harness.repo.manager.ensureExcluded()
+        try await setup.git.run(["worktree", "add", worktree.path, MergeSetup.branch], in: setup.root)
+
+        _ = try await setup.driver.mergeDelivery(setup.run, method: .rebase)
+
+        #expect(try await setup.git.run(["show", "HEAD:delivery.txt"], in: setup.root) == "one\ntwo\n")
+        #expect(try await setup.harness.repo.manager.list().isEmpty)
+        #expect(try await !setup.localBranchExists())
+        #expect(try await !setup.originBranchExists())
+    }
 }

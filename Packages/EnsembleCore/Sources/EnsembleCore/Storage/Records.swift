@@ -143,15 +143,21 @@ public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
     public var pullRequestURL: String?
     public var lastError: String?
     public var brief: String?
+    public var deliveryBranch: String?
+    public var baseBranch: String?
+    public var mergedAt: Date?
 
     public init(
         id: Int64? = nil, projectId: Int64, taskId: Int64, workflow: String, workflowVersion: String? = nil,
         currentStep: String? = nil, status: RunStatus, outcome: String? = nil, costUSD: Double = 0,
         startedAt: Date, endedAt: Date? = nil, title: String = "", workflowSnapshot: String = "",
         budgetUSD: Double? = nil, endAction: String? = nil, pullRequestURL: String? = nil, lastError: String? = nil,
-        brief: String? = nil
+        brief: String? = nil, deliveryBranch: String? = nil, baseBranch: String? = nil, mergedAt: Date? = nil
     ) {
         self.brief = brief
+        self.deliveryBranch = deliveryBranch
+        self.baseBranch = baseBranch
+        self.mergedAt = mergedAt
         self.title = title
         self.workflowSnapshot = workflowSnapshot
         self.budgetUSD = budgetUSD

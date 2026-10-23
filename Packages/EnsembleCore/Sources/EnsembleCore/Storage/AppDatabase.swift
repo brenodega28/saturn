@@ -238,6 +238,13 @@ public final class AppDatabase: Sendable {
                 t.add(column: "attachments", .text)
             }
         }
+        migrator.registerMigration("v12-merge-delivery") { db in
+            try db.alter(table: "run") { t in
+                t.add(column: "deliveryBranch", .text)
+                t.add(column: "baseBranch", .text)
+                t.add(column: "mergedAt", .datetime)
+            }
+        }
 
         return migrator
     }

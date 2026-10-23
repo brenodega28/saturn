@@ -180,6 +180,8 @@ extension RunEngine {
             row.output = encode(StepOutput(summary: finished.summary ?? finished.pullRequestURL))
             row.endedAt = now
             done.run.pullRequestURL = finished.pullRequestURL ?? done.run.pullRequestURL
+            done.run.deliveryBranch = finished.deliveryBranch ?? done.run.deliveryBranch
+            done.run.baseBranch = finished.baseBranch ?? done.run.baseBranch
             done.run.status = .succeeded
             done.run.currentStep = WorkflowDefinition.endStepID
             done.run.lastError = nil

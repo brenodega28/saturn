@@ -598,6 +598,69 @@ import Testing
         #expect(try h.steps(id).map(\.stepId) == ["build", "end", "end"])
     }
 
+    @Test func aPullRequestFinishRecordsTheDeliveryAndBaseBranches() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        h.driver.script("build", H.done())
+        h.driver.finishReplies = [.success(FinishResult(pullRequestURL: "https://example.com/pr/1", deliveryBranch: "crew/delivery-run-1/refunds", baseBranch: "main"))]
+
+        let id = try await h.start(workflow)
+
+        let run = try h.run(id)
+        #expect(run.status == .succeeded)
+        #expect(run.deliveryBranch == "crew/delivery-run-1/refunds")
+        #expect(run.baseBranch == "main")
+        #expect(run.mergedAt == nil)
+    }
+
+    @Test func mergingADeliveredRunRecordsTheMergeOnce() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        h.driver.script("build", H.done())
+        h.driver.finishReplies = [.success(FinishResult(pullRequestURL: "https://example.com/pr/1", deliveryBranch: "crew/delivery", baseBranch: "main"))]
+        let id = try await h.start(workflow)
+
+        try await h.engine.mergeDelivery(try h.run(id), method: .squash)
+
+        let run = try h.run(id)
+        #expect(h.driver.mergeCalls == [.squash])
+        #expect(run.mergedAt != nil)
+        #expect(run.outcome == "Merged crew/delivery into main.")
+        #expect(run.status == .succeeded)
+        await #expect(throws: RunEngineError.self) { try await h.engine.mergeDelivery(try h.run(id), method: .mergeCommit) }
+        #expect(h.driver.mergeCalls == [.squash])
+    }
+
+    @Test func aFailedMergeLeavesTheRunUnchanged() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        h.driver.script("build", H.done())
+        h.driver.finishReplies = [.success(FinishResult(pullRequestURL: "https://example.com/pr/1", deliveryBranch: "crew/delivery", baseBranch: "main"))]
+        h.driver.mergeReplies = [.failure(ScriptedFailure(message: "main is dirty"))]
+        let id = try await h.start(workflow)
+        let before = try h.run(id)
+
+        await #expect(throws: ScriptedFailure.self) { try await h.engine.mergeDelivery(before, method: .rebase) }
+
+        #expect(try h.run(id) == before)
+        #expect(h.driver.mergeCalls == [.rebase])
+    }
+
+    @Test func onlyFinishedPullRequestRunsCanBeMerged() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        h.driver.script("build", H.done())
+        h.driver.finishReplies = [.success(FinishResult(summary: "Left in place"))]
+        let id = try await h.start(workflow)
+
+        await #expect(throws: RunEngineError.self) { try await h.engine.mergeDelivery(try h.run(id), method: .mergeCommit) }
+        #expect(h.driver.mergeCalls.isEmpty)
+    }
+
     @Test func resolvingTheWrongHoldThrows() async throws {
         let h = try H.make()
         defer { h.cleanUp() }

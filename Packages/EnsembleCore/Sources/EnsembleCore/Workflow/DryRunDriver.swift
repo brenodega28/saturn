@@ -97,6 +97,10 @@ public final class DryRunDriver: WorkflowDriver {
 
     public func cancel(_ run: Run) async {}
 
+    public func mergeDelivery(_ run: Run, method: MergeMethod) async throws -> String {
+        "Dry run: would \(Self.describe(method)) \(run.deliveryBranch ?? "the delivery branch") into \(run.baseBranch ?? "the base branch")."
+    }
+
     private func spawnStep(after stepID: String) -> WorkflowStep? {
         guard let index = workflow.index(of: stepID) else { return nil }
         return workflow.steps[(index + 1)...].first { $0.type == .spawn }
@@ -116,6 +120,14 @@ public final class DryRunDriver: WorkflowDriver {
         case .merge: "merge into the base branch"
         case .push: "push the branch"
         case .leave: "leave the branches as they are"
+        }
+    }
+
+    public static func describe(_ method: MergeMethod) -> String {
+        switch method {
+        case .mergeCommit: "merge"
+        case .squash: "squash and merge"
+        case .rebase: "rebase and merge"
         }
     }
 }

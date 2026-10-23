@@ -198,12 +198,12 @@ Goal: edit workflows visually; the YAML stays the source of truth.
 
 Goal: ready for daily use.
 
-- [ ] Pinned agents: memory in `.ensemble/memory/<agent>.md`, loaded at start and updated at the end of each run; Memory panel to view, edit and clear; memory badge on cards
-- [ ] Usage screen: spend by project, run, role and model; budgets per run and per month with alerts
-- [ ] Settings › Workspaces: setup script per worktree (install deps, migrate DB), port allocation per worktree, cleanup policy
-- [ ] Dev-server status and port shown in the Agent session panel
+- [x] Pinned agents: memory in `.ensemble/memory/<agent>.md`, loaded at start and updated at the end of each run; Memory panel to view, edit and clear; memory badge on cards
+- [x] Usage screen: spend by project, run, role and model; budgets per run and per month with alerts
+- [x] Settings › Workspaces: setup script per worktree (install deps, migrate DB), port allocation per worktree, cleanup policy
+- [x] Dev-server status and port shown in the Agent session panel
 - [ ] Failure recovery across the board: rate limits, crashed agents, missing worktrees, failed setup scripts
-- [ ] Templates on the Welcome screen include roles **and** a workflow (Django + React, Solo with review, Led squad)
+- [x] Templates on the Welcome screen include roles **and** a workflow (Django + React, Solo with review, Led squad)
 
 **Exit check:** a week of real use on one project with no lost runs and no surprise spend.
 

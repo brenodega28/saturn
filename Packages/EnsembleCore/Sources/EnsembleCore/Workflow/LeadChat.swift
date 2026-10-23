@@ -31,21 +31,26 @@ public final class LeadChat {
     }
 
     @discardableResult
-    public func createRequest(_ text: String, lead: RoleDefinition?, in project: Project, now: Date = .now) async throws -> ProjectTask {
-        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let projectId = project.id, !body.isEmpty else { throw AgentError.emptyTask }
+    public func createRequest(
+        _ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, in project: Project, now: Date = .now
+    ) async throws -> ProjectTask {
+        let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let projectId = project.id, !typed.isEmpty || !attachments.isEmpty else { throw AgentError.emptyTask }
         guard let lead else { throw LeadChatError.noLeadRole }
         let task = try database.insert(ProjectTask(
-            projectId: projectId, title: LeadRequest.title(for: body), body: body, source: .chat,
+            projectId: projectId, title: Self.title(text: typed, attachments: attachments),
+            body: ChatAttachment.prompt(text: typed, attachments: attachments), source: .chat,
             status: .incoming, createdAt: now, updatedAt: now
         ))
-        try await send(body, to: task, lead: lead, in: project, now: now)
+        try await send(typed, attachments: attachments, to: task, lead: lead, in: project, now: now)
         return task
     }
 
-    public func send(_ text: String, to task: ProjectTask, lead: RoleDefinition?, in project: Project, now: Date = .now) async throws {
+    public func send(
+        _ text: String, attachments: [ChatAttachment] = [], to task: ProjectTask, lead: RoleDefinition?, in project: Project, now: Date = .now
+    ) async throws {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let taskId = task.id, !body.isEmpty else { return }
+        guard let taskId = task.id, !body.isEmpty || !attachments.isEmpty else { return }
         try await driver.ensureServer()
         let session = try leadSession(for: task, lead: lead, in: project)
         if try database.task(id: taskId)?.isClosed == true {
@@ -53,6 +58,21 @@ public final class LeadChat {
         }
         try database.insert(LeadMessage(projectId: task.projectId, taskId: taskId, kind: .user, text: body, createdAt: now))
         session.send(body + (try statusNote(taskId: taskId).map { "\n\n---\n" + $0 } ?? ""))
+        try database.insert(LeadMessage(
+            projectId: task.projectId, taskId: taskId, kind: .user, text: body, createdAt: now,
+            attachments: try ChatAttachmentStore(paths: runtime.paths).store(attachments)
+        ))
+        let prompt = ChatAttachment.prompt(text: body, attachments: attachments)
+        let status = try statusNote(taskId: taskId).map { (prompt.isEmpty ? "" : "\n\n---\n") + $0 } ?? ""
+        session.send(prompt + status, images: attachments.filter(\.isImage))
+    }
+
+    static func title(text: String, attachments: [ChatAttachment]) -> String {
+        if !text.isEmpty { return LeadRequest.title(for: text) }
+        if let pasted = attachments.lazy.compactMap(\.pastedText).first(where: { !LeadRequest.title(for: $0).isEmpty }) {
+            return LeadRequest.title(for: pasted)
+        }
+        return "Image"
     }
 
     @discardableResult

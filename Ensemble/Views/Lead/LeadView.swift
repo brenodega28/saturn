@@ -55,6 +55,7 @@ private struct LeadRequestList: View {
     @State private var showsClosed = false
 
     var body: some View {
+        let needsYouTaskIDs = model.needsYouTaskIDs()
         VStack(alignment: .leading, spacing: 10) {
             Button {
                 model.startNewLeadRequest(in: project)
@@ -66,8 +67,8 @@ private struct LeadRequestList: View {
             .help("Start a new conversation with the lead")
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(open) { request in
-                        row(request)
+                    ForEach(requests) { request in
+                        row(request, needsYouTaskIDs: needsYouTaskIDs)
                     }
                     if !closed.isEmpty {
                         closedToggle
@@ -111,14 +112,15 @@ private struct LeadRequestList: View {
         let isSelected = request.id == selectedID
         let run = model.latestRun(of: request)
         let detail = run.map { run in
-            let state = run.isActive ? (model.currentStepTitle(of: run) ?? run.status.label) : run.status.label
+            let label = model.statusLabel(of: run)
+            let state = run.isActive ? (model.currentStepTitle(of: run) ?? label) : label
             return "\(state) · \(run.costUSD.formatted(.currency(code: "USD")))"
         } ?? "Chat"
         return Button {
             model.showRequest(request)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StatusDot(run?.status.color ?? Theme.secondaryText)
+                StatusDot(model.statusColor(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(request.title.isEmpty ? "Request #\(request.id ?? 0)" : request.title)
                         .font(.system(size: 13, weight: isSelected ? .semibold : .regular))

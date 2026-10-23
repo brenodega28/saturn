@@ -285,12 +285,15 @@ public final class AgentRuntime {
                 .filter { FileManager.default.fileExists(atPath: $0.path) && !(realPath(of: $0) + "/").hasPrefix(root) }
         }
         var setup = TurnSetup(directory: directory, systemPrompt: prompt, readOnly: agent.readOnly, additionalDirectories: additional)
+        if agent.taskId != nil {
+            setup.extraAllowedTools += AgentPermissions.webTools
+        }
         let tools = handoffTools(agent)
         if let server = mcpServer, let agentID = agent.id, !tools.isEmpty {
             server.revokeAll(agent: agentID)
             let endpoint = server.register(agent: agentID, tools: tools)
             setup.extraArguments = try endpoint.launchArguments(configDirectory: paths.agentDirectory(agentID))
-            setup.extraAllowedTools = endpoint.allowedTools
+            setup.extraAllowedTools += endpoint.allowedTools
             setup = TurnSetup(
                 directory: setup.directory,
                 systemPrompt: setup.systemPrompt + "\n\n" + Self.handoffGuide(tools),
@@ -313,7 +316,7 @@ public final class AgentRuntime {
         return """
         # Chatting with the user
         You are the lead for one request in Ensemble. The user talks to you in a chat; each of their messages arrives as your next turn, and your final text in a turn is shown to them as your reply. Keep replies short and direct.
-        Answer questions by reading the code. When work should be done, don't build it yourself: propose a run with `\(HandoffTool.proposeRun.qualifiedName)`. The user starts it; then you plan it as the run's lead, with everything you discussed.
+        Answer questions by reading the code. You can use \(AgentPermissions.webTools.map { "`\($0)`" }.joined(separator: " and ")) to look things up on the web. When work should be done, don't build it yourself: propose a run with `\(HandoffTool.proposeRun.qualifiedName)`. The user starts it; then you plan it as the run's lead, with everything you discussed.
         While a run is going, the user's messages come with its status. Answer from that status, and use `\(HandoffTool.messageAgent.qualifiedName)` to pass instructions on to the run's agents.
         Workflows you can propose:
         \(list.isEmpty ? "(none; tell the user to add one in Settings › Workflows)" : list.joined(separator: "\n"))

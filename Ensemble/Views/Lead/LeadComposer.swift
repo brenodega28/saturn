@@ -7,23 +7,23 @@ struct LeadComposer: View {
     let project: Project
     let request: ProjectTask?
     @State private var text = ""
-    @FocusState private var isFocused: Bool
+    @State private var attachments: [ChatAttachment] = []
+    @State private var isDropTargeted = false
 
     var body: some View {
         let lead = model.chatLeadRole(in: project)
         let leadName = request.flatMap { model.leadSession(for: $0)?.agent.name } ?? lead?.name ?? "the lead"
         VStack(alignment: .leading, spacing: 10) {
-            TextField(
-                "Message",
+            ChatComposerInput(
                 text: $text,
                 prompt: Text(placeholder(leadName: leadName)),
                 axis: .vertical
+                attachments: $attachments,
+                isDropTargeted: $isDropTargeted,
+                placeholder: request == nil ? "Ask or describe what you need. The lead replies and proposes a run when it’s time." : "Message \(leadName)",
+                accessibilityLabel: request == nil ? "New request for the lead" : "Message to \(leadName)",
+                onSubmit: { send(lead: lead) }
             )
-            .textFieldStyle(.plain)
-            .font(.system(size: 14))
-            .lineLimit(2...8)
-            .focused($isFocused)
-            .accessibilityLabel(request == nil ? "New request for the lead" : "Message to \(leadName)")
             HStack(spacing: 8) {
                 ChatTargetPicker(project: project, style: .chip)
                 Spacer()
@@ -44,6 +44,7 @@ struct LeadComposer: View {
         .padding(EdgeInsets(top: 14, leading: 18, bottom: 10, trailing: 12))
         .background(Color(white: 0.19).opacity(0.7), in: .rect(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+        .chatAttachmentDrop($attachments, isTargeted: $isDropTargeted)
     }
 
     private func placeholder(leadName: String) -> String {
@@ -52,16 +53,20 @@ struct LeadComposer: View {
     }
 
     private func canSend(lead: RoleDefinition?) -> Bool {
-        (lead != nil || request.flatMap(model.leadSession(for:)) != nil) && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        (lead != nil || request.flatMap(model.leadSession(for:)) != nil)
+            && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty)
     }
 
     private func send(lead: RoleDefinition?) {
         guard canSend(lead: lead) else { return }
         let message = text
+        let sentAttachments = attachments
         text = ""
+        attachments = []
         Task {
-            if await !model.sendLeadMessage(message, lead: lead, in: project), text.isEmpty {
+            if await !model.sendLeadMessage(message, attachments: sentAttachments, lead: lead, in: project), text.isEmpty, attachments.isEmpty {
                 text = message
+                attachments = sentAttachments
             }
         }
     }

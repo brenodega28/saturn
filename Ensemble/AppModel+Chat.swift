@@ -52,9 +52,9 @@ extension AppModel {
     }
 
     @discardableResult
-    func sendDirectMessage(_ text: String, to session: AgentSession) -> Bool {
+    func sendDirectMessage(_ text: String, attachments: [ChatAttachment] = [], to session: AgentSession) -> Bool {
         do {
-            try directChat.send(text, to: session)
+            try directChat.send(text, attachments: attachments, to: session)
             return true
         } catch {
             alert = AppAlert(title: "Couldn’t send the message to \(session.agent.name)", message: error.localizedDescription)

@@ -58,7 +58,7 @@ struct RunDetailHeader: View {
                         .font(.system(size: 16, weight: .bold))
                         .lineLimit(2)
                         .textSelection(.enabled)
-                    StatusChip(text: run.status.label, color: run.status.color)
+                    StatusChip(text: model.statusLabel(of: run), color: model.statusColor(of: run))
                 }
                 Text(subtitle)
                     .font(.system(size: 12))

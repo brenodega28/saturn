@@ -31,6 +31,7 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
     public var basePort: Int?
     public var idleCleanupMinutes: Int
     public var monthlyBudgetUSD: Double?
+    public var budgetOverrideMonth: String?
 
     public init(
         maxConcurrentAgents: Int = 4,
@@ -40,7 +41,8 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         setupScript: String = "",
         basePort: Int? = nil,
         idleCleanupMinutes: Int = 10,
-        monthlyBudgetUSD: Double? = nil
+        monthlyBudgetUSD: Double? = nil,
+        budgetOverrideMonth: String? = nil
     ) {
         self.maxConcurrentAgents = maxConcurrentAgents
         self.githubRepository = githubRepository
@@ -50,6 +52,7 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         self.basePort = basePort
         self.idleCleanupMinutes = idleCleanupMinutes
         self.monthlyBudgetUSD = monthlyBudgetUSD
+        self.budgetOverrideMonth = budgetOverrideMonth
     }
 
     public init(from decoder: Decoder) throws {
@@ -63,6 +66,7 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         self.basePort = try container.decodeIfPresent(Int.self, forKey: .basePort)
         self.idleCleanupMinutes = try container.decodeIfPresent(Int.self, forKey: .idleCleanupMinutes) ?? defaults.idleCleanupMinutes
         self.monthlyBudgetUSD = try container.decodeIfPresent(Double.self, forKey: .monthlyBudgetUSD)
+        self.budgetOverrideMonth = try container.decodeIfPresent(String.self, forKey: .budgetOverrideMonth)
     }
 }
 

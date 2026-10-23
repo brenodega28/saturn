@@ -72,6 +72,7 @@ public final class AgentRuntime {
     @ObservationIgnored let stopGracePeriod: Duration
     @ObservationIgnored private var sessions: [Int64: AgentSession] = [:]
     private var turnQueue: [Int64: [Int64]] = [:]
+    @ObservationIgnored public internal(set) var memoryUpdateAgents: Set<Int64> = []
 
     public init(
         database: AppDatabase,
@@ -219,6 +220,7 @@ public final class AgentRuntime {
     }
 
     func turnSetup(for agent: Agent) throws -> TurnSetup {
+        try checkMonthlyBudget(for: agent)
         let project = try database.project(id: agent.projectId)
         let repository = project?.url
         let directory: URL
@@ -244,6 +246,7 @@ public final class AgentRuntime {
                 let context = RoleContext.build(role: role, config: config, repository: repository).systemPrompt
                 if !context.isEmpty { prompt += "\n\n" + context }
             }
+            if let memory = memoryPromptSection(for: agent, repository: repository) { prompt += "\n\n" + memory }
         }
 
         var additional: [URL] = []
@@ -270,7 +273,7 @@ public final class AgentRuntime {
                 extraAllowedTools: setup.extraAllowedTools
             )
         }
-        return setup
+        return try addingMemoryAccess(to: setup, for: agent, repository: repository)
     }
 
     static func handoffGuide(_ tools: Set<HandoffTool>) -> String {

@@ -53,6 +53,7 @@ extension AppModel {
         let leadIDs = Set(leadRoles(in: project).map(\.id))
         let assigned = lead.map { workflow.assigningLead($0.id, replacing: leadIDs) } ?? workflow
         do {
+            try ensureWithinBudget(project)
             let task = try database.insert(draft)
             let run = try engine.start(task: task, workflow: assigned, project: project)
             showRun(run)

@@ -29,7 +29,30 @@ enum FakeClaude {
       curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$FAKE_DIR/request-$$.json" "$url" >> "$FAKE_DIR/mcp.log"
       echo >> "$FAKE_DIR/mcp.log"
     }
+    memory_turn() {
+      if printf '%s' "$1" | grep -q 'reply with the complete updated memory'; then
+        printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"<memory>\n- Flaky checkout specs live in spec/checkout\n- The user wants short summaries\n</memory>"}]}}'
+        return
+      fi
+      path=$(printf '%s' "$1" | sed -E 's/.*Your memory file is ([^ ]+[.]md)[.].*/\1/')
+      real="$(cd "$(dirname "$path")" && pwd -P)/$(basename "$path")"
+      printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"m1","name":"Write","input":{"file_path":"%s","content":"notes"}}]}}\n' "$path"
+      case " $* " in
+        *"Write(/$real)"*)
+          printf -- '- Run the tests with make test\n- Keep commits small\n' > "$path"
+          printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"m1","content":"written","is_error":false}]}}\n'
+          ;;
+        *)
+          printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"m1","content":"Permission denied","is_error":true}]}}\n'
+          ;;
+      esac
+    }
     workflow_turn() {
+      if printf '%s' "$1" | grep -q 'update your memory'; then
+        shift
+        memory_turn "$line" "$@"
+        return
+      fi
       if printf '%s' "$1" | grep -q 'Roles that can build'; then
         call_tool submit_plan '{"summary":"Two parallel tasks","tasks":[{"title":"Add alpha","role":"claude-code","files":["alpha.txt"]},{"title":"Add beta","role":"claude-code","files":["beta.txt"]}]}'
         return
@@ -86,7 +109,7 @@ enum FakeClaude {
           init
           if [ "$mode" = "crash" ]; then echo "boom: invalid api key" >&2; exit 3; fi
           if [ "$mode" = "workflow" ]; then
-            workflow_turn "$line"
+            workflow_turn "$line" "$@"
             result success false
             continue
           fi

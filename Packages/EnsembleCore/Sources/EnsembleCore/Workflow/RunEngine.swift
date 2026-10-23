@@ -39,6 +39,7 @@ public final class RunEngine {
     @ObservationIgnored let clock: @MainActor () -> Date
     @ObservationIgnored private var drivers: [Int64: (token: UUID, task: Task<Void, Never>)] = [:]
     @ObservationIgnored private var workflowCache: [Int64: WorkflowDefinition] = [:]
+    @ObservationIgnored private var mergingRuns: Set<Int64> = []
 
     public init(database: AppDatabase, driver: any WorkflowDriver, minute: Duration = .seconds(60), clock: @escaping @MainActor () -> Date = { .now }) {
         self.database = database
@@ -262,6 +263,24 @@ public final class RunEngine {
             }
         }
         await driver.cancel(loaded.run)
+    }
+
+    public func mergeDelivery(_ run: Run, method: MergeMethod) async throws {
+        guard let runID = run.id, let current = try database.run(id: runID) else { throw RunEngineError.runNotFound }
+        guard current.status == .succeeded, current.pullRequestURL != nil, let branch = current.deliveryBranch else {
+            throw RunEngineError.invalidState("Only a finished run with a pull request can be merged.")
+        }
+        guard current.mergedAt == nil else { throw RunEngineError.invalidState("This run was already merged.") }
+        guard !mergingRuns.contains(runID) else { throw RunEngineError.invalidState("This run is already being merged.") }
+        mergingRuns.insert(runID)
+        defer { mergingRuns.remove(runID) }
+        let summary = try await driver.mergeDelivery(current, method: method)
+        guard var merged = try database.run(id: runID) else { throw RunEngineError.runNotFound }
+        merged.mergedAt = clock()
+        merged.outcome = summary.isEmpty ? "Merged \(branch) into \(current.baseBranch ?? "the base branch")." : summary
+        let updated = merged
+        try await database.writer.write { db in try updated.update(db) }
+        refresh(updated, state: try database.engineState(runId: runID))
     }
 
     public func recover() throws {

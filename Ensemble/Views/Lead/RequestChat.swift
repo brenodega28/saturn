@@ -535,6 +535,8 @@ private struct FinalStateCard: View {
     @Environment(AppModel.self) private var model
     let run: Run
     let reload: () -> Void
+    @State private var isChoosingMergeMethod = false
+    @State private var isMerging = false
 
     var body: some View {
         let color = model.statusColor(of: run)
@@ -560,6 +562,34 @@ private struct FinalStateCard: View {
                         .buttonStyle(.primaryPill)
                         .help(link)
                 }
+                if canMerge, let delivery = run.deliveryBranch {
+                    Button { isChoosingMergeMethod = true } label: {
+                        if isMerging {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Merging…")
+                            }
+                        } else {
+                            Label("Merge Now", systemImage: "arrow.triangle.merge")
+                        }
+                    }
+                    .buttonStyle(.pill)
+                    .disabled(isMerging)
+                    .help("Merge \(delivery) into \(baseName) and push")
+                    .confirmationDialog("Merge \(delivery) into \(baseName)?", isPresented: $isChoosingMergeMethod, titleVisibility: .visible) {
+                        ForEach(MergeMethod.allCases, id: \.self) { method in
+                            Button(method.title) { merge(method) }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Ensemble merges locally, pushes \(baseName) to origin, and deletes \(delivery).")
+                    }
+                }
+                if run.mergedAt != nil {
+                    Label("Merged into \(baseName)", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.secondaryText)
+                }
                 if run.status == .failed {
                     Button {
                         model.performRunAction("Couldn’t retry the step") { try model.engine.retryStep(run) }
@@ -576,12 +606,40 @@ private struct FinalStateCard: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(color.opacity(0.3)))
     }
 
+    private var canMerge: Bool {
+        run.status == .succeeded && run.pullRequestURL != nil && run.deliveryBranch != nil && run.mergedAt == nil
+    }
+
+    private var baseName: String {
+        run.baseBranch ?? "the base branch"
+    }
+
+    private func merge(_ method: MergeMethod) {
+        isMerging = true
+        Task {
+            await model.performRunAction("Couldn’t merge") { try await model.engine.mergeDelivery(run, method: method) }
+            isMerging = false
+            reload()
+        }
+    }
+
     private var headline: String {
         switch run.status {
+        case .succeeded where run.mergedAt != nil: "Run finished and merged"
         case .succeeded: run.pullRequestURL == nil ? "Run finished" : "Run finished with a pull request"
         case .failed: "Run failed"
         case .cancelled: "Run cancelled"
         default: model.statusLabel(of: run)
+        }
+    }
+}
+
+private extension MergeMethod {
+    var title: String {
+        switch self {
+        case .mergeCommit: "Merge commit"
+        case .squash: "Squash and merge"
+        case .rebase: "Rebase and merge"
         }
     }
 }

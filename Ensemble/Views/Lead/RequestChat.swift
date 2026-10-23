@@ -11,6 +11,15 @@ struct RequestChat: View {
     var body: some View {
         let session = model.leadSession(for: task)
         let isThinking = session.map { $0.isRunning || $0.isQueued } ?? false
+        VStack(spacing: 10) {
+            RequestHeader(task: task, project: project)
+                .frame(maxWidth: 820)
+                .frame(maxWidth: .infinity)
+            thread(isThinking: isThinking)
+        }
+    }
+
+    private func thread(isThinking: Bool) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
@@ -129,6 +138,61 @@ struct RequestChat: View {
         case .stepBudget, .runBudget: return "We hit a budget limit. Decide whether to spend more."
         case .stepFailed, .timedOut: return "“\(step)” didn’t finish. Retry it, or stop the run."
         }
+    }
+}
+
+private struct RequestHeader: View {
+    @Environment(AppModel.self) private var model
+    let task: ProjectTask
+    let project: Project
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(task.title.isEmpty ? "Request #\(task.id ?? 0)" : task.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.secondaryText)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if let reason = task.closeReason {
+                closedBanner(reason)
+            } else {
+                closeMenu
+            }
+        }
+    }
+
+    private func closedBanner(_ reason: RequestCloseReason) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: reason == .done ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(reason.color)
+                .accessibilityHidden(true)
+            Text("Closed as \(reason.title) · Send a message to reopen")
+                .foregroundStyle(Theme.secondaryText)
+        }
+        .font(.system(size: 12))
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(reason.color.opacity(0.1), in: Capsule())
+        .accessibilityElement(children: .combine)
+    }
+
+    private var closeMenu: some View {
+        let hasActiveRun = model.requestHasActiveRun(task)
+        return Menu {
+            ForEach(RequestCloseReason.allCases, id: \.self) { reason in
+                Button(reason.title) {
+                    Task { await model.closeRequest(task, as: reason, in: project) }
+                }
+            }
+        } label: {
+            Label("Close", systemImage: "checkmark.circle")
+        }
+        .menuStyle(.button)
+        .buttonStyle(PillButtonStyle(height: 26))
+        .font(.system(size: 12))
+        .fixedSize()
+        .disabled(hasActiveRun)
+        .help(hasActiveRun ? RequestCloseReason.blockedHelp : "Close this request as done or dropped and clean up its worktrees")
     }
 }
 

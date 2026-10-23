@@ -16,7 +16,7 @@ struct LeadComposer: View {
             TextField(
                 "Message",
                 text: $text,
-                prompt: Text(request == nil ? "Ask or describe what you need. The lead replies and proposes a run when it’s time." : "Message \(leadName)"),
+                prompt: Text(placeholder(leadName: leadName)),
                 axis: .vertical
             )
             .textFieldStyle(.plain)
@@ -44,6 +44,11 @@ struct LeadComposer: View {
         .padding(EdgeInsets(top: 14, leading: 18, bottom: 10, trailing: 12))
         .background(Color(white: 0.19).opacity(0.7), in: .rect(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+    }
+
+    private func placeholder(leadName: String) -> String {
+        guard let request else { return "Ask or describe what you need. The lead replies and proposes a run when it’s time." }
+        return request.isClosed ? "Send a message to reopen…" : "Message \(leadName)"
     }
 
     private func canSend(lead: RoleDefinition?) -> Bool {

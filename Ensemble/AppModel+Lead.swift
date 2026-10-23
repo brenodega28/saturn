@@ -40,8 +40,31 @@ extension AppModel {
             return try? database.task(id: taskID)
         case nil:
             let activeTaskIDs = Set(activeLeadRuns(in: project).map(\.taskId))
-            return leadRequests(in: project).first { $0.id.map(activeTaskIDs.contains) == true }
+            return LeadRequest.partition(leadRequests(in: project)).open.first { $0.id.map(activeTaskIDs.contains) == true }
         }
+    }
+
+    func requestHasActiveRun(_ task: ProjectTask) -> Bool {
+        guard let id = task.id else { return false }
+        _ = engine.runs
+        return ((try? database.runs(taskId: id)) ?? []).contains { run in (run.id.flatMap { engine.runs[$0] } ?? run).isActive }
+    }
+
+    func closeRequest(_ task: ProjectTask, as reason: RequestCloseReason, in project: Project) async {
+        guard let git else {
+            alert = AppAlert(title: "git isn’t available", message: "Ensemble couldn’t find git. Install the Xcode Command Line Tools and check again.")
+            return
+        }
+        do {
+            _ = try await leadChat.close(task, as: reason, in: project, git: git)
+        } catch {
+            alert = AppAlert(title: "Couldn’t close the request", message: error.localizedDescription)
+            return
+        }
+        leadChatRevision += 1
+        guard let projectID = project.id else { return }
+        let next = LeadRequest.partition(leadRequests(in: project)).open.first { $0.id != task.id }
+        leadSelections[projectID] = next?.id.map(LeadSelection.request) ?? .newRequest
     }
 
     func latestRun(of task: ProjectTask) -> Run? {

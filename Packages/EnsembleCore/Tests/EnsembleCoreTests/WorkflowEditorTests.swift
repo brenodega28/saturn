@@ -247,10 +247,10 @@ struct WorkflowEditingTests {
         #expect(workflow.edges.contains(WorkflowEdge(from: "b", to: "end", kind: .implicit)))
     }
 
-    @Test func addingAStepKeepsThePreviousEndingExplicit() {
+    @Test func addingAStepChainsItAfterTheLastStep() {
         var workflow = WorkflowDefinition(id: "w", name: "W", steps: [WorkflowStep(id: "a", type: .notify)])
         let added = workflow.addStep(.agent, role: "qa-engineer", position: CanvasPosition(x: 1, y: 2))
-        #expect(workflow.step("a")?.next == "end")
+        #expect(workflow.step("a")?.next == "qa-engineer")
         #expect(added.id == "qa-engineer" && added.role == "qa-engineer" && added.next == "end")
         #expect(added.position == CanvasPosition(x: 1, y: 2))
         let second = workflow.addStep(.agent, role: "qa-engineer")

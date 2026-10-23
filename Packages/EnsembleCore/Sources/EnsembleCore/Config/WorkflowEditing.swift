@@ -109,11 +109,13 @@ extension WorkflowDefinition {
     public mutating func addStep(
         _ type: StepType, role: String? = nil, title: String? = nil, position: CanvasPosition? = nil
     ) -> WorkflowStep {
-        if let last = steps.indices.last, steps[last].next == nil, steps[last].routes.isEmpty {
-            steps[last].next = Self.endStepID
+        let id = uniqueStepID(base: Self.defaultStepBase(type, role: role))
+        if let last = steps.indices.last, steps[last].routes.isEmpty,
+           steps[last].next == nil || steps[last].next == Self.endStepID {
+            steps[last].next = id
         }
         let step = WorkflowStep(
-            id: uniqueStepID(base: Self.defaultStepBase(type, role: role)),
+            id: id,
             type: type,
             title: title,
             role: type == .agent || type == .spawn ? role : nil,

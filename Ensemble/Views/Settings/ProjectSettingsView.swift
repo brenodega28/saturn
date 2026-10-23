@@ -28,6 +28,18 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         }
     }
 
+    var shortTitle: String {
+        switch self {
+        case .general: "General"
+        case .roles: "Roles"
+        case .documentation: "Docs"
+        case .skills: "Skills"
+        case .agents: "Agents"
+        case .claudeAccess: "Access"
+        case .tools: "Tools"
+        }
+    }
+
     var symbol: String {
         switch self {
         case .general: "gearshape"
@@ -56,14 +68,31 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct ProjectSettingsView: View {
-    @Environment(AppModel.self) private var model
     let project: Project
     let branch: String?
     @SceneStorage("projectSettings.section") private var section: SettingsSection = .general
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            sidebar
+        SettingsContainer(project: project, branch: branch, section: $section)
+    }
+}
+
+struct SettingsContainer: View {
+    static let fullSidebarMinimumWidth: CGFloat = 900
+
+    let project: Project
+    let branch: String?
+    @Binding var section: SettingsSection
+    @State private var availableWidth: CGFloat = 0
+
+    var body: some View {
+        let isCompact = availableWidth < Self.fullSidebarMinimumWidth
+        HStack(alignment: .top, spacing: isCompact ? 12 : 16) {
+            if isCompact {
+                compactSidebar
+            } else {
+                sidebar
+            }
             Group {
                 switch section {
                 case .general: GeneralSettings(project: project, branch: branch)
@@ -76,8 +105,10 @@ struct ProjectSettingsView: View {
                 case .github: GitHubSettingsView(project: project)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
     }
 
     private var sidebar: some View {
@@ -88,12 +119,7 @@ struct ProjectSettingsView: View {
                     section = item
                 } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: item.symbol)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 22, height: 22)
-                            .background(item.tint, in: .rect(cornerRadius: 6, style: .continuous))
-                            .accessibilityHidden(true)
+                        SectionIcon(section: item)
                         Text(item.title)
                             .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                         Spacer(minLength: 0)
@@ -111,6 +137,48 @@ struct ProjectSettingsView: View {
         .padding(8)
         .frame(width: 210)
         .card(cornerRadius: 16)
+    }
+
+    private var compactSidebar: some View {
+        VStack(spacing: 2) {
+            ForEach(SettingsSection.allCases) { item in
+                let isSelected = item == section
+                Button {
+                    section = item
+                } label: {
+                    VStack(spacing: 4) {
+                        SectionIcon(section: item)
+                        Text(item.shortTitle)
+                            .font(.system(size: 10.5, weight: isSelected ? .semibold : .regular))
+                            .lineLimit(1)
+                    }
+                    .frame(width: 60, height: 50)
+                    .background(isSelected ? Theme.accent.opacity(0.28) : Color.clear, in: .rect(cornerRadius: 8, style: .continuous))
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help(item.title)
+                .accessibilityLabel(item.title)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+            Spacer()
+        }
+        .padding(6)
+        .frame(width: 72)
+        .card(cornerRadius: 16)
+    }
+}
+
+private struct SectionIcon: View {
+    let section: SettingsSection
+
+    var body: some View {
+        Image(systemName: section.symbol)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 22, height: 22)
+            .background(section.tint, in: .rect(cornerRadius: 6, style: .continuous))
+            .accessibilityHidden(true)
     }
 }
 
@@ -138,8 +206,9 @@ struct SettingsPage<Content: View>: View {
                 content
             }
             .padding(.trailing, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         }
+        .frame(minWidth: 0, maxWidth: .infinity)
     }
 }
 

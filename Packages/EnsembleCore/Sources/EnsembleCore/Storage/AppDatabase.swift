@@ -181,6 +181,7 @@ public final class AppDatabase: Sendable {
         }
 
         registerGitHubMigration(in: &migrator)
+        migrator.registerMigration("v5-review", migrate: createReviewTables)
 
         return migrator
     }

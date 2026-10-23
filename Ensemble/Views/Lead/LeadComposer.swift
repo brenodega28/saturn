@@ -25,6 +25,11 @@ struct LeadComposer: View {
             .font(.system(size: 14))
             .lineLimit(2...8)
             .focused($isFocused)
+            .onKeyPress(.return, phases: .down) { press in
+                guard !press.modifiers.contains(.shift) else { return .ignored }
+                send(lead: lead)
+                return .handled
+            }
             .accessibilityLabel(request == nil ? "New request for the lead" : "Message to \(leadName)")
             HStack(spacing: 8) {
                 if request.flatMap(model.leadSession(for:)) == nil {

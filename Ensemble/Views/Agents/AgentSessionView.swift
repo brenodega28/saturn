@@ -167,7 +167,11 @@ private struct Composer: View {
                     .font(.system(size: 13.5))
                     .lineLimit(1...6)
                     .focused($isFocused)
-                    .onSubmit(send)
+                    .onKeyPress(.return, phases: .down) { press in
+                        guard !press.modifiers.contains(.shift) else { return .ignored }
+                        send()
+                        return .handled
+                    }
                     .task(id: session.id) { isFocused = true }
                     .padding(.vertical, 6)
                 Button(action: send) {
@@ -192,6 +196,7 @@ private struct Composer: View {
 
     private func send() {
         let message = text
+        guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         text = ""
         session.send(message)
     }

@@ -68,6 +68,26 @@ public enum AgentPermissions {
     }
 }
 
+public enum PermissionProfile: String, CaseIterable, Sendable {
+    case standard = "default"
+    case appTesting = "app_testing"
+
+    public init(name: String) {
+        self = PermissionProfile(rawValue: name) ?? .standard
+    }
+
+    public var commands: [String] {
+        switch self {
+        case .standard: []
+        case .appTesting: ["xcodegen", "open", "screencapture", "pkill", "killall"]
+        }
+    }
+
+    public var allowedTools: [String] {
+        commands.map { "Bash(\($0):*)" }
+    }
+}
+
 func realPath(of url: URL) -> String {
     guard let resolved = realpath(url.path, nil) else { return url.standardizedFileURL.path }
     defer { free(resolved) }
@@ -159,7 +179,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
         return arguments
     }
 
-    public static func readOnlySystemPrompt(agentName: String, directory: URL, canOpenWorktree: Bool = false) -> String {
+    public static func readOnlySystemPrompt(agentName: String, directory: URL, canOpenWorktree: Bool = false, extraCommands: [String] = []) -> String {
         let editing = canOpenWorktree
             ? "You start read-only and never edit, create or delete files here or commit. When you must change code yourself, "
                 + "call `\(HandoffTool.openWorktree.qualifiedName)` to get your own worktree and branch; your next turn runs there with write access."
@@ -168,12 +188,12 @@ public struct ClaudeLaunch: Sendable, Equatable {
         You are \(agentName), a read-only agent run by Ensemble. You work from \(directory.path) and can read every file \
         and worktree you are given, run tests and inspect history. \(editing)
 
-        \(shellRules(writing: false))
+        \(shellRules(writing: false, extraCommands: extraCommands))
         """
     }
 
-    public static func shellRules(writing: Bool) -> String {
-        let commands = (writing ? AgentPermissions.commands : AgentPermissions.commands.filter { !AgentPermissions.writingGitCommands.contains($0) })
+    public static func shellRules(writing: Bool, extraCommands: [String] = []) -> String {
+        let commands = ((writing ? AgentPermissions.commands : AgentPermissions.readOnlyCommands) + extraCommands)
             .map { "`\($0)`" }
             .joined(separator: ", ")
         return """
@@ -184,13 +204,13 @@ public struct ClaudeLaunch: Sendable, Equatable {
             """
     }
 
-    public static func systemPrompt(agentName: String, worktree: URL, branch: String?) -> String {
+    public static func systemPrompt(agentName: String, worktree: URL, branch: String?, extraCommands: [String] = []) -> String {
         """
         You are \(agentName), a coding agent run by Ensemble. You work alone in the git worktree at \(worktree.path)\
         \(branch.map { " on branch \($0)" } ?? ""). Keep all changes inside this worktree. \
         Run the project's tests when you change behavior. Commit finished work to your branch with clear messages; never push.
 
-        \(shellRules(writing: true))
+        \(shellRules(writing: true, extraCommands: extraCommands))
         """
     }
 }

@@ -57,7 +57,7 @@ import Testing
         try FileManager.default.createDirectory(at: roles, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: workflows, withIntermediateDirectories: true)
         try "description: no name\n".write(to: roles.appending(path: "broken.yaml"), atomically: true, encoding: .utf8)
-        try "name: Lead\nedits_code: true\ncan_spawn: true\nmodel: gpt\n".write(to: roles.appending(path: "lead.yaml"), atomically: true, encoding: .utf8)
+        try "name: Lead\nedits_code: true\ncan_spawn: true\nmodel: gpt\npermission_profile: root\n".write(to: roles.appending(path: "lead.yaml"), atomically: true, encoding: .utf8)
         try """
         name: Bad
         steps:
@@ -74,6 +74,7 @@ import Testing
         #expect(messages.contains(".ensemble/roles/broken.yaml: missing “name”"))
         #expect(messages.contains(".ensemble/roles/lead.yaml: model “gpt” isn’t a known model"))
         #expect(messages.contains(".ensemble/roles/lead.yaml: a role can’t both spawn agents and edit code"))
+        #expect(messages.contains(".ensemble/roles/lead.yaml: permission profile “root” isn’t known; use one of “default”, “app_testing”"))
         #expect(messages.contains(".ensemble/workflows/bad.yaml: steps.a: role “ghost” doesn’t exist"))
         #expect(messages.contains(".ensemble/workflows/bad.yaml: steps.a: routes to unknown step “nowhere”"))
         #expect(messages.contains(".ensemble/workflows/bad.yaml: steps.c: needs a condition"))

@@ -277,6 +277,10 @@ public enum ConfigValidator {
             if role.provider != "claude-code" {
                 issues.append(ConfigIssue(file: file, message: "provider “\(role.provider)” isn’t supported yet; only claude-code"))
             }
+            if PermissionProfile(rawValue: role.permissionProfile) == nil {
+                let known = PermissionProfile.allCases.map { "“\($0.rawValue)”" }.joined(separator: ", ")
+                issues.append(ConfigIssue(file: file, message: "permission profile “\(role.permissionProfile)” isn’t known; use one of \(known)"))
+            }
             if role.canSpawn && role.editsCode {
                 issues.append(ConfigIssue(file: file, message: "a role can’t both spawn agents and edit code"))
             }

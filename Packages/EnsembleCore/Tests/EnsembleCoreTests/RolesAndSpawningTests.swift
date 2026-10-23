@@ -267,6 +267,31 @@ import Testing
         #expect(try await harness.repo.branches() == ["main"])
     }
 
+    @Test func appTestingProfileLetsAgentsBuildLaunchAndScreenshotTheApp() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        var tester = reviewer
+        tester.id = "qa-engineer"
+        tester.permissionProfile = PermissionProfile.appTesting.rawValue
+        var builder = django
+        builder.permissionProfile = PermissionProfile.appTesting.rawValue
+        let roles = [builder, tester, RoleDefinition(id: "plain", name: "Plain", editsCode: false)]
+        for role in roles {
+            try ProjectConfigLoader.write(role, repository: harness.repo.root)
+        }
+        let config = ProjectConfig(roles: roles)
+
+        for role in roles {
+            let session = try #require(try await harness.runtime.spawn(in: harness.project, role: role, count: 1, config: config, git: harness.repo.git).first)
+            let setup = try harness.runtime.turnSetup(for: session.agent)
+            let opted = role.permissionProfile == PermissionProfile.appTesting.rawValue
+            for command in ["xcodegen", "open", "screencapture", "pkill", "killall"] {
+                #expect(setup.extraAllowedTools.contains("Bash(\(command):*)") == opted, "\(role.id) \(command)")
+                #expect(setup.systemPrompt.contains("`\(command)`") == opted, "\(role.id) \(command)")
+            }
+        }
+    }
+
     @Test func requestAgentsMayReadClaudeArtifactsAndTheWebButNoAgentMayWriteArtifacts() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }

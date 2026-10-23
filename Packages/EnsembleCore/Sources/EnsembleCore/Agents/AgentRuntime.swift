@@ -259,12 +259,13 @@ public final class AgentRuntime {
         }
 
         let tools = handoffTools(agent)
+        let config = repository.map { ProjectConfigLoader.load(repository: $0) }
+        let profile = PermissionProfile(name: config?.role(agent.role)?.permissionProfile ?? "")
         var prompt = agent.readOnly
-            ? ClaudeLaunch.readOnlySystemPrompt(agentName: agent.name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree))
-            : ClaudeLaunch.systemPrompt(agentName: agent.name, worktree: directory, branch: agent.branch)
+            ? ClaudeLaunch.readOnlySystemPrompt(agentName: agent.name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree), extraCommands: profile.commands)
+            : ClaudeLaunch.systemPrompt(agentName: agent.name, worktree: directory, branch: agent.branch, extraCommands: profile.commands)
         var isLead = false
-        if let repository {
-            let config = ProjectConfigLoader.load(repository: repository)
+        if let repository, let config {
             if let role = config.role(agent.role) {
                 isLead = role.canSpawn
                 let context = RoleContext.build(role: role, config: config, repository: repository).systemPrompt
@@ -290,6 +291,7 @@ public final class AgentRuntime {
                 .filter { FileManager.default.fileExists(atPath: $0.path) && !(realPath(of: $0) + "/").hasPrefix(root) }
         }
         var setup = TurnSetup(directory: directory, systemPrompt: prompt, readOnly: agent.readOnly, additionalDirectories: additional)
+        setup.extraAllowedTools += profile.allowedTools
         if agent.taskId != nil || agent.runId != nil {
             setup.extraAllowedTools += AgentPermissions.webTools + AgentPermissions.artifactTools
         }

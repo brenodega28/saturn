@@ -48,6 +48,10 @@ final class AppModel {
     let secrets: any SecretStore
     let locator: ToolLocator
     let runner: CommandRunner
+    let gitHub: GitHubIntegration
+    let inbox: InboxFeed
+    let inboxNotifier = InboxNotifier()
+    var leadFocusRunIDs: [Int64: Int64] = [:]
 
     private(set) var environment: EnvironmentReport?
     private(set) var providerMode: ProviderMode?
@@ -83,9 +87,12 @@ final class AppModel {
         let driver = AgentWorkflowDriver(runtime: agents)
         self.driver = driver
         self.engine = RunEngine(database: database, driver: driver)
+        self.gitHub = GitHubIntegration(engine: engine, secrets: secrets)
+        self.inbox = InboxFeed(database: database)
         driver.gitProvider = { [weak self] in self?.git }
         driver.gitHubProvider = { try? GitHubAuth(secrets: secrets).client() }
         restoreNavigation()
+        connectGitHub()
     }
 
     var git: GitClient? {
@@ -116,6 +123,8 @@ final class AppModel {
         perform("Couldn’t recover agents") { try agents.recoverAfterLaunch() }
         await checkEnvironment()
         perform("Couldn’t recover runs") { try engine.recover() }
+        startInbox()
+        gitHub.start()
         await refreshAllProjects()
     }
 

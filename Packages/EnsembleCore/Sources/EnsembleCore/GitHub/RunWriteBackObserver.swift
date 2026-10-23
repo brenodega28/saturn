@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import Yams
 
 public protocol IssueWriteBack: Sendable {
     func runStarted(issue: Int, in repository: String, workflow: String) async throws
@@ -155,7 +154,7 @@ public final class RunWriteBackObserver {
     }
 
     private func workflowName(for run: Run) -> String {
-        (try? YAMLDecoder().decode(WorkflowDefinition.self, from: run.workflowSnapshot).displayName) ?? run.workflow
+        run.workflowDefinition?.displayName ?? run.workflow
     }
 
     private func scheduleRetry() {

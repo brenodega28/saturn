@@ -20,9 +20,7 @@ struct ShellView: View {
     private var detail: some View {
         switch model.selection {
         case .inbox:
-            AppScreen(title: "Inbox", subtitle: "Across all projects") {
-                EmptyState("Nothing waiting on you", message: "Agent questions, plan approvals, pin reviews and failures from every project land here.")
-            }
+            InboxView()
         case .usage:
             AppScreen(title: "Usage", subtitle: "This week · \(model.weeklySpend.formatted(.currency(code: "USD")))") {
                 EmptyState("No spend yet", message: "Spend by project, run, role and model shows up here once agents start running.")
@@ -61,7 +59,7 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var model = model
         List(selection: $model.selection) {
-            Label("Inbox", systemImage: "tray")
+            InboxSidebarRow()
                 .tag(SidebarItem.inbox)
 
             Section {

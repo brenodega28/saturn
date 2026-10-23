@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import Yams
 
 public enum TaskColumn: String, Sendable, CaseIterable, Identifiable {
     case incoming
@@ -84,5 +85,13 @@ extension AppDatabase {
                 arguments: [TaskStatus.dismissed.rawValue, now, id, TaskStatus.incoming.rawValue]
             )
         }
+    }
+}
+
+extension Run {
+    public var workflowDefinition: WorkflowDefinition? {
+        guard var workflow = try? YAMLDecoder().decode(WorkflowDefinition.self, from: workflowSnapshot) else { return nil }
+        workflow.id = self.workflow
+        return workflow
     }
 }

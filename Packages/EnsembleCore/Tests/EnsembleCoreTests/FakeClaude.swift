@@ -17,6 +17,46 @@ enum FakeClaude {
     [ -n "${ANTHROPIC_API_KEY:-}" ] && source="ANTHROPIC_API_KEY"
     [ "$mode" = "wrongsource" ] && source="apiKeyHelper"
     cost=0
+    mcpfile=""
+    prev=""
+    for arg in "$@"; do
+      if [ "$prev" = "--mcp-config" ]; then mcpfile="$arg"; fi
+      prev="$arg"
+    done
+    call_tool() {
+      url=$(sed -E 's/.*"url":"([^"]+)".*/\1/' "$mcpfile" | sed 's#\\/#/#g')
+      printf '%s' "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" > "$FAKE_DIR/request-$$.json"
+      curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$FAKE_DIR/request-$$.json" "$url" >> "$FAKE_DIR/mcp.log"
+      echo >> "$FAKE_DIR/mcp.log"
+    }
+    workflow_turn() {
+      if printf '%s' "$1" | grep -q 'Roles that can build'; then
+        call_tool submit_plan '{"summary":"Two parallel tasks","tasks":[{"title":"Add alpha","role":"claude-code","files":["alpha.txt"]},{"title":"Add beta","role":"claude-code","files":["beta.txt"]}]}'
+        return
+      fi
+      if printf '%s' "$1" | grep -q 'submit_verdict'; then
+        if printf '%s' "$1" | grep -q '`passed` or `failed`'; then
+          call_tool submit_verdict '{"outcome":"passed","summary":"All tests pass"}'
+        elif [ -f "$FAKE_DIR/reject" ]; then
+          rm "$FAKE_DIR/reject"
+          call_tool submit_verdict '{"outcome":"changes_requested","summary":"Alpha needs a second line","issues":[{"description":"Add a second line to alpha.txt","file":"alpha.txt"}]}'
+        else
+          call_tool submit_verdict '{"outcome":"approved","summary":"Looks good"}'
+        fi
+        return
+      fi
+      if printf '%s' "$1" | grep -q 'submit_result'; then
+        name=$(basename "$PWD")
+        file="$name.txt"
+        if printf '%s' "$1" | grep -q 'Your task: Add alpha\|for “Add alpha”'; then file="alpha.txt"; fi
+        if printf '%s' "$1" | grep -q 'Your task: Add beta\|for “Add beta”'; then file="beta.txt"; fi
+        echo "work by $name" >> "$file"
+        git add "$file" >/dev/null 2>&1
+        git -c user.name=Fake -c user.email=fake@x commit -qm "Work on $file" >/dev/null 2>&1
+        call_tool create_pin "{\"file\":\"$PWD/$file\",\"start_line\":1,\"end_line\":1,\"title\":\"Check $file\",\"explanation\":\"New file\"}"
+        call_tool submit_result "{\"summary\":\"Wrote $file\"}"
+      fi
+    }
     init() {
       printf '{"type":"system","subtype":"init","session_id":"%s","model":"claude-fake-1","cwd":"%s","claude_code_version":"9.9.9","apiKeySource":"%s"}\n' "$session" "$PWD" "$source"
       if [ "$mode" = "wrongsource" ]; then sleep 5; fi
@@ -35,6 +75,11 @@ enum FakeClaude {
         *'"type":"user"'*)
           init
           if [ "$mode" = "crash" ]; then echo "boom: invalid api key" >&2; exit 3; fi
+          if [ "$mode" = "workflow" ]; then
+            workflow_turn "$line"
+            result success false
+            continue
+          fi
           printf '{"type":"assistant","message":{"content":[{"type":"text","text":"Working on it"},{"type":"tool_use","id":"t1","name":"Edit","input":{"file_path":"%s/README.md","old_string":"hello","new_string":"hello\\nworld"}}]}}\n' "$PWD"
           printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"updated","is_error":false}]}}\n'
           if [ "$mode" = "slow" ]; then

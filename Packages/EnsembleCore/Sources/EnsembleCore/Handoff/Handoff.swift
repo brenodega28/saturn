@@ -66,6 +66,17 @@ public struct Verdict: Sendable, Hashable, Codable {
         self.summary = summary
         self.issues = issues
     }
+
+    enum CodingKeys: String, CodingKey {
+        case outcome, summary, issues
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.outcome = try container.decode(String.self, forKey: .outcome)
+        self.summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        self.issues = try container.decodeIfPresent([ReviewIssue].self, forKey: .issues) ?? []
+    }
 }
 
 public struct PinDraft: Sendable, Hashable, Codable {

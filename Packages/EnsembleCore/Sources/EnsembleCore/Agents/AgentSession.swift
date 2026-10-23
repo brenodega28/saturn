@@ -232,7 +232,9 @@ public final class AgentSession: Identifiable {
             systemPrompt: setup.systemPrompt,
             environment: environment,
             readOnly: setup.readOnly,
-            additionalDirectories: setup.additionalDirectories
+            additionalDirectories: setup.additionalDirectories,
+            extraArguments: setup.extraArguments,
+            extraAllowedTools: setup.extraAllowedTools
         )
 
         do {

@@ -47,6 +47,8 @@ struct TurnSetup {
     let systemPrompt: String
     let readOnly: Bool
     let additionalDirectories: [URL]
+    var extraArguments: [String] = []
+    var extraAllowedTools: [String] = []
 }
 
 extension String {
@@ -61,6 +63,8 @@ public final class AgentRuntime {
     public var claudeExecutable: URL?
     public var processEnvironment: [String: String]
     public var providerMode: ProviderMode?
+    public var mcpServer: EnsembleMCPServer?
+    public var handoffTools: @MainActor (Agent) -> Set<HandoffTool> = { _ in [] }
     public private(set) var usageRevision = 0
 
     @ObservationIgnored let secrets: any SecretStore
@@ -218,7 +222,9 @@ public final class AgentRuntime {
         let project = try database.project(id: agent.projectId)
         let repository = project?.url
         let directory: URL
-        if agent.readOnly {
+        if agent.readOnly, let worktree = agent.worktreeURL {
+            directory = worktree
+        } else if agent.readOnly {
             guard let repository else { throw AgentLaunchError.missingProject(agent.name) }
             directory = repository
         } else {
@@ -248,7 +254,28 @@ public final class AgentRuntime {
                 .compactMap(\.worktreeURL)
                 .filter { FileManager.default.fileExists(atPath: $0.path) && !(realPath(of: $0) + "/").hasPrefix(root) }
         }
-        return TurnSetup(directory: directory, systemPrompt: prompt, readOnly: agent.readOnly, additionalDirectories: additional)
+        var setup = TurnSetup(directory: directory, systemPrompt: prompt, readOnly: agent.readOnly, additionalDirectories: additional)
+        let tools = handoffTools(agent)
+        if let server = mcpServer, let agentID = agent.id, !tools.isEmpty {
+            server.revokeAll(agent: agentID)
+            let endpoint = server.register(agent: agentID, tools: tools)
+            setup.extraArguments = try endpoint.launchArguments(configDirectory: paths.agentDirectory(agentID))
+            setup.extraAllowedTools = endpoint.allowedTools
+            setup = TurnSetup(
+                directory: setup.directory,
+                systemPrompt: setup.systemPrompt + "\n\n" + Self.handoffGuide(tools),
+                readOnly: setup.readOnly,
+                additionalDirectories: setup.additionalDirectories,
+                extraArguments: setup.extraArguments,
+                extraAllowedTools: setup.extraAllowedTools
+            )
+        }
+        return setup
+    }
+
+    static func handoffGuide(_ tools: Set<HandoffTool>) -> String {
+        let lines = HandoffTool.allCases.filter(tools.contains).map { "- `\($0.qualifiedName)`: \($0.description)" }
+        return "You are part of an Ensemble workflow run. Hand your work back through these tools:\n" + lines.joined(separator: "\n")
     }
 
     public func maxConcurrentAgents(inProject projectId: Int64) -> Int {
@@ -360,3 +387,65 @@ public final class AgentRuntime {
         kill(pid, SIGTERM)
     }
 }
+
+extension AgentRuntime {
+    public func createRunAgent(
+        in project: Project,
+        role: RoleDefinition,
+        name: String? = nil,
+        runId: Int64,
+        runStepId: Int64?,
+        planTaskId: String? = nil,
+        task: String,
+        readOnlyWorktree: (path: URL, branch: String?)? = nil,
+        git: GitClient,
+        now: Date = .now
+    ) async throws -> AgentSession {
+        guard providerMode != nil else { throw AgentError.providerNotChosen }
+        guard let projectId = project.id else { throw AgentError.emptyTask }
+        let base = name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? role.name
+        guard let agentName = try agentNames(for: base, count: 1, inProject: projectId).first else {
+            throw WorktreeError.invalidName(base)
+        }
+        let baseBranch = try await git.currentBranch(in: project.url)
+        var worktreePath: String?
+        var branch: String?
+        var resolvedBase = baseBranch
+        if let readOnlyWorktree {
+            worktreePath = readOnlyWorktree.path.path
+            branch = readOnlyWorktree.branch
+        } else if role.editsCode {
+            let taskSlug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
+            let worktree = try await WorktreeManager(repository: project.url, git: git)
+                .create(agent: agentName, slug: taskSlug.isEmpty ? "task" : taskSlug)
+            worktreePath = worktree.path.path
+            branch = worktree.branch
+            resolvedBase = baseBranch ?? worktree.head
+        }
+        let agent = try database.insert(Agent(
+            projectId: projectId,
+            runId: runId,
+            role: role.id,
+            name: agentName,
+            worktreePath: worktreePath,
+            branch: branch,
+            status: .idle,
+            model: role.model,
+            task: task,
+            baseBranch: resolvedBase,
+            runStepId: runStepId,
+            readOnly: !role.editsCode,
+            planTaskId: planTaskId,
+            createdAt: now,
+            updatedAt: now
+        ))
+        guard let session = session(for: agent) else { throw AgentError.emptyTask }
+        usageDidChange()
+        return session
+    }
+
+    public func runSessions(runId: Int64, projectId: Int64) throws -> [AgentSession] {
+        try database.agents(inProject: projectId).filter { $0.runId == runId }.compactMap { session(for: $0) }
+    }
+}
+

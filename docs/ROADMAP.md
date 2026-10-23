@@ -143,14 +143,14 @@ Goal: agents come from roles, and several run in parallel.
 
 Goal: workflows run from YAML before there is a visual editor.
 
-- [ ] Workflow schema: trigger, steps, edges, end action, budget
-- [ ] Step types: **Agent**, **Spawn** (lead's plan → one agent per task, up to a cap), **Condition** (labels, paths, diff size), **Human approval**, **Notify**
-- [ ] Per-step settings: timeout, max loops, budget cap, on-failure action (retry, ask human, fail run)
-- [ ] Hand-off protocol: how a step's output (plan, verdict, test report) is passed to the next step
-- [ ] Loop-backs: "changes requested" and "bug found" route to the author's step; stop at the loop limit and ask the user
-- [ ] Run state machine with persistence; resume after crash or quit
-- [ ] Lead chat: talk to a lead role, create a task, pick a workflow; plan card with editable tasks (reorder, change role or count, delete) before Approve
-- [ ] Ship a default **Feature delivery** workflow: Plan → Spawn → Build → Lead review → QA → You approve → End
+- [x] Workflow schema: trigger, steps, edges, end action, budget
+- [x] Step types: **Agent**, **Spawn** (lead's plan → one agent per task, up to a cap), **Condition** (labels, paths, diff size), **Human approval**, **Notify**
+- [x] Per-step settings: timeout, max loops, budget cap, on-failure action (retry, ask human, fail run)
+- [x] Hand-off protocol: how a step's output (plan, verdict, test report) is passed to the next step
+- [x] Loop-backs: "changes requested" and "bug found" route to the author's step; stop at the loop limit and ask the user
+- [x] Run state machine with persistence; resume after crash or quit
+- [x] Lead chat: talk to a lead role, create a task, pick a workflow; plan card with editable tasks (reorder, change role or count, delete) before Approve
+- [x] Ship a default **Feature delivery** workflow: Plan → Spawn → Build → Lead review → QA → You approve → End
 
 **Exit check:** a request in Lead chat runs the full default workflow, including one review loop, without touching the UI except to approve.
 

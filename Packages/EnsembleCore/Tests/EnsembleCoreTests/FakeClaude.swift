@@ -47,7 +47,26 @@ enum FakeClaude {
           ;;
       esac
     }
+    say() {
+      printf '{"type":"assistant","message":{"content":[{"type":"text","text":"%s"}]}}\n' "$1"
+    }
     workflow_turn() {
+      if printf '%s' "$1" | grep -q 'CHAT-PROPOSE'; then
+        call_tool propose_run '{"workflow":"feature-delivery","title":"Add alpha and beta","brief":"Create alpha.txt and beta.txt, as agreed."}'
+        say "I proposed a run for that."
+        return
+      fi
+      if printf '%s' "$1" | grep -q 'CHAT-RELAY'; then
+        target=$(printf '%s' "$1" | sed -E 's/.*CHAT-RELAY ([A-Za-z]+ [A-Za-z]+ [0-9]+).*/\1/')
+        call_tool message_agent "{\"agent\":\"$target\",\"message\":\"Also add a gamma line\"}"
+        say "Passed it on."
+        return
+      fi
+      if printf '%s' "$1" | grep -q 'CHAT'; then
+        say "Thinking about it."
+        say "The repo only has a README."
+        return
+      fi
       if printf '%s' "$1" | grep -q 'update your memory'; then
         shift
         memory_turn "$line" "$@"

@@ -139,6 +139,8 @@ public enum HandoffMessage: Sendable, Hashable {
     case pin(PinDraft)
     case question(String, [HumanQuestion] = [])
     case result(String)
+    case proposal(RunProposal)
+    case agentMessage(agent: String, message: String)
 }
 
 public enum HandoffTool: String, Sendable, CaseIterable {
@@ -147,6 +149,8 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     case submitResult = "submit_result"
     case createPin = "create_pin"
     case askHuman = "ask_human"
+    case proposeRun = "propose_run"
+    case messageAgent = "message_agent"
 
     public static let serverName = "ensemble"
 
@@ -162,6 +166,10 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             "Summarize what you built and how you verified it. Call when your task is finished, then end your turn."
         case .createPin:
             "Flag lines a human must read before this work ships: risky logic, security, migrations, money, data loss. Lines refer to the file in your worktree."
+        case .proposeRun:
+            "Propose a workflow run for this request. The user sees it with a Start button; nothing runs until they click it. If they start it, you plan it. Give the workflow id, a short title and a brief with everything the planner needs from this conversation. Then end your turn."
+        case .messageAgent:
+            "Relay an instruction to an agent working on this request's run, by its name. Use it when the user asks you to pass something on to the builders, reviewers or testers."
         case .askHuman:
             "Ask the user questions you can't answer from the code or docs. Put shared context in question. When you need several decisions, list each one in questions, with options when there are clear choices; the user answers them one at a time. After calling it, end your turn; the answers arrive as your next message, numbered like your questions."
         }
@@ -206,6 +214,17 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "tags": array(string("Short tag such as security, migration, money")),
                 "explanation": string("Why a human must read this"),
             ], required: ["file", "start_line", "end_line", "title", "explanation"])
+        case .proposeRun:
+            return object([
+                "workflow": string("Workflow id from the list in your instructions"),
+                "title": string("Short imperative title for the run"),
+                "brief": string("What to build and every decision the user made in this conversation"),
+            ], required: ["workflow", "title", "brief"])
+        case .messageAgent:
+            return object([
+                "agent": string("The agent's name, as shown in the run status"),
+                "message": string("The instruction to pass on"),
+            ], required: ["agent", "message"])
         case .askHuman:
             return object([
                 "question": string("The question, or the context shared by all questions when you list them in questions"),
@@ -231,6 +250,17 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .submitResult:
             guard let summary = arguments["summary"]?.string else { throw HandoffError.missing("summary") }
             return .result(summary)
+        case .proposeRun:
+            let proposal = try decoder.decode(RunProposal.self, from: data)
+            for (field, value) in [("workflow", proposal.workflow), ("title", proposal.title), ("brief", proposal.brief)]
+            where value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw HandoffError.missing(field)
+            }
+            return .proposal(proposal)
+        case .messageAgent:
+            guard let agent = arguments["agent"]?.string, !agent.isEmpty else { throw HandoffError.missing("agent") }
+            guard let message = arguments["message"]?.string, !message.isEmpty else { throw HandoffError.missing("message") }
+            return .agentMessage(agent: agent, message: message)
         }
     }
 }

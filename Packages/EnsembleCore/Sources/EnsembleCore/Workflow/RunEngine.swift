@@ -70,15 +70,15 @@ public final class RunEngine {
     }
 
     @discardableResult
-    public func start(task: ProjectTask, workflow: WorkflowDefinition, project: Project) throws -> Run {
+    public func start(task: ProjectTask, workflow: WorkflowDefinition, project: Project, title: String? = nil, brief: String? = nil) throws -> Run {
         guard let first = workflow.firstStep else { throw RunEngineError.emptyWorkflow(workflow.name) }
         guard let projectId = project.id, let taskId = task.id else { throw RunEngineError.invalidState("Save the task and project before starting a run.") }
         let now = clock()
         let draft = Run(
             projectId: projectId, taskId: taskId, workflow: workflow.id, workflowVersion: String(workflow.version),
-            currentStep: first.id, status: .running, startedAt: now, title: task.title,
+            currentStep: first.id, status: .running, startedAt: now, title: title ?? task.title,
             workflowSnapshot: try ProjectConfigLoader.encodeYAML(workflow), budgetUSD: workflow.budget,
-            endAction: workflow.end.action.rawValue
+            endAction: workflow.end.action.rawValue, brief: brief
         )
         let state = RunEngineState(cursor: RunCursor(stepId: first.id, iteration: 1))
         let run = try database.insert(draft, state: state)

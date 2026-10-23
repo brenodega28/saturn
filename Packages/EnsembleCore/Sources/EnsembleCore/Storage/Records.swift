@@ -123,13 +123,16 @@ public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
     public var endAction: String?
     public var pullRequestURL: String?
     public var lastError: String?
+    public var brief: String?
 
     public init(
         id: Int64? = nil, projectId: Int64, taskId: Int64, workflow: String, workflowVersion: String? = nil,
         currentStep: String? = nil, status: RunStatus, outcome: String? = nil, costUSD: Double = 0,
         startedAt: Date, endedAt: Date? = nil, title: String = "", workflowSnapshot: String = "",
-        budgetUSD: Double? = nil, endAction: String? = nil, pullRequestURL: String? = nil, lastError: String? = nil
+        budgetUSD: Double? = nil, endAction: String? = nil, pullRequestURL: String? = nil, lastError: String? = nil,
+        brief: String? = nil
     ) {
+        self.brief = brief
         self.title = title
         self.workflowSnapshot = workflowSnapshot
         self.budgetUSD = budgetUSD
@@ -198,6 +201,7 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
     public var planTaskId: String?
     public var port: Int?
     public var archivedAt: Date?
+    public var taskId: Int64?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -208,9 +212,10 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
         costUSD: Double = 0, isPinned: Bool = false, model: String = AgentModel.sonnet.rawValue, task: String = "",
         baseBranch: String? = nil, processID: Int32? = nil, lastError: String? = nil,
         runStepId: Int64? = nil, readOnly: Bool = false, planTaskId: String? = nil,
-        port: Int? = nil, archivedAt: Date? = nil,
+        port: Int? = nil, archivedAt: Date? = nil, taskId: Int64? = nil,
         createdAt: Date, updatedAt: Date
     ) {
+        self.taskId = taskId
         self.port = port
         self.archivedAt = archivedAt
         self.runStepId = runStepId

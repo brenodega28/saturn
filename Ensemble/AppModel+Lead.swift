@@ -3,7 +3,14 @@ import Foundation
 
 enum LeadSelection: Hashable {
     case newRequest
-    case run(Int64)
+    case request(Int64)
+}
+
+struct RequestThreadData {
+    var thread: RequestThread
+    var timelines: [Int64: RunTimeline]
+    var leadRole: RoleDefinition?
+    var leadName: String
 }
 
 extension AppModel {
@@ -11,35 +18,46 @@ extension AppModel {
         config(for: project).roles.filter(\.canSpawn)
     }
 
-    func leadRuns(in project: Project) -> [Run] {
-        guard let id = project.id else { return [] }
-        _ = engine.runs
-        _ = engine.holds
-        return Run.leadOrdering((try? database.runs(projectId: id)) ?? [])
-    }
-
     func activeLeadRuns(in project: Project) -> [Run] {
         guard let id = project.id else { return [] }
         return Run.leadOrdering(engine.activeRuns(projectID: id))
     }
 
-    func selectedLeadRun(in project: Project) -> Run? {
+    func leadRequests(in project: Project) -> [ProjectTask] {
+        guard let id = project.id else { return [] }
+        _ = engine.runs
+        _ = engine.holds
+        _ = leadChatRevision
+        return (try? database.leadRequests(projectId: id)) ?? []
+    }
+
+    func selectedRequest(in project: Project) -> ProjectTask? {
         guard let projectID = project.id else { return nil }
         switch leadSelections[projectID] {
         case .newRequest:
             return nil
-        case .run(let runID):
-            return engine.runs[runID] ?? (try? database.run(id: runID)) ?? nil
+        case .request(let taskID):
+            return try? database.task(id: taskID)
         case nil:
-            return activeLeadRuns(in: project).first
+            let activeTaskIDs = Set(activeLeadRuns(in: project).map(\.taskId))
+            return leadRequests(in: project).first { $0.id.map(activeTaskIDs.contains) == true }
         }
     }
 
+    func latestRun(of task: ProjectTask) -> Run? {
+        guard let id = task.id, let run = (try? database.runs(taskId: id))?.last else { return nil }
+        return run.id.flatMap { engine.runs[$0] } ?? run
+    }
+
     func showRun(_ run: Run) {
-        guard let runID = run.id else { return }
-        leadSelections[run.projectId] = .run(runID)
+        leadSelections[run.projectId] = .request(run.taskId)
         selection = .project(run.projectId)
         tabs[run.projectId] = .lead
+    }
+
+    func showRequest(_ task: ProjectTask) {
+        guard let id = task.id else { return }
+        leadSelections[task.projectId] = .request(id)
     }
 
     func startNewLeadRequest(in project: Project) {
@@ -47,21 +65,65 @@ extension AppModel {
         leadSelections[id] = .newRequest
     }
 
+    func leadSession(for task: ProjectTask) -> AgentSession? {
+        leadChat.leadSession(for: task)
+    }
+
     @discardableResult
-    func submitLeadRequest(_ text: String, lead: RoleDefinition?, workflow: WorkflowDefinition, in project: Project) -> Run? {
-        guard let projectID = project.id, let draft = LeadRequest.task(text: text, projectID: projectID, workflowID: workflow.id) else { return nil }
-        let leadIDs = Set(leadRoles(in: project).map(\.id))
-        let assigned = lead.map { workflow.assigningLead($0.id, replacing: leadIDs) } ?? workflow
+    func sendLeadMessage(_ text: String, lead: RoleDefinition?, in project: Project) async -> Bool {
+        do {
+            if let request = selectedRequest(in: project) {
+                let role = lead ?? leadSession(for: request).flatMap { config(for: project).role($0.agent.role) } ?? leadRoles(in: project).first
+                try await leadChat.send(text, to: request, lead: role, in: project)
+            } else {
+                let request = try await leadChat.createRequest(text, lead: lead ?? leadRoles(in: project).first, in: project)
+                showRequest(request)
+            }
+            leadChatRevision += 1
+            return true
+        } catch {
+            alert = AppAlert(title: "Couldn’t send the message", message: error.localizedDescription)
+            return false
+        }
+    }
+
+    func startProposal(_ proposal: LeadMessage, in project: Project) {
         do {
             try ensureWithinBudget(project)
-            let task = try database.insert(draft)
-            let run = try engine.start(task: task, workflow: assigned, project: project)
-            showRun(run)
-            return run
+            try leadChat.start(proposal, in: project)
+            leadChatRevision += 1
         } catch {
             alert = AppAlert(title: "Couldn’t start the run", message: error.localizedDescription)
-            return nil
         }
+    }
+
+    func dismissProposal(_ proposal: LeadMessage) {
+        do {
+            try leadChat.dismiss(proposal)
+            leadChatRevision += 1
+        } catch {
+            alert = AppAlert(title: "Couldn’t dismiss the proposal", message: error.localizedDescription)
+        }
+    }
+
+    func requestThread(for task: ProjectTask, in project: Project) -> RequestThreadData? {
+        guard let taskID = task.id else { return nil }
+        let runs = ((try? database.runs(taskId: taskID)) ?? []).map { run in run.id.flatMap { engine.runs[$0] } ?? run }
+        var timelines: [Int64: RunTimeline] = [:]
+        for run in runs {
+            if let id = run.id, let timeline = timeline(for: run) { timelines[id] = timeline }
+        }
+        let lead = try? database.leadAgent(taskId: taskID)
+        let leadRole = lead.flatMap { config(for: project).role($0.role) } ?? runs.last.flatMap { leadRole(for: $0, in: project) }
+        let thread = RequestThread(
+            task: task,
+            messages: (try? database.leadMessages(taskId: taskID)) ?? [],
+            runs: runs,
+            timelines: timelines,
+            questions: (try? database.requestQuestions(taskId: taskID)) ?? [],
+            heldRunIDs: Set(runs.compactMap(\.id).filter { engine.holds[$0] != nil })
+        )
+        return RequestThreadData(thread: thread, timelines: timelines, leadRole: leadRole, leadName: lead?.name ?? leadRole?.name ?? "Lead")
     }
 
     func runWorkflow(_ run: Run) -> WorkflowDefinition? {

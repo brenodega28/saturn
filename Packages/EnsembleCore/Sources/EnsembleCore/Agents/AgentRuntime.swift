@@ -67,6 +67,7 @@ public final class AgentRuntime {
     public var providerMode: ProviderMode?
     public var mcpServer: EnsembleMCPServer?
     public var handoffTools: @MainActor (Agent) -> Set<HandoffTool> = { _ in [] }
+    public var turnReplied: (@MainActor (Agent, String) -> Void)?
     public var worktreePrepared: (@MainActor (WorktreePreparation) async throws -> Void)?
     public internal(set) var settingUp: Set<Int64> = []
     public private(set) var usageRevision = 0
@@ -256,6 +257,9 @@ public final class AgentRuntime {
                 let context = RoleContext.build(role: role, config: config, repository: repository).systemPrompt
                 if !context.isEmpty { prompt += "\n\n" + context }
             }
+            if agent.taskId != nil {
+                prompt += "\n\n" + Self.leadChatGuide(workflows: config.workflows)
+            }
             if let memory = memoryPromptSection(for: agent, repository: repository) { prompt += "\n\n" + memory }
         }
         if let port = agent.port {
@@ -292,6 +296,18 @@ public final class AgentRuntime {
     static func handoffGuide(_ tools: Set<HandoffTool>) -> String {
         let lines = HandoffTool.allCases.filter(tools.contains).map { "- `\($0.qualifiedName)`: \($0.description)" }
         return "You are part of an Ensemble workflow run. Hand your work back through these tools:\n" + lines.joined(separator: "\n")
+    }
+
+    static func leadChatGuide(workflows: [WorkflowDefinition]) -> String {
+        let list = workflows.map { "- `\($0.id)`: \($0.displayName)\($0.description.isEmpty ? "" : " — \($0.description)")" }
+        return """
+        # Chatting with the user
+        You are the lead for one request in Ensemble. The user talks to you in a chat; each of their messages arrives as your next turn, and your final text in a turn is shown to them as your reply. Keep replies short and direct.
+        Answer questions by reading the code. When work should be done, don't build it yourself: propose a run with `\(HandoffTool.proposeRun.qualifiedName)`. The user starts it; then you plan it as the run's lead, with everything you discussed.
+        While a run is going, the user's messages come with its status. Answer from that status, and use `\(HandoffTool.messageAgent.qualifiedName)` to pass instructions on to the run's agents.
+        Workflows you can propose:
+        \(list.isEmpty ? "(none; tell the user to add one in Settings › Workflows)" : list.joined(separator: "\n"))
+        """
     }
 
     public func maxConcurrentAgents(inProject projectId: Int64) -> Int {
@@ -466,6 +482,21 @@ extension AgentRuntime {
         } else if worktreePath != nil {
             try await prepareWorktree(of: session)
         }
+        return session
+    }
+
+    public func createLeadAgent(in project: Project, role: RoleDefinition, taskId: Int64, now: Date = .now) throws -> AgentSession {
+        guard providerMode != nil else { throw AgentError.providerNotChosen }
+        guard let projectId = project.id else { throw AgentError.emptyTask }
+        guard let name = try agentNames(for: role.name, count: 1, inProject: projectId).first else {
+            throw WorktreeError.invalidName(role.name)
+        }
+        let agent = try database.insert(Agent(
+            projectId: projectId, role: role.id, name: name, status: .idle, model: role.model,
+            readOnly: true, taskId: taskId, createdAt: now, updatedAt: now
+        ))
+        guard let session = session(for: agent) else { throw AgentError.emptyTask }
+        usageDidChange()
         return session
     }
 

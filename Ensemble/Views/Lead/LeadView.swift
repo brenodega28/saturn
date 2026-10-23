@@ -7,26 +7,26 @@ struct LeadView: View {
     let project: Project
 
     var body: some View {
-        let runs = model.leadRuns(in: project)
-        let selected = model.selectedLeadRun(in: project)
+        let requests = model.leadRequests(in: project)
+        let selected = model.selectedRequest(in: project)
         GeometryReader { proxy in
-            let showsList = !runs.isEmpty && proxy.size.width >= 860
+            let showsList = !requests.isEmpty && proxy.size.width >= 860
             HStack(alignment: .top, spacing: 18) {
                 if showsList {
-                    LeadRunList(project: project, runs: runs, selectedID: selected?.id)
+                    LeadRequestList(project: project, requests: requests, selectedID: selected?.id)
                         .frame(width: 236)
                 }
                 VStack(spacing: 14) {
-                    if !showsList, !runs.isEmpty {
-                        CompactRunPicker(project: project, runs: runs, selected: selected)
+                    if !showsList, !requests.isEmpty {
+                        CompactRequestPicker(project: project, requests: requests, selected: selected)
                     }
                     if let selected {
-                        RunConversation(run: selected, project: project)
+                        RequestChat(task: selected, project: project)
                             .id(selected.id)
                     } else {
                         NewRequestIntro(project: project)
                     }
-                    LeadComposer(project: project)
+                    LeadComposer(project: project, request: selected)
                         .frame(maxWidth: 820)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -35,10 +35,10 @@ struct LeadView: View {
     }
 }
 
-private struct LeadRunList: View {
+private struct LeadRequestList: View {
     @Environment(AppModel.self) private var model
     let project: Project
-    let runs: [Run]
+    let requests: [ProjectTask]
     let selectedID: Int64?
 
     var body: some View {
@@ -50,30 +50,34 @@ private struct LeadRunList: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.pill)
-            .help("Describe a new task for the lead")
+            .help("Start a new conversation with the lead")
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(runs) { run in
-                        row(run)
+                    ForEach(requests) { request in
+                        row(request)
                     }
                 }
             }
         }
     }
 
-    private func row(_ run: Run) -> some View {
-        let isSelected = run.id == selectedID
-        let detail = run.isActive ? (model.currentStepTitle(of: run) ?? run.status.label) : run.status.label
+    private func row(_ request: ProjectTask) -> some View {
+        let isSelected = request.id == selectedID
+        let run = model.latestRun(of: request)
+        let detail = run.map { run in
+            let state = run.isActive ? (model.currentStepTitle(of: run) ?? run.status.label) : run.status.label
+            return "\(state) · \(run.costUSD.formatted(.currency(code: "USD")))"
+        } ?? "Chat"
         return Button {
-            model.showRun(run)
+            model.showRequest(request)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StatusDot(run.status.color)
+                StatusDot(run?.status.color ?? Theme.secondaryText)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(run.title.isEmpty ? "Run #\(run.id ?? 0)" : run.title)
+                    Text(request.title.isEmpty ? "Request #\(request.id ?? 0)" : request.title)
                         .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                         .lineLimit(1)
-                    Text("\(detail) · \(run.costUSD.formatted(.currency(code: "USD")))")
+                    Text(detail)
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.secondaryText)
                         .lineLimit(1)
@@ -86,7 +90,7 @@ private struct LeadRunList: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(run.title), \(run.status.label), \(detail)")
+        .accessibilityLabel("\(request.title), \(detail)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -106,27 +110,27 @@ private struct NewRequestIntro: View {
             } else if model.leadRoles(in: project).isEmpty {
                 EmptyState("No lead role", message: "A lead is a role with can_spawn: true. Add one in Settings › Roles, or pick a workflow that needs no lead.")
             } else {
-                EmptyState("Talk to the lead", message: "Describe a task below. The lead plans it, you approve the plan, and the workflow runs.")
+                EmptyState("Talk to the lead", message: "Ask a question or describe what you need. The lead answers here, and proposes a run when there’s work to do.")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
-private struct CompactRunPicker: View {
+private struct CompactRequestPicker: View {
     @Environment(AppModel.self) private var model
     let project: Project
-    let runs: [Run]
-    let selected: Run?
+    let requests: [ProjectTask]
+    let selected: ProjectTask?
 
     var body: some View {
         HStack(spacing: 10) {
             Menu {
-                ForEach(runs) { run in
-                    Button(run.title) { model.showRun(run) }
+                ForEach(requests) { request in
+                    Button(request.title) { model.showRequest(request) }
                 }
             } label: {
-                Label(selected?.title ?? "Runs", systemImage: "list.bullet")
+                Label(selected?.title ?? "Requests", systemImage: "list.bullet")
                     .lineLimit(1)
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -141,4 +145,3 @@ private struct CompactRunPicker: View {
         }
     }
 }
-

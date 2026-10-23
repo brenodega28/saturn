@@ -42,6 +42,10 @@ extension AppModel {
         if item.kind == .pinReview {
             selection = .project(item.projectId)
             tabs[item.projectId] = .changes
+        } else if item.runId == nil, let taskID = item.agentId.flatMap({ agent(id: $0) })?.taskId {
+            selection = .project(item.projectId)
+            leadSelections[item.projectId] = .request(taskID)
+            tabs[item.projectId] = .lead
         } else {
             openLead(forRun: item.runId, in: item.projectId)
         }

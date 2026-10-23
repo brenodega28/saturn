@@ -47,7 +47,9 @@ extension AppModel {
 
     func openLead(forRun runID: Int64?, in projectID: Int64) {
         selection = .project(projectID)
-        if let runID { leadSelections[projectID] = .run(runID) }
+        if let runID, let run = engine.runs[runID] ?? (try? database.run(id: runID)) ?? nil {
+            leadSelections[projectID] = .request(run.taskId)
+        }
         tabs[projectID] = .lead
     }
 }

@@ -65,6 +65,8 @@ final class AppModel {
     var isNewAgentPresented = false
     var leadSelections: [Int64: LeadSelection] = [:]
     var skillPlugins: [Int64: [SkillPlugin]] = [:]
+    var leadChatRevision = 0
+    let leadChat: LeadChat
 
     var selection: SidebarItem? {
         didSet { persistNavigation() }
@@ -90,6 +92,7 @@ final class AppModel {
         let driver = AgentWorkflowDriver(runtime: agents)
         self.driver = driver
         self.engine = RunEngine(database: database, driver: driver)
+        self.leadChat = LeadChat(runtime: agents, engine: engine, driver: driver)
         self.gitHub = GitHubIntegration(engine: engine, secrets: secrets)
         self.inbox = InboxFeed(database: database)
         self.idleCleanup = IdleCleanupScheduler(runtime: agents)

@@ -26,6 +26,7 @@ public final class AgentSession: Identifiable {
     @ObservationIgnored private var launchedMode: ProviderMode?
     @ObservationIgnored private var costInProcess: Double = 0
     @ObservationIgnored private var turnCompletedInProcess = false
+    @ObservationIgnored private var latestReply: String?
 
     init(agent: Agent, runtime: AgentRuntime) {
         self.id = agent.id ?? -1
@@ -53,6 +54,13 @@ public final class AgentSession: Identifiable {
 
     public func togglePin() {
         setPinned(!agent.isPinned)
+    }
+
+    public func attach(toRun runId: Int64) {
+        guard agent.runId != runId else { return }
+        agent.runId = runId
+        agent.runStepId = nil
+        persist()
     }
 
     public func send(_ message: String) {
@@ -215,6 +223,7 @@ public final class AgentSession: Identifiable {
     }
 
     private func launchTurn(with message: String) {
+        latestReply = nil
         guard let executable = runtime.claudeExecutable else {
             fail("Claude Code isn’t available. Check Settings › Tools.")
             return
@@ -297,9 +306,16 @@ public final class AgentSession: Identifiable {
                     source.kill()
                 }
                 transcript.apply(event)
+                if case .assistantText(let text) = event {
+                    latestReply = text
+                }
                 if case .turnCompleted(let result) = event {
                     account(result)
                     source.closeInput()
+                    if let reply = latestReply?.trimmingCharacters(in: .whitespacesAndNewlines), !reply.isEmpty {
+                        latestReply = nil
+                        runtime.turnReplied?(agent, reply)
+                    }
                 }
             }
         case .exited(let code, let standardError):

@@ -193,6 +193,26 @@ public final class AppDatabase: Sendable {
                 t.add(column: "questions", .text)
             }
         }
+        migrator.registerMigration("v8-lead-chat") { db in
+            try db.alter(table: "agent") { t in
+                t.add(column: "taskId", .integer).references("task", onDelete: .setNull)
+            }
+            try db.alter(table: "run") { t in
+                t.add(column: "brief", .text)
+            }
+            try db.create(table: "leadMessage") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("projectId", .integer).notNull().indexed().references("project", onDelete: .cascade)
+                t.column("taskId", .integer).notNull().indexed().references("task", onDelete: .cascade)
+                t.column("kind", .text).notNull()
+                t.column("text", .text).notNull().defaults(to: "")
+                t.column("workflow", .text)
+                t.column("title", .text)
+                t.column("status", .text)
+                t.column("runId", .integer).references("run", onDelete: .setNull)
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
 
         return migrator
     }

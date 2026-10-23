@@ -298,7 +298,8 @@ extension RunEngine {
             .filter { $0.status == .succeeded }
             .map { PreviousOutput(stepId: $0.stepId, iteration: $0.iteration, outcome: $0.outcome, output: decodeOutput($0.output)) }
         return StepInputs(
-            taskTitle: task.title, taskBody: task.body, labels: task.labels, instructions: step.instructions,
+            taskTitle: loaded.run.title.isEmpty ? task.title : loaded.run.title, taskBody: loaded.run.brief ?? task.body,
+            labels: task.labels, instructions: step.instructions,
             plan: previous.last { $0.output.plan != nil }?.output.plan,
             latestVerdict: previous.last { $0.output.verdict != nil }?.output.verdict,
             feedback: loaded.state.feedback, previousOutputs: previous

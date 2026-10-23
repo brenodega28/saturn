@@ -71,10 +71,11 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     func tools(for agent: Agent) -> Set<HandoffTool> {
-        guard agent.runId != nil else { return [] }
+        let requestTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .messageAgent, .askHuman]
+        guard agent.runId != nil else { return requestTools }
         let config = (try? runtime.database.project(id: agent.projectId)).flatMap { $0 }.map { ProjectConfigLoader.load(repository: $0.url) }
         let role = config?.role(agent.role)
-        var tools: Set<HandoffTool> = [.askHuman, .createPin]
+        var tools: Set<HandoffTool> = requestTools.union([.askHuman, .createPin])
         if role?.canSpawn == true { tools.formUnion([.submitPlan, .submitVerdict]) }
         if agent.readOnly { tools.insert(.submitVerdict) }
         if !agent.readOnly { tools.insert(.submitResult) }
@@ -119,6 +120,32 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 title: "\(agent.name) asks", body: question, questions: questions.isEmpty ? nil : questions, createdAt: .now
             ))
             return "Your question was sent to the user. End your turn now; the answer arrives as your next message."
+        case .proposal(let proposal):
+            guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can propose runs.") }
+            let config = try projectConfig(for: agent)
+            guard config.workflow(proposal.workflow) != nil else {
+                throw HandoffError.notAllowed("Unknown workflow “\(proposal.workflow)”. Use one of: \(config.workflows.map(\.id).joined(separator: ", ")).")
+            }
+            if try runtime.database.runs(taskId: taskId).contains(where: \.isActive) {
+                throw HandoffError.notAllowed("A run for this request is still going. Use message_agent to change it, or wait until it ends.")
+            }
+            try runtime.database.insert(LeadMessage(
+                projectId: agent.projectId, taskId: taskId, kind: .proposal, text: proposal.brief,
+                workflow: proposal.workflow, title: proposal.title, status: .open, createdAt: .now
+            ))
+            return "The user sees your proposal with a Start button. End your turn now. If they start it, you’ll be asked to plan it."
+        case .agentMessage(let name, let text):
+            guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can message run agents.") }
+            let activeRuns = Set(try runtime.database.runs(taskId: taskId).filter(\.isActive).compactMap(\.id))
+            guard !activeRuns.isEmpty else { throw HandoffError.notAllowed("No run is going for this request, so there’s no one to message.") }
+            let candidates = try runtime.database.agents(inProject: agent.projectId)
+                .filter { $0.id != agentID && $0.archivedAt == nil && $0.runId.map(activeRuns.contains) == true }
+            guard let target = candidates.first(where: { $0.name.caseInsensitiveCompare(name.trimmingCharacters(in: .whitespaces)) == .orderedSame }),
+                  let session = runtime.session(for: target) else {
+                throw HandoffError.notAllowed("No agent named “\(name)” in this request’s run. Agents: \(candidates.map(\.name).joined(separator: ", ")).")
+            }
+            session.send("Message from \(agent.name), passing on the user’s instruction:\n\n\(text)")
+            return "Sent to \(target.name)."
         }
     }
 

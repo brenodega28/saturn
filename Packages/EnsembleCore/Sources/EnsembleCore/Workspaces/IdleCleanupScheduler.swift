@@ -10,7 +10,7 @@ public enum IdleCleanupPolicy {
         busyAgentIDs: Set<Int64>,
         now: Date
     ) -> Bool {
-        guard minutes > 0, agent.status == .idle, !agent.isPinned, agent.archivedAt == nil else { return false }
+        guard minutes > 0, agent.status == .idle, !agent.isPinned, agent.archivedAt == nil, agent.taskId == nil else { return false }
         if let id = agent.id, busyAgentIDs.contains(id) { return false }
         if let runId = agent.runId, activeRunIDs.contains(runId) { return false }
         return now.timeIntervalSince(agent.updatedAt) >= TimeInterval(minutes * 60)

@@ -5,30 +5,33 @@ import SwiftUI
 struct LeadComposer: View {
     @Environment(AppModel.self) private var model
     let project: Project
+    let request: ProjectTask?
     @State private var text = ""
     @State private var leadID: String?
-    @State private var workflowID: String?
     @FocusState private var isFocused: Bool
 
     var body: some View {
         let leads = model.leadRoles(in: project)
-        let workflows = model.config(for: project).workflows
         let lead = leads.first { $0.id == leadID } ?? leads.first
-        let workflow = workflows.first { $0.id == workflowID } ?? workflows.first
+        let leadName = request.flatMap { model.leadSession(for: $0)?.agent.name } ?? lead?.name ?? "the lead"
         VStack(alignment: .leading, spacing: 10) {
-            TextField("Describe a new task. The lead plans it and starts the workflow.", text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .lineLimit(2...8)
-                .focused($isFocused)
-                .accessibilityLabel("New task for the lead")
+            TextField(
+                "Message",
+                text: $text,
+                prompt: Text(request == nil ? "Ask or describe what you need. The lead replies and proposes a run when it’s time." : "Message \(leadName)"),
+                axis: .vertical
+            )
+            .textFieldStyle(.plain)
+            .font(.system(size: 14))
+            .lineLimit(2...8)
+            .focused($isFocused)
+            .accessibilityLabel(request == nil ? "New request for the lead" : "Message to \(leadName)")
             HStack(spacing: 8) {
-                leadMenu(leads: leads, selected: lead)
-                workflowMenu(workflows: workflows, selected: workflow)
+                if request.flatMap(model.leadSession(for:)) == nil {
+                    leadMenu(leads: leads, selected: lead)
+                }
                 Spacer()
-                Button {
-                    send(lead: lead, workflow: workflow)
-                } label: {
+                Button(action: { send(lead: lead) }) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 14, weight: .bold))
                         .frame(width: 34, height: 34)
@@ -36,10 +39,10 @@ struct LeadComposer: View {
                         .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
-                .disabled(!canSend(workflow: workflow))
+                .disabled(!canSend(lead: lead))
                 .keyboardShortcut(.return, modifiers: .command)
-                .help("Send to the lead (⌘↩)")
-                .accessibilityLabel("Send to lead")
+                .help("Send to \(leadName) (⌘↩)")
+                .accessibilityLabel("Send")
             }
         }
         .padding(EdgeInsets(top: 14, leading: 18, bottom: 10, trailing: 12))
@@ -47,14 +50,18 @@ struct LeadComposer: View {
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
     }
 
-    private func canSend(workflow: WorkflowDefinition?) -> Bool {
-        workflow != nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private func canSend(lead: RoleDefinition?) -> Bool {
+        (lead != nil || request.flatMap(model.leadSession(for:)) != nil) && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private func send(lead: RoleDefinition?, workflow: WorkflowDefinition?) {
-        guard let workflow, canSend(workflow: workflow) else { return }
-        if model.submitLeadRequest(text, lead: lead, workflow: workflow, in: project) != nil {
-            text = ""
+    private func send(lead: RoleDefinition?) {
+        guard canSend(lead: lead) else { return }
+        let message = text
+        text = ""
+        Task {
+            if await !model.sendLeadMessage(message, lead: lead, in: project), text.isEmpty {
+                text = message
+            }
         }
     }
 
@@ -83,30 +90,6 @@ struct LeadComposer: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Choose the lead that plans this task")
-    }
-
-    private func workflowMenu(workflows: [WorkflowDefinition], selected: WorkflowDefinition?) -> some View {
-        Menu {
-            ForEach(workflows) { workflow in
-                Toggle(isOn: Binding(get: { workflow.id == selected?.id }, set: { if $0 { workflowID = workflow.id } })) {
-                    Text(workflow.displayName)
-                    if !workflow.description.isEmpty { Text(workflow.description) }
-                }
-            }
-        } label: {
-            Label(selected?.displayName ?? "No workflows", systemImage: "point.3.connected.trianglepath.dotted")
-                .font(.system(size: 12))
-                .foregroundStyle(Color(hex: 0x9CC6FF))
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .background(Theme.accent.opacity(0.2), in: Capsule())
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .disabled(workflows.isEmpty)
-        .help("Choose the workflow this task runs through")
+        .help("Choose the lead for this request")
     }
 }

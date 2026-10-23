@@ -105,7 +105,18 @@ public enum ClaudeEvent: Sendable, Hashable {
             if let text = json["message"]?["content"]?.string {
                 return [.userMessage(text)]
             }
-            return contentBlocks(json).compactMap { block in
+            let blocks = contentBlocks(json)
+            if blocks.contains(where: { $0["type"]?.string == "image" }) {
+                let parts = blocks.compactMap { block -> String? in
+                    switch block["type"]?.string {
+                    case "text": block["text"]?.string
+                    case "image": ChatAttachment.imagePlaceholder
+                    default: nil
+                    }
+                }
+                return [.userMessage(parts.joined(separator: "\n"))]
+            }
+            return blocks.compactMap { block in
                 switch block["type"]?.string {
                 case "text":
                     return block["text"]?.string.map(ClaudeEvent.userMessage)
@@ -148,6 +159,28 @@ public enum ClaudeEvent: Sendable, Hashable {
         JSONValue.object([
             "type": .string("user"),
             "message": .object(["role": .string("user"), "content": .string(text)]),
+        ]).compactJSON
+    }
+
+    public static let omittedImageData = "omitted"
+
+    public static func userLine(_ text: String, images: [ChatAttachment], includingImageData: Bool = true) -> String {
+        let imageBlocks = images.compactMap { attachment -> JSONValue? in
+            guard case .image(_, let mediaType, _, let data) = attachment else { return nil }
+            return .object([
+                "type": .string("image"),
+                "source": .object([
+                    "type": .string("base64"),
+                    "media_type": .string(mediaType),
+                    "data": .string(includingImageData ? data.base64EncodedString() : omittedImageData),
+                ]),
+            ])
+        }
+        guard !imageBlocks.isEmpty else { return userLine(text) }
+        let textBlocks: [JSONValue] = text.isEmpty ? [] : [.object(["type": .string("text"), "text": .string(text)])]
+        return JSONValue.object([
+            "type": .string("user"),
+            "message": .object(["role": .string("user"), "content": .array(textBlocks + imageBlocks)]),
         ]).compactJSON
     }
 

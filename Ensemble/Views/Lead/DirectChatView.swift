@@ -61,7 +61,7 @@ struct DirectChatView: View {
     private func bubble(_ message: DirectMessage, role: RoleDefinition?) -> some View {
         switch message.kind {
         case .user:
-            RequestBubble(text: message.text, date: message.createdAt)
+            RequestBubble(text: message.text, date: message.createdAt, attachments: message.storedAttachments)
         case .agent:
             LeadBubble(role: role, name: session.agent.name, date: message.createdAt) {
                 ChatText(message.text)
@@ -132,15 +132,20 @@ private struct DirectComposer: View {
     let session: AgentSession
     let project: Project
     @State private var text = ""
+    @State private var attachments: [ChatAttachment] = []
+    @State private var isDropTargeted = false
 
     var body: some View {
         let name = session.agent.name
         VStack(alignment: .leading, spacing: 10) {
-            TextField("Message", text: $text, prompt: Text("Message \(name)…"), axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .lineLimit(2...8)
-                .accessibilityLabel("Message to \(name)")
+            ChatComposerInput(
+                text: $text,
+                attachments: $attachments,
+                isDropTargeted: $isDropTargeted,
+                placeholder: "Message \(name)…",
+                accessibilityLabel: "Message to \(name)",
+                onSubmit: send
+            )
             HStack(spacing: 8) {
                 ChatTargetPicker(project: project, style: .chip)
                 Text("Direct message · no new run")
@@ -167,16 +172,18 @@ private struct DirectComposer: View {
         .padding(EdgeInsets(top: 14, leading: 18, bottom: 10, trailing: 12))
         .background(Color(white: 0.19).opacity(0.7), in: .rect(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+        .chatAttachmentDrop($attachments, isTargeted: $isDropTargeted)
     }
 
     private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
 
     private func send() {
         guard canSend else { return }
-        if model.sendDirectMessage(text, to: session) {
+        if model.sendDirectMessage(text, attachments: attachments, to: session) {
             text = ""
+            attachments = []
         }
     }
 }

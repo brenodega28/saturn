@@ -224,6 +224,14 @@ public final class AppDatabase: Sendable {
                 t.column("createdAt", .datetime).notNull()
             }
         }
+        migrator.registerMigration("v10-chat-attachments") { db in
+            try db.alter(table: "leadMessage") { t in
+                t.add(column: "attachments", .text)
+            }
+            try db.alter(table: "directMessage") { t in
+                t.add(column: "attachments", .text)
+            }
+        }
 
         return migrator
     }

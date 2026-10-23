@@ -47,7 +47,7 @@ extension AppModel {
 
     func openLead(forRun runID: Int64?, in projectID: Int64) {
         selection = .project(projectID)
-        if let runID { leadFocusRunIDs[projectID] = runID }
+        if let runID { leadSelections[projectID] = .run(runID) }
         tabs[projectID] = .lead
     }
 }

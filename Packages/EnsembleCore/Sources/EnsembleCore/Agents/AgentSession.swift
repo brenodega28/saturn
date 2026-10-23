@@ -135,6 +135,26 @@ public final class AgentSession: Identifiable {
         handle = nil
     }
 
+    func failSetup(_ message: String) {
+        fail(message)
+    }
+
+    func clearSetupFailure() {
+        guard handle == nil, agent.status == .failed else { return }
+        agent.status = .idle
+        agent.lastError = nil
+        persist()
+    }
+
+    func archive(detail: String, at date: Date) {
+        guard handle == nil else { return }
+        leaveQueue()
+        agent.status = .stopped
+        agent.archivedAt = date
+        record(notice: .stopped, detail: detail)
+        persist()
+    }
+
     @discardableResult
     private func leaveQueue() -> String? {
         guard let message = waitingTurn else { return nil }
@@ -218,7 +238,7 @@ public final class AgentSession: Identifiable {
 
         let environment: [String: String]
         do {
-            environment = try runtime.launchEnvironment()
+            environment = try runtime.launchEnvironment(for: agent)
         } catch {
             fail(error.localizedDescription)
             return

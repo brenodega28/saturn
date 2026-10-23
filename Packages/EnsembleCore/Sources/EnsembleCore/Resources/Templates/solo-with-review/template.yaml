@@ -1,0 +1,4 @@
+name: Solo with review
+description: One Claude Code agent and a PR Reviewer
+order: 2
+crew: [claude-code, pr-reviewer]

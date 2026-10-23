@@ -18,7 +18,7 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Yams", package: "Yams"),
             ],
-            resources: [.copy("Resources/Defaults")]
+            resources: [.copy("Resources/Defaults"), .copy("Resources/Templates")]
         ),
         .testTarget(
             name: "EnsembleCoreTests",

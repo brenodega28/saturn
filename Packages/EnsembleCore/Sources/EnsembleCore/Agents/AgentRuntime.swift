@@ -65,6 +65,8 @@ public final class AgentRuntime {
     public var providerMode: ProviderMode?
     public var mcpServer: EnsembleMCPServer?
     public var handoffTools: @MainActor (Agent) -> Set<HandoffTool> = { _ in [] }
+    public var worktreePrepared: (@MainActor (WorktreePreparation) async throws -> Void)?
+    public internal(set) var settingUp: Set<Int64> = []
     public private(set) var usageRevision = 0
 
     @ObservationIgnored let secrets: any SecretStore
@@ -72,6 +74,7 @@ public final class AgentRuntime {
     @ObservationIgnored let stopGracePeriod: Duration
     @ObservationIgnored private var sessions: [Int64: AgentSession] = [:]
     private var turnQueue: [Int64: [Int64]] = [:]
+    @ObservationIgnored var reservedPorts: [String: Int] = [:]
 
     public init(
         database: AppDatabase,
@@ -144,11 +147,12 @@ public final class AgentRuntime {
             model: model.rawValue,
             task: task,
             baseBranch: base ?? worktree.head,
+            port: try nextPort(forProject: projectId),
             createdAt: now,
             updatedAt: now
         ))
         guard let session = session(for: agent) else { throw AgentError.emptyTask }
-        session.start()
+        startAfterPreparing(session, startTurn: true)
         usageDidChange()
         return session
     }
@@ -205,6 +209,7 @@ public final class AgentRuntime {
                 task: task,
                 baseBranch: base,
                 readOnly: !role.editsCode,
+                port: worktreePath == nil ? nil : try nextPort(forProject: projectId),
                 createdAt: now,
                 updatedAt: now
             ))
@@ -212,8 +217,8 @@ public final class AgentRuntime {
             spawned.append(session)
         }
         usageDidChange()
-        if !task.isEmpty {
-            for session in spawned { session.start() }
+        for session in spawned {
+            startAfterPreparing(session, startTurn: !task.isEmpty)
         }
         return spawned
     }
@@ -244,6 +249,9 @@ public final class AgentRuntime {
                 let context = RoleContext.build(role: role, config: config, repository: repository).systemPrompt
                 if !context.isEmpty { prompt += "\n\n" + context }
             }
+        }
+        if let port = agent.port {
+            prompt += "\n\n" + Self.portGuide(port)
         }
 
         var additional: [URL] = []
@@ -411,9 +419,11 @@ extension AgentRuntime {
         var worktreePath: String?
         var branch: String?
         var resolvedBase = baseBranch
+        var port: Int?
         if let readOnlyWorktree {
             worktreePath = readOnlyWorktree.path.path
             branch = readOnlyWorktree.branch
+            port = try reservedPorts.removeValue(forKey: realPath(of: readOnlyWorktree.path)) ?? nextPort(forProject: projectId)
         } else if role.editsCode {
             let taskSlug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
             let worktree = try await WorktreeManager(repository: project.url, git: git)
@@ -421,6 +431,7 @@ extension AgentRuntime {
             worktreePath = worktree.path.path
             branch = worktree.branch
             resolvedBase = baseBranch ?? worktree.head
+            port = try nextPort(forProject: projectId)
         }
         let agent = try database.insert(Agent(
             projectId: projectId,
@@ -436,11 +447,17 @@ extension AgentRuntime {
             runStepId: runStepId,
             readOnly: !role.editsCode,
             planTaskId: planTaskId,
+            port: port,
             createdAt: now,
             updatedAt: now
         ))
         guard let session = session(for: agent) else { throw AgentError.emptyTask }
         usageDidChange()
+        if let readOnlyWorktree {
+            adoptIntegrationSetupLog(from: readOnlyWorktree.path, into: session)
+        } else if worktreePath != nil {
+            try await prepareWorktree(of: session)
+        }
         return session
     }
 

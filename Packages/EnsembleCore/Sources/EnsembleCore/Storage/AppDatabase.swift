@@ -182,6 +182,12 @@ public final class AppDatabase: Sendable {
 
         registerGitHubMigration(in: &migrator)
         migrator.registerMigration("v5-review", migrate: createReviewTables)
+        migrator.registerMigration("v6-workspaces") { db in
+            try db.alter(table: "agent") { t in
+                t.add(column: "port", .integer)
+                t.add(column: "archivedAt", .datetime)
+            }
+        }
 
         return migrator
     }

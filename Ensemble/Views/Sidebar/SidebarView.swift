@@ -85,7 +85,7 @@ private struct SidebarGroup: Identifiable {
 
     static let all = [
         SidebarGroup(title: "Work", tabs: [.lead, .tasks]),
-        SidebarGroup(title: "Crew", tabs: [.agents, .workflows]),
+        SidebarGroup(title: "Crew", tabs: [.agents, .roles, .workflows]),
         SidebarGroup(title: "Review", tabs: [.changes, .code]),
     ]
 
@@ -184,7 +184,7 @@ private struct ProjectSidebarGroup: View {
         case .agents:
             let agents = model.agentSessions(in: project).count
             return agents > 0 ? SidebarBadge(count: agents, color: Theme.tertiaryText) : nil
-        case .lead, .workflows, .settings, .code:
+        case .lead, .roles, .workflows, .settings, .code:
             return nil
         }
     }

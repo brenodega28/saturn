@@ -112,7 +112,7 @@ struct SkillsSettingsView: View {
                  : "In .claude/skills: \(localSkills.sorted().joined(separator: ", "))")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.secondaryText)
-            Text("Change which skills a role uses in Settings › Roles.")
+            Text("Change which skills a role uses in Crew › Roles.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.tertiaryText)
         }
@@ -228,7 +228,7 @@ struct SkillsSettingsView: View {
         defer { isInstalling = false }
         do {
             let installed = try await model.installSkillPlugin(plugin, from: marketplace, in: project)
-            installMessage = "Installed \(installed.id) with \(installed.skills.count == 1 ? "1 skill" : "\(installed.skills.count) skills"). Add them to a role in Settings › Roles."
+            installMessage = "Installed \(installed.id) with \(installed.skills.count == 1 ? "1 skill" : "\(installed.skills.count) skills"). Add them to a role in Crew › Roles."
             marketplace = ""
             plugin = ""
         } catch {

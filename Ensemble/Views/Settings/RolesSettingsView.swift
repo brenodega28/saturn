@@ -3,6 +3,10 @@ import EnsembleUI
 import SwiftUI
 
 struct RolesSettingsView: View {
+    static let sideBySideMinimumWidth: CGFloat = 1000
+    static let pickerRowMinimumWidth: CGFloat = 520
+    private static let contextPreviewID = "contextPreview"
+
     @Environment(AppModel.self) private var model
     let project: Project
     @State private var selectedID: String?
@@ -10,6 +14,8 @@ struct RolesSettingsView: View {
     @State private var isNew = false
     @State private var errorMessage: String?
     @State private var isConfirmingDelete = false
+    @State private var contentWidth: CGFloat = 0
+    @State private var editorWidth: CGFloat = 0
 
     var body: some View {
         let config = model.config(for: project)
@@ -18,15 +24,22 @@ struct RolesSettingsView: View {
                 InstallDefaultsCard(project: project)
             }
             IssueList(issues: unreadableRoleIssues(config))
-            HStack(alignment: .top, spacing: 16) {
-                roleList(config)
-                if let draft {
-                    editor(binding(for: draft), config: config)
-                } else {
-                    Text("Choose a role to edit, or add a new one.")
-                        .foregroundStyle(Theme.secondaryText)
-                        .frame(maxWidth: .infinity, minHeight: 200)
+            ScrollViewReader { proxy in
+                Group {
+                    if contentWidth >= Self.sideBySideMinimumWidth {
+                        HStack(alignment: .top, spacing: 16) {
+                            roleList(config)
+                            editorOrPlaceholder(config: config, proxy: proxy)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 16) {
+                            rolePicker(config)
+                            editorOrPlaceholder(config: config, proxy: proxy)
+                        }
+                    }
                 }
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
             }
         }
         .onAppear { selectFirst(in: config) }
@@ -35,6 +48,17 @@ struct RolesSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Removes .ensemble/roles/\(draft?.id ?? "").yaml. Agents already spawned from it keep running.")
+        }
+    }
+
+    @ViewBuilder
+    private func editorOrPlaceholder(config: ProjectConfig, proxy: ScrollViewProxy) -> some View {
+        if let draft {
+            editor(binding(for: draft), config: config, proxy: proxy)
+        } else {
+            Text("Choose a role to edit, or add a new one.")
+                .foregroundStyle(Theme.secondaryText)
+                .frame(maxWidth: .infinity, minHeight: 200)
         }
     }
 
@@ -54,7 +78,7 @@ struct RolesSettingsView: View {
                         AgentAvatar(size: 26, appearance: RoleAppearance(role: role))
                         VStack(alignment: .leading, spacing: 1) {
                             Text(role.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                            Text(role.editsCode ? "Writes code" : role.canSpawn ? "Lead" : "Read-only")
+                            Text(kind(of: role))
                                 .font(.system(size: 11))
                                 .foregroundStyle(Theme.secondaryText)
                         }
@@ -72,71 +96,113 @@ struct RolesSettingsView: View {
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
-            Button {
-                newRole()
-            } label: {
-                Label("New Role", systemImage: "plus")
-            }
-            .buttonStyle(.pill)
-            .padding(.top, 8)
-            .help("Create a role in .ensemble/roles")
+            newRoleButton
+                .padding(.top, 8)
         }
         .padding(8)
         .frame(width: 220, alignment: .topLeading)
         .card(cornerRadius: 16)
     }
 
-    private func editor(_ role: Binding<RoleDefinition>, config: ProjectConfig) -> some View {
+    private func rolePicker(_ config: ProjectConfig) -> some View {
+        FlowLayout(spacing: 6) {
+            ForEach(config.roles) { role in
+                let isSelected = role.id == selectedID && !isNew
+                let issueCount = issues(for: role.id, in: config).count
+                Button {
+                    select(role)
+                } label: {
+                    HStack(spacing: 6) {
+                        AgentAvatar(size: 20, appearance: RoleAppearance(role: role))
+                        Text(role.name)
+                            .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                            .lineLimit(1)
+                        if issueCount > 0 {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.warning)
+                                .accessibilityLabel("\(issueCount) problems")
+                        }
+                    }
+                    .padding(.leading, 4)
+                    .padding(.trailing, 10)
+                    .frame(height: 28)
+                    .background(isSelected ? Theme.fillSelected : Theme.fillRaised, in: Capsule())
+                    .overlay(Capsule().strokeBorder(isSelected ? Theme.accent : Theme.hairline))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("\(role.name) · \(kind(of: role))")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+            newRoleButton
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card(cornerRadius: 16)
+    }
+
+    private var newRoleButton: some View {
+        Button {
+            newRole()
+        } label: {
+            Label("New Role", systemImage: "plus")
+        }
+        .buttonStyle(.pill)
+        .help("Create a role in .ensemble/roles")
+    }
+
+    private func kind(of role: RoleDefinition) -> String {
+        role.editsCode ? "Writes code" : role.canSpawn ? "Lead" : "Read-only"
+    }
+
+    private func editor(_ role: Binding<RoleDefinition>, config: ProjectConfig, proxy: ScrollViewProxy) -> some View {
         let value = role.wrappedValue
         let liveIssues = draftIssues(value, config: config)
         let context = RoleContext.build(role: value, config: config, repository: project.url)
         return VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
                     AgentAvatar(size: 40, appearance: RoleAppearance(role: value))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(value.name.isEmpty ? "Untitled role" : value.name).font(.system(size: 17, weight: .bold))
                         Text(isNew ? "New role · saved as .ensemble/roles/\(Slug.make(value.name)).yaml" : ".ensemble/roles/\(value.id).yaml")
                             .font(Theme.monospaced)
                             .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
+                    Spacer(minLength: 8)
+                    Button {
+                        withAnimation { proxy.scrollTo(Self.contextPreviewID, anchor: .top) }
+                    } label: {
+                        Label("≈ \(context.totalTokens.formatted()) tokens", systemImage: "text.alignleft")
+                    }
+                    .buttonStyle(.pill)
+                    .fixedSize()
+                    .help("Jump to what an agent with this role loads")
                 }
                 IssueList(issues: liveIssues, showsFile: false)
 
                 field("Name") { TextField("Name", text: role.name).textFieldStyle(.roundedBorder).labelsHidden() }
                 field("Description") { TextField("Description", text: role.description).textFieldStyle(.roundedBorder).labelsHidden() }
-                HStack(spacing: 16) {
-                    field("Icon") {
-                        Picker("Icon", selection: role.icon) {
-                            ForEach(choices(RoleAppearance.iconChoices, including: value.icon), id: \.self) { icon in
-                                Label(icon, systemImage: RoleAppearance.symbol(for: icon)).tag(icon)
-                            }
-                        }
-                        .labelsHidden()
-                    }
-                    field("Color") {
-                        Picker("Color", selection: role.color) {
-                            ForEach(choices(RoleAppearance.colorChoices, including: value.color), id: \.self) { Text($0).tag($0) }
-                        }
-                        .labelsHidden()
-                    }
-                    field("Model") {
-                        Picker("Model", selection: role.model) {
-                            ForEach(choices(AgentModel.allCases.map(\.rawValue), including: value.model), id: \.self) { Text($0.modelTitle).tag($0) }
-                        }
-                        .labelsHidden()
-                    }
+                appearancePickers(role, value: value)
+                VStack(alignment: .leading, spacing: 12) {
+                    settingToggle("Edits code", detail: "Gets its own worktree and branch. Off means the agent only reads the repo.", isOn: role.editsCode)
+                    Divider().overlay(Theme.hairline)
+                    settingToggle("Can spawn agents", detail: "Plans work and hands it to other roles, like a lead.", isOn: role.canSpawn)
                 }
-                HStack(spacing: 24) {
-                    Toggle("Edits code", isOn: role.editsCode)
-                        .help("Coding roles get their own worktree and branch; others are read-only")
-                    Toggle("Can spawn agents", isOn: role.canSpawn)
-                        .help("Leads plan work and hand it to other roles")
-                    field("Budget per run") {
-                        TextField("Budget", value: role.budgetPerRun, format: .currency(code: "USD"), prompt: Text("No limit"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                field("Budget per run") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("Budget per run", value: role.budgetPerRun, format: .currency(code: "USD"), prompt: Text("No limit"))
                             .textFieldStyle(.roundedBorder)
                             .labelsHidden()
-                            .frame(width: 110)
+                            .frame(maxWidth: 180)
+                        Text("A run stops once it spends this much. Leave empty for no limit.")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.tertiaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 field("Skills") {
@@ -179,11 +245,71 @@ struct RolesSettingsView: View {
                 }
             }
             .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .card(cornerRadius: 16)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { editorWidth = $0 }
 
             ContextPreview(context: context)
+                .id(Self.contextPreviewID)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func appearancePickers(_ role: Binding<RoleDefinition>, value: RoleDefinition) -> some View {
+        let icon = field("Icon") {
+            Picker("Icon", selection: role.icon) {
+                ForEach(choices(RoleAppearance.iconChoices, including: value.icon), id: \.self) { icon in
+                    Label(icon, systemImage: RoleAppearance.symbol(for: icon)).tag(icon)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        let color = field("Color") {
+            Picker("Color", selection: role.color) {
+                ForEach(choices(RoleAppearance.colorChoices, including: value.color), id: \.self) { Text($0).tag($0) }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        let model = field("Model") {
+            Picker("Model", selection: role.model) {
+                ForEach(choices(AgentModel.allCases.map(\.rawValue), including: value.model), id: \.self) { Text($0.modelTitle).tag($0) }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        if editorWidth >= Self.pickerRowMinimumWidth {
+            HStack(alignment: .top, spacing: 12) {
+                icon
+                color
+                model
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                icon
+                color
+                model
+            }
+        }
+    }
+
+    private func settingToggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .semibold))
+                Text(detail)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Toggle(title, isOn: isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+        }
+        .help(detail)
     }
 
     private func field(_ title: String, @ViewBuilder content: () -> some View) -> some View {
@@ -191,6 +317,7 @@ struct RolesSettingsView: View {
             Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
             content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func choices(_ base: [String], including current: String) -> [String] {
@@ -307,18 +434,24 @@ struct ContextPreview: View {
                         .foregroundStyle(Theme.secondaryText)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text(section.title).font(.system(size: 13, weight: .semibold))
+                        HStack(spacing: 8) {
+                            Text(section.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                             if let source = section.source {
-                                Text(source).font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Theme.tertiaryText)
+                                Text(source)
+                                    .font(.system(size: 11.5, design: .monospaced))
+                                    .foregroundStyle(Theme.tertiaryText)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
                             }
                             if section.isTruncated {
                                 Chip(text: "truncated", foreground: Theme.warning, background: Theme.warning.opacity(0.12))
+                                    .fixedSize()
                             }
-                            Spacer()
+                            Spacer(minLength: 8)
                             Text("\(section.tokens.formatted()) tokens")
                                 .font(.system(size: 11.5, design: .monospaced))
                                 .foregroundStyle(Theme.secondaryText)
+                                .fixedSize()
                         }
                         Text(section.text)
                             .font(.system(size: 12))
@@ -332,11 +465,14 @@ struct ContextPreview: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(Theme.warning)
                         .accessibilityLabel("Warning")
-                    Text(warning.message).font(.system(size: 12))
+                    Text(warning.message)
+                        .font(.system(size: 12))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .card(cornerRadius: 16)
     }
 
@@ -421,10 +557,11 @@ struct FlowLayout: Layout {
     var spacing: CGFloat = 6
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        let width = proposal.width ?? .infinity
+        let rows = arrange(width: width, subviews: subviews)
         let height = rows.last.map { $0.y + $0.height } ?? 0
-        let width = rows.map(\.width).max() ?? 0
-        return CGSize(width: proposal.width ?? width, height: height)
+        let widest = rows.map(\.width).max() ?? 0
+        return CGSize(width: width.isFinite ? width : widest, height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -432,11 +569,17 @@ struct FlowLayout: Layout {
         for row in rows {
             var x = bounds.minX
             for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
+                let size = fittedSize(of: subviews[index], width: bounds.width)
                 subviews[index].place(at: CGPoint(x: x, y: bounds.minY + row.y), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
         }
+    }
+
+    private func fittedSize(of subview: LayoutSubview, width: CGFloat) -> CGSize {
+        let ideal = subview.sizeThatFits(.unspecified)
+        guard width.isFinite, ideal.width > width else { return ideal }
+        return subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
     }
 
     private struct Row {
@@ -450,7 +593,7 @@ struct FlowLayout: Layout {
         var rows: [Row] = []
         var current = Row()
         for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
+            let size = fittedSize(of: subviews[index], width: width)
             if !current.indices.isEmpty, current.width + spacing + size.width > width {
                 let next = current.y + current.height + spacing
                 rows.append(current)

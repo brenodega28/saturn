@@ -8,6 +8,9 @@ struct SkillsSettingsView: View {
     let project: Project
     @State private var message: String?
     @State private var errorMessage: String?
+    @State private var tableWidth: CGFloat = 0
+
+    static let roleColumnMinimumTableWidth: CGFloat = 520
 
     var body: some View {
         let config = model.config(for: project)
@@ -15,20 +18,24 @@ struct SkillsSettingsView: View {
         let manifest = project.url.appending(path: SkillLibrary.manifestPath)
         let hasManifest = FileManager.default.fileExists(atPath: manifest.path)
         SettingsPage("Skills", subtitle: "Skills each role loads from .claude/skills. Claude Code reads the skill files itself; Ensemble tells each agent which ones to use.") {
-            HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Write the rules below to \(SkillLibrary.manifestPath) so they are versioned with the code.")
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.secondaryText)
-                Spacer()
-                if hasManifest {
-                    Button("Open SKILLS.md") { NSWorkspace.shared.open(manifest) }
-                        .buttonStyle(.pill)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    Button(hasManifest ? "Update SKILLS.md" : "Write SKILLS.md") { writeManifest(config) }
+                        .buttonStyle(.primaryPill)
+                        .help("Writes \(SkillLibrary.manifestPath) from the roles in .ensemble/roles")
+                    if hasManifest {
+                        Button("Open SKILLS.md") { NSWorkspace.shared.open(manifest) }
+                            .buttonStyle(.pill)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Button(hasManifest ? "Update SKILLS.md" : "Write SKILLS.md") { writeManifest(config) }
-                    .buttonStyle(.primaryPill)
-                    .help("Writes \(SkillLibrary.manifestPath) from the roles in .ensemble/roles")
             }
             .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .card(cornerRadius: 16)
 
             if let message {
@@ -38,10 +45,15 @@ struct SkillsSettingsView: View {
                 Text(errorMessage).foregroundStyle(Theme.danger).textSelection(.enabled)
             }
 
+            let hasRoleColumn = tableWidth >= Self.roleColumnMinimumTableWidth
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text("Role").frame(width: 200, alignment: .leading)
-                    Text("Skills")
+                    if hasRoleColumn {
+                        Text("Role").frame(width: 200, alignment: .leading)
+                        Text("Skills")
+                    } else {
+                        Text("Role and skills")
+                    }
                     Spacer()
                 }
                 .font(.system(size: 12, weight: .semibold))
@@ -49,28 +61,26 @@ struct SkillsSettingsView: View {
                 .padding(16)
                 ForEach(config.roles) { role in
                     Divider().overlay(Theme.hairline)
-                    HStack(alignment: .center, spacing: 0) {
-                        HStack(spacing: 10) {
-                            AgentAvatar(size: 26, appearance: RoleAppearance(role: role))
-                            Text(role.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                        }
-                        .frame(width: 200, alignment: .leading)
-                        if role.skills.isEmpty {
-                            Text("No skills").font(.system(size: 12)).foregroundStyle(Theme.tertiaryText)
+                    Group {
+                        if hasRoleColumn {
+                            HStack(alignment: .center, spacing: 0) {
+                                roleName(role).frame(width: 200, alignment: .leading)
+                                skills(of: role, installed: installed)
+                            }
                         } else {
-                            FlowLayout(spacing: 6) {
-                                ForEach(role.skills, id: \.self) { skill in
-                                    SkillChip(name: skill, isMissing: !installed.contains(skill))
-                                }
+                            VStack(alignment: .leading, spacing: 8) {
+                                roleName(role)
+                                skills(of: role, installed: installed)
                             }
                         }
-                        Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .card(cornerRadius: 16)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { tableWidth = $0 }
 
             let missing = missingSkills(config: config, installed: installed)
             ForEach(missing, id: \.skill) { item in
@@ -80,6 +90,7 @@ struct SkillsSettingsView: View {
                         .accessibilityLabel("Missing skill")
                     Text("\(item.skill) is listed for \(item.roles.joined(separator: ", ")) but isn’t in .claude/skills. Those agents start without it.")
                         .font(.system(size: 12.5))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -94,6 +105,29 @@ struct SkillsSettingsView: View {
             Text("Change which skills a role uses in Settings › Roles.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.tertiaryText)
+        }
+    }
+
+    private func roleName(_ role: RoleDefinition) -> some View {
+        HStack(spacing: 10) {
+            AgentAvatar(size: 26, appearance: RoleAppearance(role: role))
+            Text(role.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private func skills(of role: RoleDefinition, installed: Set<String>) -> some View {
+        if role.skills.isEmpty {
+            Text("No skills")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.tertiaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            FlowLayout(spacing: 6) {
+                ForEach(role.skills, id: \.self) { skill in
+                    SkillChip(name: skill, isMissing: !installed.contains(skill))
+                }
+            }
         }
     }
 

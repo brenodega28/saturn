@@ -111,8 +111,8 @@ struct DocsSettingsView: View {
     private func addCard(config: ProjectConfig) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Add a document").font(.system(size: 15, weight: .semibold))
-                Spacer()
+                Text("Add a document").font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                Spacer(minLength: 8)
                 Picker("Source", selection: $mode) {
                     ForEach(Mode.allCases) { Text($0.title).tag($0) }
                 }
@@ -160,42 +160,16 @@ struct DocsSettingsView: View {
                 }
             }
 
-            HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Who reads it").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
-                ForEach(ReaderChoice.allCases) { choice in
-                    if choice == .roles {
-                        Menu {
-                            ForEach(config.roles) { role in
-                                Toggle(role.name, isOn: Binding(
-                                    get: { chosenRoles.contains(role.id) },
-                                    set: { isOn in
-                                        if isOn { chosenRoles.insert(role.id) } else { chosenRoles.remove(role.id) }
-                                        readerChoice = .roles
-                                    }
-                                ))
-                            }
-                        } label: {
-                            Text(chosenRoles.isEmpty ? choice.title : "\(chosenRoles.count) roles")
-                        }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
-                        .padding(.horizontal, 10)
-                        .frame(height: 26)
-                        .background(readerChoice == choice ? Theme.accent.opacity(0.16) : Color.clear, in: Capsule())
-                        .overlay(Capsule().strokeBorder(readerChoice == choice ? Theme.accent : Color.white.opacity(0.1)))
-                    } else {
-                        Button(choice.title) { readerChoice = choice }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 12))
-                            .padding(.horizontal, 10)
-                            .frame(height: 26)
-                            .background(readerChoice == choice ? Theme.accent.opacity(0.16) : Color.clear, in: Capsule())
-                            .overlay(Capsule().strokeBorder(readerChoice == choice ? Theme.accent : Color.white.opacity(0.1)))
-                            .accessibilityAddTraits(readerChoice == choice ? .isSelected : [])
-                    }
+                FlowLayout(spacing: 8) {
+                    readerChips(config: config)
                 }
-                Spacer()
-                if mode == .prompt {
+            }
+
+            if mode == .prompt {
+                HStack {
+                    Spacer()
                     Button("Add Prompt") { addPrompt(config: config) }
                         .buttonStyle(.primaryPill)
                         .disabled(promptTitle.trimmingCharacters(in: .whitespaces).isEmpty || promptBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -204,6 +178,42 @@ struct DocsSettingsView: View {
         }
         .padding(16)
         .card(cornerRadius: 16)
+    }
+
+    @ViewBuilder
+    private func readerChips(config: ProjectConfig) -> some View {
+        ForEach(ReaderChoice.allCases) { choice in
+            if choice == .roles {
+                Menu {
+                    ForEach(config.roles) { role in
+                        Toggle(role.name, isOn: Binding(
+                            get: { chosenRoles.contains(role.id) },
+                            set: { isOn in
+                                if isOn { chosenRoles.insert(role.id) } else { chosenRoles.remove(role.id) }
+                                readerChoice = .roles
+                            }
+                        ))
+                    }
+                } label: {
+                    Text(chosenRoles.isEmpty ? choice.title : "\(chosenRoles.count) roles")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .padding(.horizontal, 10)
+                .frame(height: 26)
+                .background(readerChoice == choice ? Theme.accent.opacity(0.16) : Color.clear, in: Capsule())
+                .overlay(Capsule().strokeBorder(readerChoice == choice ? Theme.accent : Color.white.opacity(0.1)))
+            } else {
+                Button(choice.title) { readerChoice = choice }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 10)
+                    .frame(height: 26)
+                    .background(readerChoice == choice ? Theme.accent.opacity(0.16) : Color.clear, in: Capsule())
+                    .overlay(Capsule().strokeBorder(readerChoice == choice ? Theme.accent : Color.white.opacity(0.1)))
+                    .accessibilityAddTraits(readerChoice == choice ? .isSelected : [])
+            }
+        }
     }
 
     private var readers: DocReaders {
@@ -324,9 +334,9 @@ private struct DocRow: View {
                 }
                 HStack(spacing: 6) {
                     StatusDot(isMissing ? Theme.warning : (doc.path == nil ? Theme.neutral : Theme.success), size: 6)
-                    Text(source)
+                    Text(source).lineLimit(1).truncationMode(.middle)
                     Text("·").accessibilityHidden(true)
-                    Text("\(String(format: "%.1f", Double(tokens) / 1000))k tokens")
+                    Text("\(String(format: "%.1f", Double(tokens) / 1000))k tokens").fixedSize()
                 }
                 .font(.system(size: 11.5))
                 .foregroundStyle(isMissing ? Theme.warning : Theme.tertiaryText)
@@ -347,7 +357,7 @@ private struct DocRow: View {
                 }
             } label: {
                 HStack(spacing: 4) {
-                    ForEach(doc.readers.summary(roles: roles), id: \.self) { name in
+                    ForEach(readerLabels, id: \.self) { name in
                         Text(name)
                             .font(.system(size: 11.5))
                             .padding(.horizontal, 8)
@@ -378,6 +388,12 @@ private struct DocRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .opacity(doc.enabled ? 1 : 0.55)
+    }
+
+    private var readerLabels: [String] {
+        let names = doc.readers.summary(roles: roles)
+        guard names.count > 2 else { return names }
+        return Array(names.prefix(1)) + ["+\(names.count - 1)"]
     }
 
     private var fileExtension: String {

@@ -70,13 +70,13 @@ extension AppModel {
     }
 
     @discardableResult
-    func sendLeadMessage(_ text: String, lead: RoleDefinition?, in project: Project) async -> Bool {
+    func sendLeadMessage(_ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, in project: Project) async -> Bool {
         do {
             if let request = selectedRequest(in: project) {
                 let role = lead ?? leadSession(for: request).flatMap { config(for: project).role($0.agent.role) } ?? leadRoles(in: project).first
-                try await leadChat.send(text, to: request, lead: role, in: project)
+                try await leadChat.send(text, attachments: attachments, to: request, lead: role, in: project)
             } else {
-                let request = try await leadChat.createRequest(text, lead: lead ?? leadRoles(in: project).first, in: project)
+                let request = try await leadChat.createRequest(text, attachments: attachments, lead: lead ?? leadRoles(in: project).first, in: project)
                 showRequest(request)
             }
             leadChatRevision += 1

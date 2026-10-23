@@ -110,6 +110,53 @@ import Testing
         #expect(throws: LeadChatError.proposalClosed) { try chat.start(dismissed, in: setup.project) }
     }
 
+    @Test func aRequestCanBeOnlyAttachments() async throws {
+        let (setup, chat, lead) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        try StdinRecorder.install(in: setup.harness)
+        let paste = ChatAttachment.pastedText(id: UUID(), index: 1, text: "CHAT crash log\n" + String(repeating: "frame\n", count: 30))
+        let image = try ChatAttachment.image(data: try TestImages.encoded(width: 10, height: 10, as: .png), fileName: "shot.png")
+
+        let task = try await chat.createRequest("", attachments: [paste, image], lead: lead, in: setup.project)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+
+        #expect(task.title == "CHAT crash log")
+        #expect(task.body == ChatAttachment.prompt(text: "", attachments: [paste]))
+        let sent = try #require(messages(setup, task).first)
+        #expect(sent.kind == .user && sent.text == "")
+        #expect(sent.chatAttachments == [paste, image])
+
+        let line = try #require(StdinRecorder.lines(in: setup.harness).last)
+        let blocks = try #require(line["message"]?["content"]?.array)
+        #expect(blocks.map { $0["type"]?.string } == ["text", "image"])
+        #expect(blocks[0]["text"]?.string?.contains("<pasted-text number=\"1\">\nCHAT crash log") == true)
+        #expect(blocks[1]["source"]?["data"]?.string == image.imageData?.base64EncodedString())
+    }
+
+    @Test func followUpsCarryAttachmentsAndTheTypedTextStaysPlain() async throws {
+        let (setup, chat, lead) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        try StdinRecorder.install(in: setup.harness)
+        let image = try ChatAttachment.image(data: try TestImages.encoded(width: 10, height: 10, as: .png), fileName: "shot.png")
+        let task = try await chat.createRequest("", attachments: [image], lead: lead, in: setup.project)
+        #expect(task.title == "Image")
+        #expect(task.body == "")
+
+        try await waitUntil { chat.leadSession(for: task).map { !$0.isRunning && $0.agent.status == .idle } == true }
+        try await chat.send("CHAT what about this one?", attachments: [image], to: task, lead: lead, in: setup.project)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+
+        #expect(messages(setup, task).filter { $0.kind == .user }.map(\.text) == ["", "CHAT what about this one?"])
+        let line = try #require(StdinRecorder.lines(in: setup.harness).last)
+        #expect(StdinRecorder.imageBlocks(line).count == 1)
+    }
+
+    @Test func requestsNeedTextOrAttachments() async throws {
+        let (setup, chat, lead) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        await #expect(throws: AgentError.emptyTask) { try await chat.createRequest("  ", lead: lead, in: setup.project) }
+    }
+
     @Test func requestsNeedALeadRole() async throws {
         let (setup, chat, _) = try await makeChat()
         defer { setup.harness.cleanUp() }

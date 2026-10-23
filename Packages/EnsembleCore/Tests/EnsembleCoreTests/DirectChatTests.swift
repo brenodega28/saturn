@@ -61,6 +61,49 @@ import Testing
         #expect(notes.first?.runId == run.id)
     }
 
+    @Test func attachmentsOnlyMessagesSendImagesAndAreAnswered() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        try StdinRecorder.install(in: harness)
+        let chat = DirectChat(runtime: harness.runtime)
+        let session = try await harness.spawn()
+        try await waitUntil { session.agent.status == .idle }
+
+        let image = try ChatAttachment.image(data: try TestImages.encoded(width: 12, height: 12, as: .png), fileName: "shot.png")
+        try chat.send("   ", attachments: [image], to: session)
+        try await waitUntil { messages(chat, session).contains { $0.kind == .agent } }
+
+        let thread = messages(chat, session)
+        #expect(thread.map(\.kind) == [.user, .agent])
+        #expect(thread[0].text == "")
+        #expect(thread[0].chatAttachments == [image])
+        #expect(thread.allSatisfy { !$0.awaitingReply })
+        let sent = try #require(StdinRecorder.lines(in: harness).last)
+        #expect(StdinRecorder.imageBlocks(sent).first?["source"]?["media_type"]?.string == "image/png")
+    }
+
+    @Test func pastedTextIsExpandedIntoThePromptAndStillMatchesTheReply() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        try StdinRecorder.install(in: harness)
+        let chat = DirectChat(runtime: harness.runtime)
+        let session = try await harness.spawn()
+        try await waitUntil { session.agent.status == .idle }
+
+        let paste = ChatAttachment.pastedText(id: UUID(), index: 1, text: String(repeating: "stack frame\n", count: 20))
+        let image = try ChatAttachment.image(data: try TestImages.encoded(width: 12, height: 12, as: .png), fileName: "shot.png")
+        try chat.send("Why does this crash?", attachments: [paste, image], to: session)
+        try await waitUntil { messages(chat, session).contains { $0.kind == .agent } }
+
+        let thread = messages(chat, session)
+        #expect(thread[0].text == "Why does this crash?")
+        #expect(thread[0].chatAttachments == [paste, image])
+        #expect(thread.allSatisfy { !$0.awaitingReply })
+        let sent = try #require(StdinRecorder.lines(in: harness).last)
+        #expect(sent["message"]?["content"]?.array?.first?["text"]?.string == ChatAttachment.prompt(text: "Why does this crash?", attachments: [paste]))
+        #expect(StdinRecorder.imageBlocks(sent).count == 1)
+    }
+
     @Test func notesShortenLongTextToOneLine() {
         let long = String(repeating: "word ", count: 60)
         let excerpt = DirectChat.excerpt("first line\nsecond line")

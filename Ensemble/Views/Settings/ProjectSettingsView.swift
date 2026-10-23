@@ -11,6 +11,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case agents
     case claudeAccess
     case tools
+    case github
 
     var id: Self { self }
 
@@ -23,6 +24,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .agents: "Agents & models"
         case .claudeAccess: "Claude access"
         case .tools: "Tools"
+        case .github: "GitHub"
         }
     }
 
@@ -35,6 +37,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .agents: "cpu"
         case .claudeAccess: "key"
         case .tools: "wrench.and.screwdriver"
+        case .github: "arrow.triangle.pull"
         }
     }
 
@@ -47,6 +50,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .agents: Color(hex: 0x2E9C5A)
         case .claudeAccess: Color(hex: 0xC23A54)
         case .tools: Color(hex: 0x48484A)
+        case .github: Color(hex: 0x48484A)
         }
     }
 }
@@ -69,6 +73,7 @@ struct ProjectSettingsView: View {
                 case .agents: AgentsSettings(project: project)
                 case .claudeAccess: ClaudeAccessSettings()
                 case .tools: ToolsSettings()
+                case .github: GitHubSettingsView(project: project)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

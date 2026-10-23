@@ -74,7 +74,7 @@ struct ProjectView: View {
     private func content(for tab: ProjectTab, state: ProjectState) -> some View {
         switch tab {
         case .tasks:
-            EmptyState("No tasks yet", message: "Tasks come from Lead chat and GitHub Issues, and move through Incoming, Running, Waiting on you, Done and Failed.")
+            TasksView(project: project)
         case .lead:
             LeadView(project: project)
         case .agents:

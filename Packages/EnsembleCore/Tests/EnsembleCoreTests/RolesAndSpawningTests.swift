@@ -145,7 +145,7 @@ import Testing
         #expect(allowed.contains("Grep"))
         #expect(allowed.contains("Bash(git status:*)"))
         #expect(allowed.contains("Bash(pytest:*)"))
-        for command in ["git add", "git commit", "git restore", "git stash", "git mv", "git rm"] {
+        for command in ["git add", "git commit", "git restore", "git stash", "git mv", "git rm", "git merge"] {
             #expect(!allowed.contains("Bash(\(command):*)"))
         }
         #expect(allowed.last == "mcp__ensemble__submit_verdict")
@@ -170,6 +170,7 @@ import Testing
         #expect(!launch.arguments.contains("--disallowedTools"))
         #expect(!launch.arguments.contains("--add-dir"))
         #expect(launch.arguments.contains("Bash(git commit:*)"))
+        #expect(launch.arguments.contains("Bash(git merge:*)"))
         #expect(launch.arguments.contains { $0.hasPrefix("Write(//") })
     }
 }
@@ -242,6 +243,7 @@ import Testing
         #expect(launch.contains("--disallowedTools Edit MultiEdit Write NotebookEdit"))
         #expect(!launch.contains("Write(/"))
         #expect(!launch.contains("Bash(git commit:*)"))
+        #expect(!launch.contains("Bash(git merge:*)"))
         #expect(launch.contains("Bash(git diff:*)"))
         #expect(launch.contains("a read-only agent run by Ensemble"))
         #expect(try await harness.repo.branches() == ["main"])

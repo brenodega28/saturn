@@ -158,13 +158,13 @@ Goal: workflows run from YAML before there is a visual editor.
 
 Goal: the human approval step is fast and trustworthy.
 
-- [ ] Pin tool: expose an Ensemble MCP server to agents so they can create pins (file, lines, title, tags, explanation)
-- [ ] Changes tab: diffs across the run's branches, unified/split view, plain-language summary per file, generated files collapsed
-- [ ] Pins: Looks right / Request change / Ask the agent; "Request change" re-enters the author's workflow step
-- [ ] "Reviewed by" marker per file (lead, reviewer) and viewed state
-- [ ] Conflict detection: files touched by more than one branch, flagged before merge
-- [ ] Bottom bar: "N open pins · Approve all & continue run"
-- [ ] End actions: open GitHub PR, merge locally, push branch, or leave in worktree; post a summary to Lead chat; clean up worktrees
+- [x] Pin tool: expose an Ensemble MCP server to agents so they can create pins (file, lines, title, tags, explanation)
+- [x] Changes tab: diffs across the run's branches, unified/split view, plain-language summary per file, generated files collapsed
+- [x] Pins: Looks right / Request change / Ask the agent; "Request change" re-enters the author's workflow step
+- [x] "Reviewed by" marker per file (lead, reviewer) and viewed state
+- [x] Conflict detection: files touched by more than one branch, flagged before merge
+- [x] Bottom bar: "N open pins · Approve all & continue run"
+- [x] End actions: open GitHub PR, merge locally, push branch, or leave in worktree; post a summary to Lead chat; clean up worktrees
 
 **Exit check:** a two-agent run ends in a PR on GitHub after you approve its pins in Changes.
 

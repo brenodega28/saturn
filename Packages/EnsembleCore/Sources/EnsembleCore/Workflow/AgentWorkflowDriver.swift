@@ -51,6 +51,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     public var gitProvider: @MainActor () -> GitClient? = { nil }
     public var gitHubProvider: @MainActor () -> GitHubClient? = { nil }
     public var pollInterval: Duration = .milliseconds(250)
+    public var memoryUpdater: PinnedMemoryUpdater?
 
     private var plans: [Int64: Plan] = [:]
     private var verdicts: [Int64: Verdict] = [:]
@@ -303,6 +304,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
         }
 
+        await memoryUpdater?.updateMemories(after: run)
         if end.cleanUpWorktrees {
             await cleanUp(runId: runId, project: project, git: git)
         }

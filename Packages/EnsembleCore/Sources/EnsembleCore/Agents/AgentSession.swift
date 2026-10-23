@@ -84,6 +84,12 @@ public final class AgentSession: Identifiable {
         persist()
     }
 
+    func startNewSession() {
+        guard handle == nil, !isQueued, agent.sessionId != nil else { return }
+        agent.sessionId = nil
+        persist()
+    }
+
     public func send(_ message: String, images: [ChatAttachment] = []) {
         let turn = AgentTurn(message.trimmingCharacters(in: .whitespacesAndNewlines), images: images.filter(\.isImage))
         guard !turn.text.isEmpty || !turn.images.isEmpty else { return }
@@ -166,7 +172,7 @@ public final class AgentSession: Identifiable {
 
     func retire(detail: String) {
         leaveQueue()
-        queuedMessages.removeAll()
+        queuedTurns.removeAll()
         deferredTurn = nil
         restartAfterStop = false
         pendingFailure = nil

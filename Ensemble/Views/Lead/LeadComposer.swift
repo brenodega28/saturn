@@ -18,7 +18,7 @@ struct LeadComposer: View {
                 text: $text,
                 attachments: $attachments,
                 isDropTargeted: $isDropTargeted,
-                placeholder: request == nil ? "Ask or describe what you need. The lead replies and proposes a run when it’s time." : "Message \(leadName)",
+                placeholder: placeholder(leadName: leadName),
                 accessibilityLabel: request == nil ? "New request for the lead" : "Message to \(leadName)",
                 onSubmit: { send(lead: lead) }
             )

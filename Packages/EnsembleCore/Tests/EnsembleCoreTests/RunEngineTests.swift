@@ -134,6 +134,55 @@ import Testing
         #expect(state.loopCounts["review->changes_requested"] == 2)
     }
 
+    @Test func aBuildThatCommitsNothingAsksBeforeTheWorkIsCheckedAgain() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let workflow = WorkflowDefinition(id: "loose", name: "Loose", steps: [
+            WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "review"),
+            WorkflowStep(id: "review", type: .agent, role: "pr-reviewer", routes: [
+                StepOutcome.approved: WorkflowRoute(to: "end"),
+                StepOutcome.changesRequested: WorkflowRoute(to: "build", maxLoops: 5),
+            ]),
+        ])
+        h.driver.script("build", H.done(heads: ["crew/dev-1": "a1"]), H.done(heads: ["crew/dev-1": "a1"]))
+        h.driver.script("review", H.verdict(StepOutcome.changesRequested, "Fix it"), H.verdict(StepOutcome.approved))
+
+        let id = try await h.start(workflow)
+
+        let hold = try #require(try h.hold(id))
+        #expect(hold.reason == .loopLimit)
+        #expect(hold.stepId == "build")
+        #expect(hold.message.contains("changed nothing"))
+        #expect(h.driver.calledSteps == ["build", "review", "build"])
+        #expect(try h.steps(id).last?.status == .succeeded)
+
+        try h.engine.resolveLoopLimit(try h.run(id), continueOnce: true)
+        await h.settle(id)
+
+        #expect(try h.run(id).status == .succeeded)
+        #expect(h.driver.calledSteps == ["build", "review", "build", "review"])
+    }
+
+    @Test func aBuildWithNewCommitsGoesStraightToReview() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let workflow = WorkflowDefinition(id: "loose", name: "Loose", steps: [
+            WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "review"),
+            WorkflowStep(id: "review", type: .agent, role: "pr-reviewer", routes: [
+                StepOutcome.approved: WorkflowRoute(to: "end"),
+                StepOutcome.changesRequested: WorkflowRoute(to: "build", maxLoops: 5),
+            ]),
+        ])
+        h.driver.script("build", H.done(heads: ["crew/dev-1": "a1"]), H.done(heads: ["crew/dev-1": "a2"]))
+        h.driver.script("review", H.verdict(StepOutcome.changesRequested, "Fix it"), H.verdict(StepOutcome.approved))
+
+        let id = try await h.start(workflow)
+        await h.settle(id)
+
+        #expect(try h.run(id).status == .succeeded)
+        #expect(h.driver.calledSteps == ["build", "review", "build", "review"])
+    }
+
     @Test func loopLimitCanFailTheRun() async throws {
         let h = try H.make()
         defer { h.cleanUp() }

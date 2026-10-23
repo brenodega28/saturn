@@ -37,10 +37,16 @@ public enum AgentPermissions {
         commands.filter { !writingGitCommands.contains($0) }
     }
 
-    public static let tools = ["Read", "Glob", "Grep", "TodoWrite"]
+    public static let tools = ["Read", "Glob", "Grep"]
     public static let fileWritingTools = ["Edit", "MultiEdit", "Write", "NotebookEdit"]
     public static let webTools = ["WebFetch", "WebSearch"]
     public static let artifactTools = ["ArtifactData", "ArtifactComments", "ArtifactCheck"]
+
+    public static func builtInTools(readOnly: Bool, extraAllowedTools: [String]) -> [String] {
+        ["Bash", "Skill"] + tools + (readOnly ? [] : fileWritingTools) + webTools.filter(extraAllowedTools.contains)
+    }
+
+    public static let projectSkillsOnlySettings = #"{"disableBundledSkills":true,"skillOverrides":{"design":"off","doctor":"off","plugin-authoring":"off"}}"#
 
     public static func readOnlyAllowedTools() -> [String] {
         tools + readOnlyCommands.map { "Bash(\($0):*)" }
@@ -118,6 +124,8 @@ public struct ClaudeLaunch: Sendable, Equatable {
             "--model", model,
             "--permission-mode", "dontAsk",
             "--setting-sources", "project",
+            "--tools", AgentPermissions.builtInTools(readOnly: readOnly, extraAllowedTools: extraAllowedTools).joined(separator: ","),
+            "--settings", AgentPermissions.projectSkillsOnlySettings,
             "--append-system-prompt", systemPrompt,
         ]
         switch session {

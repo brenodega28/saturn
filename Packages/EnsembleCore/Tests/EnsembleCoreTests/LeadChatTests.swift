@@ -151,6 +151,15 @@ import Testing
         try setup.engine.approvePlan(run, plan: plan)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .approval, timeout: .seconds(60))
 
+        let runLeads = try setup.harness.database.agents(inProject: setup.project.id!).filter { $0.runId == run.id && $0.role == "tech-lead" }
+        let chatLead = try #require(runLeads.first { $0.taskId == task.id })
+        let reviewer = try #require(runLeads.first { $0.taskId == nil })
+        #expect(runLeads.count == 2)
+        #expect(reviewer.readOnly && reviewer.costUSD > 0)
+        let chatTranscript = try String(contentsOf: setup.harness.runtime.paths.transcript(chatLead.id!), encoding: .utf8)
+        #expect(chatTranscript.contains("Roles that can build"))
+        #expect(!chatTranscript.contains("# Review the code"))
+
         let note = try #require(try chat.statusNote(taskId: task.id!))
         #expect(note.contains("“Add alpha and beta” is waiting for the user"))
         #expect(note.contains("It is waiting for the user: an approval step."))
@@ -329,6 +338,8 @@ import Testing
         #expect(builder.transcript.entries.count == noticesAfterFirstClose)
         #expect(builder.agent.archivedAt == archivedAt)
         #expect(try stored(setup, task).closeReason == .dropped)
+    }
+
     @Test func aRequestCanBeOnlyAttachments() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }

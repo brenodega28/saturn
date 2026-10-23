@@ -67,14 +67,14 @@ private struct LeadRequestList: View {
             .help("Start a new conversation with the lead")
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(requests) { request in
+                    ForEach(open) { request in
                         row(request, needsYouTaskIDs: needsYouTaskIDs)
                     }
                     if !closed.isEmpty {
                         closedToggle
                         if showsClosed {
                             ForEach(closed) { request in
-                                row(request)
+                                row(request, needsYouTaskIDs: needsYouTaskIDs)
                             }
                         }
                     }
@@ -108,7 +108,7 @@ private struct LeadRequestList: View {
         .accessibilityValue(showsClosed ? "Expanded" : "Collapsed")
     }
 
-    private func row(_ request: ProjectTask) -> some View {
+    private func row(_ request: ProjectTask, needsYouTaskIDs: Set<Int64>) -> some View {
         let isSelected = request.id == selectedID
         let run = model.latestRun(of: request)
         let detail = run.map { run in

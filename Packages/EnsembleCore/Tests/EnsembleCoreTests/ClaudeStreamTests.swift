@@ -124,4 +124,31 @@ import Testing
         #expect(!arguments.contains("Bash"))
         #expect(!arguments.contains("Edit"))
     }
+
+    @Test func launchesOfferOnlyTheBuiltInToolsTheAgentNeedsAndProjectSkills() throws {
+        func launch(readOnly: Bool, extraAllowedTools: [String] = []) -> [String] {
+            ClaudeLaunch(
+                executable: URL(fileURLWithPath: "/bin/claude"),
+                worktree: URL(fileURLWithPath: "/repo/.crew/dev"),
+                session: .new("s-1"),
+                model: "sonnet",
+                systemPrompt: "prompt",
+                environment: [:],
+                readOnly: readOnly,
+                extraAllowedTools: extraAllowedTools
+            ).arguments
+        }
+        func value(of flag: String, in arguments: [String]) throws -> String {
+            arguments[try #require(arguments.firstIndex(of: flag)) + 1]
+        }
+
+        #expect(try value(of: "--tools", in: launch(readOnly: false)) == "Bash,Skill,Read,Glob,Grep,Edit,MultiEdit,Write,NotebookEdit")
+        #expect(try value(of: "--tools", in: launch(readOnly: true)) == "Bash,Skill,Read,Glob,Grep")
+        #expect(try value(of: "--tools", in: launch(readOnly: true, extraAllowedTools: ["WebFetch", "WebSearch", "mcp__ensemble__ask_human"])) == "Bash,Skill,Read,Glob,Grep,WebFetch,WebSearch")
+
+        let settings = try value(of: "--settings", in: launch(readOnly: false))
+        let decoded = try #require(try JSONSerialization.jsonObject(with: Data(settings.utf8)) as? [String: Any])
+        #expect(decoded["disableBundledSkills"] as? Bool == true)
+        #expect(try value(of: "--setting-sources", in: launch(readOnly: false)) == "project")
+    }
 }

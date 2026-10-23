@@ -68,6 +68,15 @@ import Testing
         #expect(agents.filter { $0.planTaskId != nil }.count == 2)
         #expect(agents.filter { $0.role == "qa-engineer" }.count == 1)
 
+        let lead = try #require(agents.first { $0.role == "tech-lead" })
+        let leadLaunches = setup.harness.launches().filter { $0.contains("You are \(lead.name),") }
+        #expect(leadLaunches.count == 3)
+        #expect(leadLaunches.allSatisfy { $0.contains("--session-id") && !$0.contains("--resume") })
+        let leadTranscript = try String(contentsOf: setup.harness.runtime.paths.transcript(lead.id!), encoding: .utf8)
+        #expect(leadTranscript.components(separatedBy: "Your last check (round 1)").count == 2)
+        #expect(leadTranscript.contains("Add a second line to alpha.txt (alpha.txt)"))
+        #expect(leadTranscript.contains("` was at `"))
+
         let alphaBuilder = try #require(agents.first { $0.planTaskId != nil && $0.task == "Add alpha" })
         let alpha = try String(contentsOf: alphaBuilder.worktreeURL!.appending(path: "alpha.txt"), encoding: .utf8)
         #expect(alpha.split(separator: "\n").count == 2)
@@ -139,6 +148,32 @@ import Testing
         try await waitUntil(timeout: .seconds(30)) { (try? setup.harness.database.run(id: run.id!))??.status == .succeeded }
         let alpha = try await setup.harness.repo.git.run(["show", "main:alpha.txt"], in: setup.harness.repo.root)
         #expect(alpha.split(separator: "\n").count == 2)
+        #expect(!alpha.contains("<<<<<<<"))
+    }
+
+    @Test func aBranchThatConflictsWithMainGetsMainMergedInForTheBuilderToResolve() async throws {
+        let setup = try await makeSetup()
+        defer { setup.harness.cleanUp() }
+        try "".write(to: setup.harness.bin.appending(path: "move-main"), atomically: true, encoding: .utf8)
+        let run = try startRun(setup)
+        try await waitForHold(setup, run: run, .planApproval)
+        let planStep = try setup.harness.database.runSteps(runId: run.id!).first { $0.stepId == "plan" }
+        let plan = try #require(planStep?.output.flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) }?.plan)
+        try setup.engine.approvePlan(run, plan: plan)
+
+        try await waitForHold(setup, run: run, .approval, timeout: .seconds(60))
+
+        let steps = try setup.harness.database.runSteps(runId: run.id!)
+        #expect(steps.filter { $0.stepId == "qa" }.map(\.outcome) == ["failed", "passed"])
+        let builds = steps.filter { $0.stepId == "build" }.map { $0.output.flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) }?.branchHeads ?? [:] }
+        #expect(builds.count == 2)
+        #expect(builds.allSatisfy { $0.count == 2 })
+        #expect(builds[0] != builds[1])
+        try setup.engine.resolveApproval(run, approved: true)
+        try await waitUntil(timeout: .seconds(30)) { (try? setup.harness.database.run(id: run.id!))??.status == .succeeded }
+        let alpha = try await setup.harness.repo.git.run(["show", "main:alpha.txt"], in: setup.harness.repo.root)
+        #expect(alpha.contains("main moved on"))
+        #expect(alpha.contains("work by"))
         #expect(!alpha.contains("<<<<<<<"))
     }
 }

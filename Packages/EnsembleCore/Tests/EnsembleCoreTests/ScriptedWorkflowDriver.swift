@@ -143,7 +143,7 @@ struct WorkflowHarness {
         .result(.verdict(Verdict(outcome: outcome, summary: summary, issues: issues), costUSD: cost))
     }
 
-    static func done(_ summary: String = "Built it", cost: Double = 0) -> ScriptedWorkflowDriver.Reply {
-        .result(.done(summary, costUSD: cost))
+    static func done(_ summary: String = "Built it", heads: [String: String] = [:], cost: Double = 0) -> ScriptedWorkflowDriver.Reply {
+        .result(.done(summary, branchHeads: heads, costUSD: cost))
     }
 }

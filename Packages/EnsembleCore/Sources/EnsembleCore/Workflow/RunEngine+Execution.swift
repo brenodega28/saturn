@@ -96,7 +96,23 @@ extension RunEngine {
         runStep.status = .succeeded
         runStep.endedAt = clock()
         loaded.run.lastError = nil
+        if try changedNothing(since: step.id, runID: runID, runStepID: runStepID, heads: result.output.branchHeads) {
+            try hold(
+                &loaded, .loopLimit, stepId: step.id, runStepId: runStepID, outcome: result.outcome,
+                title: "“\(step.displayTitle)” changed nothing since the last round",
+                body: "No branch has a new commit, so the next step would check the same code again. Continue once more, or fail the run.",
+                steps: [runStep]
+            )
+            return false
+        }
         return try conclude(&loaded, step: step, outcome: result.outcome, runStep: runStep, output: result.output, checkStepBudget: true)
+    }
+
+    private func changedNothing(since stepId: String, runID: Int64, runStepID: Int64, heads: [String: String]) throws -> Bool {
+        guard !heads.isEmpty else { return false }
+        let previous = try database.runSteps(runId: runID)
+            .last { $0.stepId == stepId && $0.status == .succeeded && $0.id != runStepID }
+        return previous.map { decodeOutput($0.output).branchHeads == heads } ?? false
     }
 
     private func executeCondition(_ loaded: inout LoadedRun, step: WorkflowStep, cursor: RunCursor) async throws -> Bool {

@@ -324,6 +324,7 @@ private struct SidebarRunRows: View {
 
 private struct SpendCard: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(AppModel.usageResetPointKey) private var usageResetPoint: Double = 0
 
     var body: some View {
         let weekly = model.weeklySpend.formatted(.currency(code: "USD"))
@@ -342,7 +343,7 @@ private struct SpendCard: View {
                     HStack {
                         Text("This month").foregroundStyle(Theme.secondaryText)
                         Spacer()
-                        Text("\(monthly.formatted(.currency(code: "USD"))) / \(budget.formatted(.currency(code: "USD")))")
+                        Text("\(model.displayedUsageTotals.monthUSD.formatted(.currency(code: "USD"))) / \(budget.formatted(.currency(code: "USD")))")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(Theme.secondaryText)
                     }
@@ -362,7 +363,7 @@ private struct SpendCard: View {
 
     private func accessibilityLabel(weekly: String) -> String {
         guard let budget = model.globalMonthlyBudget else { return "Usage, this week \(weekly)" }
-        let monthly = model.monthlySpend.formatted(.currency(code: "USD"))
+        let monthly = model.displayedUsageTotals.monthUSD.formatted(.currency(code: "USD"))
         return "Usage, this week \(weekly), this month \(monthly) of \(budget.formatted(.currency(code: "USD")))"
     }
 }

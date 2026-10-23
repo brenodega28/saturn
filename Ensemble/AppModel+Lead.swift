@@ -64,8 +64,10 @@ extension AppModel {
         leadChatRevision += 1
         if selectedAgent(in: project) == nil { select(nil, in: project) }
         guard let projectID = project.id else { return }
+        let showsRequestPage = requestPageProjectIDs.contains(projectID)
         let next = LeadRequest.partition(leadRequests(in: project)).open.first { $0.id != task.id }
         leadSelections[projectID] = next?.id.map(LeadSelection.request) ?? .newRequest
+        if showsRequestPage { requestPageProjectIDs.insert(projectID) }
     }
 
     func deleteAgentsOfClosedRequests() async {
@@ -81,19 +83,56 @@ extension AppModel {
     }
 
     func showRun(_ run: Run) {
-        leadSelections[run.projectId] = .request(run.taskId)
+        showRequest(id: run.taskId, inProjectID: run.projectId)
         selection = .project(run.projectId)
         tabs[run.projectId] = .lead
     }
 
     func showRequest(_ task: ProjectTask) {
         guard let id = task.id else { return }
-        leadSelections[task.projectId] = .request(id)
+        showRequest(id: id, inProjectID: task.projectId)
+    }
+
+    func showRequest(id requestID: Int64, inProjectID id: Int64) {
+        leadSelections[id] = .request(requestID)
+        showLeadChat(inProjectID: id)
     }
 
     func startNewLeadRequest(in project: Project) {
         guard let id = project.id else { return }
         leadSelections[id] = .newRequest
+        showLeadChat(inProjectID: id)
+    }
+
+    private func showLeadChat(inProjectID id: Int64) {
+        requestPageProjectIDs.remove(id)
+        if case .agent = chatTargets[id] {
+            chatTargets[id] = nil
+        }
+    }
+
+    func showRequestPage(inProjectID id: Int64) {
+        runDetailIDs[id] = nil
+        tabs[id] = .lead
+        selection = .project(id)
+        requestPageProjectIDs.insert(id)
+    }
+
+    func isShowingRequestPage(in project: Project) -> Bool {
+        project.id.map(requestPageProjectIDs.contains) == true
+    }
+
+    func selectedOpenRequestID(inProjectID id: Int64) -> Int64? {
+        guard case .request(let requestID) = leadSelections[id], let project = project(withID: id),
+              LeadRequest.partition(leadRequests(in: project)).open.contains(where: { $0.id == requestID }) else { return nil }
+        return requestID
+    }
+
+    func requestStatusLabel(of request: ProjectTask, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> String {
+        if requestNeedsYou(request, latestRun: latestRun, needsYouTaskIDs: needsYouTaskIDs) { return "Needs you" }
+        guard let latestRun else { return "Chat" }
+        let label = statusLabel(of: latestRun)
+        return latestRun.isActive ? (currentStepTitle(of: latestRun) ?? label) : label
     }
 
     func leadSession(for task: ProjectTask) -> AgentSession? {

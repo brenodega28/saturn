@@ -7,7 +7,9 @@ struct LeadView: View {
     let project: Project
 
     var body: some View {
-        if let session = model.directChatSession(in: project) {
+        if model.isShowingRequestPage(in: project) {
+            RequestListView(project: project)
+        } else if let session = model.directChatSession(in: project) {
             DirectChatView(session: session, project: project)
                 .id(session.id)
         } else {
@@ -17,147 +19,70 @@ struct LeadView: View {
 
     @ViewBuilder
     private var leadChat: some View {
-        let requests = LeadRequest.partition(model.leadRequests(in: project))
-        let hasRequests = !requests.open.isEmpty || !requests.closed.isEmpty
         let selected = model.selectedRequest(in: project)
-        GeometryReader { proxy in
-            let showsList = hasRequests && proxy.size.width >= 860
-            HStack(alignment: .top, spacing: 18) {
-                if showsList {
-                    LeadRequestList(project: project, open: requests.open, closed: requests.closed, selectedID: selected?.id)
-                        .frame(width: 236)
-                }
-                VStack(spacing: 14) {
-                    if !showsList, hasRequests {
-                        CompactRequestPicker(project: project, open: requests.open, closed: requests.closed, selected: selected)
-                    }
-                    if let selected {
-                        RequestChat(task: selected, project: project)
-                            .id(selected.id)
-                    } else {
-                        NewRequestIntro(project: project)
-                    }
-                    LeadComposer(project: project, request: selected)
-                        .frame(maxWidth: 820)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 14) {
+            LeadChatHeader(project: project, request: selected)
+            if let selected {
+                RequestChat(task: selected, project: project)
+                    .id(selected.id)
+            } else {
+                NewRequestIntro(project: project)
             }
+            LeadComposer(project: project, request: selected)
+                .frame(maxWidth: 820)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
-private struct LeadRequestList: View {
+private struct LeadChatHeader: View {
     @Environment(AppModel.self) private var model
     let project: Project
-    let open: [ProjectTask]
-    let closed: [ProjectTask]
-    let selectedID: Int64?
-    @State private var showsClosed = false
+    let request: ProjectTask?
 
     var body: some View {
-        let needsYouTaskIDs = model.needsYouTaskIDs()
-        VStack(alignment: .leading, spacing: 10) {
+        let title = request.map { $0.title.isEmpty ? "Request #\($0.id ?? 0)" : $0.title } ?? "New request"
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.system(size: 13.5, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .accessibilityAddTraits(.isHeader)
+            if let reason = request?.closeReason {
+                CloseReasonBadge(reason: reason)
+            }
+            Spacer(minLength: 8)
             Button {
                 model.startNewLeadRequest(in: project)
             } label: {
                 Label("New request", systemImage: "plus")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.pill)
+            .buttonStyle(PillButtonStyle(height: 26))
+            .fixedSize()
             .help("Start a new conversation with the lead")
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(open) { request in
-                        row(request, needsYouTaskIDs: needsYouTaskIDs)
-                    }
-                    if !closed.isEmpty {
-                        closedToggle
-                        if showsClosed {
-                            ForEach(closed) { request in
-                                row(request, needsYouTaskIDs: needsYouTaskIDs)
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
+}
 
-    private var closedToggle: some View {
-        Button {
-            withAnimation(.snappy(duration: 0.2)) { showsClosed.toggle() }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .rotationEffect(.degrees(showsClosed ? 90 : 0))
-                    .accessibilityHidden(true)
-                Text("Closed").font(.system(size: 12, weight: .semibold))
-                Text("\(closed.count)").font(.system(size: 12)).foregroundStyle(Theme.tertiaryText)
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(Theme.secondaryText)
-            .padding(.horizontal, 10)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .help(showsClosed ? "Hide closed requests" : "Show closed requests")
-        .accessibilityLabel("Closed requests, \(closed.count)")
-        .accessibilityValue(showsClosed ? "Expanded" : "Collapsed")
-    }
+struct RequestCloseMenu: View {
+    @Environment(AppModel.self) private var model
+    let request: ProjectTask
+    let project: Project
 
-    private func row(_ request: ProjectTask, needsYouTaskIDs: Set<Int64>) -> some View {
-        let isSelected = request.id == selectedID
-        let run = model.latestRun(of: request)
-        let detail = run.map { run in
-            let label = model.statusLabel(of: run)
-            let state = run.isActive ? (model.currentStepTitle(of: run) ?? label) : label
-            return "\(state) · \(run.costUSD.formatted(.currency(code: "USD")))"
-        } ?? "Chat"
-        return Button {
-            model.showRequest(request)
-        } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StatusDot(model.statusColor(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(request.title.isEmpty ? "Request #\(request.id ?? 0)" : request.title)
-                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                        .lineLimit(1)
-                    Text(detail)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
+    var body: some View {
+        if !request.isClosed {
+            let hasActiveRun = model.requestHasActiveRun(request)
+            ForEach(RequestCloseReason.allCases, id: \.self) { reason in
+                Button("Close as \(reason.title)") {
+                    Task { await model.closeRequest(request, as: reason, in: project) }
                 }
-                Spacer(minLength: 0)
-                if let reason = request.closeReason {
-                    CloseReasonBadge(reason: reason)
-                }
+                .disabled(hasActiveRun)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(isSelected ? Theme.accent.opacity(0.22) : Color.clear, in: .rect(cornerRadius: 9, style: .continuous))
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            if !request.isClosed {
-                let hasActiveRun = model.requestHasActiveRun(request)
-                ForEach(RequestCloseReason.allCases, id: \.self) { reason in
-                    Button("Close as \(reason.title)") {
-                        Task { await model.closeRequest(request, as: reason, in: project) }
-                    }
-                    .disabled(hasActiveRun)
-                }
-                if hasActiveRun {
-                    Divider()
-                    Text(RequestCloseReason.blockedHelp)
-                }
+            if hasActiveRun {
+                Divider()
+                Text(RequestCloseReason.blockedHelp)
             }
         }
-        .accessibilityLabel([request.title, detail, request.closeReason.map { "Closed as \($0.title)" }].compactMap(\.self).joined(separator: ", "))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -199,43 +124,5 @@ private struct NewRequestIntro: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private struct CompactRequestPicker: View {
-    @Environment(AppModel.self) private var model
-    let project: Project
-    let open: [ProjectTask]
-    let closed: [ProjectTask]
-    let selected: ProjectTask?
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Menu {
-                ForEach(open) { request in
-                    Button(request.title) { model.showRequest(request) }
-                }
-                if !closed.isEmpty {
-                    Divider()
-                    Menu("Closed (\(closed.count))") {
-                        ForEach(closed) { request in
-                            Button([request.title, request.closeReason?.title].compactMap(\.self).joined(separator: " · ")) { model.showRequest(request) }
-                        }
-                    }
-                }
-            } label: {
-                Label(selected?.title ?? "Requests", systemImage: "list.bullet")
-                    .lineLimit(1)
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button {
-                model.startNewLeadRequest(in: project)
-            } label: {
-                Label("New request", systemImage: "plus")
-            }
-            .buttonStyle(.pill)
-            .fixedSize()
-        }
     }
 }

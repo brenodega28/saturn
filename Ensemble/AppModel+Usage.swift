@@ -19,9 +19,29 @@ extension AppModel {
         checkBudgets()
     }
 
+    static let usageResetPointKey = "usage.resetPoint"
+
+    var usageResetPoint: Date? {
+        let interval = UserDefaults.standard.double(forKey: Self.usageResetPointKey)
+        return interval > 0 ? Date(timeIntervalSince1970: interval) : nil
+    }
+
+    func resetUsage(at date: Date = .now) {
+        UserDefaults.standard.set(date.timeIntervalSince1970, forKey: Self.usageResetPointKey)
+    }
+
+    func clearUsageReset() {
+        UserDefaults.standard.removeObject(forKey: Self.usageResetPointKey)
+    }
+
     func usageReport(period: UsagePeriod) -> UsageReport? {
         _ = agents.usageRevision
-        return try? database.usageReport(period: period)
+        return try? database.usageReport(period: period, totalsCountingSince: usageResetPoint)
+    }
+
+    var displayedUsageTotals: UsageTotals {
+        _ = agents.usageRevision
+        return (try? database.usageTotals(countingSince: usageResetPoint)) ?? UsageTotals()
     }
 
     var monthlySpend: Double {

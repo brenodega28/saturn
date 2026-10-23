@@ -245,45 +245,113 @@ import Testing
         #expect(ended.closedAt == closedAt && ended.closeReason == .dropped)
     }
 
-    @Test func closingStopsTheRequestsAgentsAndRemovesOnlyTheirWorktrees() async throws {
+    func branchExists(_ setup: Setup, _ branch: String) async throws -> Bool {
+        try await setup.harness.repo.git.run(["branch", "--list", branch], in: setup.harness.repo.root).contains(branch)
+    }
+
+    func expectDeleted(_ setup: Setup, _ agentIDs: [Int64?]) throws {
+        let remaining = try setup.harness.database.agents(inProject: setup.project.id!).map(\.id)
+        for id in agentIDs {
+            #expect(!remaining.contains(id))
+            #expect(!FileManager.default.fileExists(atPath: setup.harness.runtime.paths.agentDirectory(id!).path))
+        }
+    }
+
+    @Test func closingDeletesTheRequestsAgentsWorktreesAndBranchesAndNothingElse() async throws {
+        for reason in RequestCloseReason.allCases {
+            let (setup, chat, lead) = try await makeChat()
+            defer { setup.harness.cleanUp() }
+            let (task, run) = try await startedRun(setup, chat, lead: lead)
+            try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
+            let builder = try await setup.harness.runtime.createRunAgent(
+                in: setup.project, role: try #require(setup.config.role("claude-code")), runId: run.id!, runStepId: nil,
+                task: "Add alpha", git: setup.harness.repo.git
+            )
+            let builderWorktree = try #require(builder.agent.worktreeURL)
+            let builderBranch = try #require(builder.agent.branch)
+            let outsider = try await setup.harness.repo.manager.create(agent: "Outsider", slug: "keep")
+            let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
+            let leadSession = try #require(setup.harness.runtime.session(for: leadAgent))
+            try await waitUntil { !leadSession.isRunning }
+            let requestAgentIDs = try setup.harness.database.requestAgents(taskId: task.id!).map(\.id)
+            #expect(requestAgentIDs.contains(leadAgent.id) && requestAgentIDs.contains(builder.id))
+            let messagesBefore = messages(setup, task)
+
+            let closed = try await chat.close(task, as: reason, in: setup.project, git: setup.harness.repo.git)
+
+            #expect(closed.closeReason == reason)
+            #expect(!leadSession.isRunning)
+            try expectDeleted(setup, requestAgentIDs)
+            #expect(try setup.harness.database.requestAgents(taskId: task.id!).isEmpty)
+            #expect(try setup.harness.database.leadAgent(taskId: task.id!) == nil)
+            #expect(chat.leadSession(for: closed) == nil)
+            #expect(!FileManager.default.fileExists(atPath: builderWorktree.path))
+            #expect(try await setup.harness.repo.manager.list().map(\.agent) == [outsider.agent])
+            #expect(try await !branchExists(setup, builderBranch))
+            #expect(try await branchExists(setup, try #require(outsider.branch)))
+            #expect(messages(setup, task) == messagesBefore)
+        }
+    }
+
+    @Test func launchCleanupDeletesAgentsOfRequestsClosedBeforeClosingDeletedThem() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }
         let (task, run) = try await startedRun(setup, chat, lead: lead)
         try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
-        let builder = try await setup.harness.runtime.createRunAgent(
+        let runtime = setup.harness.runtime
+        let builder = try await runtime.createRunAgent(
             in: setup.project, role: try #require(setup.config.role("claude-code")), runId: run.id!, runStepId: nil,
             task: "Add alpha", git: setup.harness.repo.git
         )
-        let builderWorktree = try #require(builder.agent.worktreeURL)
         let builderBranch = try #require(builder.agent.branch)
-        let outsider = try await setup.harness.repo.manager.create(agent: "Outsider", slug: "keep")
+        let worktree = try #require(try await setup.harness.repo.manager.list().first { $0.agent == builder.agent.worktreeURL?.lastPathComponent })
+        try await setup.harness.repo.manager.remove(worktree, force: true, deleteBranch: false)
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
-        let leadSession = try #require(setup.harness.runtime.session(for: leadAgent))
-        try await waitUntil { !leadSession.isRunning }
-        let messagesBefore = messages(setup, task)
+        try await waitUntil { runtime.session(for: leadAgent)?.isRunning == false }
+        for agent in try setup.harness.database.requestAgents(taskId: task.id!) {
+            runtime.session(for: agent)?.archive(detail: "Closing the request removed this agent’s worktree.", at: .now)
+        }
+        try setup.harness.database.setClosed(taskId: task.id!, reason: .done, at: .now)
+        let closedAgentIDs = try setup.harness.database.requestAgents(taskId: task.id!).map(\.id)
+        #expect(closedAgentIDs.count >= 2)
+        #expect(try await branchExists(setup, builderBranch))
 
-        let closed = try await chat.close(task, as: .dropped, in: setup.project, git: setup.harness.repo.git)
+        let open = try await chat.createRequest("CHAT still going", lead: lead, in: setup.project)
+        try await waitUntil { messages(setup, open).contains { $0.kind == .lead } }
+        let openLead = try #require(try setup.harness.database.leadAgent(taskId: open.id!))
 
-        #expect(closed.closeReason == .dropped)
-        #expect(!leadSession.isRunning && leadSession.agent.status == .stopped)
-        #expect(builder.agent.status == .stopped && builder.agent.archivedAt != nil)
-        #expect(!FileManager.default.fileExists(atPath: builderWorktree.path))
-        let remaining = try await setup.harness.repo.manager.list().map(\.agent)
-        #expect(remaining == [outsider.agent])
-        let branches = try await setup.harness.repo.git.run(["branch", "--list", builderBranch], in: setup.harness.repo.root)
-        #expect(branches.contains(builderBranch))
-        let agentIDs = try setup.harness.database.agents(inProject: setup.project.id!).map(\.id)
-        #expect(agentIDs.contains(leadAgent.id) && agentIDs.contains(builder.id))
-        #expect(try setup.harness.database.leadAgent(taskId: task.id!)?.id == leadAgent.id)
-        #expect(messages(setup, task) == messagesBefore)
+        await chat.deleteAgentsOfClosedRequests(in: setup.project, git: setup.harness.repo.git)
+
+        try expectDeleted(setup, closedAgentIDs)
+        #expect(try await !branchExists(setup, builderBranch))
+        #expect(try setup.harness.database.leadAgent(taskId: open.id!)?.id == openLead.id)
+        #expect(try stored(setup, task).closeReason == .done)
+
+        await chat.deleteAgentsOfClosedRequests(in: setup.project, git: setup.harness.repo.git)
+        #expect(try setup.harness.database.leadAgent(taskId: open.id!)?.id == openLead.id)
     }
 
-    @Test func sendingToAClosedRequestReopensItAndTheLeadAnswers() async throws {
+    @Test func launchCleanupSkipsClosedRequestsWithAnActiveRun() async throws {
+        let (setup, chat, lead) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, run) = try await startedRun(setup, chat, lead: lead)
+        try setup.harness.database.setClosed(taskId: task.id!, reason: .dropped, at: .now)
+        let agentIDs = try setup.harness.database.requestAgents(taskId: task.id!).map(\.id)
+
+        await chat.deleteAgentsOfClosedRequests(in: setup.project, git: setup.harness.repo.git)
+
+        #expect(try setup.harness.database.requestAgents(taskId: task.id!).map(\.id) == agentIDs)
+        try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
+    }
+
+    @Test func sendingToAClosedRequestReopensItWithANewLeadThatAnswers() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }
         let task = try await chat.createRequest("CHAT hi", lead: lead, in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+        let firstLead = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         let closed = try await chat.close(task, as: .done, in: setup.project, git: setup.harness.repo.git)
+        #expect(try setup.harness.database.leadAgent(taskId: task.id!) == nil)
         let projectID = setup.project.id!
         #expect(LeadRequest.partition(try setup.harness.database.leadRequests(projectId: projectID)).closed.map(\.id) == [task.id])
         #expect(LeadRequest.partition(try setup.harness.database.leadRequests(projectId: projectID)).open.isEmpty)
@@ -298,8 +366,10 @@ import Testing
         try await waitUntil { messages(setup, task).filter { $0.kind == .lead }.count == 2 }
         #expect(messages(setup, task).map(\.kind) == [.user, .lead, .user, .lead])
         #expect(setup.harness.launches().count == launchesBefore + 1)
-        #expect(setup.harness.launches().last?.contains("--resume") == true)
-        #expect(try setup.harness.database.agents(inProject: projectID).filter { $0.taskId == task.id }.count == 1)
+        #expect(setup.harness.launches().last?.contains("--resume") == false)
+        let leads = try setup.harness.database.agents(inProject: projectID).filter { $0.taskId == task.id }
+        #expect(leads.count == 1)
+        #expect(leads.first?.id != firstLead.id && leads.first?.role == "tech-lead")
     }
 
     @Test func startingAnOpenProposalOnAClosedRequestReopensIt() async throws {
@@ -320,7 +390,7 @@ import Testing
         try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
     }
 
-    @Test func closingAgainSkipsAgentsAnEarlierCloseAlreadyRetired() async throws {
+    @Test func closingAgainDeletesTheNewLeadAndIsSafe() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }
         let (task, run) = try await startedRun(setup, chat, lead: lead)
@@ -330,16 +400,18 @@ import Testing
             task: "Add alpha", git: setup.harness.repo.git
         )
         try await chat.close(task, as: .done, in: setup.project, git: setup.harness.repo.git)
-        let noticesAfterFirstClose = builder.transcript.entries.count
-        let archivedAt = builder.agent.archivedAt
+        try expectDeleted(setup, [builder.id])
 
         try await chat.send("CHAT back again", to: try stored(setup, task), lead: lead, in: setup.project)
         try await waitUntil { messages(setup, task).filter { $0.kind == .lead }.count == 2 }
+        let secondLead = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         try await chat.close(try stored(setup, task), as: .dropped, in: setup.project, git: setup.harness.repo.git)
+        try expectDeleted(setup, [secondLead.id])
 
-        #expect(builder.transcript.entries.count == noticesAfterFirstClose)
-        #expect(builder.agent.archivedAt == archivedAt)
-        #expect(try stored(setup, task).closeReason == .dropped)
+        let closedAgain = try await chat.close(try stored(setup, task), as: .done, in: setup.project, git: setup.harness.repo.git)
+
+        #expect(closedAgain.closeReason == .done)
+        #expect(try setup.harness.database.requestAgents(taskId: task.id!).isEmpty)
     }
 
     @Test func aRequestCanBeOnlyAttachments() async throws {

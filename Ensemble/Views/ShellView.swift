@@ -33,20 +33,38 @@ struct ShellView: View {
     }
 }
 
-struct AppScreen<Content: View>: View {
+struct AppScreen<Accessory: View, Content: View>: View {
     let title: String
     let subtitle: String
-    @ViewBuilder let content: Content
+    let accessory: Accessory
+    let content: Content
+
+    init(title: String, subtitle: String, @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.subtitle = subtitle
+        self.accessory = accessory()
+        self.content = content()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 17, weight: .bold)).kerning(-0.2)
-                Text(subtitle).font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 17, weight: .bold)).kerning(-0.2)
+                    Text(subtitle).font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+                }
+                Spacer(minLength: 0)
+                accessory
             }
             .frame(minHeight: 52, alignment: .leading)
             content
         }
         .padding(EdgeInsets(top: 10, leading: 26, bottom: 24, trailing: 22))
+    }
+}
+
+extension AppScreen where Accessory == EmptyView {
+    init(title: String, subtitle: String, @ViewBuilder content: () -> Content) {
+        self.init(title: title, subtitle: subtitle, accessory: { EmptyView() }, content: content)
     }
 }

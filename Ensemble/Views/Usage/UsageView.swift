@@ -6,12 +6,19 @@ struct UsageView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("usage.period") private var period: UsagePeriod = .month
     @AppStorage(AppModel.globalMonthlyBudgetKey) private var globalBudget: Double = 0
+    @AppStorage(AppModel.usageResetPointKey) private var usageResetPoint: Double = 0
+    @State private var isConfirmingReset = false
 
     var body: some View {
         let report = model.usageReport(period: period)
         AppScreen(title: "Usage", subtitle: "What agents cost across every project") {
+            resetButton
+        } content: {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    if let resetPoint = model.usageResetPoint {
+                        resetNote(resetPoint)
+                    }
                     totals(report?.totals ?? UsageTotals())
                     if model.providerMode == .claudeSignIn {
                         estimateNote
@@ -40,9 +47,46 @@ struct UsageView: View {
     private func totals(_ totals: UsageTotals) -> some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
             StatTile(title: "This week", value: totals.weekUSD)
-            StatTile(title: "This month", value: totals.monthUSD, budget: globalBudget > 0 ? globalBudget : nil)
+            StatTile(title: "This month", value: totals.monthUSD, budget: globalBudget > 0 ? globalBudget : nil, budgetSpent: model.monthlySpend)
             StatTile(title: "All time", value: totals.allTimeUSD)
         }
+    }
+
+    private var resetButton: some View {
+        Button {
+            isConfirmingReset = true
+        } label: { Label("Reset Usage", systemImage: "arrow.counterclockwise") }
+            .buttonStyle(PillButtonStyle(height: 28))
+            .font(.system(size: 12))
+            .help("Restart the This week and This month totals from now")
+            .confirmationDialog("Reset this week and this month?", isPresented: $isConfirmingReset) {
+                Button("Reset Usage") {
+                    model.resetUsage()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The This week and This month totals start counting from now. Usage history, all-time spend, breakdowns and budgets are unaffected, and you can undo this.")
+            }
+    }
+
+    private func resetNote(_ resetPoint: Date) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "arrow.counterclockwise").foregroundStyle(Theme.secondaryText).accessibilityHidden(true)
+            Text("This week and this month are counting since \(Text(resetPoint, format: .relative(presentation: .named))). Budgets still count the whole month.")
+                .font(.system(size: 12.5))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button("Undo Reset") {
+                model.clearUsageReset()
+            }
+            .buttonStyle(PillButtonStyle(height: 26))
+            .font(.system(size: 12))
+            .help("Count this week and this month from their usual start again")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.05), in: .rect(cornerRadius: 12, style: .continuous))
     }
 
     private var estimateNote: some View {
@@ -138,6 +182,7 @@ private struct StatTile: View {
     let title: String
     let value: Double
     var budget: Double?
+    var budgetSpent: Double?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -148,7 +193,7 @@ private struct StatTile: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             if let budget {
-                let fraction = value / budget
+                let fraction = (budgetSpent ?? value) / budget
                 ProportionBar(fraction: fraction, color: BudgetLevel(fraction: fraction).color)
                     .accessibilityHidden(true)
                 Text("of \(budget.formatted(.currency(code: "USD"))) overall budget")

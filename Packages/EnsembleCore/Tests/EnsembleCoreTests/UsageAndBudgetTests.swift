@@ -58,6 +58,33 @@ import Testing
         #expect(abs(totals.allTimeUSD - 11.00) < 0.0001)
     }
 
+    @Test func resetPointRestartsWeekAndMonthButNotAllTime() throws {
+        let fixture = try makeFixture()
+        let reset = Self.date("2026-10-21T12:00:00Z")
+        let totals = try fixture.database.usageTotals(at: fixture.now, calendar: fixture.calendar, countingSince: reset)
+        #expect(abs(totals.weekUSD - 1.50) < 0.0001)
+        #expect(abs(totals.monthUSD - 1.50) < 0.0001)
+        #expect(abs(totals.allTimeUSD - 11.00) < 0.0001)
+
+        let report = try fixture.database.usageReport(period: .month, at: fixture.now, calendar: fixture.calendar, totalsCountingSince: reset)
+        #expect(abs(report.totals.monthUSD - 1.50) < 0.0001)
+        #expect(report.byProject.map(\.costUSD) == [5.00, 2.00])
+        #expect(report.expensiveTurns.count == 4)
+    }
+
+    @Test func resetPointBeforeThePeriodLeavesTotalsUnchanged() throws {
+        let fixture = try makeFixture()
+        let reset = Self.date("2026-10-10T00:00:00Z")
+        let totals = try fixture.database.usageTotals(at: fixture.now, calendar: fixture.calendar, countingSince: reset)
+        #expect(abs(totals.weekUSD - 6.50) < 0.0001)
+        #expect(abs(totals.monthUSD - 6.50) < 0.0001)
+        #expect(abs(totals.allTimeUSD - 11.00) < 0.0001)
+
+        let monthStart = UsagePeriod.month.start(at: fixture.now, calendar: fixture.calendar)
+        #expect(UsagePeriod.month.displayedStart(at: fixture.now, calendar: fixture.calendar, countingSince: Self.date("2026-01-01T00:00:00Z")) == monthStart)
+        #expect(UsagePeriod.allTime.displayedStart(at: fixture.now, calendar: fixture.calendar, countingSince: reset) == nil)
+    }
+
     @Test func breakdownsGroupByProjectRunRoleAndModel() throws {
         let fixture = try makeFixture()
         let report = try fixture.database.usageReport(period: .month, at: fixture.now, calendar: fixture.calendar)
@@ -186,6 +213,25 @@ import Testing
         settings.monthlyBudgetUSD = 20
         try database.updateSettings(settings, forProject: project.id!)
         try database.checkProjectBudget(projectId: project.id!, at: november, calendar: calendar)
+    }
+
+    @Test func budgetsKeepCountingRealMonthlySpendAfterAUsageReset() throws {
+        let database = try AppDatabase.inMemory()
+        let project = try makeProject(database, budget: 10)
+        let now = date("2026-10-22T12:00:00Z")
+        try spend(database, project, 9, at: "2026-10-02T10:00:00Z")
+        try spend(database, project, 1, at: "2026-10-21T10:00:00Z")
+
+        let totals = try database.usageTotals(at: now, calendar: calendar, countingSince: date("2026-10-20T00:00:00Z"))
+        #expect(abs(totals.monthUSD - 1) < 0.0001)
+
+        #expect(abs(try database.monthlySpend(at: now, calendar: calendar) - 10) < 0.0001)
+        let status = try database.projectBudgetStatus(projectId: project.id!, at: now, calendar: calendar)
+        #expect(abs(status.spentUSD - 10) < 0.0001)
+        #expect(status.blocksNewWork)
+        #expect(throws: BudgetError.self) { try database.checkProjectBudget(projectId: project.id!, at: now, calendar: calendar) }
+        let notices = try database.recordBudgetNotices(globalBudgetUSD: nil, at: now, calendar: calendar)
+        #expect(notices.map(\.title) == ["80% of the monthly budget used", "Monthly budget reached"])
     }
 
     @MainActor

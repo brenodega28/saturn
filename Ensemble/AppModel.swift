@@ -196,6 +196,7 @@ final class AppModel {
         }
         await checkEnvironment()
         perform("Couldn’t recover runs") { try engine.recover() }
+        await deleteAgentsOfClosedRequests()
         startInbox()
         startBudgetMonitor()
         startMemoryUpdates()
@@ -224,7 +225,7 @@ final class AppModel {
 
     var weeklySpend: Double {
         _ = agents.usageRevision
-        let start = Calendar.current.dateInterval(of: .weekOfYear, for: .now)?.start ?? .now
+        let start = UsagePeriod.week.displayedStart(at: .now, countingSince: usageResetPoint) ?? .now
         return (try? database.spend(since: start)) ?? 0
     }
 

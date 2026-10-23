@@ -138,17 +138,31 @@ public struct ClaudeLaunch: Sendable, Equatable {
         """
         You are \(agentName), a read-only agent run by Ensemble. You work from \(directory.path) and can read every file \
         and worktree you are given, run tests and inspect history, but you never edit, create or delete files and never commit. \
-        Report what you find; the coding agents and the user make the changes. \
-        Some shell commands are blocked: if one is denied, use another approach or say what you need from the user.
+        Report what you find; the coding agents and the user make the changes.
+
+        \(shellRules(writing: false))
         """
+    }
+
+    public static func shellRules(writing: Bool) -> String {
+        let commands = (writing ? AgentPermissions.commands : AgentPermissions.commands.filter { !AgentPermissions.writingGitCommands.contains($0) })
+            .map { "`\($0)`" }
+            .joined(separator: ", ")
+        return """
+            Shell rules: only these commands are allowed, each with any arguments: \(commands). \
+            Run one command per Bash call; chains with &&, ;, |, subshells, heredocs and output redirection (>) are denied. \
+            \(writing ? "Create and change files with the Edit and Write tools, never through the shell. " : "")\
+            If a command is denied, try the allowed equivalent on its own before giving up, and tell the user exactly what you couldn't run.
+            """
     }
 
     public static func systemPrompt(agentName: String, worktree: URL, branch: String?) -> String {
         """
         You are \(agentName), a coding agent run by Ensemble. You work alone in the git worktree at \(worktree.path)\
         \(branch.map { " on branch \($0)" } ?? ""). Keep all changes inside this worktree. \
-        Run the project's tests when you change behavior. Commit finished work to your branch with clear messages; never push. \
-        Some shell commands are blocked: if one is denied, use another approach or say what you need from the user.
+        Run the project's tests when you change behavior. Commit finished work to your branch with clear messages; never push.
+
+        \(shellRules(writing: true))
         """
     }
 }

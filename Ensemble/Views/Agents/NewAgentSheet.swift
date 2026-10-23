@@ -15,6 +15,8 @@ struct NewAgentSheet: View {
     @State private var isCreating = false
     @State private var errorMessage: String?
 
+    @FocusState private var isTaskFocused: Bool
+
     var body: some View {
         let config = model.config(for: project)
         VStack(alignment: .leading, spacing: 22) {
@@ -45,7 +47,10 @@ struct NewAgentSheet: View {
         }
         .padding(26)
         .frame(width: 720)
-        .onAppear { selectDefaultRole(in: config) }
+        .onAppear {
+            model.reloadConfig(for: project)
+            selectDefaultRole(in: model.config(for: project))
+        }
         .onChange(of: config.roles.map(\.id)) { selectDefaultRole(in: config) }
     }
 
@@ -96,9 +101,12 @@ struct NewAgentSheet: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 13.5))
                     .lineLimit(2...6)
+                    .focused($isTaskFocused)
                     .padding(10)
                     .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 10, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+                    .contentShape(.rect)
+                    .onTapGesture { isTaskFocused = true }
                     .labelsHidden()
             }
         }

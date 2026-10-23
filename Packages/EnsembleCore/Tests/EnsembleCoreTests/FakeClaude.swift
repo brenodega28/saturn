@@ -9,7 +9,7 @@ enum FakeClaude {
       if [ "$prev" = "--session-id" ] || [ "$prev" = "--resume" ]; then session="$arg"; fi
       prev="$arg"
     done
-    echo "$*" >> "$FAKE_DIR/args.log"
+    printf '%s\n' "$(printf '%s' "$*" | tr '\n' ' ')" >> "$FAKE_DIR/args.log"
     echo "key=${ANTHROPIC_API_KEY:-} token=${ANTHROPIC_AUTH_TOKEN:-}" >> "$FAKE_DIR/env.log"
     mode="${FAKE_MODE:-normal}"
     [ -f "$FAKE_DIR/mode" ] && mode="$(cat "$FAKE_DIR/mode")"

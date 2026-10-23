@@ -91,11 +91,11 @@ struct MemoryPanel: View {
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.memory.opacity(0.22)))
         .task(id: refreshKey) { reload() }
         .sheet(isPresented: $isEditing, onDismiss: reload) {
-            MemoryEditorSheet(agentName: session.agent.name, file: memory.url, initialText: text) { edited in
+            MemoryEditorSheet(agentName: model.displayName(of: session.agent, in: project), file: memory.url, initialText: text) { edited in
                 model.saveMemory(edited, for: session)
             }
         }
-        .confirmationDialog("Clear \(session.agent.name)’s memory?", isPresented: $isConfirmingClear) {
+        .confirmationDialog("Clear \(model.displayName(of: session.agent, in: project))’s memory?", isPresented: $isConfirmingClear) {
             Button("Clear Memory", role: .destructive) {
                 model.clearMemory(for: session)
                 reload()

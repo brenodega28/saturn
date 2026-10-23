@@ -12,7 +12,7 @@ struct LeadComposer: View {
 
     var body: some View {
         let lead = model.chatLeadRole(in: project)
-        let leadName = request.flatMap { model.leadSession(for: $0)?.agent.name } ?? lead?.name ?? "the lead"
+        let leadName = request.flatMap { model.leadSession(for: $0).map { model.displayName(of: $0.agent, in: project) } } ?? lead?.name ?? "the lead"
         VStack(alignment: .leading, spacing: 10) {
             ChatComposerInput(
                 text: $text,

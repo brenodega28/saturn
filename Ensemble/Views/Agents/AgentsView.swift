@@ -150,6 +150,7 @@ private struct AgentCard: View {
     var body: some View {
         let agent = session.agent
         let role = model.role(for: agent, in: project)
+        let name = model.displayName(of: agent, in: project)
         VStack(alignment: .leading, spacing: 12) {
             Button {
                 model.select(session, in: project)
@@ -158,7 +159,7 @@ private struct AgentCard: View {
                     HStack(spacing: 12) {
                         AgentAvatar(appearance: RoleAppearance(role: role))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(agent.name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                            Text(name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
                             Text("\(role?.name ?? "Claude Code") · \(session.transcript.session?.model ?? agent.model.modelTitle)")
                                 .font(.system(size: 11.5))
                                 .foregroundStyle(Theme.secondaryText)
@@ -190,7 +191,7 @@ private struct AgentCard: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(agent.name), \(session.isQueued ? "Queued" : model.displayStatus(of: agent).label)")
+            .accessibilityLabel("\(name), \(session.isQueued ? "Queued" : model.displayStatus(of: agent).label)")
             .accessibilityHint("Opens the agent session")
 
             HStack(spacing: 4) {
@@ -216,7 +217,7 @@ private struct AgentCard: View {
             Divider()
             Button("Delete Agent…", role: .destructive) { isConfirmingDelete = true }
         }
-        .confirmationDialog("Delete \(agent.name)?", isPresented: $isConfirmingDelete) {
+        .confirmationDialog("Delete \(name)?", isPresented: $isConfirmingDelete) {
             if agent.readOnly {
                 Button("Delete Agent", role: .destructive) {
                     Task { await model.deleteAgent(session, in: project, deleteBranch: false) }

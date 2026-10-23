@@ -47,7 +47,7 @@ struct ChatTargetPicker: View {
             Section(group.title) {
                 ForEach(group.sessions) { session in
                     Toggle(isOn: selection(.agent(session.id))) {
-                        Text(session.agent.name)
+                        Text(model.displayName(of: session.agent, in: project))
                         Text(detail(for: session))
                     }
                 }
@@ -72,7 +72,7 @@ struct ChatTargetPicker: View {
 
     private var currentParticipant: (name: String, appearance: RoleAppearance, status: AgentStatus?) {
         if let session = model.directChatSession(in: project) {
-            return (session.agent.name, RoleAppearance(role: model.role(for: session.agent, in: project)), model.displayStatus(of: session.agent))
+            return (model.displayName(of: session.agent, in: project), RoleAppearance(role: model.role(for: session.agent, in: project)), model.displayStatus(of: session.agent))
         }
         let lead = model.chatLeadRole(in: project)
         let request = model.selectedRequest(in: project)

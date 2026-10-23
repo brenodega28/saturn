@@ -21,6 +21,24 @@ import Testing
         #expect(AgentNaming.names(base: "React Dev", count: 1, existing: ["react-dev"]) == ["React Dev 1"])
         #expect(AgentNaming.names(base: "Dev", count: 2, existing: ["dev 2"]) == ["Dev 3", "Dev 4"])
     }
+
+    @Test func leadDisplayNameDropsTheNumber() {
+        let lead = RoleDefinition(id: "tech-lead", name: "Tech Lead", canSpawn: true)
+        #expect(AgentNaming.displayName(of: "Tech Lead 17", role: lead) == "Tech Lead")
+        #expect(AgentNaming.displayName(of: "Tech Lead", role: lead) == "Tech Lead")
+    }
+
+    @Test func nonLeadDisplayNameKeepsTheNumber() {
+        let developer = RoleDefinition(id: "developer", name: "Developer")
+        #expect(AgentNaming.displayName(of: "Developer 2", role: developer) == "Developer 2")
+        #expect(AgentNaming.displayName(of: "Developer 2", role: nil) == "Developer 2")
+    }
+
+    @Test func leadDisplayNameKeepsNamesOutsideThePattern() {
+        let lead = RoleDefinition(id: "tech-lead", name: "Tech Lead", canSpawn: true)
+        #expect(AgentNaming.displayName(of: "Ada", role: lead) == "Ada")
+        #expect(AgentNaming.displayName(of: "Tech Lead Backup", role: lead) == "Tech Lead Backup")
+    }
 }
 
 @Suite struct RoleContextTests {

@@ -103,7 +103,7 @@ extension StepType {
 extension EndAction {
     var title: String {
         switch self {
-        case .pullRequest: "Open a pull request"
+        case .pullRequest: "Prepare a pull request"
         case .merge: "Merge to the base branch"
         case .push: "Push the branch"
         case .leave: "Leave the branches"

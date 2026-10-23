@@ -40,6 +40,7 @@ public final class RunEngine {
     @ObservationIgnored private var drivers: [Int64: (token: UUID, task: Task<Void, Never>)] = [:]
     @ObservationIgnored private var workflowCache: [Int64: WorkflowDefinition] = [:]
     @ObservationIgnored private var mergingRuns: Set<Int64> = []
+    @ObservationIgnored private var openingPullRequests: Set<Int64> = []
 
     public init(database: AppDatabase, driver: any WorkflowDriver, minute: Duration = .seconds(60), clock: @escaping @MainActor () -> Date = { .now }) {
         self.database = database
@@ -267,11 +268,12 @@ public final class RunEngine {
 
     public func mergeDelivery(_ run: Run, method: MergeMethod) async throws {
         guard let runID = run.id, let current = try database.run(id: runID) else { throw RunEngineError.runNotFound }
-        guard current.status == .succeeded, current.pullRequestURL != nil, let branch = current.deliveryBranch else {
-            throw RunEngineError.invalidState("Only a finished run with a pull request can be merged.")
+        guard current.status == .succeeded, let branch = current.deliveryBranch else {
+            throw RunEngineError.invalidState("Only a finished run with a delivery branch can be merged.")
         }
         guard current.mergedAt == nil else { throw RunEngineError.invalidState("This run was already merged.") }
         guard !mergingRuns.contains(runID) else { throw RunEngineError.invalidState("This run is already being merged.") }
+        guard !openingPullRequests.contains(runID) else { throw RunEngineError.invalidState("This run is opening a pull request.") }
         mergingRuns.insert(runID)
         defer { mergingRuns.remove(runID) }
         let summary = try await driver.mergeDelivery(current, method: method)
@@ -279,6 +281,25 @@ public final class RunEngine {
         merged.mergedAt = clock()
         merged.outcome = summary.isEmpty ? "Merged \(branch) into \(current.baseBranch ?? "the base branch")." : summary
         let updated = merged
+        try await database.writer.write { db in try updated.update(db) }
+        refresh(updated, state: try database.engineState(runId: runID))
+    }
+
+    public func openPullRequest(_ run: Run) async throws {
+        guard let runID = run.id, let current = try database.run(id: runID) else { throw RunEngineError.runNotFound }
+        guard current.status == .succeeded, current.deliveryBranch != nil else {
+            throw RunEngineError.invalidState("Only a finished run with a delivery branch can open a pull request.")
+        }
+        guard current.mergedAt == nil else { throw RunEngineError.invalidState("This run was already merged.") }
+        guard current.pullRequestURL == nil else { throw RunEngineError.invalidState("This run already has a pull request.") }
+        guard !openingPullRequests.contains(runID) else { throw RunEngineError.invalidState("This run is already opening a pull request.") }
+        guard !mergingRuns.contains(runID) else { throw RunEngineError.invalidState("This run is being merged.") }
+        openingPullRequests.insert(runID)
+        defer { openingPullRequests.remove(runID) }
+        let url = try await driver.openPullRequest(current)
+        guard var opened = try database.run(id: runID) else { throw RunEngineError.runNotFound }
+        opened.pullRequestURL = url
+        let updated = opened
         try await database.writer.write { db in try updated.update(db) }
         refresh(updated, state: try database.engineState(runId: runID))
     }

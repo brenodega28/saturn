@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 @testable import EnsembleCore
 
@@ -89,6 +90,41 @@ struct LeadRequestTests {
         }
         let runs = [run(1, .succeeded, minutes: 30), run(2, .running, minutes: 0), run(3, .waitingOnYou, minutes: 10), run(4, .failed, minutes: 5)]
         #expect(Run.leadOrdering(runs).map(\.id) == [3, 2, 1, 4])
+    }
+
+    @Test func partitionKeepsOpenOrderAndListsClosedNewestFirst() {
+        let base = Date(timeIntervalSince1970: 1_000)
+        func request(_ id: Int64, closedMinutes: Double? = nil) -> ProjectTask {
+            ProjectTask(
+                id: id, projectId: 1, title: "R\(id)", body: "", source: .chat, status: .done,
+                closedAt: closedMinutes.map { base.addingTimeInterval($0 * 60) }, closeReason: closedMinutes.map { _ in .done },
+                createdAt: base, updatedAt: base
+            )
+        }
+        let requests = [request(1), request(2, closedMinutes: 5), request(3), request(4, closedMinutes: 20), request(5, closedMinutes: 10)]
+
+        let partition = LeadRequest.partition(requests)
+
+        #expect(partition.open.map(\.id) == [1, 3])
+        #expect(partition.closed.map(\.id) == [4, 5, 2])
+        #expect(partition.closed.allSatisfy(\.isClosed) && !partition.open.contains(where: \.isClosed))
+    }
+
+    @Test func requestClosingMigrationKeepsExistingTasksOpen() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v9-direct-messages")
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO project (name, path, isOpen, createdAt, lastOpenedAt) VALUES ('p', '/tmp/p', 1, ?, ?)", arguments: [Date(), Date()])
+            try db.execute(sql: "INSERT INTO task (projectId, title, source, status, createdAt, updatedAt) VALUES (1, 'Old', 'chat', 'done', ?, ?)", arguments: [Date(), Date()])
+        }
+
+        let database = try AppDatabase(queue)
+
+        let task = try #require(try database.task(id: 1))
+        #expect(task.title == "Old" && task.status == .done)
+        #expect(!task.isClosed && task.closeReason == nil)
+        let closed = try #require(try database.setClosed(taskId: 1, reason: .dropped, at: Date(timeIntervalSince1970: 2_000)))
+        #expect(closed.closeReason == .dropped && closed.closedAt == Date(timeIntervalSince1970: 2_000))
     }
 }
 

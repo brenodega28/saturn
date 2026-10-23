@@ -42,6 +42,8 @@ public final class AgentSession: Identifiable {
 
     public var isQueued: Bool { waitingTurn != nil }
 
+    var isRetired: Bool { agent.archivedAt != nil && agent.status == .stopped && handle == nil && !isQueued }
+
     public var canResume: Bool {
         handle == nil && !isQueued && [.paused, .interrupted, .stopped, .failed].contains(agent.status)
     }
@@ -141,6 +143,21 @@ public final class AgentSession: Identifiable {
         stopTarget = .stopped
         handle?.terminate()
         handle = nil
+    }
+
+    func retire(detail: String) {
+        leaveQueue()
+        queuedMessages.removeAll()
+        deferredTurn = nil
+        restartAfterStop = false
+        pendingFailure = nil
+        stopTarget = nil
+        handle?.terminate()
+        handle = nil
+        agent.status = .stopped
+        agent.processID = nil
+        record(notice: .stopped, detail: detail)
+        persist()
     }
 
     func failSetup(_ message: String) {

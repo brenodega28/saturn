@@ -50,6 +50,18 @@ public enum TaskStatus: String, Codable, Sendable, CaseIterable {
     case dismissed
 }
 
+public enum RequestCloseReason: String, Codable, Sendable, CaseIterable {
+    case done
+    case dropped
+
+    public var title: String {
+        switch self {
+        case .done: "Done"
+        case .dropped: "Dropped"
+        }
+    }
+}
+
 public struct ProjectTask: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "task"
 
@@ -64,14 +76,19 @@ public struct ProjectTask: Codable, Sendable, Hashable, Identifiable, FetchableR
     public var externalNumber: Int?
     public var repository: String?
     public var labels: [String]
+    public var closedAt: Date?
+    public var closeReason: RequestCloseReason?
     public var createdAt: Date
     public var updatedAt: Date
 
     public init(
         id: Int64? = nil, projectId: Int64, title: String, body: String, source: TaskSource,
         sourceURL: String? = nil, workflow: String? = nil, status: TaskStatus, externalNumber: Int? = nil,
-        repository: String? = nil, labels: [String] = [], createdAt: Date, updatedAt: Date
+        repository: String? = nil, labels: [String] = [], closedAt: Date? = nil, closeReason: RequestCloseReason? = nil,
+        createdAt: Date, updatedAt: Date
     ) {
+        self.closedAt = closedAt
+        self.closeReason = closeReason
         self.externalNumber = externalNumber
         self.repository = repository
         self.labels = labels
@@ -86,6 +103,8 @@ public struct ProjectTask: Codable, Sendable, Hashable, Identifiable, FetchableR
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+
+    public var isClosed: Bool { closedAt != nil }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID

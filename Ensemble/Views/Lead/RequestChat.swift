@@ -325,16 +325,16 @@ private struct RunCard: View {
         ].compactMap(\.self)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                StatusDot(run.status.color, size: 8)
+                StatusDot(model.statusColor(of: run), size: 8)
                 Text(run.title).font(.system(size: 14, weight: .semibold)).lineLimit(2)
                 Text(meta.joined(separator: " · "))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
                     .lineLimit(2)
                 Spacer(minLength: 8)
-                Text(run.status.label)
+                Text(model.statusLabel(of: run))
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(run.status.color)
+                    .foregroundStyle(model.statusColor(of: run))
                 Button("Details") { model.openRunDetail(run) }
                     .buttonStyle(PillButtonStyle(height: 24))
                     .font(.system(size: 11.5))
@@ -413,9 +413,10 @@ private struct FinalStateCard: View {
     let reload: () -> Void
 
     var body: some View {
+        let color = model.statusColor(of: run)
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                StatusDot(run.status.color, size: 8)
+                StatusDot(color, size: 8)
                 Text(headline).font(.system(size: 14, weight: .semibold))
                 if let ended = run.endedAt {
                     Text(ended.formatted(date: .abbreviated, time: .shortened))
@@ -447,8 +448,8 @@ private struct FinalStateCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(run.status.color.opacity(0.09), in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(run.status.color.opacity(0.3)))
+        .background(color.opacity(0.09), in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(color.opacity(0.3)))
     }
 
     private var headline: String {
@@ -509,6 +510,7 @@ private struct StepRow: View {
 
     private var outcomeColor: Color {
         switch entry.outcome {
+        case _ where entry.status == .waitingOnYou: Theme.warning
         case StepOutcome.changesRequested, StepOutcome.failed, "rejected": Theme.warning
         default: entry.status == .failed ? Theme.danger : Theme.successText
         }

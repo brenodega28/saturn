@@ -137,6 +137,7 @@ private struct TimelineRow: View {
 
     private var outcomeColor: Color {
         switch entry.outcome {
+        case _ where entry.status == .waitingOnYou: Theme.warning
         case StepOutcome.changesRequested, StepOutcome.failed, "rejected": Theme.warning
         case nil: entry.status.color
         default: entry.status == .failed ? Theme.danger : Theme.successText
@@ -169,13 +170,14 @@ struct AgentLink: View {
 
     var body: some View {
         let live = model.agents.session(for: agent)?.agent ?? agent
+        let status = model.displayStatus(of: live)
         Button {
             model.openAgentSession(agent, in: project)
         } label: {
             HStack(spacing: 5) {
                 AgentAvatar(size: 16, appearance: RoleAppearance(role: role))
                 Text(live.name).font(.system(size: 11.5, weight: .medium)).lineLimit(1)
-                StatusDot(live.status.color, size: 5)
+                StatusDot(status.color, size: 5)
             }
             .padding(.leading, 3)
             .padding(.trailing, 8)
@@ -184,8 +186,8 @@ struct AgentLink: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help("Open \(live.name)’s session · \(role?.name ?? live.role) · \(live.status.label)")
-        .accessibilityLabel("Open \(live.name)’s session, \(role?.name ?? live.role), \(live.status.label)")
+        .help("Open \(live.name)’s session · \(role?.name ?? live.role) · \(status.label)")
+        .accessibilityLabel("Open \(live.name)’s session, \(role?.name ?? live.role), \(status.label)")
     }
 }
 

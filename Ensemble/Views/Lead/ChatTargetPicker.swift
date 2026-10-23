@@ -67,16 +67,19 @@ struct ChatTargetPicker: View {
 
     private func detail(for session: AgentSession) -> String {
         let role = model.role(for: session.agent, in: project)?.name ?? session.agent.role
-        return "\(role) · \(session.agent.status.label)"
+        return "\(role) · \(model.displayStatus(of: session.agent).label)"
     }
 
     private var currentParticipant: (name: String, appearance: RoleAppearance, status: AgentStatus?) {
         if let session = model.directChatSession(in: project) {
-            return (session.agent.name, RoleAppearance(role: model.role(for: session.agent, in: project)), session.agent.status)
+            return (session.agent.name, RoleAppearance(role: model.role(for: session.agent, in: project)), model.displayStatus(of: session.agent))
         }
         let lead = model.chatLeadRole(in: project)
-        let leadSession = model.selectedRequest(in: project).flatMap(model.leadSession(for:))
-        return (lead?.name ?? "No lead role", RoleAppearance(role: lead), leadSession?.agent.status)
+        let request = model.selectedRequest(in: project)
+        let leadSession = request.flatMap(model.leadSession(for:))
+        let requestNeedsYou = request.map { model.requestNeedsYou($0, latestRun: model.latestRun(of: $0)) } == true
+        let status: AgentStatus? = requestNeedsYou ? .needsInput : leadSession.map { model.displayStatus(of: $0.agent) }
+        return (lead?.name ?? "No lead role", RoleAppearance(role: lead), status)
     }
 
     private func headerLabel(_ current: (name: String, appearance: RoleAppearance, status: AgentStatus?)) -> some View {

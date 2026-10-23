@@ -169,7 +169,7 @@ private struct AgentCard: View {
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 8)
-                        StatusLabel(status: agent.status, isQueued: session.isQueued)
+                        StatusLabel(status: model.displayStatus(of: agent), isQueued: session.isQueued)
                     }
                     Text(headline)
                         .font(.system(size: 13))
@@ -194,7 +194,7 @@ private struct AgentCard: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(agent.name), \(session.statusText)")
+            .accessibilityLabel("\(agent.name), \(session.isQueued ? "Queued" : model.displayStatus(of: agent).label)")
             .accessibilityHint("Opens the agent session")
 
             HStack(spacing: 4) {

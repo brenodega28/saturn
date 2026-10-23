@@ -146,7 +146,7 @@ struct ChangesToolbar: View {
             Text("Run").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
             ForEach(chipRuns) { run in
                 ChipButton(isSelected: run.id == selected.id, action: { store.select(run, replacing: selected) }) {
-                    StatusDot(run.reviewColor)
+                    StatusDot(model.statusColor(of: run))
                     Text(run.reviewTitle).fontWeight(.semibold).lineLimit(1)
                     Text(run.reviewMeta).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
                 }
@@ -332,18 +332,6 @@ extension Run {
         case .succeeded: "Done"
         case .failed: "Failed"
         case .cancelled: "Cancelled"
-        }
-    }
-
-    var reviewColor: Color {
-        switch status {
-        case .running, .pending: Theme.success
-        case .waitingOnYou: Theme.warning
-        case .paused: Theme.paused
-        case .interrupted: Theme.warning
-        case .succeeded: Theme.info
-        case .failed: Theme.danger
-        case .cancelled: Theme.neutral
         }
     }
 }

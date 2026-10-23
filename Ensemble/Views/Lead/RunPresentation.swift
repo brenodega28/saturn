@@ -73,6 +73,24 @@ extension RunTimeline.StageState {
     }
 }
 
+extension AppModel {
+    static func statusColor(needsYou: Bool, otherwise color: Color) -> Color {
+        needsYou ? Theme.warning : color
+    }
+
+    func statusColor(of run: Run) -> Color {
+        Self.statusColor(needsYou: runNeedsYou(run), otherwise: run.status.color)
+    }
+
+    func statusLabel(of run: Run) -> String {
+        runNeedsYou(run) ? RunStatus.waitingOnYou.label : run.status.label
+    }
+
+    func statusColor(of request: ProjectTask, latestRun: Run?) -> Color {
+        Self.statusColor(needsYou: requestNeedsYou(request, latestRun: latestRun), otherwise: latestRun?.status.color ?? Theme.secondaryText)
+    }
+}
+
 extension Run {
     var elapsedDescription: String {
         let seconds = (endedAt ?? .now).timeIntervalSince(startedAt)

@@ -75,14 +75,15 @@ private struct LeadRequestList: View {
         let isSelected = request.id == selectedID
         let run = model.latestRun(of: request)
         let detail = run.map { run in
-            let state = run.isActive ? (model.currentStepTitle(of: run) ?? run.status.label) : run.status.label
+            let label = model.statusLabel(of: run)
+            let state = run.isActive ? (model.currentStepTitle(of: run) ?? label) : label
             return "\(state) · \(run.costUSD.formatted(.currency(code: "USD")))"
         } ?? "Chat"
         return Button {
             model.showRequest(request)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StatusDot(run?.status.color ?? Theme.secondaryText)
+                StatusDot(model.statusColor(of: request, latestRun: run))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(request.title.isEmpty ? "Request #\(request.id ?? 0)" : request.title)
                         .font(.system(size: 13, weight: isSelected ? .semibold : .regular))

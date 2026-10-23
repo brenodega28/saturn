@@ -51,6 +51,36 @@ extension AppModel {
         }
     }
 
+    static let needsYouKinds: Set<InboxKind> = [.question, .planApproval, .approval]
+
+    var needsYouItems: [InboxItem] {
+        inbox.items.filter { Self.needsYouKinds.contains($0.kind) }
+    }
+
+    func runNeedsYou(_ run: Run) -> Bool {
+        if run.status == .waitingOnYou { return true }
+        guard let runID = run.id else { return false }
+        return needsYouItems.contains { $0.runId == runID }
+    }
+
+    func agentNeedsYou(_ agent: Agent) -> Bool {
+        guard let agentID = agent.id else { return false }
+        return needsYouItems.contains { $0.agentId == agentID }
+    }
+
+    func displayStatus(of agent: Agent) -> AgentStatus {
+        agentNeedsYou(agent) ? .needsInput : agent.status
+    }
+
+    func requestNeedsYou(_ task: ProjectTask, latestRun: Run?) -> Bool {
+        if let latestRun, runNeedsYou(latestRun) { return true }
+        guard let taskID = task.id else { return false }
+        return needsYouItems.contains { item in
+            if let runID = item.runId, liveRun(id: runID)?.taskId == taskID { return true }
+            return item.agentId.flatMap { agent(id: $0) }?.taskId == taskID
+        }
+    }
+
     func runTitle(for item: InboxItem) -> String? {
         guard let runID = item.runId else { return nil }
         if let live = engine.runs[runID] { return live.title }

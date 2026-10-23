@@ -93,7 +93,7 @@ struct TaskCardView: View {
                 .font(.system(size: 11.5))
                 .foregroundStyle(Theme.secondaryText)
             HStack(spacing: 8) {
-                StepChip(text: stepText(for: run), column: column)
+                StepChip(text: stepText(for: run), column: column == .running && model.runNeedsYou(run) ? .waitingOnYou : column)
                 Spacer(minLength: 4)
                 Button {
                     model.openRunDetail(run)

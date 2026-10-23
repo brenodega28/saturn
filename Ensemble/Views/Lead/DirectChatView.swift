@@ -83,6 +83,7 @@ private struct DirectAgentCard: View {
 
     var body: some View {
         let agent = session.agent
+        let status = model.displayStatus(of: agent)
         HStack(alignment: .center, spacing: 12) {
             AgentAvatar(size: 36, appearance: RoleAppearance(role: role))
             VStack(alignment: .leading, spacing: 2) {
@@ -103,11 +104,11 @@ private struct DirectAgentCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 6) {
-                StatusDot(agent.status.color)
-                Text(agent.status.label)
+                StatusDot(status.color)
+                Text(status.label)
             }
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(agent.status.color)
+            .foregroundStyle(status.color)
             .fixedSize()
             Button("Open Session") { model.openAgentSession(agent, in: project) }
                 .buttonStyle(.pill)

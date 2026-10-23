@@ -55,6 +55,12 @@ public enum UsagePeriod: String, CaseIterable, Sendable, Identifiable {
         case .allTime: nil
         }
     }
+
+    public func displayedStart(at date: Date, calendar: Calendar = .current, countingSince resetPoint: Date?) -> Date? {
+        guard let start = start(at: date, calendar: calendar) else { return nil }
+        guard let resetPoint else { return start }
+        return max(start, resetPoint)
+    }
 }
 
 public struct UsageTotals: Sendable, Hashable {
@@ -81,7 +87,7 @@ public struct UsageReport: Sendable, Hashable {
 }
 
 extension AppDatabase {
-    public func usageTotals(at date: Date = .now, calendar: Calendar = .current) throws -> UsageTotals {
+    public func usageTotals(at date: Date = .now, calendar: Calendar = .current, countingSince resetPoint: Date? = nil) throws -> UsageTotals {
         try writer.read { db in
             func total(since start: Date?) throws -> Double {
                 if let start {
@@ -90,8 +96,8 @@ extension AppDatabase {
                 return try Double.fetchOne(db, sql: "SELECT COALESCE(SUM(costUSD), 0) FROM usage") ?? 0
             }
             return UsageTotals(
-                weekUSD: try total(since: UsagePeriod.week.start(at: date, calendar: calendar)),
-                monthUSD: try total(since: UsagePeriod.month.start(at: date, calendar: calendar)),
+                weekUSD: try total(since: UsagePeriod.week.displayedStart(at: date, calendar: calendar, countingSince: resetPoint)),
+                monthUSD: try total(since: UsagePeriod.month.displayedStart(at: date, calendar: calendar, countingSince: resetPoint)),
                 allTimeUSD: try total(since: nil)
             )
         }
@@ -102,10 +108,11 @@ extension AppDatabase {
         projectId: Int64? = nil,
         at date: Date = .now,
         calendar: Calendar = .current,
+        totalsCountingSince resetPoint: Date? = nil,
         runLimit: Int = 12,
         expensiveTurnLimit: Int = 10
     ) throws -> UsageReport {
-        let totals = try usageTotals(at: date, calendar: calendar)
+        let totals = try usageTotals(at: date, calendar: calendar, countingSince: resetPoint)
         let start = period.start(at: date, calendar: calendar)
         return try writer.read { db in
             var conditions: [String] = []

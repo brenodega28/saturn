@@ -52,6 +52,92 @@ import Testing
         #expect(Pin.changeRequestSummary([]) == "")
     }
 
+    @Test func agentPinsDefaultToTheNewSide() throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let runId = try #require(try Self.makeRun(h).id)
+        let pin = try h.database.createPin(PinDraft(file: "a.py", startLine: 3, endLine: 3, title: "New", explanation: ""), runId: runId, agentId: nil)
+        let pinId = try #require(pin.id)
+        let stored = try #require(try h.database.pin(id: pinId))
+        #expect(stored.side == .new)
+        #expect(stored.byUser == false)
+
+        try h.database.writer.write { db in
+            try db.execute(sql: """
+                INSERT INTO pin (runId, file, startLine, endLine, title, explanation, status, createdAt, updatedAt)
+                VALUES (?, 'b.py', 1, 1, 'Raw', '', 'open', ?, ?)
+                """, arguments: [runId, Date.now, Date.now])
+        }
+        let raw = try #require(try h.database.pins(runId: runId).first { $0.title == "Raw" })
+        #expect(raw.side == .new)
+        #expect(raw.byUser == false)
+        #expect(raw.sideLineLabel == "1")
+    }
+
+    @Test func storesEditsAndDeletesComments() throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let runId = try #require(try Self.makeRun(h).id)
+        let agent = try h.database.insert(Agent(projectId: try #require(h.project.id), runId: runId, role: "claude-code", name: "Dev 1", status: .idle, createdAt: .now, updatedAt: .now))
+
+        let added = try h.database.createComment(runId: runId, branchAgentId: agent.id, file: "a.py", side: .new, startLine: 14, endLine: 12, text: "Use cents.")
+        let removed = try h.database.createComment(runId: runId, branchAgentId: nil, file: "b.py", side: .old, startLine: 7, endLine: 7, text: "Keep this check.")
+
+        let addedId = try #require(added.id)
+        let removedId = try #require(removed.id)
+        let stored = try #require(try h.database.pin(id: addedId))
+        #expect(stored.startLine == 12 && stored.endLine == 14)
+        #expect(stored.side == .new && stored.byUser)
+        #expect(stored.agentId == agent.id)
+        #expect(stored.status == .changeRequested)
+        #expect(stored.explanation == "Use cents." && stored.response == "Use cents.")
+        #expect(stored.sideLineLabel == "12–14")
+
+        let old = try #require(try h.database.pin(id: removedId))
+        #expect(old.side == .old && old.byUser && old.agentId == nil)
+        #expect(old.lineLabel == "7")
+        #expect(old.sideLineLabel == "7 (removed)")
+
+        let edited = try h.database.updateComment(id: addedId, text: "Use integer cents.")
+        #expect(edited?.response == "Use integer cents.")
+        #expect(try h.database.pin(id: addedId)?.explanation == "Use integer cents.")
+        #expect(try h.database.pin(id: addedId)?.status == .changeRequested)
+        #expect(try h.database.updateComment(id: 9999, text: "x") == nil)
+
+        #expect(try h.database.deletePin(id: removedId))
+        #expect(try h.database.pin(id: removedId) == nil)
+        #expect(try h.database.deletePin(id: 9999) == false)
+        #expect(try h.database.pins(runId: runId).map(\.file) == ["a.py"])
+    }
+
+    @Test func summarisesUserComments() throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let runId = try #require(try Self.makeRun(h).id)
+        let agent = try h.database.insert(Agent(projectId: try #require(h.project.id), runId: runId, role: "claude-code", name: "Dev 1", status: .idle, createdAt: .now, updatedAt: .now))
+        let names = [try #require(agent.id): "Dev 1"]
+
+        let comment = try h.database.createComment(runId: runId, branchAgentId: agent.id, file: "a.py", side: .new, startLine: 3, endLine: 3, text: "Rename this.")
+        #expect(Pin.changeRequestSummary([comment], agentNames: names) == "Changes requested on 1 comment:\n- Reviewer comment on a.py:3, on Dev 1’s branch: Rename this.")
+
+        let removed = try h.database.createComment(runId: runId, branchAgentId: agent.id, file: "a.py", side: .old, startLine: 12, endLine: 14, text: "Put this back.")
+        #expect(Pin.changeRequestSummary([removed], agentNames: names) == "Changes requested on 1 comment:\n- Reviewer comment on a.py:12–14 (removed lines), on Dev 1’s branch: Put this back.")
+
+        try h.database.createComment(runId: runId, branchAgentId: nil, file: "c.py", side: .old, startLine: 1, endLine: 2, text: "Why?")
+        let pin = try h.database.createPin(PinDraft(file: "b.py", startLine: 5, endLine: 6, title: "Money", explanation: ""), runId: runId, agentId: agent.id)
+        try h.database.updatePin(id: try #require(pin.id), status: .changeRequested, response: "Round down.")
+
+        let summary = Pin.changeRequestSummary(try h.database.pins(runId: runId), agentNames: names)
+        #expect(summary == """
+            Changes requested on 1 pin and 3 comments:
+            - Reviewer comment on a.py:3, on Dev 1’s branch: Rename this.
+            - Reviewer comment on a.py:12–14 (removed lines), on Dev 1’s branch: Put this back.
+            - b.py:5–6 “Money” (pinned by Dev 1): Round down.
+            - Reviewer comment on c.py:1–2 (removed lines): Why?
+            """)
+        #expect(Pin.changeRequestSummary([comment, comment], agentNames: names).hasPrefix("Changes requested on 2 comments:"))
+    }
+
     @Test func streamsPinUpdates() async throws {
         let h = try H.make()
         defer { h.cleanUp() }

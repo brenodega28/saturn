@@ -135,6 +135,11 @@ public enum PinStatus: String, Codable, Sendable, CaseIterable {
     case changeRequested = "change_requested"
 }
 
+public enum PinSide: String, Codable, Sendable, CaseIterable {
+    case new
+    case old
+}
+
 public struct Pin: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "pin"
 
@@ -144,6 +149,8 @@ public struct Pin: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
     public var file: String
     public var startLine: Int
     public var endLine: Int
+    public var side: PinSide
+    public var byUser: Bool
     public var title: String
     public var tags: [String]
     public var explanation: String
@@ -154,9 +161,12 @@ public struct Pin: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
 
     public init(
         id: Int64? = nil, runId: Int64, agentId: Int64?, file: String, startLine: Int, endLine: Int,
+        side: PinSide = .new, byUser: Bool = false,
         title: String, tags: [String] = [], explanation: String, status: PinStatus = .open,
         response: String? = nil, createdAt: Date, updatedAt: Date
     ) {
+        self.side = side
+        self.byUser = byUser
         self.id = id
         self.runId = runId
         self.agentId = agentId

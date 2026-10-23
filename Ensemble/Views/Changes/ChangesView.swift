@@ -312,7 +312,7 @@ struct UnplacedPinsCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.white.opacity(0.04))
             ForEach(pins) { pin in
-                Text("\(pin.file):\(pin.lineLabel)")
+                Text("\(pin.file):\(pin.sideLineLabel)")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(Theme.secondaryText)
                     .padding(.horizontal, 16)

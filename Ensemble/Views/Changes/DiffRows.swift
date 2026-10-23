@@ -52,8 +52,7 @@ struct DiffRows {
             for line in hunk.lines {
                 guard lineLimit.map({ shownLines < $0 }) ?? true else { break }
                 shownLines += 1
-                let pinned = line.newLine.map { number in pins.contains { $0.lineRange.contains(number) } } ?? false
-                append(.line(line, pinned: pinned && line.kind != .removed))
+                append(.line(line, pinned: pins.contains { $0.covers(line) }))
                 for pin in anchors[Self.key(line)] ?? [] {
                     guard let id = pin.id, placed.insert(id).inserted else { continue }
                     append(.pin(pin))
@@ -73,8 +72,7 @@ struct DiffRows {
     private static func anchors(for pins: [Pin], in hunk: PatchHunk) -> [String: [Pin]] {
         var result: [String: [Pin]] = [:]
         for pin in pins {
-            let candidates = hunk.lines.filter { line in line.newLine.map { pin.lineRange.contains($0) } ?? false }
-            guard let anchor = candidates.last else { continue }
+            guard let anchor = hunk.lines.last(where: pin.covers) else { continue }
             result[key(anchor), default: []].append(pin)
         }
         return result
@@ -114,6 +112,55 @@ struct DiffRows {
             }
         }
         return result
+    }
+}
+
+struct LineTarget: Hashable {
+    let side: PinSide
+    let line: Int
+}
+
+struct LineSelection: Equatable {
+    let entryID: String
+    let side: PinSide
+    let anchor: Int
+    var head: Int
+
+    var range: ClosedRange<Int> { min(anchor, head)...max(anchor, head) }
+
+    func contains(_ line: PatchLine) -> Bool {
+        guard let target = line.commentTarget else { return false }
+        return target.side == side && range.contains(target.line)
+    }
+
+    static func next(after current: LineSelection?, clicking target: LineTarget, in entryID: String, extending: Bool) -> LineSelection {
+        if extending, var current, current.entryID == entryID, current.side == target.side {
+            current.head = target.line
+            return current
+        }
+        return LineSelection(entryID: entryID, side: target.side, anchor: target.line, head: target.line)
+    }
+}
+
+extension PatchLine {
+    var commentTarget: LineTarget? {
+        switch kind {
+        case .removed: oldLine.map { LineTarget(side: .old, line: $0) }
+        case .added, .context: newLine.map { LineTarget(side: .new, line: $0) }
+        }
+    }
+
+    func number(on side: PinSide) -> Int? {
+        switch side {
+        case .new: kind == .removed ? nil : newLine
+        case .old: kind == .added ? nil : oldLine
+        }
+    }
+}
+
+extension Pin {
+    func covers(_ line: PatchLine) -> Bool {
+        line.number(on: side).map(lineRange.contains) ?? false
     }
 }
 

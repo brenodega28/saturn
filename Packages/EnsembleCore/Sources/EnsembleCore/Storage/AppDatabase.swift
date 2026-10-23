@@ -245,6 +245,12 @@ public final class AppDatabase: Sendable {
                 t.add(column: "mergedAt", .datetime)
             }
         }
+        migrator.registerMigration("v13-pin-comments") { db in
+            try db.alter(table: "pin") { t in
+                t.add(column: "side", .text).notNull().defaults(to: PinSide.new.rawValue)
+                t.add(column: "byUser", .boolean).notNull().defaults(to: false)
+            }
+        }
 
         return migrator
     }

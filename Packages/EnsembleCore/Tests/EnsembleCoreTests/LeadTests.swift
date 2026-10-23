@@ -105,6 +105,8 @@ struct LeadRequestTests {
 
         let timeline = try h.database.timeline(for: try h.run(id), workflow: try h.engine.workflow(for: try h.run(id)))
         #expect(timeline.pendingPlan == H.plan)
+        #expect(timeline.holdItem?.kind == .planApproval)
+        #expect(timeline.holdItem?.body.contains("Refund API") == true)
         #expect(timeline.approvedPlan == nil)
         #expect(timeline.currentStepTitle == "Plan & split the task")
         #expect(timeline.stages.map(\.id) == ["plan", "build", "review", "qa", "approve", "end"])
@@ -164,6 +166,7 @@ struct LeadRequestTests {
         let timeline = try h.database.timeline(for: run, workflow: try h.engine.workflow(for: run))
         #expect(try h.hold(id)?.reason == .stepFailed)
         #expect(timeline.stages.first?.state == .failed)
+        #expect(timeline.holdItem?.kind == .failure)
         #expect(timeline.entries.first?.summary == "Tests crashed")
         #expect(timeline.questions.map(\.title) == ["Squash migrations?"])
         #expect(timeline.questions.first?.agentId == agent.id)

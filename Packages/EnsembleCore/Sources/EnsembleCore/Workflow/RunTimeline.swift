@@ -38,6 +38,7 @@ public struct RunTimeline: Sendable, Hashable {
     public var currentStepTitle: String?
     public var pendingPlan: Plan?
     public var questions: [InboxItem]
+    public var holdItem: InboxItem?
 
     public init(run: Run, workflow: WorkflowDefinition, steps: [RunStep], hold: RunHold?, inbox: [InboxItem] = []) {
         self.entries = steps.compactMap { step in
@@ -58,6 +59,7 @@ public struct RunTimeline: Sendable, Hashable {
             self.pendingPlan = nil
         }
         self.questions = inbox.filter { $0.kind == .question && $0.status == .open }
+        self.holdItem = hold?.inboxItemId.flatMap { id in inbox.first { $0.id == id } }
     }
 
     public var approvedPlan: Plan? {

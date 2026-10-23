@@ -58,6 +58,7 @@ final class AppModel {
     private(set) var configs: [Int64: ProjectConfig] = [:]
     var selectedAgents: [Int64: Int64] = [:]
     var isNewAgentPresented = false
+    var leadSelections: [Int64: LeadSelection] = [:]
 
     var selection: SidebarItem? {
         didSet { persistNavigation() }

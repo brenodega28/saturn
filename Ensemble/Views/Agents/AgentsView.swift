@@ -44,7 +44,7 @@ struct AgentGroup: Identifiable {
         let idleIDs = Set(idle.map(\.id))
         let others = outsideRuns.filter { !$0.agent.isPinned && !idleIDs.contains($0.id) }
         if !pinned.isEmpty {
-            groups.append(AgentGroup(kind: .pinned, title: "Pinned", meta: "Kept between runs", sessions: pinned))
+            groups.append(AgentGroup(kind: .pinned, title: "Pinned", meta: "Kept between runs, with memory", sessions: pinned))
         }
         if !idle.isEmpty {
             groups.append(AgentGroup(kind: .idle, title: "Idle", meta: "Finished their turn or waiting for a message", sessions: idle))
@@ -172,6 +172,9 @@ private struct AgentCard: View {
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     HStack(spacing: 6) {
+                        if agent.isPinned {
+                            MemoryBadge(project: project, agent: agent)
+                        }
                         if let step = agent.step {
                             Chip(text: "Step \(step)")
                         }

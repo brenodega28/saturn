@@ -22,9 +22,7 @@ struct ShellView: View {
         case .inbox:
             InboxView()
         case .usage:
-            AppScreen(title: "Usage", subtitle: "This week · \(model.weeklySpend.formatted(.currency(code: "USD")))") {
-                EmptyState("No spend yet", message: "Spend by project, run, role and model shows up here once agents start running.")
-            }
+            UsageView()
         case .project:
             if let project = model.selectedProject {
                 ProjectView(project: project)

@@ -143,6 +143,7 @@ extension AppModel {
         guard let workflow = config(for: project).workflow(workflowID) else {
             throw GitHubSettingsError.unknownWorkflow(workflowID)
         }
+        try ensureWithinBudget(project)
         try engine.start(task: task, workflow: workflow, project: project)
     }
 

@@ -125,6 +125,8 @@ final class AppModel {
         await checkEnvironment()
         perform("Couldn’t recover runs") { try engine.recover() }
         startInbox()
+        startBudgetMonitor()
+        startMemoryUpdates()
         gitHub.start()
         await refreshAllProjects()
     }

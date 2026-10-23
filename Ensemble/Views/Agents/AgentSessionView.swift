@@ -18,7 +18,7 @@ struct AgentSessionView: View {
                     Composer(session: session)
                 }
                 .frame(maxWidth: .infinity)
-                WorkspacePanel(session: session)
+                AgentSidePanel(session: session, project: project)
                     .frame(width: 300)
             }
         }

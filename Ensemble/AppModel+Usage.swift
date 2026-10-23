@@ -1,0 +1,72 @@
+import EnsembleCore
+import Foundation
+import Observation
+
+extension AppModel {
+    static let globalMonthlyBudgetKey = "usage.globalMonthlyBudgetUSD"
+
+    var globalMonthlyBudget: Double? {
+        let value = UserDefaults.standard.double(forKey: Self.globalMonthlyBudgetKey)
+        return value > 0 ? value : nil
+    }
+
+    func setGlobalMonthlyBudget(_ budget: Double?) {
+        if let budget, budget > 0 {
+            UserDefaults.standard.set(budget, forKey: Self.globalMonthlyBudgetKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.globalMonthlyBudgetKey)
+        }
+        checkBudgets()
+    }
+
+    func usageReport(period: UsagePeriod) -> UsageReport? {
+        _ = agents.usageRevision
+        return try? database.usageReport(period: period)
+    }
+
+    var monthlySpend: Double {
+        _ = agents.usageRevision
+        return (try? database.monthlySpend()) ?? 0
+    }
+
+    func budgetStatus(for project: Project) -> BudgetStatus {
+        _ = agents.usageRevision
+        guard let id = project.id else { return BudgetStatus(budgetUSD: nil, spentUSD: 0) }
+        return (try? database.projectBudgetStatus(projectId: id)) ?? BudgetStatus(budgetUSD: project.settings.monthlyBudgetUSD, spentUSD: 0)
+    }
+
+    func setMonthlyBudget(_ budget: Double?, for project: Project) {
+        var settings = project.settings
+        settings.monthlyBudgetUSD = budget.flatMap { $0 > 0 ? $0 : nil }
+        updateSettings(settings, for: project)
+        checkBudgets()
+    }
+
+    func allowOverBudgetThisMonth(_ project: Project) {
+        var settings = project.settings
+        settings.budgetOverrideMonth = BudgetMonth.key(for: .now)
+        updateSettings(settings, for: project)
+    }
+
+    func ensureWithinBudget(_ project: Project) throws {
+        guard let id = project.id else { return }
+        try database.checkProjectBudget(projectId: id)
+    }
+
+    func startBudgetMonitor() {
+        checkBudgets()
+        withObservationTracking {
+            _ = agents.usageRevision
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in self?.startBudgetMonitor() }
+        }
+    }
+
+    func checkBudgets() {
+        do {
+            try database.recordBudgetNotices(globalBudgetUSD: globalMonthlyBudget)
+        } catch {
+            alert = AppAlert(title: "Couldn’t check budgets", message: error.localizedDescription)
+        }
+    }
+}

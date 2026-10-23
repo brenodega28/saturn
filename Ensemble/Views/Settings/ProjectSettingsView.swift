@@ -314,6 +314,8 @@ private struct AgentsSettings: View {
             .padding(16)
             .card(cornerRadius: 16)
 
+            ProjectBudgetCard(project: project)
+
             Text("Each role picks its model in Settings › Roles.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.secondaryText)

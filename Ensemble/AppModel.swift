@@ -43,6 +43,8 @@ final class AppModel {
 
     let database: AppDatabase
     let agents: AgentRuntime
+    let driver: AgentWorkflowDriver
+    let engine: RunEngine
     let secrets: any SecretStore
     let locator: ToolLocator
     let runner: CommandRunner
@@ -73,10 +75,16 @@ final class AppModel {
         self.database = database
         let storedMode = UserDefaults.standard.string(forKey: Self.providerModeKey).flatMap(ProviderMode.init(rawValue:))
         self.providerMode = storedMode
-        self.agents = AgentRuntime(database: database, paths: paths, secrets: secrets, providerMode: storedMode)
+        let agents = AgentRuntime(database: database, paths: paths, secrets: secrets, providerMode: storedMode)
+        self.agents = agents
         self.secrets = secrets
         self.locator = locator
         self.runner = CommandRunner(environment: locator.environment())
+        let driver = AgentWorkflowDriver(runtime: agents)
+        self.driver = driver
+        self.engine = RunEngine(database: database, driver: driver)
+        driver.gitProvider = { [weak self] in self?.git }
+        driver.gitHubProvider = { try? GitHubAuth(secrets: secrets).client() }
         restoreNavigation()
     }
 
@@ -107,6 +115,7 @@ final class AppModel {
         reloadProjects()
         perform("Couldn’t recover agents") { try agents.recoverAfterLaunch() }
         await checkEnvironment()
+        perform("Couldn’t recover runs") { try engine.recover() }
         await refreshAllProjects()
     }
 

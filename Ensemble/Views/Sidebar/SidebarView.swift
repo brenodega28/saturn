@@ -143,11 +143,11 @@ private struct ProjectSidebarGroup: View {
                     .accessibilityAddTraits(.isHeader)
                     .projectCard(.middle)
                 ForEach(group.tabs) { tab in
-                    SectionRow(tab: tab, badge: badge(for: tab, waiting: waiting))
+                    SectionRow(tab: tab, badge: badge(for: tab, waiting: waiting), newRequest: newRequestAction(for: tab))
                         .tag(SidebarDestination.section(project: projectID, tab: tab))
                         .projectCard(tab == SidebarGroup.lastTab ? .bottom : .middle)
                     if tab == .lead {
-                        SidebarChatRows(project: project, projectID: projectID)
+                        SidebarRequestRows(project: project, projectID: projectID)
                     }
                     if tab == .tasks {
                         SidebarRunRows(project: project, projectID: projectID)
@@ -155,6 +155,16 @@ private struct ProjectSidebarGroup: View {
                 }
             }
         }
+    }
+
+    private func newRequestAction(for tab: ProjectTab) -> (() -> Void)? {
+        guard tab == .lead else { return nil }
+        return { startNewRequest() }
+    }
+
+    private func startNewRequest() {
+        model.sidebarDestination = .section(project: projectID, tab: .lead)
+        model.startNewLeadRequest(in: project)
     }
 
     private func attentionColor(_ waiting: [InboxItem]) -> Color? {
@@ -268,22 +278,37 @@ private struct ProjectTile: View {
 private struct SectionRow: View {
     let tab: ProjectTab
     let badge: SidebarBadge?
+    var newRequest: (() -> Void)?
 
     var body: some View {
-        Label {
-            HStack {
-                Text(tab.title)
-                Spacer(minLength: 4)
-                if let badge {
-                    Text("\(badge.count)")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(badge.color)
+        HStack(spacing: 4) {
+            Label {
+                HStack {
+                    Text(tab.title)
+                    Spacer(minLength: 4)
+                    if let badge {
+                        Text("\(badge.count)")
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(badge.color)
+                    }
                 }
+            } icon: {
+                Image(systemName: tab.systemImage)
             }
-        } icon: {
-            Image(systemName: tab.systemImage)
+            .accessibilityLabel(badge.map { "\(tab.title), \($0.count)" } ?? tab.title)
+            if let newRequest {
+                Button(action: newRequest) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.secondaryText)
+                        .frame(width: 20, height: 20)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help("New request")
+                .accessibilityLabel("New request")
+            }
         }
-        .accessibilityLabel(badge.map { "\(tab.title), \($0.count)" } ?? tab.title)
     }
 }
 
@@ -325,35 +350,57 @@ private struct SidebarRunRows: View {
     }
 }
 
-private struct SidebarChatRows: View {
+private struct SidebarRequestRows: View {
     @Environment(AppModel.self) private var model
     let project: Project
     let projectID: Int64
 
     var body: some View {
-        ForEach(model.sidebarChats(in: project)) { chat in
-            let color = chat.activity.waitsOnYou ? Theme.warning : Theme.success
-            let status = chat.activity.label
-            HStack(spacing: 8) {
-                StatusDot(color, size: 6)
-                Text(chat.name)
-                    .font(.system(size: 12.5))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 4)
-                Text(status)
-                    .font(.system(size: 11))
-                    .foregroundStyle(chat.activity.waitsOnYou ? Theme.warning : Theme.secondaryText)
-                    .lineLimit(1)
+        let needsYouTaskIDs = model.needsYouTaskIDs()
+        ForEach(LeadRequest.partition(model.leadRequests(in: project)).open) { request in
+            if let requestID = request.id {
+                let run = model.latestRun(of: request)
+                let title = request.title.isEmpty ? "Request #\(requestID)" : request.title
+                let status = model.requestStatusLabel(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs)
+                HStack(spacing: 8) {
+                    StatusDot(model.statusColor(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs), size: 6)
+                    Text(title)
+                        .font(.system(size: 12.5))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 4)
+                    Text(status)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondaryText)
+                        .lineLimit(1)
+                }
+                .padding(.leading, 24)
+                .tag(SidebarDestination.request(project: projectID, request: requestID))
+                .projectCard(.middle)
+                .contextMenu { RequestCloseMenu(request: request, project: project) }
+                .help("\(title) — \(status)")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Request \(title), \(status)")
+                .accessibilityHint("Opens the request in chat")
             }
-            .padding(.leading, 24)
-            .tag(SidebarDestination.chat(project: projectID, target: chat.target))
-            .projectCard(.middle)
-            .help("\(chat.name) — \(status)")
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Chat with \(chat.name), \(status)")
-            .accessibilityHint("Opens the chat")
         }
+        HStack(spacing: 8) {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.tertiaryText)
+                .frame(width: 6)
+            Text("Show more")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Theme.secondaryText)
+            Spacer(minLength: 4)
+        }
+        .padding(.leading, 24)
+        .tag(SidebarDestination.requests(project: projectID))
+        .projectCard(.middle)
+        .help("Show all open and closed requests")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Show more requests")
+        .accessibilityHint("Opens the list of all requests")
     }
 }
 

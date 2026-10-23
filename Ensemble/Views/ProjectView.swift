@@ -68,7 +68,9 @@ struct ProjectView: View {
     @ViewBuilder
     private var headerControls: some View {
         if model.tab(for: project) == .lead, model.runDetailID(in: project) == nil {
-            ChatTargetPicker(project: project)
+            if !model.isShowingRequestPage(in: project) {
+                ChatTargetPicker(project: project)
+            }
         } else {
             newAgentButton
         }

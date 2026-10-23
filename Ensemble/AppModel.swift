@@ -13,6 +13,7 @@ enum SidebarDestination: Hashable {
     case usage
     case section(project: Int64, tab: ProjectTab)
     case run(project: Int64, run: Int64)
+    case chat(project: Int64, target: ChatTarget)
 }
 
 enum ProjectTab: String, CaseIterable, Identifiable, Codable {
@@ -154,6 +155,8 @@ final class AppModel {
             case .project(let id):
                 if let runID = runDetailIDs[id] {
                     .run(project: id, run: runID)
+                } else if tab(forProjectID: id) == .lead, let chat = sidebarChatDestination(inProjectID: id) {
+                    chat
                 } else {
                     .section(project: id, tab: tab(forProjectID: id))
                 }
@@ -172,6 +175,8 @@ final class AppModel {
                 selection = .project(id)
             case .run(let id, let runID):
                 openRunDetail(runID: runID, in: id)
+            case .chat(let id, let target):
+                openChat(target, inProjectID: id)
             case nil:
                 break
             }

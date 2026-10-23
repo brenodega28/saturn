@@ -39,6 +39,7 @@ public enum AgentPermissions {
 
     public static let tools = ["Read", "Glob", "Grep", "TodoWrite"]
     public static let fileWritingTools = ["Edit", "MultiEdit", "Write", "NotebookEdit"]
+    public static let webTools = ["WebFetch", "WebSearch"]
 
     public static func readOnlyAllowedTools() -> [String] {
         tools + readOnlyCommands.map { "Bash(\($0):*)" }

@@ -37,6 +37,70 @@ import Testing
         #expect(try setup.harness.database.leadRequests(projectId: setup.project.id!).map(\.id) == [task.id])
     }
 
+    func allowedTools(_ arguments: [String]) throws -> [String] {
+        let index = try #require(arguments.lastIndex(of: "--allowedTools"))
+        return Array(arguments[(index + 1)...])
+    }
+
+    func launchArguments(_ setup: TurnSetup) -> [String] {
+        ClaudeLaunch(
+            executable: URL(fileURLWithPath: "/usr/bin/true"),
+            worktree: setup.directory,
+            session: .new("abc"),
+            model: "sonnet",
+            systemPrompt: setup.systemPrompt,
+            environment: [:],
+            readOnly: setup.readOnly,
+            additionalDirectories: setup.additionalDirectories,
+            extraArguments: setup.extraArguments,
+            extraAllowedTools: setup.extraAllowedTools
+        ).arguments
+    }
+
+    @Test func theChatLeadMayFetchAndSearchTheWebAlongsideItsHandoffTools() async throws {
+        let (setup, chat, lead) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let task = try await chat.createRequest("CHAT what is in this repo?", lead: lead, in: setup.project)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+
+        let launch = try #require(setup.harness.launches().last)
+        let allowed = try allowedTools(launch.split(separator: " ").map(String.init))
+        #expect(allowed.contains("WebFetch"))
+        #expect(allowed.contains("WebSearch"))
+        #expect(allowed.contains("mcp__ensemble__propose_run"))
+        #expect(allowed.contains("mcp__ensemble__message_agent"))
+
+        let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
+        let turn = try setup.harness.runtime.turnSetup(for: leadAgent)
+        #expect(Array(turn.extraAllowedTools.prefix(2)) == AgentPermissions.webTools)
+        #expect(turn.systemPrompt.contains("`WebFetch` and `WebSearch`"))
+    }
+
+    @Test func agentsOutsideTheChatGetNoWebTools() async throws {
+        let (setup, chat, lead) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let task = try await chat.createRequest("CHAT hi", lead: lead, in: setup.project)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+        #expect(setup.harness.runtime.mcpServer != nil)
+
+        let reviewer = RoleDefinition(id: "pr-reviewer", name: "PR Reviewer", editsCode: false)
+        let builder = RoleDefinition(id: "claude-code", name: "Claude Code")
+        let config = ProjectConfig(roles: [reviewer, builder, lead])
+        let runtime = setup.harness.runtime
+        let git = setup.harness.repo.git
+        var others: [AgentSession] = []
+        for role in [reviewer, builder, lead] {
+            others += try await runtime.spawn(in: setup.project, role: role, count: 1, config: config, git: git)
+        }
+
+        #expect(others.count == 3)
+        for session in others {
+            #expect(session.agent.taskId == nil)
+            let allowed = try allowedTools(launchArguments(try runtime.turnSetup(for: session.agent)))
+            #expect(!allowed.contains { AgentPermissions.webTools.contains($0) }, "\(session.agent.name)")
+        }
+    }
+
     @Test func aStartedProposalIsPlannedByTheSameLeadWithTheBrief() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }

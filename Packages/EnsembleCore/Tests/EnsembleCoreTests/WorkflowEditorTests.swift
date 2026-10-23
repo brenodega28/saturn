@@ -280,7 +280,16 @@ struct WorkflowEditingTests {
         #expect(workflow.step(gate.id)?.routes["yes"] == WorkflowRoute(to: a.id, maxLoops: 3))
         let other = workflow.connect(from: gate.id, to: b.id)
         #expect(other == "no")
-        #expect(workflow.step(gate.id)?.next == "end")
+        #expect(workflow.step(gate.id)?.next == nil)
+    }
+
+    @Test func firstRouteReplacesThePlaceholderEnding() {
+        var workflow = WorkflowDefinition.blank(id: "w", name: "W")
+        let qa = workflow.addStep(.agent, role: "qa")
+        #expect(workflow.step(qa.id)?.next == "end")
+        workflow.setRoute(from: qa.id, outcome: StepOutcome.passed, to: WorkflowDefinition.endStepID)
+        #expect(workflow.step(qa.id)?.next == nil)
+        #expect(workflow.addStep(.approval).next == nil)
     }
 
     @Test func connectingFromTheTriggerMakesTheStepFirstWithoutChangingFlow() {

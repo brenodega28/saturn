@@ -119,7 +119,7 @@ extension WorkflowDefinition {
             role: type == .agent || type == .spawn ? role : nil,
             maxAgents: type == .spawn ? 4 : nil,
             condition: type == .condition ? StepCondition() : nil,
-            next: Self.endStepID,
+            next: type == .condition || type == .approval ? nil : Self.endStepID,
             position: position
         )
         steps.append(step)
@@ -209,7 +209,7 @@ extension WorkflowDefinition {
         }
     }
 
-    static func unusedOutcome(for step: WorkflowStep) -> String {
+    public static func unusedOutcome(for step: WorkflowStep) -> String {
         let used = Set(step.routes.keys)
         if let free = suggestedOutcomes(for: step.type).first(where: { !used.contains($0) }) { return free }
         return (2...).lazy.map { "outcome-\($0)" }.first { !used.contains($0) } ?? "outcome"
@@ -218,6 +218,9 @@ extension WorkflowDefinition {
     public mutating func setRoute(from source: String, outcome: String, to target: String, maxLoops: Int? = nil) {
         guard let index = index(of: source) else { return }
         let loops = maxLoops ?? (isLoopBack(from: source, to: target) ? 3 : nil)
+        if steps[index].routes.isEmpty && steps[index].next == Self.endStepID {
+            steps[index].next = nil
+        }
         steps[index].routes[outcome] = WorkflowRoute(to: target, maxLoops: loops)
     }
 

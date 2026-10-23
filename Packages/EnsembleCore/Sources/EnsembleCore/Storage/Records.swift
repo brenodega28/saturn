@@ -10,14 +10,16 @@ public struct Project: Codable, Sendable, Hashable, Identifiable, FetchableRecor
     public var isOpen: Bool
     public var createdAt: Date
     public var lastOpenedAt: Date
+    public var settings: ProjectSettings
 
-    public init(id: Int64? = nil, name: String, path: String, isOpen: Bool, createdAt: Date, lastOpenedAt: Date) {
+    public init(id: Int64? = nil, name: String, path: String, isOpen: Bool, createdAt: Date, lastOpenedAt: Date, settings: ProjectSettings = ProjectSettings()) {
         self.id = id
         self.name = name
         self.path = path
         self.isOpen = isOpen
         self.createdAt = createdAt
         self.lastOpenedAt = lastOpenedAt
+        self.settings = settings
     }
 
     public var url: URL { URL(fileURLWithPath: path, isDirectory: true) }
@@ -59,13 +61,20 @@ public struct ProjectTask: Codable, Sendable, Hashable, Identifiable, FetchableR
     public var sourceURL: String?
     public var workflow: String?
     public var status: TaskStatus
+    public var externalNumber: Int?
+    public var repository: String?
+    public var labels: [String]
     public var createdAt: Date
     public var updatedAt: Date
 
     public init(
         id: Int64? = nil, projectId: Int64, title: String, body: String, source: TaskSource,
-        sourceURL: String? = nil, workflow: String? = nil, status: TaskStatus, createdAt: Date, updatedAt: Date
+        sourceURL: String? = nil, workflow: String? = nil, status: TaskStatus, externalNumber: Int? = nil,
+        repository: String? = nil, labels: [String] = [], createdAt: Date, updatedAt: Date
     ) {
+        self.externalNumber = externalNumber
+        self.repository = repository
+        self.labels = labels
         self.id = id
         self.projectId = projectId
         self.title = title
@@ -108,12 +117,25 @@ public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
     public var costUSD: Double
     public var startedAt: Date
     public var endedAt: Date?
+    public var title: String
+    public var workflowSnapshot: String
+    public var budgetUSD: Double?
+    public var endAction: String?
+    public var pullRequestURL: String?
+    public var lastError: String?
 
     public init(
         id: Int64? = nil, projectId: Int64, taskId: Int64, workflow: String, workflowVersion: String? = nil,
         currentStep: String? = nil, status: RunStatus, outcome: String? = nil, costUSD: Double = 0,
-        startedAt: Date, endedAt: Date? = nil
+        startedAt: Date, endedAt: Date? = nil, title: String = "", workflowSnapshot: String = "",
+        budgetUSD: Double? = nil, endAction: String? = nil, pullRequestURL: String? = nil, lastError: String? = nil
     ) {
+        self.title = title
+        self.workflowSnapshot = workflowSnapshot
+        self.budgetUSD = budgetUSD
+        self.endAction = endAction
+        self.pullRequestURL = pullRequestURL
+        self.lastError = lastError
         self.id = id
         self.projectId = projectId
         self.taskId = taskId
@@ -171,6 +193,9 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
     public var baseBranch: String?
     public var processID: Int32?
     public var lastError: String?
+    public var runStepId: Int64?
+    public var readOnly: Bool
+    public var planTaskId: String?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -180,8 +205,12 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
         inputTokens: Int = 0, outputTokens: Int = 0, cacheReadTokens: Int = 0, cacheWriteTokens: Int = 0,
         costUSD: Double = 0, isPinned: Bool = false, model: String = AgentModel.sonnet.rawValue, task: String = "",
         baseBranch: String? = nil, processID: Int32? = nil, lastError: String? = nil,
+        runStepId: Int64? = nil, readOnly: Bool = false, planTaskId: String? = nil,
         createdAt: Date, updatedAt: Date
     ) {
+        self.runStepId = runStepId
+        self.readOnly = readOnly
+        self.planTaskId = planTaskId
         self.id = id
         self.projectId = projectId
         self.runId = runId
@@ -217,6 +246,8 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
 
     public enum Columns {
         public static let projectId = Column(CodingKeys.projectId)
+        public static let runId = Column(CodingKeys.runId)
+        public static let runStepId = Column(CodingKeys.runStepId)
         public static let status = Column(CodingKeys.status)
         public static let createdAt = Column(CodingKeys.createdAt)
     }

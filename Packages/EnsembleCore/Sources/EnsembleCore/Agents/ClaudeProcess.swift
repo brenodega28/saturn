@@ -34,11 +34,13 @@ public final class ClaudeProcess: AgentProcessHandle, @unchecked Sendable {
     }()
 
     private let process = Process()
+    private let drainGrace: Duration
     private let input = Pipe()
     private let lock = NSLock()
     private var inputClosed = false
 
-    public init() {
+    public init(drainGrace: Duration = .seconds(2)) {
+        self.drainGrace = drainGrace
         Self.ignoreBrokenPipes
     }
 
@@ -66,23 +68,29 @@ public final class ClaudeProcess: AgentProcessHandle, @unchecked Sendable {
 
         try process.run()
 
-        return AsyncStream { continuation in
-            let reader = Task.detached {
-                async let errorText = Self.readAll(errors.fileHandleForReading)
-                do {
-                    for try await line in output.fileHandleForReading.bytes.lines {
-                        continuation.yield(.line(line))
-                    }
-                } catch {}
-                var code: Int32 = -1
-                for await status in termination {
-                    code = status
-                }
-                continuation.yield(.exited(code: code, standardError: await errorText))
-                continuation.finish()
+        let (stream, continuation) = AsyncStream.makeStream(of: ProcessOutput.self)
+        let lines = OutputCollector { continuation.yield(.line($0)) }
+        let errorText = OutputCollector(limit: 16_384)
+        lines.attach(to: output.fileHandleForReading)
+        errorText.attach(to: errors.fileHandleForReading)
+
+        let drainGrace = self.drainGrace
+        let waiter = Task.detached {
+            var code: Int32 = -1
+            for await status in termination {
+                code = status
             }
-            continuation.onTermination = { _ in reader.cancel() }
+            let deadline = ContinuousClock.now + drainGrace
+            while !lines.isFinished, ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            lines.detach(from: output.fileHandleForReading)
+            errorText.detach(from: errors.fileHandleForReading)
+            continuation.yield(.exited(code: code, standardError: errorText.text))
+            continuation.finish()
         }
+        continuation.onTermination = { _ in waiter.cancel() }
+        return stream
     }
 
     public func send(line: String) throws {
@@ -109,17 +117,104 @@ public final class ClaudeProcess: AgentProcessHandle, @unchecked Sendable {
 
     public func kill() {
         closeInput()
-        if process.isRunning {
-            Darwin.kill(process.processIdentifier, SIGKILL)
+        guard process.isRunning else { return }
+        let root = process.processIdentifier
+        for pid in Self.descendants(of: root).reversed() {
+            Darwin.kill(pid, SIGKILL)
+        }
+        Darwin.kill(root, SIGKILL)
+    }
+
+    static func descendants(of pid: Int32) -> [Int32] {
+        var result: [Int32] = []
+        var queue = [pid]
+        while let parent = queue.popLast() {
+            var children = [Int32](repeating: 0, count: 256)
+            let bytes = proc_listchildpids(parent, &children, Int32(children.count * MemoryLayout<Int32>.size))
+            let count = max(0, Int(bytes))
+            let found = children.prefix(count).filter { $0 > 0 }
+            result.append(contentsOf: found)
+            queue.append(contentsOf: found)
+        }
+        return result
+    }
+
+}
+
+final class OutputCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private let onLine: (@Sendable (String) -> Void)?
+    private let limit: Int?
+    private var buffer = Data()
+    private var collected = Data()
+    private var finished = false
+
+    init(onLine: @escaping @Sendable (String) -> Void) {
+        self.onLine = onLine
+        self.limit = nil
+    }
+
+    init(limit: Int) {
+        self.onLine = nil
+        self.limit = limit
+    }
+
+    var isFinished: Bool {
+        lock.withLock { finished }
+    }
+
+    var text: String {
+        lock.withLock { String(decoding: collected, as: UTF8.self) }
+    }
+
+    func attach(to handle: FileHandle) {
+        handle.readabilityHandler = { [self] handle in
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                finish()
+            } else {
+                receive(data)
+            }
         }
     }
 
-    private static func readAll(_ handle: FileHandle) async -> String {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                let data = handle.readDataToEndOfFile()
-                continuation.resume(returning: String(decoding: data.suffix(16_384), as: UTF8.self))
+    func detach(from handle: FileHandle) {
+        handle.readabilityHandler = nil
+        finish()
+        try? handle.close()
+    }
+
+    private func receive(_ data: Data) {
+        guard let onLine else {
+            lock.withLock {
+                collected.append(data)
+                if let limit, collected.count > limit {
+                    collected = collected.suffix(limit)
+                }
             }
+            return
         }
+        let ready: [String] = lock.withLock {
+            buffer.append(data)
+            var lines: [String] = []
+            while let newline = buffer.firstIndex(of: UInt8(ascii: "\n")) {
+                lines.append(String(decoding: buffer[buffer.startIndex..<newline], as: UTF8.self))
+                buffer.removeSubrange(buffer.startIndex...newline)
+            }
+            return lines
+        }
+        ready.forEach(onLine)
+    }
+
+    private func finish() {
+        let remainder: String? = lock.withLock {
+            guard !finished else { return nil }
+            finished = true
+            guard onLine != nil, !buffer.isEmpty else { return nil }
+            defer { buffer.removeAll() }
+            return String(decoding: buffer, as: UTF8.self)
+        }
+        if let remainder, let onLine { onLine(remainder) }
     }
 }

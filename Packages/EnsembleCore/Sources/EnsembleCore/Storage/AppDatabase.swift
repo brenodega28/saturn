@@ -109,6 +109,71 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v3-workflows") { db in
+            try db.alter(table: "project") { t in
+                t.add(column: "settings", .text).notNull().defaults(to: "{}")
+            }
+            try db.alter(table: "task") { t in
+                t.add(column: "externalNumber", .integer)
+                t.add(column: "repository", .text)
+                t.add(column: "labels", .text).notNull().defaults(to: "[]")
+            }
+            try db.alter(table: "run") { t in
+                t.add(column: "title", .text).notNull().defaults(to: "")
+                t.add(column: "workflowSnapshot", .text).notNull().defaults(to: "")
+                t.add(column: "budgetUSD", .double)
+                t.add(column: "endAction", .text)
+                t.add(column: "pullRequestURL", .text)
+                t.add(column: "lastError", .text)
+            }
+            try db.create(table: "runStep") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.belongsTo("run", onDelete: .cascade).notNull()
+                t.column("stepId", .text).notNull()
+                t.column("iteration", .integer).notNull().defaults(to: 1)
+                t.column("status", .text).notNull()
+                t.column("outcome", .text)
+                t.column("output", .text)
+                t.column("input", .text)
+                t.column("costUSD", .double).notNull().defaults(to: 0)
+                t.column("startedAt", .datetime).notNull()
+                t.column("endedAt", .datetime)
+            }
+            try db.alter(table: "agent") { t in
+                t.add(column: "runStepId", .integer).references("runStep", onDelete: .setNull)
+                t.add(column: "readOnly", .boolean).notNull().defaults(to: false)
+                t.add(column: "planTaskId", .text)
+            }
+            try db.create(table: "pin") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.belongsTo("run", onDelete: .cascade).notNull()
+                t.belongsTo("agent", onDelete: .setNull)
+                t.column("file", .text).notNull()
+                t.column("startLine", .integer).notNull()
+                t.column("endLine", .integer).notNull()
+                t.column("title", .text).notNull()
+                t.column("tags", .text).notNull().defaults(to: "[]")
+                t.column("explanation", .text).notNull()
+                t.column("status", .text).notNull()
+                t.column("response", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+            try db.create(table: "inboxItem") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.belongsTo("project", onDelete: .cascade).notNull()
+                t.belongsTo("run", onDelete: .cascade)
+                t.belongsTo("agent", onDelete: .setNull)
+                t.column("kind", .text).notNull()
+                t.column("title", .text).notNull()
+                t.column("body", .text).notNull().defaults(to: "")
+                t.column("status", .text).notNull().indexed()
+                t.column("response", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("resolvedAt", .datetime)
+            }
+        }
+
         return migrator
     }
 }

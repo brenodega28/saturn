@@ -46,6 +46,7 @@ enum FakeClaude {
           ;;
       esac
     done
+    if [ "$mode" = "lingering" ]; then (sleep 30) & fi
     exit 0
     """#
 

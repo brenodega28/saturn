@@ -9,11 +9,16 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.0"),
+        .package(url: "https://github.com/jpsim/Yams", from: "6.2.0"),
     ],
     targets: [
         .target(
             name: "EnsembleCore",
-            dependencies: [.product(name: "GRDB", package: "GRDB.swift")]
+            dependencies: [
+                .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "Yams", package: "Yams"),
+            ],
+            resources: [.copy("Resources/Defaults")]
         ),
         .testTarget(
             name: "EnsembleCoreTests",

@@ -149,6 +149,16 @@ import Testing
         #expect(userMessages(session).last == AgentSession.handBackPrompt)
     }
 
+    @Test func backgroundChildHoldingOutputDoesNotHangTheTurn() async throws {
+        let harness = try await AgentHarness.make(mode: "lingering")
+        defer { harness.cleanUp() }
+
+        let session = try await harness.spawn()
+
+        try await waitUntil(timeout: .seconds(5)) { session.agent.status == .idle }
+        #expect(session.agent.costUSD == 0.01)
+    }
+
     @Test func crashMarksTheAgentFailedWithStandardError() async throws {
         let harness = try await AgentHarness.make(mode: "crash")
         defer { harness.cleanUp() }

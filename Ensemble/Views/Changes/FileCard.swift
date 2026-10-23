@@ -179,7 +179,7 @@ struct FileCard: View {
         } else if entry.diff.hunks.isEmpty {
             collapsedNote(emptyDiffMessage(entry.diff))
         } else {
-            DiffBodyView(rows: rows, layout: store.layout) { pin in pinCard(pin) }
+            DiffBodyView(rows: rows, layout: store.layout, language: CodeLanguage(path: entry.diff.path)) { pin in pinCard(pin) }
             if !showsAll && rows.totalLines > Self.lineLimit {
                 Button("Show all \(rows.totalLines) lines") { store.fullyShown.insert(entry.id) }
                     .buttonStyle(.link)

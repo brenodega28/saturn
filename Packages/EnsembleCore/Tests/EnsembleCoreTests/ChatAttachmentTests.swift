@@ -84,6 +84,13 @@ enum StdinRecorder {
         #expect(ChatAttachment.prompt(text: "", attachments: [attachments[2]]) == "<pasted-text number=\"2\">\nsecond\n</pasted-text>")
         #expect(ChatAttachment.prompt(text: "Just text", attachments: []) == "Just text")
         #expect(ChatAttachment.prompt(text: " ", attachments: [attachments[1]]) == "")
+
+        let split = ChatAttachment.splitPrompt(ChatAttachment.prompt(text: "Review these", attachments: attachments))
+        #expect(split.text == "Review these")
+        #expect(split.pastes.compactMap(\.pastedText) == ["line one\nline two", "second"])
+        #expect(split.pastes.map(\.label) == ["Pasted text #1 · 2 lines", "Pasted text #2 · 1 line"])
+        #expect(ChatAttachment.splitPrompt("No pastes here").text == "No pastes here")
+        #expect(ChatAttachment.splitPrompt("No pastes here").pastes.isEmpty)
     }
 
     @Test func labelsCountLinesAndLargePastesCollapse() {

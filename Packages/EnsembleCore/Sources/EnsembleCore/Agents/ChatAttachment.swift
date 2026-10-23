@@ -89,6 +89,15 @@ public enum ChatAttachment: Codable, Sendable, Hashable, Identifiable {
         return ([typed].filter { !$0.isEmpty } + pastes).joined(separator: "\n\n")
     }
 
+    public static func splitPrompt(_ prompt: String) -> (text: String, pastes: [ChatAttachment]) {
+        let block = /<pasted-text number="(\d+)">\n(.*?)\n<\/pasted-text>/.dotMatchesNewlines()
+        let pastes = prompt.matches(of: block).map { match in
+            ChatAttachment.pastedText(id: UUID(), index: Int(match.output.1) ?? 0, text: String(match.output.2))
+        }
+        let text = prompt.replacing(block, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return (text, pastes)
+    }
+
     public static func image(data: Data, fileName: String) throws -> ChatAttachment {
         let normalized = try ChatImage.normalize(data, fileName: fileName)
         return .image(id: UUID(), mediaType: normalized.mediaType, fileName: normalized.fileName, data: normalized.data)

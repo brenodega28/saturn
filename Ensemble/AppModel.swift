@@ -86,12 +86,7 @@ final class AppModel {
     private(set) var configs: [Int64: ProjectConfig] = [:]
     var selectedAgents: [Int64: Int64] = [:]
     var isNewAgentPresented = false
-    var leadSelections: [Int64: LeadSelection] = [:] {
-        didSet {
-            let changedProjectIDs = Set(leadSelections.keys).union(oldValue.keys).filter { leadSelections[$0] != oldValue[$0] }
-            requestPageProjectIDs.subtract(changedProjectIDs)
-        }
-    }
+    var leadSelections: [Int64: LeadSelection] = [:]
     var requestPageProjectIDs: Set<Int64> = []
     var changesRunSelections: [Int64: Int64] = [:]
     var skillPlugins: [Int64: [SkillPlugin]] = [:]

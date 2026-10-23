@@ -64,10 +64,8 @@ extension AppModel {
         leadChatRevision += 1
         if selectedAgent(in: project) == nil { select(nil, in: project) }
         guard let projectID = project.id else { return }
-        let showsRequestPage = requestPageProjectIDs.contains(projectID)
         let next = LeadRequest.partition(leadRequests(in: project)).open.first { $0.id != task.id }
         leadSelections[projectID] = next?.id.map(LeadSelection.request) ?? .newRequest
-        if showsRequestPage { requestPageProjectIDs.insert(projectID) }
     }
 
     func deleteAgentsOfClosedRequests() async {
@@ -124,6 +122,7 @@ extension AppModel {
 
     func selectedOpenRequestID(inProjectID id: Int64) -> Int64? {
         guard case .request(let requestID) = leadSelections[id], let project = project(withID: id),
+              directChatSession(in: project) == nil,
               LeadRequest.partition(leadRequests(in: project)).open.contains(where: { $0.id == requestID }) else { return nil }
         return requestID
     }

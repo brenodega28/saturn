@@ -180,6 +180,8 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        registerGitHubMigration(in: &migrator)
+
         return migrator
     }
 }

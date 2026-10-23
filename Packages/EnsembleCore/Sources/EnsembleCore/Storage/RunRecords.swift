@@ -4,12 +4,21 @@ import GRDB
 public struct GitHubMapping: Sendable, Hashable, Codable, Identifiable {
     public var label: String
     public var workflow: String
+    public var autoStart: Bool
 
     public var id: String { label }
 
-    public init(label: String, workflow: String) {
+    public init(label: String, workflow: String, autoStart: Bool = false) {
         self.label = label
         self.workflow = workflow
+        self.autoStart = autoStart
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.label = try container.decode(String.self, forKey: .label)
+        self.workflow = try container.decode(String.self, forKey: .workflow)
+        self.autoStart = try container.decodeIfPresent(Bool.self, forKey: .autoStart) ?? false
     }
 }
 

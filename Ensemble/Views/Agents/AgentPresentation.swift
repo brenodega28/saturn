@@ -105,10 +105,6 @@ struct StatusLabel: View {
     }
 }
 
-extension AgentSession {
-    var statusText: String { isQueued ? "Queued" : agent.status.label }
-}
-
 extension String {
     var modelTitle: String {
         AgentModel(rawValue: self)?.title ?? self

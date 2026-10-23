@@ -292,9 +292,10 @@ private struct SidebarRunRows: View {
     var body: some View {
         ForEach(model.activeLeadRuns(in: project)) { run in
             if let runID = run.id {
-                let step = model.currentStepTitle(of: run) ?? run.status.label
+                let status = model.statusLabel(of: run)
+                let step = model.currentStepTitle(of: run) ?? status
                 HStack(spacing: 8) {
-                    StatusDot(run.status.color, size: 6)
+                    StatusDot(model.statusColor(of: run), size: 6)
                     Text(run.title.isEmpty ? "Run #\(runID)" : run.title)
                         .font(.system(size: 12.5))
                         .lineLimit(1)
@@ -312,9 +313,9 @@ private struct SidebarRunRows: View {
                     Button("Show Run Details") { model.openRunDetail(run) }
                     Button("Open in Chat") { model.openRunInLead(run) }
                 }
-                .help("\(run.title) — \(run.status.label), \(step)")
+                .help("\(run.title) — \(status), \(step)")
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Run \(run.title), \(run.status.label), step \(step)")
+                .accessibilityLabel("Run \(run.title), \(status), step \(step)")
                 .accessibilityHint("Shows the run’s details")
             }
         }

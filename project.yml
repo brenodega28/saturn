@@ -45,6 +45,7 @@ targets:
         SUFeedURL: $(SPARKLE_FEED_URL)
         SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
         SUEnableAutomaticChecks: true
+        GitHubClientID: $(GITHUB_CLIENT_ID)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.monoliti.Ensemble

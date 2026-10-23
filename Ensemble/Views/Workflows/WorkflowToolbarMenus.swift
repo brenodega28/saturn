@@ -106,7 +106,7 @@ struct WorkflowListMenu: View {
             }
             if !hasConfig {
                 Section {
-                    Text("No .ensemble/ folder yet. Add the defaults in Settings › Roles.")
+                    Text("No .ensemble/ folder yet. Add the defaults in Crew › Roles.")
                 }
             }
         } label: {

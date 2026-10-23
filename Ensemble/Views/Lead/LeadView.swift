@@ -118,7 +118,7 @@ private struct NewRequestIntro: View {
                         .buttonStyle(.primaryPill)
                 }
             } else if model.leadRoles(in: project).isEmpty {
-                EmptyState("No lead role", message: "A lead is a role with can_spawn: true. Add one in Settings › Roles, or pick a workflow that needs no lead.")
+                EmptyState("No lead role", message: "A lead is a role with can_spawn: true. Add one in Crew › Roles, or pick a workflow that needs no lead.")
             } else {
                 EmptyState("Talk to an agent", message: "Ask a question or describe what you need. The lead answers here, and proposes a run when there’s work to do.")
             }

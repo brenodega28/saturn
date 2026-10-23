@@ -31,7 +31,7 @@ struct NewAgentSheet: View {
             if !model.hasConfig(project) {
                 InstallDefaultsCard(project: project)
             } else if config.roles.isEmpty {
-                Text("There are no roles in .ensemble/roles yet. Add one in Settings › Roles.")
+                Text("There are no roles in .ensemble/roles yet. Add one in Crew › Roles.")
                     .foregroundStyle(Theme.secondaryText)
             } else {
                 roleGroup("Writes code", roles: config.roles.filter(\.editsCode))

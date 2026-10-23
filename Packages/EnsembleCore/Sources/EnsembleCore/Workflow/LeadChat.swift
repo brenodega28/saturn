@@ -8,7 +8,7 @@ public enum LeadChatError: Error, LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .noLeadRole: "This project has no lead role. Add a role with can_spawn: true in Settings › Roles."
+        case .noLeadRole: "This project has no lead role. Add a role with can_spawn: true in Crew › Roles."
         case .proposalClosed: "This proposal was already started or dismissed."
         case .runInProgress: "A run for this request is still going. Wait for it to end, or cancel it first."
         case .unknownWorkflow(let id): "The workflow “\(id)” no longer exists in .ensemble/workflows."

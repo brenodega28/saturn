@@ -25,6 +25,7 @@ enum ProjectTab: String, CaseIterable, Identifiable, Codable {
     case workflows
     case settings
     case code
+    case roles
 
     var id: Self { self }
 
@@ -37,6 +38,7 @@ enum ProjectTab: String, CaseIterable, Identifiable, Codable {
         case .workflows: "Workflows"
         case .settings: "Settings"
         case .code: "Code"
+        case .roles: "Roles"
         }
     }
 
@@ -49,6 +51,7 @@ enum ProjectTab: String, CaseIterable, Identifiable, Codable {
         case .workflows: "flowchart"
         case .settings: "gearshape"
         case .code: "chevron.left.forwardslash.chevron.right"
+        case .roles: "person.text.rectangle"
         }
     }
 }

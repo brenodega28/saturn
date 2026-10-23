@@ -54,7 +54,7 @@ public struct WorkflowDefinition: Sendable, Hashable, Identifiable, Codable {
         try container.encode(version, forKey: .version)
         if !description.isEmpty { try container.encode(description, forKey: .description) }
         try container.encode(trigger, forKey: .trigger)
-        try container.encodeIfPresent(budget, forKey: .budget)
+        try container.encodeNumber(budget, forKey: .budget)
         try container.encode(steps, forKey: .steps)
         try container.encode(end, forKey: .end)
     }
@@ -244,7 +244,7 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         try container.encodeIfPresent(condition, forKey: .condition)
         try container.encodeIfPresent(message, forKey: .message)
         try container.encodeIfPresent(timeoutMinutes, forKey: .timeoutMinutes)
-        try container.encodeIfPresent(budget, forKey: .budget)
+        try container.encodeNumber(budget, forKey: .budget)
         if onFailure != .ask { try container.encode(onFailure, forKey: .onFailure) }
         try container.encodeIfPresent(next, forKey: .next)
         if !routes.isEmpty { try container.encode(routes, forKey: .routes) }
@@ -267,6 +267,16 @@ public struct CanvasPosition: Sendable, Hashable, Codable {
     public init(x: Double, y: Double) {
         self.x = x
         self.y = y
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case x, y
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeNumber(x.rounded(), forKey: .x)
+        try container.encodeNumber(y.rounded(), forKey: .y)
     }
 }
 

@@ -185,12 +185,12 @@ Goal: work arrives on its own, and nothing waiting on you gets missed.
 
 Goal: edit workflows visually; the YAML stays the source of truth.
 
-- [ ] Canvas editor reading and writing `.ensemble/workflows/*.yaml`
-- [ ] Palette of roles (not named agents) and step types; drag to add
-- [ ] Inspector: who does it, instructions, inputs, hand-offs, rules, limits
-- [ ] Trigger and End steps configurable in the canvas
-- [ ] Warning when editing a workflow with runs in flight (runs keep the version they started with)
-- [ ] Test run: dry run on a sample task with agents stubbed, showing the path taken
+- [x] Canvas editor reading and writing `.ensemble/workflows/*.yaml`
+- [x] Palette of roles (not named agents) and step types; drag to add
+- [x] Inspector: who does it, instructions, inputs, hand-offs, rules, limits
+- [x] Trigger and End steps configurable in the canvas
+- [x] Warning when editing a workflow with runs in flight (runs keep the version they started with)
+- [x] Test run: dry run on a sample task with agents stubbed, showing the path taken
 
 **Exit check:** build a Hotfix workflow (no lead, one dev, QA, you) in the editor and run it.
 

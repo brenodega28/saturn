@@ -85,7 +85,7 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Codable {
         try container.encode(editsCode, forKey: .editsCode)
         try container.encode(canSpawn, forKey: .canSpawn)
         try container.encode(permissionProfile, forKey: .permissionProfile)
-        try container.encodeIfPresent(budgetPerRun, forKey: .budgetPerRun)
+        try container.encodeNumber(budgetPerRun, forKey: .budgetPerRun)
         if !skills.isEmpty { try container.encode(skills, forKey: .skills) }
         if !docs.isEmpty { try container.encode(docs, forKey: .docs) }
         try container.encode(prompt, forKey: .prompt)

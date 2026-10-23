@@ -110,3 +110,16 @@ import Testing
         #expect(throws: HandoffError.missing("question")) { try HandoffTool.askHuman.decode(.object([:])) }
     }
 }
+
+@Suite struct YAMLNumberTests {
+    @Test func writesReadableNumbers() throws {
+        let workflow = WorkflowDefinition(id: "w", name: "W", budget: 20, steps: [
+            WorkflowStep(id: "a", type: .agent, role: "r", budget: 2.5, position: CanvasPosition(x: 400.4, y: 180)),
+        ])
+        let yaml = try ProjectConfigLoader.encodeYAML(workflow)
+        #expect(yaml.contains("budget: 20\n"))
+        #expect(yaml.contains("budget: 2.5\n"))
+        #expect(yaml.contains("x: 400\n"))
+        #expect(!yaml.contains("e+"))
+    }
+}

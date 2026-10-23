@@ -475,15 +475,22 @@ private struct HandOffEditor: View {
                         }
                     }
                     otherwise(step)
-                    Button {
-                        editor.edit { workflow in
-                            guard let current = workflow.step(stepID) else { return }
-                            workflow.setRoute(from: stepID, outcome: WorkflowDefinition.unusedOutcome(for: current), to: WorkflowDefinition.endStepID)
+                    let unused = WorkflowDefinition.suggestedOutcomes(for: step.type).filter { step.routes[$0] == nil }
+                    Menu {
+                        ForEach(unused, id: \.self) { outcome in
+                            Button(outcome.replacingOccurrences(of: "_", with: " ").capitalized) {
+                                editor.edit { workflow in
+                                    workflow.setRoute(from: stepID, outcome: outcome, to: WorkflowDefinition.endStepID)
+                                }
+                            }
                         }
                     } label: {
                         Label("Add route", systemImage: "plus")
                     }
+                    .menuStyle(.button)
                     .buttonStyle(.pill)
+                    .fixedSize()
+                    .disabled(unused.isEmpty)
                     .help("Send a specific outcome to another step")
                 }
             }

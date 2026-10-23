@@ -11,9 +11,9 @@ struct QuestionCard: View {
     var body: some View {
         let agent = item.agentId.flatMap { model.agent(id: $0) }
         DecisionCard(title: item.title, detail: nil) {
-            QuestionFormView(form: QuestionForm(item: item), recipient: agent?.name, send: send) {
+            QuestionFormView(form: QuestionForm(item: item), recipient: agent.map { model.displayName(of: $0, in: project) }, send: send) {
                 if let agent {
-                    Button("Open \(agent.name)") { model.select(model.agents.session(for: agent), in: project) }
+                    Button("Open \(model.displayName(of: agent, in: project))") { model.select(model.agents.session(for: agent), in: project) }
                         .buttonStyle(PillButtonStyle(height: 30))
                         .help("Open the agent’s session")
                 }

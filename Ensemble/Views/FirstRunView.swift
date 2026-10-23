@@ -28,7 +28,7 @@ struct FirstRunView: View {
                         Text("Install the \(Text("claude").font(Theme.monospaced)) CLI, then check again.")
                     }
                     Divider().overlay(Theme.hairline)
-                    ProviderRow(access: report.provider)
+                    ProviderRow(status: report.provider)
                 }
                 .card(cornerRadius: 16)
 
@@ -109,21 +109,82 @@ private struct ToolRow<Hint: View>: View {
 }
 
 private struct ProviderRow: View {
-    let access: ProviderAccess
+    let status: ProviderStatus
 
     var body: some View {
-        CheckRow(title: "Anthropic access", isOK: access.isOK, summary: access.summary) {
-            if access.isOK {
-                Text(access.detail).foregroundStyle(Theme.secondaryText)
-            } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Sign in with \(Text("claude auth login").font(Theme.monospaced)) in Terminal, or paste an Anthropic API key. Keys are stored in your Keychain.")
-                        .foregroundStyle(Theme.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+        CheckRow(title: "Claude access", isOK: status.isOK, summary: status.summary) {
+            ProviderChoice(status: status)
+        }
+    }
+}
+
+struct ProviderChoice: View {
+    @Environment(AppModel.self) private var model
+    let status: ProviderStatus
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose how agents connect to Claude. Agents only ever use the method you pick here.")
+                .foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                ForEach(ProviderMode.allCases) { mode in
+                    option(mode)
+                }
+            }
+            switch status {
+            case .notChosen:
+                EmptyView()
+            case .apiKey(let isStored):
+                if isStored {
+                    HStack {
+                        Label("Key stored in your Keychain", systemImage: "key.fill").foregroundStyle(Theme.successText)
+                        Spacer()
+                        Button("Remove Key", role: .destructive) { Task { await model.removeAPIKey() } }
+                            .buttonStyle(.pill)
+                    }
+                } else {
                     APIKeyField()
+                }
+            case .claudeSignIn(let account, let isSignedIn):
+                if isSignedIn {
+                    Label(account.map { "Signed in as \($0)" } ?? "Signed in", systemImage: "person.crop.circle.badge.checkmark")
+                        .foregroundStyle(Theme.successText)
+                } else {
+                    Text("Run \(Text("claude auth login").font(Theme.monospaced)) in Terminal, then check again.")
+                        .foregroundStyle(Theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
+    }
+
+    private func option(_ mode: ProviderMode) -> some View {
+        let isSelected = status.mode == mode
+        return Button {
+            Task { await model.chooseProvider(mode) }
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                        .foregroundStyle(isSelected ? Theme.accent : Theme.secondaryText)
+                    Text(mode.title).font(.system(size: 13.5, weight: .semibold))
+                }
+                Text(.init(mode.billing))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(isSelected ? Theme.accent.opacity(0.12) : Theme.fill, in: .rect(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(isSelected ? Theme.accent : Theme.hairline, lineWidth: 1.5))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help("Use \(mode.title)")
+        .accessibilityLabel(mode.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -149,20 +210,12 @@ struct APIKeyField: View {
     }
 }
 
-extension ProviderAccess {
+extension ProviderStatus {
     var summary: String {
         switch self {
-        case .apiKey: "API key"
-        case .claudeLogin: "Claude Code login"
-        case .none: "Not set up"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .apiKey: "Using the API key stored in your Keychain."
-        case .claudeLogin(let method): "Using your Claude Code sign-in\(method.map { " (\($0))" } ?? "")."
-        case .none: "No API key and no Claude Code sign-in."
+        case .notChosen: "Choose one"
+        case .apiKey(let isStored): isStored ? "API key" : "API key needed"
+        case .claudeSignIn(_, let isSignedIn): isSignedIn ? "Claude sign-in" : "Not signed in"
         }
     }
 }

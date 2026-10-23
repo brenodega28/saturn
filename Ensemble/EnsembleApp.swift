@@ -4,6 +4,7 @@ import SwiftUI
 
 @main
 struct EnsembleApp: App {
+    @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var launch = Launch.start()
     @State private var updater = Updater()
 
@@ -12,7 +13,9 @@ struct EnsembleApp: App {
             Group {
                 switch launch {
                 case .ready(let model):
-                    RootView().environment(model)
+                    RootView()
+                        .environment(model)
+                        .onAppear { appDelegate.model = model }
                 case .failed(let message):
                     LaunchFailureView(message: message)
                 }
@@ -39,6 +42,15 @@ struct EnsembleApp: App {
     }
 }
 
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    @MainActor var model: AppModel?
+
+    @MainActor
+    func applicationWillTerminate(_ notification: Notification) {
+        model?.agents.terminateAll()
+    }
+}
+
 enum WindowID {
     static let main = "main"
     static let debugWorktrees = "debug-worktrees"
@@ -51,8 +63,9 @@ enum Launch {
     @MainActor
     static func start() -> Launch {
         do {
-            let database = try AppDatabase.open(at: AppDatabase.defaultLocation)
-            return .ready(AppModel(database: database, secrets: KeychainSecretStore(service: AppModel.keychainService)))
+            let paths = AppPaths.standard
+            let database = try AppDatabase.open(at: paths.database)
+            return .ready(AppModel(database: database, paths: paths, secrets: KeychainSecretStore(service: AppModel.keychainService)))
         } catch {
             return .failed(error.localizedDescription)
         }

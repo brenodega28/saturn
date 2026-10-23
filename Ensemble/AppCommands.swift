@@ -16,6 +16,9 @@ struct AppCommands: Commands {
                 .keyboardShortcut("o")
             Button("Clone Repository…") { model.isClonePresented = true }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
+            Button("New Agent…") { model.isNewAgentPresented = true }
+                .keyboardShortcut("n")
+                .disabled(model.selectedProject == nil)
             Divider()
             Button("Close Project") {
                 if let project = model.selectedProject { model.close(project) }

@@ -117,12 +117,12 @@ Goal: a native shell that can open a project and manage worktrees safely.
 
 Goal: run a single Claude Code agent in its own worktree and watch it work.
 
-- [ ] Agent runner: spawn the `claude` CLI headlessly with `Process` inside a worktree, parse its streaming JSON events, persist the transcript, keep the session id for resume
-- [ ] Track tokens and cost per agent from the stream
-- [ ] Pause, stop, restart an agent; survive app quit (mark as interrupted, offer resume)
-- [ ] Agent session screen: transcript, tool calls, inline diffs, message box
-- [ ] Right panel: worktree path, branch, commits ahead, changed files, Reveal in Finder, Open in Editor, Terminal
-- [ ] **Take over**: pause the agent and hand the worktree to the user
+- [x] Agent runner: spawn the `claude` CLI headlessly with `Process` inside a worktree, parse its streaming JSON events, persist the transcript, keep the session id for resume
+- [x] Track tokens and cost per agent from the stream
+- [x] Pause, stop, restart an agent; survive app quit (mark as interrupted, offer resume)
+- [x] Agent session screen: transcript, tool calls, inline diffs, message box
+- [x] Right panel: worktree path, branch, commits ahead, changed files, Reveal in Finder, Open in Editor, Terminal
+- [x] **Take over**: pause the agent and hand the worktree to the user
 
 **Exit check:** type a task, one agent implements it in its worktree, tests run, you see the diff and the cost.
 

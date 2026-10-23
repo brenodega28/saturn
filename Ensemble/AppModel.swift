@@ -42,16 +42,19 @@ final class AppModel {
     static let keychainService = "dev.monoliti.Ensemble"
 
     let database: AppDatabase
+    let agents: AgentRuntime
     let secrets: any SecretStore
     let locator: ToolLocator
     let runner: CommandRunner
 
     private(set) var environment: EnvironmentReport?
+    private(set) var providerMode: ProviderMode?
     private(set) var isCheckingEnvironment = false
     private(set) var openProjects: [Project] = []
     private(set) var recentProjects: [Project] = []
     private(set) var projectStates: [Int64: ProjectState] = [:]
-    private(set) var weeklySpend: Double = 0
+    var selectedAgents: [Int64: Int64] = [:]
+    var isNewAgentPresented = false
 
     var selection: SidebarItem? {
         didSet { persistNavigation() }
@@ -65,8 +68,11 @@ final class AppModel {
     var isOpenPanelPresented = false
     var alert: AppAlert?
 
-    init(database: AppDatabase, secrets: any SecretStore, locator: ToolLocator = ToolLocator()) {
+    init(database: AppDatabase, paths: AppPaths, secrets: any SecretStore, locator: ToolLocator = ToolLocator()) {
         self.database = database
+        let storedMode = UserDefaults.standard.string(forKey: Self.providerModeKey).flatMap(ProviderMode.init(rawValue:))
+        self.providerMode = storedMode
+        self.agents = AgentRuntime(database: database, paths: paths, secrets: secrets, providerMode: storedMode)
         self.secrets = secrets
         self.locator = locator
         self.runner = CommandRunner(environment: locator.environment())
@@ -98,6 +104,7 @@ final class AppModel {
 
     func launch() async {
         reloadProjects()
+        perform("Couldn’t recover agents") { try agents.recoverAfterLaunch() }
         await checkEnvironment()
         await refreshAllProjects()
     }
@@ -105,12 +112,65 @@ final class AppModel {
     func checkEnvironment() async {
         isCheckingEnvironment = true
         defer { isCheckingEnvironment = false }
-        environment = await EnvironmentChecker(locator: locator, runner: runner, secrets: secrets).check()
+        let report = await EnvironmentChecker(locator: locator, runner: runner, secrets: secrets, mode: providerMode).check()
+        environment = report
+        agents.claudeExecutable = report.claude.isOK ? report.claude.path : nil
+        agents.processEnvironment = locator.environment()
     }
 
-    var storedAPIKey: Bool {
-        guard let key = try? secrets.read(.anthropicAPIKey) else { return false }
-        return !key.isEmpty
+    private static let providerModeKey = "providerMode"
+
+    func chooseProvider(_ mode: ProviderMode) async {
+        providerMode = mode
+        agents.providerMode = mode
+        UserDefaults.standard.set(mode.rawValue, forKey: Self.providerModeKey)
+        await checkEnvironment()
+    }
+
+    var weeklySpend: Double {
+        _ = agents.usageRevision
+        let start = Calendar.current.dateInterval(of: .weekOfYear, for: .now)?.start ?? .now
+        return (try? database.spend(since: start)) ?? 0
+    }
+
+    func agentSessions(in project: Project) -> [AgentSession] {
+        guard let id = project.id else { return [] }
+        _ = agents.usageRevision
+        return (try? agents.sessions(inProject: id)) ?? []
+    }
+
+    func selectedAgent(in project: Project) -> AgentSession? {
+        guard let projectID = project.id, let agentID = selectedAgents[projectID] else { return nil }
+        return agentSessions(in: project).first { $0.id == agentID }
+    }
+
+    func select(_ session: AgentSession?, in project: Project) {
+        guard let projectID = project.id else { return }
+        selectedAgents[projectID] = session?.id
+        if session != nil { setTab(.agents, for: project) }
+    }
+
+    func nextAgentName(in project: Project) -> String {
+        let taken = Set(agentSessions(in: project).map { Slug.make($0.agent.name) })
+        return (1...).lazy.map { "Claude Code \($0)" }.first { !taken.contains(Slug.make($0)) }!
+    }
+
+    func spawnAgent(in project: Project, name: String, model: AgentModel, task: String) async throws {
+        guard let git = requireGit() else { return }
+        let session = try await agents.spawn(in: project, name: name, model: model, task: task, git: git)
+        select(session, in: project)
+        await refresh(project)
+    }
+
+    func deleteAgent(_ session: AgentSession, in project: Project, deleteBranch: Bool) async {
+        guard let git = requireGit() else { return }
+        do {
+            try await agents.delete(session, in: project, git: git, deleteBranch: deleteBranch)
+            if selectedAgent(in: project)?.id == session.id { select(nil, in: project) }
+        } catch {
+            alert = AppAlert(title: "Couldn’t delete \(session.agent.name)", message: error.localizedDescription)
+        }
+        await refresh(project)
     }
 
     func saveAPIKey(_ key: String) async {
@@ -229,7 +289,6 @@ final class AppModel {
         perform("Couldn’t load projects") {
             openProjects = try database.openProjects()
             recentProjects = try database.recentProjects()
-            weeklySpend = try database.spend(since: Calendar.current.dateInterval(of: .weekOfYear, for: .now)?.start ?? .now)
         }
         let openIDs = Set(openProjects.compactMap(\.id))
         if case .project(let id) = selection, !openIDs.contains(id) {

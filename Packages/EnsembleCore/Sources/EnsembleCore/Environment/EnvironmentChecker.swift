@@ -18,18 +18,32 @@ public enum ToolCheck: Sendable, Equatable {
     }
 }
 
-public enum ProviderAccess: Sendable, Equatable {
-    case apiKey
-    case claudeLogin(method: String?)
-    case none
+public enum ProviderStatus: Sendable, Equatable {
+    case notChosen
+    case apiKey(isStored: Bool)
+    case claudeSignIn(account: String?, isSignedIn: Bool)
 
-    public var isOK: Bool { self != .none }
+    public var mode: ProviderMode? {
+        switch self {
+        case .notChosen: nil
+        case .apiKey: .apiKey
+        case .claudeSignIn: .claudeSignIn
+        }
+    }
+
+    public var isOK: Bool {
+        switch self {
+        case .notChosen: false
+        case .apiKey(let isStored): isStored
+        case .claudeSignIn(_, let isSignedIn): isSignedIn
+        }
+    }
 }
 
 public struct EnvironmentReport: Sendable, Equatable {
     public let git: ToolCheck
     public let claude: ToolCheck
-    public let provider: ProviderAccess
+    public let provider: ProviderStatus
 
     public var isReady: Bool { git.isOK && claude.isOK && provider.isOK }
 }
@@ -38,11 +52,13 @@ public struct EnvironmentChecker: Sendable {
     private let locator: ToolLocator
     private let runner: CommandRunner
     private let secrets: any SecretStore
+    private let mode: ProviderMode?
 
-    public init(locator: ToolLocator, runner: CommandRunner, secrets: any SecretStore) {
+    public init(locator: ToolLocator, runner: CommandRunner, secrets: any SecretStore, mode: ProviderMode?) {
         self.locator = locator
         self.runner = runner
         self.secrets = secrets
+        self.mode = mode
     }
 
     public func check() async -> EnvironmentReport {
@@ -52,7 +68,7 @@ public struct EnvironmentChecker: Sendable {
         return EnvironmentReport(
             git: await git,
             claude: claudeCheck,
-            provider: await providerAccess(claude: claudeCheck)
+            provider: await providerStatus(claude: claudeCheck)
         )
     }
 
@@ -69,23 +85,30 @@ public struct EnvironmentChecker: Sendable {
         }
     }
 
-    func providerAccess(claude: ToolCheck) async -> ProviderAccess {
-        if let key = try? secrets.read(.anthropicAPIKey), !key.trimmed.isEmpty {
-            return .apiKey
+    func providerStatus(claude: ToolCheck) async -> ProviderStatus {
+        switch mode {
+        case nil:
+            return .notChosen
+        case .apiKey:
+            let key = (try? secrets.read(.anthropicAPIKey)) ?? nil
+            return .apiKey(isStored: !(key?.trimmed.isEmpty ?? true))
+        case .claudeSignIn:
+            let signInRunner = CommandRunner(environment: ProviderMode.claudeSignIn.environment(base: runner.environment, apiKey: nil))
+            guard case .found(let path, _) = claude,
+                  let result = try? await signInRunner.run(path, ["auth", "status", "--json"]),
+                  let status = Self.claudeAuthStatus(from: result.standardOutput)
+            else {
+                return .claudeSignIn(account: nil, isSignedIn: false)
+            }
+            let isSignedIn = status.loggedIn && status.authMethod != "api_key"
+            return .claudeSignIn(account: isSignedIn ? status.email : nil, isSignedIn: isSignedIn)
         }
-        guard case .found(let path, _) = claude,
-              let result = try? await runner.run(path, ["auth", "status", "--json"]),
-              let status = Self.claudeAuthStatus(from: result.standardOutput),
-              status.loggedIn
-        else {
-            return .none
-        }
-        return .claudeLogin(method: status.authMethod)
     }
 
     struct ClaudeAuthStatus: Decodable, Equatable {
         let loggedIn: Bool
         let authMethod: String?
+        let email: String?
     }
 
     static func claudeAuthStatus(from output: String) -> ClaudeAuthStatus? {

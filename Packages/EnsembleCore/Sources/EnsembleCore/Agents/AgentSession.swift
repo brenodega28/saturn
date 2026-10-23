@@ -1,0 +1,351 @@
+import Foundation
+import Observation
+
+@MainActor
+@Observable
+public final class AgentSession: Identifiable {
+    public static let continuePrompt = "Continue where you left off."
+    public static let handBackPrompt = """
+        I made changes in your worktree while you were paused. Check `git status` and `git diff` before continuing, \
+        then carry on with the task.
+        """
+
+    public nonisolated let id: Int64
+    public private(set) var agent: Agent
+    public private(set) var transcript: Transcript
+    public private(set) var queuedMessages: [String] = []
+
+    @ObservationIgnored private unowned let runtime: AgentRuntime
+    @ObservationIgnored private let log: TranscriptLog
+    private var handle: AgentProcessHandle?
+    private var stopTarget: AgentStatus?
+    @ObservationIgnored private var restartAfterStop = false
+    @ObservationIgnored private var pendingFailure: String?
+    @ObservationIgnored private var launchedMode: ProviderMode?
+    @ObservationIgnored private var costInProcess: Double = 0
+    @ObservationIgnored private var turnCompletedInProcess = false
+
+    init(agent: Agent, runtime: AgentRuntime) {
+        self.id = agent.id ?? -1
+        self.agent = agent
+        self.runtime = runtime
+        self.log = TranscriptLog(url: runtime.paths.transcript(agent.id ?? -1))
+        self.transcript = Transcript(lines: log.readLines())
+    }
+
+    public var isRunning: Bool { handle != nil }
+
+    public var isStopping: Bool { stopTarget != nil }
+
+    public var canResume: Bool {
+        handle == nil && [.paused, .interrupted, .stopped, .failed].contains(agent.status)
+    }
+
+    public func send(_ message: String) {
+        let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if handle != nil {
+            queuedMessages.append(text)
+        } else {
+            beginTurn(with: text)
+        }
+    }
+
+    public func pause() {
+        requestStop(.paused)
+    }
+
+    public func stop() {
+        queuedMessages.removeAll()
+        requestStop(.stopped)
+    }
+
+    public func takeOver() {
+        requestStop(.takenOver)
+    }
+
+    public func resume() {
+        guard handle == nil else { return }
+        record(notice: .resumed)
+        beginTurn(with: Self.continuePrompt)
+    }
+
+    public func handBack() {
+        guard handle == nil, agent.status == .takenOver else { return }
+        record(notice: .handedBack)
+        beginTurn(with: Self.handBackPrompt)
+    }
+
+    public func restart() {
+        if handle != nil {
+            restartAfterStop = true
+            queuedMessages.removeAll()
+            requestStop(.stopped)
+        } else {
+            performRestart()
+        }
+    }
+
+    func start() {
+        record(notice: .started)
+        beginTurn(with: agent.task)
+    }
+
+    @discardableResult
+    func markInterrupted(detail: String) -> AgentProcessHandle? {
+        let interrupted = handle
+        interrupted?.terminate()
+        handle = nil
+        stopTarget = nil
+        agent.status = .interrupted
+        agent.processID = nil
+        record(notice: .interrupted, detail: detail)
+        persist()
+        return interrupted
+    }
+
+    func terminateForDeletion() {
+        stopTarget = .stopped
+        handle?.terminate()
+        handle = nil
+    }
+
+    private func performRestart() {
+        restartAfterStop = false
+        agent.sessionId = nil
+        record(notice: .restarted)
+        beginTurn(with: agent.task)
+    }
+
+    private func requestStop(_ target: AgentStatus) {
+        guard let handle else {
+            if agent.status != target {
+                agent.status = target
+                record(notice: notice(for: target))
+                persist()
+            }
+            return
+        }
+        stopTarget = target
+        if turnCompletedInProcess {
+            handle.closeInput()
+        } else {
+            try? handle.send(line: ClaudeEvent.interruptLine(requestID: UUID().uuidString))
+        }
+        let grace = runtime.stopGracePeriod
+        Task { [weak self] in
+            try? await Task.sleep(for: grace)
+            guard let self, self.handle === handle else { return }
+            handle.terminate()
+        }
+    }
+
+    private func beginTurn(with message: String) {
+        guard let executable = runtime.claudeExecutable else {
+            fail("Claude Code isn’t available. Check Settings › Tools.")
+            return
+        }
+        guard let worktree = agent.worktreeURL, FileManager.default.fileExists(atPath: worktree.path) else {
+            fail("The worktree for \(agent.name) is missing.")
+            return
+        }
+
+        let session: ClaudeLaunch.Session
+        if let sessionID = agent.sessionId, transcript.session?.sessionID == sessionID {
+            session = .resume(sessionID)
+        } else {
+            let sessionID = agent.sessionId ?? UUID().uuidString.lowercased()
+            agent.sessionId = sessionID
+            session = .new(sessionID)
+        }
+
+        let environment: [String: String]
+        do {
+            environment = try runtime.launchEnvironment()
+        } catch {
+            fail(error.localizedDescription)
+            return
+        }
+
+        let launch = ClaudeLaunch(
+            executable: executable,
+            worktree: worktree,
+            session: session,
+            model: agent.model,
+            systemPrompt: ClaudeLaunch.systemPrompt(agentName: agent.name, worktree: worktree, branch: agent.branch),
+            environment: environment
+        )
+
+        do {
+            let (handle, output) = try runtime.launcher.launch(launch)
+            self.handle = handle
+            launchedMode = runtime.providerMode
+            pendingFailure = nil
+            costInProcess = 0
+            turnCompletedInProcess = false
+            let line = ClaudeEvent.userLine(message)
+            try handle.send(line: line)
+            record(line: line)
+            agent.status = .working
+            agent.processID = handle.processIdentifier
+            agent.lastError = nil
+            persist()
+            Task { [weak self] in
+                for await item in output {
+                    self?.receive(item, from: handle)
+                }
+            }
+        } catch {
+            handle?.terminate()
+            handle = nil
+            fail(error.localizedDescription)
+        }
+    }
+
+    private func receive(_ output: ProcessOutput, from source: AgentProcessHandle) {
+        guard source === handle else { return }
+        switch output {
+        case .line(let line):
+            let events = ClaudeEvent.parse(line: line)
+            guard !events.isEmpty else { return }
+            log.append(line)
+            for event in events {
+                if case .sessionStarted(let info) = event, let mode = launchedMode,
+                   case let keySource = info.apiKeySource ?? "unreported", keySource != mode.expectedKeySource {
+                    pendingFailure = ProviderError.wrongCredentials(expected: mode, actualSource: keySource).localizedDescription
+                    source.kill()
+                }
+                transcript.apply(event)
+                if case .turnCompleted(let result) = event {
+                    account(result)
+                    source.closeInput()
+                }
+            }
+        case .exited(let code, let standardError):
+            processEnded(code: code, standardError: standardError)
+        }
+    }
+
+    private func account(_ result: TurnResult) {
+        turnCompletedInProcess = true
+        let cost = max(0, result.totalCostUSD - costInProcess)
+        costInProcess = result.totalCostUSD
+        agent.inputTokens += result.usage.input
+        agent.outputTokens += result.usage.output
+        agent.cacheReadTokens += result.usage.cacheRead
+        agent.cacheWriteTokens += result.usage.cacheWrite
+        agent.costUSD += cost
+        persist()
+        do {
+            try runtime.database.record(UsageEntry(
+                projectId: agent.projectId,
+                runId: agent.runId,
+                agentId: agent.id,
+                model: transcript.session?.model ?? agent.model,
+                inputTokens: result.usage.input,
+                outputTokens: result.usage.output,
+                cacheReadTokens: result.usage.cacheRead,
+                cacheWriteTokens: result.usage.cacheWrite,
+                costUSD: cost,
+                recordedAt: .now
+            ))
+        } catch {
+            agent.lastError = "Couldn’t record usage: \(error.localizedDescription)"
+        }
+        runtime.usageDidChange()
+    }
+
+    private func processEnded(code: Int32, standardError: String) {
+        handle = nil
+        agent.processID = nil
+
+        if let failure = pendingFailure {
+            pendingFailure = nil
+            stopTarget = nil
+            restartAfterStop = false
+            fail(failure)
+            return
+        }
+
+        if let target = stopTarget {
+            stopTarget = nil
+            agent.status = target
+            record(notice: notice(for: target))
+            persist()
+            if restartAfterStop { performRestart() }
+            return
+        }
+
+        if turnCompletedInProcess {
+            agent.status = .idle
+            persist()
+            if !queuedMessages.isEmpty {
+                let next = queuedMessages.joined(separator: "\n\n")
+                queuedMessages.removeAll()
+                beginTurn(with: next)
+            }
+            return
+        }
+
+        let message = standardError.trimmingCharacters(in: .whitespacesAndNewlines)
+        fail(message.isEmpty ? "Claude Code exited with code \(code) before finishing the turn." : message)
+    }
+
+    private func fail(_ message: String) {
+        agent.status = .failed
+        agent.lastError = message
+        queuedMessages.removeAll()
+        record(notice: .failed, detail: message)
+        persist()
+    }
+
+    private func notice(for status: AgentStatus) -> EnsembleNotice {
+        switch status {
+        case .paused: .paused
+        case .takenOver: .takenOver
+        case .interrupted: .interrupted
+        default: .stopped
+        }
+    }
+
+    private func record(notice: EnsembleNotice, detail: String? = nil) {
+        record(line: ClaudeEvent.noticeLine(notice, detail: detail))
+    }
+
+    private func record(line: String) {
+        log.append(line)
+        for event in ClaudeEvent.parse(line: line) {
+            transcript.apply(event)
+        }
+    }
+
+    private func persist() {
+        agent.updatedAt = .now
+        do {
+            try runtime.database.save(agent)
+        } catch {
+            agent.lastError = "Couldn’t save agent state: \(error.localizedDescription)"
+        }
+    }
+}
+
+struct TranscriptLog {
+    let url: URL
+
+    func append(_ line: String) {
+        let data = Data((line + "\n").utf8)
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: url)
+        }
+    }
+
+    func readLines() -> [String] {
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        return text.split(separator: "\n").map(String.init)
+    }
+}

@@ -20,11 +20,7 @@ public final class AppDatabase: Sendable {
         try AppDatabase(DatabaseQueue())
     }
 
-    public static var defaultLocation: URL {
-        URL.applicationSupportDirectory
-            .appending(path: "Ensemble", directoryHint: .isDirectory)
-            .appending(path: "ensemble.sqlite")
-    }
+    public static var defaultLocation: URL { AppPaths.standard.database }
 
     static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -98,6 +94,18 @@ public final class AppDatabase: Sendable {
                 t.column("cacheWriteTokens", .integer).notNull().defaults(to: 0)
                 t.column("costUSD", .double).notNull()
                 t.column("recordedAt", .datetime).notNull().indexed()
+            }
+        }
+
+        migrator.registerMigration("v2-agent-sessions") { db in
+            try db.alter(table: "agent") { t in
+                t.add(column: "model", .text).notNull().defaults(to: "sonnet")
+                t.add(column: "task", .text).notNull().defaults(to: "")
+                t.add(column: "baseBranch", .text)
+                t.add(column: "cacheReadTokens", .integer).notNull().defaults(to: 0)
+                t.add(column: "cacheWriteTokens", .integer).notNull().defaults(to: 0)
+                t.add(column: "processID", .integer)
+                t.add(column: "lastError", .text)
             }
         }
 

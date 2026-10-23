@@ -141,7 +141,10 @@ public enum AgentStatus: String, Codable, Sendable, CaseIterable {
     case paused
     case interrupted
     case stopped
+    case takenOver
     case failed
+
+    public var hasLiveProcess: Bool { self == .working }
 }
 
 public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
@@ -159,15 +162,24 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
     public var sessionId: String?
     public var inputTokens: Int
     public var outputTokens: Int
+    public var cacheReadTokens: Int
+    public var cacheWriteTokens: Int
     public var costUSD: Double
     public var isPinned: Bool
+    public var model: String
+    public var task: String
+    public var baseBranch: String?
+    public var processID: Int32?
+    public var lastError: String?
     public var createdAt: Date
     public var updatedAt: Date
 
     public init(
         id: Int64? = nil, projectId: Int64, runId: Int64? = nil, role: String, name: String, step: String? = nil,
         worktreePath: String? = nil, branch: String? = nil, status: AgentStatus, sessionId: String? = nil,
-        inputTokens: Int = 0, outputTokens: Int = 0, costUSD: Double = 0, isPinned: Bool = false,
+        inputTokens: Int = 0, outputTokens: Int = 0, cacheReadTokens: Int = 0, cacheWriteTokens: Int = 0,
+        costUSD: Double = 0, isPinned: Bool = false, model: String = AgentModel.sonnet.rawValue, task: String = "",
+        baseBranch: String? = nil, processID: Int32? = nil, lastError: String? = nil,
         createdAt: Date, updatedAt: Date
     ) {
         self.id = id
@@ -182,14 +194,31 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
         self.sessionId = sessionId
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
+        self.cacheReadTokens = cacheReadTokens
+        self.cacheWriteTokens = cacheWriteTokens
         self.costUSD = costUSD
         self.isPinned = isPinned
+        self.model = model
+        self.task = task
+        self.baseBranch = baseBranch
+        self.processID = processID
+        self.lastError = lastError
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
+    public var totalTokens: Int { inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens }
+
+    public var worktreeURL: URL? { worktreePath.map { URL(fileURLWithPath: $0, isDirectory: true) } }
+
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
+    }
+
+    public enum Columns {
+        public static let projectId = Column(CodingKeys.projectId)
+        public static let status = Column(CodingKeys.status)
+        public static let createdAt = Column(CodingKeys.createdAt)
     }
 }
 

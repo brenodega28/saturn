@@ -1,0 +1,179 @@
+import EnsembleCore
+import EnsembleUI
+import SwiftUI
+
+struct AgentSessionView: View {
+    @Environment(AppModel.self) private var model
+    let session: AgentSession
+    let project: Project
+    @AppStorage("preferredEditor") private var preferredEditor = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            header
+            HStack(alignment: .top, spacing: 16) {
+                VStack(spacing: 12) {
+                    StatusBanner(session: session)
+                    TranscriptView(session: session)
+                    Composer(session: session)
+                }
+                .frame(maxWidth: .infinity)
+                WorkspacePanel(session: session)
+                    .frame(width: 300)
+            }
+        }
+    }
+
+    private var header: some View {
+        ViewThatFits(in: .horizontal) {
+            headerRow(compactControls: false)
+            headerRow(compactControls: true)
+        }
+    }
+
+    private func headerRow(compactControls: Bool) -> some View {
+        let agent = session.agent
+        return HStack(alignment: .center, spacing: 14) {
+            Button {
+                model.select(nil, in: project)
+            } label: {
+                Image(systemName: "chevron.left").frame(width: 28, height: 28).contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .help("Back to Agents")
+            .accessibilityLabel("Back to Agents")
+
+            AgentAvatar(size: 40)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 10) {
+                    Text(agent.name).font(.system(size: 17, weight: .bold)).lineLimit(1)
+                    StatusLabel(status: agent.status).fixedSize()
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        Text("Claude Code · \(session.transcript.session?.model ?? agent.model)")
+                        Text(agent.tokensAndCost).font(.system(size: 12, design: .monospaced))
+                        Text("started \(Text(agent.createdAt, style: .relative)) ago")
+                    }
+                    .fixedSize()
+                    Text(agent.tokensAndCost).font(.system(size: 12, design: .monospaced)).fixedSize()
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.secondaryText)
+            }
+            .frame(minWidth: 160, alignment: .leading)
+            Spacer(minLength: 8)
+            AgentControls(session: session, compact: compactControls)
+                .fixedSize()
+            Button {
+                session.takeOver()
+                if let worktree = agent.worktreeURL {
+                    let editors = ExternalApp.installed(ExternalApp.editorCandidates)
+                    (editors.first { $0.bundleIdentifier == preferredEditor } ?? editors.first)?.open(worktree)
+                }
+            } label: {
+                if compactControls {
+                    Image(systemName: "hand.raised")
+                } else {
+                    Label("Take Over", systemImage: "hand.raised")
+                }
+            }
+            .buttonStyle(.pill)
+            .fixedSize()
+            .accessibilityLabel("Take Over")
+            .help("Pauses the agent and hands its worktree to you")
+            .disabled(agent.status == .takenOver || session.isStopping)
+        }
+    }
+}
+
+private struct StatusBanner: View {
+    let session: AgentSession
+
+    var body: some View {
+        let agent = session.agent
+        switch agent.status {
+        case .takenOver:
+            banner(icon: "hand.raised", color: Theme.info, text: "The worktree is yours. Edit freely, then hand it back and the agent picks up your changes.") {
+                Button("Hand Back", action: session.handBack).buttonStyle(.primaryPill)
+            }
+        case .interrupted:
+            banner(icon: "exclamationmark.triangle", color: Theme.warning, text: "This turn was cut off when Ensemble quit.") {
+                Button("Resume", action: session.resume).buttonStyle(.primaryPill)
+            }
+        case .failed:
+            banner(icon: "xmark.octagon", color: Theme.danger, text: agent.lastError ?? "The agent stopped unexpectedly.") {
+                Button("Retry", action: session.resume).buttonStyle(.primaryPill)
+            }
+        case .paused:
+            banner(icon: "pause.circle", color: Theme.paused, text: "Paused. Resume to continue, or send a message with new instructions.") {
+                Button("Resume", action: session.resume).buttonStyle(.primaryPill)
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func banner(icon: String, color: Color, text: String, @ViewBuilder action: () -> some View) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).foregroundStyle(color)
+            Text(text).font(.system(size: 12.5)).textSelection(.enabled).lineLimit(4)
+            Spacer()
+            action()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(color.opacity(0.12), in: .rect(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct Composer: View {
+    let session: AgentSession
+    @State private var text = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !session.queuedMessages.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock").font(.system(size: 11))
+                    Text("\(session.queuedMessages.count) queued for when this turn ends")
+                }
+                .font(.system(size: 11.5))
+                .foregroundStyle(Theme.secondaryText)
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("Message \(session.agent.name)", text: $text, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13.5))
+                    .lineLimit(1...6)
+                    .focused($isFocused)
+                    .onSubmit(send)
+                    .task(id: session.id) { isFocused = true }
+                    .padding(.vertical, 6)
+                Button(action: send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(Theme.accent, in: Circle())
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.return, modifiers: .command)
+                .accessibilityLabel("Send")
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+        }
+    }
+
+    private func send() {
+        let message = text
+        text = ""
+        session.send(message)
+    }
+}

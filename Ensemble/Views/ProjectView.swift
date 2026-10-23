@@ -8,6 +8,7 @@ struct ProjectView: View {
     let project: Project
 
     var body: some View {
+        @Bindable var model = model
         let state = model.state(for: project)
         VStack(alignment: .leading, spacing: 20) {
             header(branch: state.branch)
@@ -18,26 +19,55 @@ struct ProjectView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .padding(EdgeInsets(top: 10, leading: 26, bottom: 24, trailing: 22))
+        .sheet(isPresented: $model.isNewAgentPresented) {
+            NewAgentSheet(project: project)
+        }
     }
 
     private func header(branch: String?) -> some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(project.name).font(.system(size: 17, weight: .bold)).kerning(-0.2)
-                Text([project.path.abbreviatingHome, branch].compactMap(\.self).joined(separator: " · "))
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                title(branch: branch).frame(minWidth: 220, alignment: .leading)
+                Spacer(minLength: 12)
+                headerControls
             }
-            Spacer(minLength: 12)
+            VStack(alignment: .leading, spacing: 12) {
+                title(branch: branch)
+                headerControls
+            }
+        }
+        .frame(minHeight: 52)
+    }
+
+    private func title(branch: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(project.name)
+                .font(.system(size: 17, weight: .bold))
+                .kerning(-0.2)
+                .lineLimit(1)
+            Text([project.path.abbreviatingHome, branch].compactMap(\.self).joined(separator: " · "))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(Theme.secondaryText)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
+    private var headerControls: some View {
+        HStack(spacing: 14) {
             CapsuleTabs(ProjectTab.allCases, selection: Binding(
                 get: { model.tab(for: project) },
                 set: { model.setTab($0, for: project) }
             ), title: \.title)
             .fixedSize()
+            Button {
+                model.isNewAgentPresented = true
+            } label: {
+                Label("New Agent", systemImage: "plus")
+            }
+            .buttonStyle(.primaryPill)
+            .fixedSize()
         }
-        .frame(minHeight: 52)
     }
 
     @ViewBuilder
@@ -48,17 +78,11 @@ struct ProjectView: View {
         case .lead:
             EmptyState("Lead chat", message: "Talk to a lead role here to turn a request into a task and a plan before any agent starts.")
         case .agents:
-            EmptyState("No agents yet", message: "Agents are created by runs. Give the lead a task, or accept a GitHub issue from Tasks, and its workflow spins up the right roles.") {
-                Button("New task in Lead chat") { model.setTab(.lead, for: project) }.buttonStyle(.primaryPill)
-                Button("Open Tasks") { model.setTab(.tasks, for: project) }.buttonStyle(.pill)
-            }
-            .overlay(alignment: .bottom) {
-                if !state.worktrees.isEmpty {
-                    Button("\(state.worktrees.count) worktrees in .crew/ — Debug › Worktrees…") {
-                        openWindow(id: WindowID.debugWorktrees)
-                    }
-                    .buttonStyle(.link)
-                    .font(.system(size: 12))
+            if let session = model.selectedAgent(in: project) {
+                AgentSessionView(session: session, project: project)
+            } else {
+                AgentsView(project: project, worktreeCount: state.worktrees.count) {
+                    openWindow(id: WindowID.debugWorktrees)
                 }
             }
         case .changes:
@@ -117,18 +141,14 @@ private struct ProjectSettingsView: View {
                 LabeledContent("Worktrees", value: "\(model.state(for: project).worktrees.count) in \(WorktreeManager.directoryName)/")
             }
 
-            Section("Anthropic access") {
+            Section {
                 if let environment = model.environment {
-                    LabeledContent("Using", value: environment.provider.summary)
-                    Text(environment.provider.detail).foregroundStyle(Theme.secondaryText)
+                    ProviderChoice(status: environment.provider)
                 }
-                if model.storedAPIKey {
-                    Button("Remove API Key from Keychain", role: .destructive) {
-                        Task { await model.removeAPIKey() }
-                    }
-                } else {
-                    APIKeyField()
-                }
+            } header: {
+                Text("Claude access")
+            } footer: {
+                Text("Applies to every project. A change takes effect on each agent’s next turn.")
             }
 
             Section("Tools") {

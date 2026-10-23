@@ -189,6 +189,11 @@ final class AppModel {
     func launch() async {
         reloadProjects()
         perform("Couldn’t recover agents") { try agents.recoverAfterLaunch() }
+        do {
+            try await driver.ensureServer()
+        } catch {
+            alert = AppAlert(title: "Couldn’t start Ensemble’s agent tools", message: error.localizedDescription)
+        }
         await checkEnvironment()
         perform("Couldn’t recover runs") { try engine.recover() }
         startInbox()

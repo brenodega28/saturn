@@ -48,9 +48,24 @@ public struct RequestThread: Sendable, Hashable {
         if !messages.contains(where: { $0.kind == .user }) {
             add(task.createdAt, .request(task))
         }
-        for message in messages {
-            add(message.createdAt, .message(message))
+        var proposalsAwaitingReply: [LeadMessage] = []
+        func addProposalsAwaitingReply(at date: Date? = nil) {
+            for proposal in proposalsAwaitingReply { add(date ?? proposal.createdAt, .message(proposal)) }
+            proposalsAwaitingReply = []
         }
+        for message in messages {
+            switch message.kind {
+            case .proposal:
+                proposalsAwaitingReply.append(message)
+            case .lead:
+                add(message.createdAt, .message(message))
+                addProposalsAwaitingReply(at: message.createdAt)
+            default:
+                addProposalsAwaitingReply()
+                add(message.createdAt, .message(message))
+            }
+        }
+        addProposalsAwaitingReply()
         for run in runs {
             add(run.startedAt, .runStarted(run))
             for entry in timelines[run.id ?? -1]?.entries ?? [] where entry.status != .running && entry.status != .waitingOnYou {

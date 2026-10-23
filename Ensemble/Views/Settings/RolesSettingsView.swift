@@ -192,7 +192,7 @@ struct RolesSettingsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     settingToggle("Edits code", detail: "Gets its own worktree and branch. Off means the agent only reads the repo.", isOn: role.editsCode)
                     Divider().overlay(Theme.hairline)
-                    settingToggle("Can spawn agents", detail: "Plans work and hands it to other roles, like a lead.", isOn: role.canSpawn)
+                    settingToggle("Can spawn agents", detail: "Plans work and hands it to other roles, like a lead. Can start, stop, message and delete any agent, and opens its own worktree when it needs to code.", isOn: role.canSpawn)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 field("Budget per run") {

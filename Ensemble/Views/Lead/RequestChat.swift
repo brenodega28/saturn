@@ -89,9 +89,8 @@ struct RequestChat: View {
                     ChatText(message.text)
                 }
             case .proposal:
-                LeadBubble(role: data.leadRole, name: data.leadName, date: message.createdAt) {
-                    ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed)
-                }
+                ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed)
+                    .padding(.leading, 42)
             case .note:
                 DirectMessageNote(text: message.text)
                     .padding(.leading, 42)
@@ -246,6 +245,7 @@ private struct ProposalCard: View {
     let project: Project
     let hasActiveRun: Bool
     let isRequestClosed: Bool
+    @State private var showsBrief = false
 
     var body: some View {
         let workflow = proposal.workflow.flatMap { model.config(for: project).workflow($0) }
@@ -260,8 +260,17 @@ private struct ProposalCard: View {
                 statusLabel
             }
             Text(proposal.title ?? "Run").font(.system(size: 14.5, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
-            ChatText(proposal.text)
-                .foregroundStyle(Theme.secondaryText)
+            if showsBrief {
+                ChatText(proposal.text)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            Button(showsBrief ? "Show less" : "Show more") {
+                withAnimation(.snappy(duration: 0.2)) { showsBrief.toggle() }
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12.5, weight: .medium))
+            .foregroundStyle(Color(hex: 0x9CC6FF))
+            .help(showsBrief ? "Hide the full brief" : "Show the full brief the run will start from")
             if proposal.status == .open {
                 HStack(spacing: 8) {
                     Button { model.startProposal(proposal, in: project) } label: { Label("Start Run", systemImage: "play.fill") }

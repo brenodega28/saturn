@@ -84,6 +84,15 @@ public final class AgentSession: Identifiable {
         persist()
     }
 
+    func adoptWorktree(_ worktree: Worktree, baseBranch: String?, port: Int?) {
+        agent.worktreePath = worktree.path.path
+        agent.branch = worktree.branch
+        agent.baseBranch = baseBranch ?? worktree.head
+        agent.port = port
+        agent.readOnly = false
+        persist()
+    }
+
     func startNewSession() {
         guard handle == nil, !isQueued, agent.sessionId != nil else { return }
         agent.sessionId = nil

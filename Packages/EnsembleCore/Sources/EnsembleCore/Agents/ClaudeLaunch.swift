@@ -40,10 +40,18 @@ public enum AgentPermissions {
     public static let tools = ["Read", "Glob", "Grep"]
     public static let fileWritingTools = ["Edit", "MultiEdit", "Write", "NotebookEdit"]
     public static let webTools = ["WebFetch", "WebSearch"]
-    public static let artifactTools = ["ArtifactData", "ArtifactComments", "ArtifactCheck"]
+    public static let artifactReadTool = "Artifact(read)"
+    public static let artifactDataTools = ["ArtifactData", "ArtifactComments", "ArtifactCheck"]
+    public static let artifactTools = [artifactReadTool] + artifactDataTools
+    public static let artifactEnvironment = ["CLAUDE_CODE_ARTIFACT": "1"]
 
     public static func builtInTools(readOnly: Bool, extraAllowedTools: [String]) -> [String] {
-        ["Bash", "Skill"] + tools + (readOnly ? [] : fileWritingTools) + webTools.filter(extraAllowedTools.contains)
+        ["Bash", "Skill"] + tools + (readOnly ? [] : fileWritingTools)
+            + (webTools + artifactTools).filter(extraAllowedTools.contains).map(toolName)
+    }
+
+    static func toolName(_ rule: String) -> String {
+        String(rule.prefix { $0 != "(" })
     }
 
     public static let projectSkillsOnlySettings = #"{"disableBundledSkills":true,"skillOverrides":{"design":"off","doctor":"off","plugin-authoring":"off"}}"#
@@ -115,6 +123,11 @@ public struct ClaudeLaunch: Sendable, Equatable {
 
     public var workingDirectory: URL { worktree }
 
+    public var processEnvironment: [String: String] {
+        guard extraAllowedTools.contains(AgentPermissions.artifactReadTool) else { return environment }
+        return environment.merging(AgentPermissions.artifactEnvironment) { _, artifact in artifact }
+    }
+
     public var arguments: [String] {
         var arguments = [
             "-p",
@@ -146,11 +159,14 @@ public struct ClaudeLaunch: Sendable, Equatable {
         return arguments
     }
 
-    public static func readOnlySystemPrompt(agentName: String, directory: URL) -> String {
-        """
+    public static func readOnlySystemPrompt(agentName: String, directory: URL, canOpenWorktree: Bool = false) -> String {
+        let editing = canOpenWorktree
+            ? "You start read-only and never edit, create or delete files here or commit. When you must change code yourself, "
+                + "call `\(HandoffTool.openWorktree.qualifiedName)` to get your own worktree and branch; your next turn runs there with write access."
+            : "You never edit, create or delete files and never commit. Report what you find; the coding agents and the user make the changes."
+        return """
         You are \(agentName), a read-only agent run by Ensemble. You work from \(directory.path) and can read every file \
-        and worktree you are given, run tests and inspect history, but you never edit, create or delete files and never commit. \
-        Report what you find; the coding agents and the user make the changes.
+        and worktree you are given, run tests and inspect history. \(editing)
 
         \(shellRules(writing: false))
         """

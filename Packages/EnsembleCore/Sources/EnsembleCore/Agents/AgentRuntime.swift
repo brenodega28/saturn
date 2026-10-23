@@ -171,7 +171,7 @@ public final class AgentRuntime {
         return session
     }
 
-    public static let maxSpawnCount = 8
+    public nonisolated static let maxSpawnCount = 8
 
     public func agentNames(for base: String, count: Int, inProject projectId: Int64) throws -> [String] {
         AgentNaming.names(base: base, count: count, existing: try database.agents(inProject: projectId).map(\.name))
@@ -258,12 +258,15 @@ public final class AgentRuntime {
             throw agent.readOnly ? AgentLaunchError.missingProject(agent.name) : AgentLaunchError.missingWorktree(agent.name)
         }
 
+        let tools = handoffTools(agent)
         var prompt = agent.readOnly
-            ? ClaudeLaunch.readOnlySystemPrompt(agentName: agent.name, directory: directory)
+            ? ClaudeLaunch.readOnlySystemPrompt(agentName: agent.name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree))
             : ClaudeLaunch.systemPrompt(agentName: agent.name, worktree: directory, branch: agent.branch)
+        var isLead = false
         if let repository {
             let config = ProjectConfigLoader.load(repository: repository)
             if let role = config.role(agent.role) {
+                isLead = role.canSpawn
                 let context = RoleContext.build(role: role, config: config, repository: repository).systemPrompt
                 if !context.isEmpty { prompt += "\n\n" + context }
             }
@@ -279,7 +282,7 @@ public final class AgentRuntime {
         }
 
         var additional: [URL] = []
-        if agent.readOnly, let runId = agent.runId {
+        if agent.readOnly || isLead, let runId = agent.runId {
             let root = realPath(of: directory) + "/"
             additional = try database.agents(inProject: agent.projectId)
                 .filter { $0.runId == runId && $0.id != agent.id }
@@ -290,7 +293,6 @@ public final class AgentRuntime {
         if agent.taskId != nil || agent.runId != nil {
             setup.extraAllowedTools += AgentPermissions.webTools + AgentPermissions.artifactTools
         }
-        let tools = handoffTools(agent)
         if let server = mcpServer, let agentID = agent.id, !tools.isEmpty {
             server.revokeAll(agent: agentID)
             let endpoint = server.register(agent: agentID, tools: tools)
@@ -310,12 +312,14 @@ public final class AgentRuntime {
 
     static func handoffGuide(_ tools: Set<HandoffTool>) -> String {
         let lines = HandoffTool.allCases.filter(tools.contains).map { "- `\($0.qualifiedName)`: \($0.description)" }
-        return "You are part of an Ensemble workflow run. Hand your work back through these tools:\n" + lines.joined(separator: "\n")
+        return "Ensemble gives you these tools to hand back your work and coordinate with other agents:\n" + lines.joined(separator: "\n")
     }
 
     static var webToolsGuide: String {
         "You can use \(codeList(AgentPermissions.webTools)) to look things up on the web. "
-            + "To open claude.ai artifact links the user shares, use \(codeList(AgentPermissions.artifactTools))."
+            + "To open a claude.ai artifact link the user shares, call `Artifact` with `action: \"read\"` and the link as `url`; "
+            + "never fetch artifact links with `WebFetch`, because their pages are drawn by JavaScript and come back empty. "
+            + "Use \(codeList(AgentPermissions.artifactDataTools)) for an artifact's data and comments."
     }
 
     static func codeList(_ names: [String]) -> String {
@@ -329,7 +333,7 @@ public final class AgentRuntime {
         return """
         # Chatting with the user
         You are the lead for one request in Ensemble. The user talks to you in a chat; each of their messages arrives as your next turn, and your final text in a turn is shown to them as your reply. Keep replies short and direct.
-        Answer questions by reading the code. \(webToolsGuide) When work should be done, don't build it yourself: propose a run with `\(HandoffTool.proposeRun.qualifiedName)`. The user starts it; then you plan it as the run's lead, with everything you discussed.
+        Answer questions by reading the code. \(webToolsGuide) When work should be done, propose a run with `\(HandoffTool.proposeRun.qualifiedName)`. The user starts it; then you plan it as the run's lead, with everything you discussed. Only change code yourself when it can't wait for a run, after opening your own worktree with `\(HandoffTool.openWorktree.qualifiedName)`.
         While a run is going, the user's messages come with its status. Answer from that status, and use `\(HandoffTool.messageAgent.qualifiedName)` to pass instructions on to the run's agents.
         Workflows you can propose:
         \(list.isEmpty ? "(none; tell the user to add one in Settings › Workflows)" : list.joined(separator: "\n"))
@@ -526,6 +530,17 @@ extension AgentRuntime {
             try await prepareWorktree(of: session)
         }
         return session
+    }
+
+    public func openWorktree(for session: AgentSession, in project: Project, git: GitClient) async throws {
+        let agent = session.agent
+        let baseBranch = try await git.currentBranch(in: project.url)
+        let taskSlug = Slug.make((agent.task.nilIfEmpty ?? "lead").split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
+        let worktree = try await WorktreeManager(repository: project.url, git: git)
+            .create(agent: agent.name, slug: taskSlug.isEmpty ? "lead" : taskSlug)
+        session.adoptWorktree(worktree, baseBranch: baseBranch, port: try nextPort(forProject: agent.projectId))
+        usageDidChange()
+        try await prepareWorktree(of: session)
     }
 
     public func createLeadAgent(in project: Project, role: RoleDefinition, taskId: Int64, now: Date = .now) throws -> AgentSession {

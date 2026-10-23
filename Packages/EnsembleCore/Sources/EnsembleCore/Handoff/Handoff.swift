@@ -141,6 +141,40 @@ public enum HandoffMessage: Sendable, Hashable {
     case result(String)
     case proposal(RunProposal)
     case agentMessage(agent: String, message: String)
+    case listAgents
+    case spawnAgent(AgentSpawnRequest)
+    case stopAgent(String)
+    case deleteAgent(String, deleteBranch: Bool)
+    case openWorktree
+}
+
+public struct AgentSpawnRequest: Sendable, Hashable, Codable {
+    public var role: String
+    public var task: String
+    public var name: String?
+    public var model: String?
+    public var count: Int
+
+    public init(role: String, task: String, name: String? = nil, model: String? = nil, count: Int = 1) {
+        self.role = role
+        self.task = task
+        self.name = name
+        self.model = model
+        self.count = count
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case role, task, name, model, count
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.role = try container.decode(String.self, forKey: .role)
+        self.task = try container.decode(String.self, forKey: .task)
+        self.name = try container.decodeIfPresent(String.self, forKey: .name)
+        self.model = try container.decodeIfPresent(String.self, forKey: .model)
+        self.count = max(1, try container.decodeIfPresent(Int.self, forKey: .count) ?? 1)
+    }
 }
 
 public enum HandoffTool: String, Sendable, CaseIterable {
@@ -151,6 +185,13 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     case askHuman = "ask_human"
     case proposeRun = "propose_run"
     case messageAgent = "message_agent"
+    case listAgents = "list_agents"
+    case spawnAgent = "spawn_agent"
+    case stopAgent = "stop_agent"
+    case deleteAgent = "delete_agent"
+    case openWorktree = "open_worktree"
+
+    public static let leadTools: Set<HandoffTool> = [.messageAgent, .listAgents, .spawnAgent, .stopAgent, .deleteAgent]
 
     public static let serverName = "ensemble"
 
@@ -169,7 +210,17 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .proposeRun:
             "Propose a workflow run for this request. The user sees it with a Start button; nothing runs until they click it. If they start it, you plan it. Give the workflow id, a short title and a brief with everything the planner needs from this conversation. Then end your turn."
         case .messageAgent:
-            "Relay an instruction to an agent working on this request's run, by its name. Use it when the user asks you to pass something on to the builders, reviewers or testers."
+            "Send an instruction to another agent in this project, by its name. It arrives as that agent's next message. Use it to pass on the user's instructions or to steer agents you lead."
+        case .listAgents:
+            "List every agent in this project with its role, status, branch, worktree and task."
+        case .spawnAgent:
+            "Start new agents of a role with a task. Agents of roles that edit code get their own worktree and branch. They start working on the task right away."
+        case .stopAgent:
+            "Stop another agent's current turn and drop its queued messages. It keeps its worktree, branch and history and can be messaged again later."
+        case .deleteAgent:
+            "Delete another agent: stop it, remove its worktree and history, and delete its branch when delete_branch is true. Agents in a running workflow can't be deleted; stop them instead."
+        case .openWorktree:
+            "Get your own git worktree and branch so you can change code yourself. Call it only when you must edit files, then end your turn; your next turn runs inside the worktree with write access."
         case .askHuman:
             "Ask the user questions you can't answer from the code or docs. Put shared context in question. When you need several decisions, list each one in questions, with options when there are clear choices; the user answers them one at a time. After calling it, end your turn; the answers arrive as your next message, numbered like your questions."
         }
@@ -225,6 +276,23 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "agent": string("The agent's name, as shown in the run status"),
                 "message": string("The instruction to pass on"),
             ], required: ["agent", "message"])
+        case .listAgents, .openWorktree:
+            return object([:], required: [])
+        case .spawnAgent:
+            return object([
+                "role": string("Role id of the new agents"),
+                "task": string("What the agents should do, with everything they need to start"),
+                "name": string("Base name for the agents; defaults to the role's name"),
+                "model": string("Model alias or full name; defaults to the role's model"),
+                "count": .object(["type": .string("integer"), "minimum": .number(1), "maximum": .number(Double(AgentRuntime.maxSpawnCount))]),
+            ], required: ["role", "task"])
+        case .stopAgent:
+            return object(["agent": string("The agent's name, as list_agents shows it")], required: ["agent"])
+        case .deleteAgent:
+            return object([
+                "agent": string("The agent's name, as list_agents shows it"),
+                "delete_branch": .object(["type": .string("boolean"), "description": .string("Also delete the agent's git branch. Defaults to false.")]),
+            ], required: ["agent"])
         case .askHuman:
             return object([
                 "question": string("The question, or the context shared by all questions when you list them in questions"),
@@ -261,6 +329,23 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             guard let agent = arguments["agent"]?.string, !agent.isEmpty else { throw HandoffError.missing("agent") }
             guard let message = arguments["message"]?.string, !message.isEmpty else { throw HandoffError.missing("message") }
             return .agentMessage(agent: agent, message: message)
+        case .listAgents:
+            return .listAgents
+        case .spawnAgent:
+            let request = try decoder.decode(AgentSpawnRequest.self, from: data)
+            for (field, value) in [("role", request.role), ("task", request.task)]
+            where value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw HandoffError.missing(field)
+            }
+            return .spawnAgent(request)
+        case .stopAgent:
+            guard let agent = arguments["agent"]?.string, !agent.isEmpty else { throw HandoffError.missing("agent") }
+            return .stopAgent(agent)
+        case .deleteAgent:
+            guard let agent = arguments["agent"]?.string, !agent.isEmpty else { throw HandoffError.missing("agent") }
+            return .deleteAgent(agent, deleteBranch: arguments["delete_branch"]?.bool ?? false)
+        case .openWorktree:
+            return .openWorktree
         }
     }
 }

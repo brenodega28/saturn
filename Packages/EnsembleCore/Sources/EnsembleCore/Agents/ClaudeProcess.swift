@@ -53,7 +53,7 @@ public final class ClaudeProcess: AgentProcessHandle, @unchecked Sendable {
         let errors = Pipe()
         process.executableURL = launch.executable
         process.arguments = launch.arguments
-        process.environment = launch.environment
+        process.environment = launch.processEnvironment
         process.currentDirectoryURL = launch.worktree
         process.standardInput = input
         process.standardOutput = output

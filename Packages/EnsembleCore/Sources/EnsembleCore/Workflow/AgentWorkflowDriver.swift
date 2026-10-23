@@ -71,12 +71,15 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     func tools(for agent: Agent) -> Set<HandoffTool> {
-        let requestTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .messageAgent, .askHuman]
-        guard agent.runId != nil else { return requestTools }
         let config = (try? runtime.database.project(id: agent.projectId)).flatMap { $0 }.map { ProjectConfigLoader.load(repository: $0.url) }
-        let role = config?.role(agent.role)
+        let isLead = config?.role(agent.role)?.canSpawn == true
+        var leadTools: Set<HandoffTool> = isLead ? HandoffTool.leadTools : []
+        if isLead, agent.readOnly, agent.worktreePath == nil { leadTools.insert(.openWorktree) }
+        let chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .messageAgent, .askHuman]
+        let requestTools = chatTools.union(leadTools)
+        guard agent.runId != nil else { return requestTools }
         var tools: Set<HandoffTool> = requestTools.union([.askHuman, .createPin])
-        if role?.canSpawn == true { tools.formUnion([.submitPlan, .submitVerdict]) }
+        if isLead { tools.formUnion([.submitPlan, .submitVerdict]) }
         if agent.readOnly { tools.insert(.submitVerdict) }
         if !agent.readOnly { tools.insert(.submitResult) }
         return tools
@@ -134,6 +137,12 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 workflow: proposal.workflow, title: proposal.title, status: .open, createdAt: .now
             ))
             return "The user sees your proposal with a Start button. End your turn now. If they start it, you’ll be asked to plan it."
+        case .agentMessage(let name, let text) where (try? isLead(agent)) == true:
+            let target = try otherAgent(named: name, from: agent)
+            guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(target.name) can’t receive messages.") }
+            let sender = agent.taskId == nil ? "Message from \(agent.name):" : "Message from \(agent.name), passing on the user’s instruction:"
+            session.send("\(sender)\n\n\(text)")
+            return "Sent to \(target.name)."
         case .agentMessage(let name, let text):
             guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can message run agents.") }
             let activeRuns = Set(try runtime.database.runs(taskId: taskId).filter(\.isActive).compactMap(\.id))
@@ -146,7 +155,73 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
             session.send("Message from \(agent.name), passing on the user’s instruction:\n\n\(text)")
             return "Sent to \(target.name)."
+        case .listAgents:
+            try requireLead(agent)
+            let agents = try runtime.database.agents(inProject: agent.projectId).filter { $0.archivedAt == nil }
+            return agents.map { listing(of: $0, isCaller: $0.id == agentID) }.joined(separator: "\n")
+        case .spawnAgent(let request):
+            try requireLead(agent)
+            let (project, config) = try projectAndConfig(for: agent)
+            guard let role = config.role(request.role) else {
+                throw HandoffError.notAllowed("Unknown role “\(request.role)”. Use one of: \(config.roles.map(\.id).joined(separator: ", ")).")
+            }
+            let spawned = try await runtime.spawn(
+                in: project, role: role, count: request.count, config: config, git: try requireGit(),
+                name: request.name, model: request.model, task: request.task
+            )
+            return "Started \(spawned.map(\.agent.name).joined(separator: ", ")). Check on them with list_agents."
+        case .stopAgent(let name):
+            try requireLead(agent)
+            let target = try otherAgent(named: name, from: agent)
+            guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(target.name) can’t be stopped.") }
+            session.stop()
+            return "Stopping \(target.name)."
+        case .deleteAgent(let name, let deleteBranch):
+            try requireLead(agent)
+            let target = try otherAgent(named: name, from: agent)
+            if let runId = target.runId, try runtime.database.run(id: runId)?.isActive == true {
+                throw HandoffError.notAllowed("\(target.name) is part of a running workflow. Stop it with stop_agent instead.")
+            }
+            let (project, _) = try projectAndConfig(for: agent)
+            guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(target.name) can’t be deleted.") }
+            try await runtime.delete(session, in: project, git: try requireGit(), deleteBranch: deleteBranch)
+            return "Deleted \(target.name)\(deleteBranch && target.branch != nil ? " and its branch" : "")."
+        case .openWorktree:
+            try requireLead(agent)
+            guard agent.worktreePath == nil else { throw HandoffError.notAllowed("You already work in \(agent.worktreePath ?? "a worktree").") }
+            let (project, _) = try projectAndConfig(for: agent)
+            guard let session = runtime.session(for: agent) else { throw HandoffError.notAllowed("This agent no longer exists.") }
+            try await runtime.openWorktree(for: session, in: project, git: try requireGit())
+            let path = session.agent.worktreePath ?? ""
+            let branch = session.agent.branch.map { " on branch \($0)" } ?? ""
+            session.send("Your worktree at \(path)\(branch) is ready and you can now edit files there. Continue with the change you were about to make.")
+            return "Worktree ready at \(path)\(branch). End your turn now; your next turn runs there with write access."
         }
+    }
+
+    private func isLead(_ agent: Agent) throws -> Bool {
+        try projectConfig(for: agent).role(agent.role)?.canSpawn == true
+    }
+
+    private func requireLead(_ agent: Agent) throws {
+        guard try isLead(agent) else { throw HandoffError.notAllowed("Only lead roles can manage agents.") }
+    }
+
+    private func otherAgent(named name: String, from agent: Agent) throws -> Agent {
+        let candidates = try runtime.database.agents(inProject: agent.projectId).filter { $0.id != agent.id && $0.archivedAt == nil }
+        guard let target = candidates.first(where: { $0.name.caseInsensitiveCompare(name.trimmingCharacters(in: .whitespaces)) == .orderedSame }) else {
+            throw HandoffError.notAllowed("No other agent named “\(name)” in this project. Agents: \(candidates.map(\.name).joined(separator: ", ")).")
+        }
+        return target
+    }
+
+    private func listing(of agent: Agent, isCaller: Bool) -> String {
+        var fields = ["role \(agent.role)", "status \(agent.status.rawValue)"]
+        if let branch = agent.branch { fields.append("branch \(branch)") }
+        fields.append(agent.worktreePath.map { "worktree \($0)" } ?? "read-only")
+        if agent.runId != nil { fields.append("in a workflow run") }
+        if !agent.task.isEmpty { fields.append("task: \(agent.task)") }
+        return "- \(agent.name)\(isCaller ? " (you)" : ""): " + fields.joined(separator: "; ")
     }
 
     public func runAgentStep(_ context: StepContext) async throws -> StepResult {
@@ -440,6 +515,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let reusable = sessions.first { session in
             let agent = session.agent
             guard agent.role == role.id, agent.planTaskId == nil, expected != .verdict || agent.taskId == nil else { return false }
+            if role.canSpawn { return !agent.readOnly || agent.worktreePath == nil }
             return role.editsCode ? !agent.readOnly : agent.readOnly && agent.worktreePath == nil
         }
         if let reusable { return reusable }
@@ -600,8 +676,12 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func projectConfig(for agent: Agent) throws -> ProjectConfig {
+        try projectAndConfig(for: agent).1
+    }
+
+    private func projectAndConfig(for agent: Agent) throws -> (Project, ProjectConfig) {
         guard let project = try runtime.database.project(id: agent.projectId) else { throw HandoffError.notAllowed("The project is gone.") }
-        return ProjectConfigLoader.load(repository: project.url)
+        return (project, ProjectConfigLoader.load(repository: project.url))
     }
 
     private func requireGit() throws -> GitClient {

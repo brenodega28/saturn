@@ -70,6 +70,7 @@ import Testing
         #expect(allowed.contains("ArtifactData"))
         #expect(allowed.contains("ArtifactComments"))
         #expect(allowed.contains("ArtifactCheck"))
+        #expect(allowed.contains("Artifact(read)"))
         #expect(!allowed.contains("Artifact"))
         #expect(allowed.contains("mcp__ensemble__propose_run"))
         #expect(allowed.contains("mcp__ensemble__message_agent"))
@@ -77,9 +78,10 @@ import Testing
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         let turn = try setup.harness.runtime.turnSetup(for: leadAgent)
         #expect(Array(turn.extraAllowedTools.prefix(2)) == AgentPermissions.webTools)
-        #expect(Array(turn.extraAllowedTools.dropFirst(2).prefix(3)) == AgentPermissions.artifactTools)
+        #expect(Array(turn.extraAllowedTools.dropFirst(2).prefix(4)) == AgentPermissions.artifactTools)
         #expect(turn.systemPrompt.contains("`WebFetch` and `WebSearch`"))
-        #expect(turn.systemPrompt.contains("open claude.ai artifact links the user shares, use `ArtifactData`, `ArtifactComments` and `ArtifactCheck`"))
+        #expect(turn.systemPrompt.contains("open a claude.ai artifact link the user shares, call `Artifact` with `action: \"read\"`"))
+        #expect(turn.systemPrompt.contains("never fetch artifact links with `WebFetch`"))
     }
 
     @Test func agentsOutsideTheChatGetNoWebTools() async throws {
@@ -104,7 +106,7 @@ import Testing
             #expect(session.agent.taskId == nil)
             let allowed = try allowedTools(launchArguments(try runtime.turnSetup(for: session.agent)))
             #expect(!allowed.contains { AgentPermissions.webTools.contains($0) }, "\(session.agent.name)")
-            #expect(!allowed.contains { AgentPermissions.artifactTools.contains($0) || $0 == "Artifact" }, "\(session.agent.name)")
+            #expect(!allowed.contains { AgentPermissions.artifactTools.contains($0) || $0.hasPrefix("Artifact") }, "\(session.agent.name)")
         }
     }
 
@@ -429,6 +431,14 @@ import Testing
 
         #expect(thread.items.map(\.id) == ["message-1", "message-2", "message-3", "run-7", "step-30", "answer-20", "message-4", "question-21", "hold-7"])
         #expect(thread.items.suffix(2).allSatisfy { $0.isLive })
+    }
+
+    @Test func aProposalShowsAfterTheLeadsReplyFromTheSameTurn() {
+        let thread = RequestThread(
+            task: task, messages: [message(1, .user, 1), message(2, .proposal, 2), message(3, .lead, 3), message(4, .user, 4), message(5, .proposal, 5)],
+            runs: [], timelines: [:], questions: [], heldRunIDs: []
+        )
+        #expect(thread.items.map(\.id) == ["message-1", "message-3", "message-2", "message-4", "message-5"])
     }
 
     @Test func olderRequestsWithoutMessagesStartWithTheirBodyAndEndWithTheResult() {

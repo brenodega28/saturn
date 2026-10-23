@@ -145,10 +145,29 @@ import Testing
         #expect(try value(of: "--tools", in: launch(readOnly: false)) == "Bash,Skill,Read,Glob,Grep,Edit,MultiEdit,Write,NotebookEdit")
         #expect(try value(of: "--tools", in: launch(readOnly: true)) == "Bash,Skill,Read,Glob,Grep")
         #expect(try value(of: "--tools", in: launch(readOnly: true, extraAllowedTools: ["WebFetch", "WebSearch", "mcp__ensemble__ask_human"])) == "Bash,Skill,Read,Glob,Grep,WebFetch,WebSearch")
+        #expect(try value(of: "--tools", in: launch(readOnly: true, extraAllowedTools: AgentPermissions.artifactTools)) == "Bash,Skill,Read,Glob,Grep,Artifact,ArtifactData,ArtifactComments,ArtifactCheck")
 
         let settings = try value(of: "--settings", in: launch(readOnly: false))
         let decoded = try #require(try JSONSerialization.jsonObject(with: Data(settings.utf8)) as? [String: Any])
         #expect(decoded["disableBundledSkills"] as? Bool == true)
         #expect(try value(of: "--setting-sources", in: launch(readOnly: false)) == "project")
+    }
+
+    @Test func onlyLaunchesThatMayReadArtifactsTurnOnClaudeArtifacts() {
+        func environment(extraAllowedTools: [String]) -> [String: String] {
+            ClaudeLaunch(
+                executable: URL(fileURLWithPath: "/bin/claude"),
+                worktree: URL(fileURLWithPath: "/repo"),
+                session: .new("s-1"),
+                model: "sonnet",
+                systemPrompt: "prompt",
+                environment: ["PATH": "/usr/bin"],
+                readOnly: true,
+                extraAllowedTools: extraAllowedTools
+            ).processEnvironment
+        }
+
+        #expect(environment(extraAllowedTools: AgentPermissions.artifactTools) == ["PATH": "/usr/bin", "CLAUDE_CODE_ARTIFACT": "1"])
+        #expect(environment(extraAllowedTools: AgentPermissions.webTools) == ["PATH": "/usr/bin"])
     }
 }

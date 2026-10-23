@@ -196,7 +196,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             guard let verdict = verdicts[session.id] else { throw WorkflowDriverError.missingHandoff(agent: session.agent.name, tool: expected.tool.qualifiedName) }
             return .verdict(verdict, costUSD: cost)
         case .result:
-            return .done(results[session.id] ?? lastAssistantText(session), costUSD: cost)
+            let heads = await branchHeads(of: [session], in: context.project, git: git)
+            return .done(results[session.id] ?? lastAssistantText(session), branchHeads: heads, costUSD: cost)
         }
     }
 
@@ -277,7 +278,17 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
         let cost = builders.reduce(0) { $0 + $1.session.agent.costUSD - (startCosts[$1.session.id] ?? 0) }
         let summary = taskResults.map { "\($0.agentName ?? "Agent"): \($0.summary)" }.joined(separator: "\n")
-        return .done(summary, taskResults: taskResults, costUSD: cost)
+        let heads = await branchHeads(of: builders.map(\.session), in: project, git: git)
+        return .done(summary, taskResults: taskResults, branchHeads: heads, costUSD: cost)
+    }
+
+    private func branchHeads(of sessions: [AgentSession], in project: Project, git: GitClient) async -> [String: String] {
+        var heads: [String: String] = [:]
+        for branch in sessions.compactMap(\.agent.branch) {
+            guard let head = try? await git.run(["rev-parse", branch], in: project.url) else { continue }
+            heads[branch] = head.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return heads
     }
 
     public func diffInfo(_ run: Run) async -> DiffInfo {
@@ -599,6 +610,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     struct BranchConflict: Equatable {
         let branch: String
+        let base: String
         let mergedBefore: [String]
         let files: [String]
     }
@@ -615,7 +627,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             let result = try await git.runner.run(git.executable, ["merge-tree", "--write-tree", "--name-only", "--no-messages", head, branch], in: project.url)
             let lines = result.standardOutput.split(separator: "\n").map(String.init)
             if result.exitCode == 1 {
-                return BranchConflict(branch: branch, mergedBefore: mergedBefore, files: Array(lines.dropFirst()))
+                return BranchConflict(branch: branch, base: base, mergedBefore: mergedBefore, files: Array(lines.dropFirst()))
             }
             guard result.succeeded, let newTree = lines.first else { return nil }
             tree = newTree
@@ -634,7 +646,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             try await git.run(identity + ["commit", "-am", "Work in progress before merging the other branches"], in: worktree)
         }
         var conflicted: [String] = []
-        for branch in conflict.mergedBefore {
+        let merged = [conflict.base] + conflict.mergedBefore
+        for branch in merged {
             let result = try await git.runner.run(git.executable, identity + ["merge", "--no-ff", "--no-edit", branch], in: worktree)
             if !result.succeeded {
                 conflicted = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: worktree))?
@@ -645,7 +658,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let files = conflicted.isEmpty ? conflict.files : conflicted
         return """
             # Resolve a merge conflict
-            Your branch conflicts with work the other builders already finished. Ensemble merged \(conflict.mergedBefore.map { "`\($0)`" }.joined(separator: ", ")) into your worktree\(conflicted.isEmpty ? "" : ", and git stopped with conflicts in \(files.joined(separator: ", "))").
+            Your branch conflicts with `\(conflict.base)` or with work the other builders already finished. Ensemble merged \(merged.map { "`\($0)`" }.joined(separator: ", ")) into your worktree\(conflicted.isEmpty ? "" : ", and git stopped with conflicts in \(files.joined(separator: ", "))").
 
             \(conflicted.isEmpty ? "The merge went through, but check that both changes still work together." : "Open each file, keep both sides' changes so all functions and tests remain, and remove every conflict marker (<<<<<<<, =======, >>>>>>>) with the Edit tool.") Run the tests, then `git add` the files and `git commit --no-edit`. Finally call `\(HandoffTool.submitResult.qualifiedName)` describing the resolution, and end your turn.
             """

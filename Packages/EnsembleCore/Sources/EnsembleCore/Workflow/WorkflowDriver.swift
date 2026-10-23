@@ -26,12 +26,14 @@ public struct StepOutput: Sendable, Hashable, Codable {
     public var verdict: Verdict?
     public var summary: String?
     public var taskResults: [TaskResult]
+    public var branchHeads: [String: String]
 
-    public init(plan: Plan? = nil, verdict: Verdict? = nil, summary: String? = nil, taskResults: [TaskResult] = []) {
+    public init(plan: Plan? = nil, verdict: Verdict? = nil, summary: String? = nil, taskResults: [TaskResult] = [], branchHeads: [String: String] = [:]) {
         self.plan = plan
         self.verdict = verdict
         self.summary = summary
         self.taskResults = taskResults
+        self.branchHeads = branchHeads
     }
 
     public init(from decoder: Decoder) throws {
@@ -40,6 +42,7 @@ public struct StepOutput: Sendable, Hashable, Codable {
         self.verdict = try container.decodeIfPresent(Verdict.self, forKey: .verdict)
         self.summary = try container.decodeIfPresent(String.self, forKey: .summary)
         self.taskResults = try container.decodeIfPresent([TaskResult].self, forKey: .taskResults) ?? []
+        self.branchHeads = try container.decodeIfPresent([String: String].self, forKey: .branchHeads) ?? [:]
     }
 }
 
@@ -62,8 +65,8 @@ public struct StepResult: Sendable, Hashable {
         StepResult(outcome: verdict.outcome, output: StepOutput(verdict: verdict, summary: verdict.summary), costUSD: costUSD)
     }
 
-    public static func done(_ summary: String, taskResults: [TaskResult] = [], costUSD: Double = 0) -> StepResult {
-        StepResult(outcome: StepOutcome.done, output: StepOutput(summary: summary, taskResults: taskResults), costUSD: costUSD)
+    public static func done(_ summary: String, taskResults: [TaskResult] = [], branchHeads: [String: String] = [:], costUSD: Double = 0) -> StepResult {
+        StepResult(outcome: StepOutcome.done, output: StepOutput(summary: summary, taskResults: taskResults, branchHeads: branchHeads), costUSD: costUSD)
     }
 }
 

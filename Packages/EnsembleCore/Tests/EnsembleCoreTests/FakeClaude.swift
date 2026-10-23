@@ -102,6 +102,13 @@ enum FakeClaude {
         file="$name.txt"
         if printf '%s' "$1" | grep -q 'Your task: Add alpha\|for “Add alpha”'; then file="alpha.txt"; fi
         if printf '%s' "$1" | grep -q 'Your task: Add beta\|for “Add beta”'; then file="beta.txt"; fi
+        if [ "$file" = "alpha.txt" ] && [ -f "$FAKE_DIR/move-main" ]; then
+          rm "$FAKE_DIR/move-main"
+          root=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
+          echo "main moved on" > "$root/alpha.txt"
+          git -C "$root" add alpha.txt >/dev/null 2>&1
+          git -C "$root" -c user.name=Fake -c user.email=fake@x commit -qm "Main changes alpha" >/dev/null 2>&1
+        fi
         echo "work by $name" >> "$file"
         git add "$file" >/dev/null 2>&1
         git -c user.name=Fake -c user.email=fake@x commit -qm "Work on $file" >/dev/null 2>&1

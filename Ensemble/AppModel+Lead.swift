@@ -15,7 +15,7 @@ struct RequestThreadData {
 
 extension AppModel {
     func leadRoles(in project: Project) -> [RoleDefinition] {
-        config(for: project).roles.filter(\.canSpawn)
+        config(for: project).leadRoles
     }
 
     func activeLeadRuns(in project: Project) -> [Run] {

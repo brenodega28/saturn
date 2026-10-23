@@ -21,6 +21,14 @@ public struct AppPaths: Sendable {
         agentDirectory(agentID).appending(path: "transcript.jsonl")
     }
 
+    public var attachmentsDirectory: URL {
+        root.appending(path: "attachments", directoryHint: .isDirectory)
+    }
+
+    public func attachment(_ id: UUID, fileExtension: String) -> URL {
+        attachmentsDirectory.appending(path: "\(id.uuidString.lowercased()).\(fileExtension)")
+    }
+
     public func pendingWorkspaceDirectory(_ name: String) -> URL {
         root.appending(path: "workspaces/\(Slug.make(name))", directoryHint: .isDirectory)
     }

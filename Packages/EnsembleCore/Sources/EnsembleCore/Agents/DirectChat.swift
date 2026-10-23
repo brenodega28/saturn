@@ -17,10 +17,11 @@ public struct DirectMessage: Codable, Sendable, Hashable, Identifiable, Fetchabl
     public var text: String
     public var awaitingReply: Bool
     public var createdAt: Date
+    public var attachments: [StoredChatAttachment]?
 
     public init(
         id: Int64? = nil, projectId: Int64, agentId: Int64, kind: DirectMessageKind, text: String,
-        awaitingReply: Bool = false, createdAt: Date
+        awaitingReply: Bool = false, createdAt: Date, attachments: [StoredChatAttachment]? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -29,6 +30,20 @@ public struct DirectMessage: Codable, Sendable, Hashable, Identifiable, Fetchabl
         self.text = text
         self.awaitingReply = awaitingReply
         self.createdAt = createdAt
+        self.attachments = attachments
+    }
+
+    public var storedAttachments: [StoredChatAttachment] { attachments ?? [] }
+
+    public var chatAttachments: [ChatAttachment] { storedAttachments.attachments }
+
+    var promptKey: String {
+        let pastes = storedAttachments.compactMap { stored -> ChatAttachment? in
+            if case .pastedText(let id, let index, let text) = stored { return .pastedText(id: id, index: index, text: text) }
+            return nil
+        }
+        let prompt = ChatAttachment.prompt(text: text, attachments: pastes)
+        return prompt.isEmpty ? ChatAttachment.imagePlaceholder : prompt
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -93,20 +108,21 @@ public final class DirectChat {
         return (try? database.directMessages(agentId: id)) ?? []
     }
 
-    public func send(_ text: String, to session: AgentSession, now: Date = .now) throws {
+    public func send(_ text: String, attachments: [ChatAttachment] = [], to session: AgentSession, now: Date = .now) throws {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let agentId = session.agent.id, !body.isEmpty else { return }
+        guard let agentId = session.agent.id, !body.isEmpty || !attachments.isEmpty else { return }
         try database.insert(DirectMessage(
-            projectId: session.agent.projectId, agentId: agentId, kind: .user, text: body, awaitingReply: true, createdAt: now
+            projectId: session.agent.projectId, agentId: agentId, kind: .user, text: body, awaitingReply: true, createdAt: now,
+            attachments: try ChatAttachmentStore(paths: runtime.paths).store(attachments)
         ))
         revision += 1
-        session.send(body)
+        session.send(ChatAttachment.prompt(text: body, attachments: attachments), images: attachments.filter(\.isImage))
     }
 
     func record(reply: String, from agent: Agent, now: Date = .now) {
         guard let agentId = agent.id, let prompt = lastPrompt(of: agent) else { return }
         let answered = ((try? database.directMessages(agentId: agentId)) ?? [])
-            .filter { $0.kind == .user && $0.awaitingReply && prompt.contains($0.text) }
+            .filter { $0.kind == .user && $0.awaitingReply && prompt.contains($0.promptKey) }
         guard !answered.isEmpty else { return }
         do {
             try database.recordDirectReply(
@@ -130,7 +146,7 @@ public final class DirectChat {
 
     private func noteForLead(questions: [DirectMessage], reply: String, from agent: Agent, now: Date) throws {
         guard let runId = agent.runId, let run = try database.run(id: runId) else { return }
-        let asked = questions.map(\.text).joined(separator: " ")
+        let asked = questions.map { $0.text.isEmpty ? $0.storedAttachments.map(\.label).joined(separator: ", ") : $0.text }.joined(separator: " ")
         let text = "You asked \(agent.name) directly: “\(Self.excerpt(asked))” \(agent.name) replied: “\(Self.excerpt(reply))”"
         try database.insert(LeadMessage(projectId: run.projectId, taskId: run.taskId, kind: .note, text: text, runId: runId, createdAt: now))
     }

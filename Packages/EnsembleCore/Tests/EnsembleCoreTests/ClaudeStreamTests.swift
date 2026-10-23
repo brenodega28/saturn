@@ -84,6 +84,15 @@ import Testing
         #expect(ClaudeEvent.parse(line: ClaudeEvent.noticeLine(.paused, detail: "by you")) == [.notice(.paused, detail: "by you")])
     }
 
+    @Test func userLinesWithImagesRoundTripThroughParse() throws {
+        let image = ChatAttachment.image(id: UUID(), mediaType: "image/jpeg", fileName: "a.jpg", data: Data("jpeg".utf8))
+        let line = ClaudeEvent.userLine("Fix \"it\"\nnow", images: [image])
+        let user = try #require(JSONValue.parse(line))
+        #expect(user["message"]?["content"]?.array?.compactMap { $0["source"]?["media_type"]?.string } == ["image/jpeg"])
+        #expect(ClaudeEvent.parse(line: line) == [.userMessage("Fix \"it\"\nnow\n[image]")])
+        #expect(ClaudeEvent.parse(line: ClaudeEvent.userLine("Fix \"it\"\nnow")) == [.userMessage("Fix \"it\"\nnow")])
+    }
+
     @Test func diffsLines() {
         #expect(LineDiff.compute(old: "a\nb\nc", new: "a\nB\nc") == [
             DiffLine(kind: .context, text: "a"),

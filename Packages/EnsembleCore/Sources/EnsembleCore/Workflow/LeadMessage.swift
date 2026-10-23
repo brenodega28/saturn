@@ -27,10 +27,12 @@ public struct LeadMessage: Codable, Sendable, Hashable, Identifiable, FetchableR
     public var status: ProposalStatus?
     public var runId: Int64?
     public var createdAt: Date
+    public var attachments: [StoredChatAttachment]?
 
     public init(
         id: Int64? = nil, projectId: Int64, taskId: Int64, kind: LeadMessageKind, text: String,
-        workflow: String? = nil, title: String? = nil, status: ProposalStatus? = nil, runId: Int64? = nil, createdAt: Date
+        workflow: String? = nil, title: String? = nil, status: ProposalStatus? = nil, runId: Int64? = nil, createdAt: Date,
+        attachments: [StoredChatAttachment]? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -42,7 +44,12 @@ public struct LeadMessage: Codable, Sendable, Hashable, Identifiable, FetchableR
         self.status = status
         self.runId = runId
         self.createdAt = createdAt
+        self.attachments = attachments
     }
+
+    public var storedAttachments: [StoredChatAttachment] { attachments ?? [] }
+
+    public var chatAttachments: [ChatAttachment] { storedAttachments.attachments }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID

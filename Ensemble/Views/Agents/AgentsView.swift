@@ -8,6 +8,7 @@ struct AgentGroup: Identifiable {
         case pinned
         case idle
         case other
+        case archived
     }
 
     let kind: Kind
@@ -23,7 +24,7 @@ struct AgentGroup: Identifiable {
     }
 
     @MainActor
-    static func make(_ sessions: [AgentSession], runs: [Run], describe: (Run) -> (workflow: String?, step: String?) = { ($0.workflow, $0.currentStep) }) -> [AgentGroup] {
+    static func make(_ sessions: [AgentSession], runs: [Run], idleCleanupMinutes: Int = 0, describe: (Run) -> (workflow: String?, step: String?) = { ($0.workflow, $0.currentStep) }) -> [AgentGroup] {
         var groups: [AgentGroup] = []
         let runsByID = Dictionary(uniqueKeysWithValues: runs.compactMap { run in run.id.map { ($0, run) } })
         let runIDs = sessions.compactMap(\.agent.runId).reduce(into: [Int64]()) { ids, id in
@@ -39,18 +40,23 @@ struct AgentGroup: Identifiable {
             groups.append(AgentGroup(kind: .run(runID), title: title, meta: meta, sessions: members))
         }
         let outsideRuns = sessions.filter { $0.agent.runId == nil }
+        let archived = outsideRuns.filter { $0.agent.archivedAt != nil && !$0.agent.isPinned }
+        let archivedIDs = Set(archived.map(\.id))
         let pinned = outsideRuns.filter(\.agent.isPinned)
-        let idle = outsideRuns.filter { !$0.agent.isPinned && $0.agent.status == .idle && !$0.isRunning && !$0.isQueued }
+        let idle = outsideRuns.filter { !$0.agent.isPinned && $0.agent.status == .idle && !$0.isRunning && !$0.isQueued && !archivedIDs.contains($0.id) }
         let idleIDs = Set(idle.map(\.id))
-        let others = outsideRuns.filter { !$0.agent.isPinned && !idleIDs.contains($0.id) }
+        let others = outsideRuns.filter { !$0.agent.isPinned && !idleIDs.contains($0.id) && !archivedIDs.contains($0.id) }
         if !pinned.isEmpty {
             groups.append(AgentGroup(kind: .pinned, title: "Pinned", meta: "Kept between runs", sessions: pinned))
         }
         if !idle.isEmpty {
-            groups.append(AgentGroup(kind: .idle, title: "Idle", meta: "Finished their turn or waiting for a message", sessions: idle))
+            groups.append(AgentGroup(kind: .idle, title: "Idle", meta: IdleCleanupPolicy.summary(minutes: idleCleanupMinutes), sessions: idle))
         }
         if !others.isEmpty {
             groups.append(AgentGroup(kind: .other, title: "Agents", meta: "Working, paused or needing you", sessions: others))
+        }
+        if !archived.isEmpty {
+            groups.append(AgentGroup(kind: .archived, title: "Cleaned up", meta: "Worktrees removed after sitting idle; branches kept", sessions: archived))
         }
         return groups
     }
@@ -80,7 +86,7 @@ struct AgentsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     summary(sessions)
-                    ForEach(AgentGroup.make(sessions, runs: model.runs(for: sessions), describe: model.runGroupDescription)) { group in
+                    ForEach(AgentGroup.make(sessions, runs: model.runs(for: sessions), idleCleanupMinutes: project.settings.idleCleanupMinutes, describe: model.runGroupDescription)) { group in
                         section(group)
                     }
                 }
@@ -105,7 +111,7 @@ struct AgentsView: View {
             .accessibilityAddTraits(.isHeader)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 12)], spacing: 12) {
                 ForEach(group.sessions) { session in
-                    AgentCard(session: session, project: project, isDimmed: group.kind == .idle)
+                    AgentCard(session: session, project: project, isDimmed: group.kind == .idle || group.kind == .archived)
                 }
             }
         }

@@ -51,6 +51,7 @@ final class AppModel {
     let gitHub: GitHubIntegration
     let inbox: InboxFeed
     let inboxNotifier = InboxNotifier()
+    let idleCleanup: IdleCleanupScheduler
     var leadFocusRunIDs: [Int64: Int64] = [:]
 
     private(set) var environment: EnvironmentReport?
@@ -90,7 +91,9 @@ final class AppModel {
         self.engine = RunEngine(database: database, driver: driver)
         self.gitHub = GitHubIntegration(engine: engine, secrets: secrets)
         self.inbox = InboxFeed(database: database)
+        self.idleCleanup = IdleCleanupScheduler(runtime: agents)
         driver.gitProvider = { [weak self] in self?.git }
+        connectWorkspaces()
         driver.gitHubProvider = { try? GitHubAuth(secrets: secrets).client() }
         restoreNavigation()
         connectGitHub()
@@ -126,6 +129,7 @@ final class AppModel {
         perform("Couldn’t recover runs") { try engine.recover() }
         startInbox()
         gitHub.start()
+        idleCleanup.start()
         await refreshAllProjects()
     }
 

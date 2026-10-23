@@ -16,6 +16,7 @@ struct AgentSessionView: View {
                     StatusBanner(session: session)
                     TranscriptView(session: session)
                     Composer(session: session)
+                        .disabled(model.agents.isSettingUp(session))
                 }
                 .frame(maxWidth: .infinity)
                 WorkspacePanel(session: session)
@@ -88,10 +89,28 @@ struct AgentSessionView: View {
 }
 
 private struct StatusBanner: View {
+    @Environment(AppModel.self) private var model
     let session: AgentSession
 
     var body: some View {
         let agent = session.agent
+        if model.agents.isSettingUp(session) {
+            banner(icon: "hammer", color: Theme.info, text: "Running the project’s setup script in this worktree. The agent starts when it finishes.") {
+                ProgressView().controlSize(.small)
+            }
+        } else if agent.status == .failed, model.agents.setupFailed(session) {
+            banner(icon: "xmark.octagon", color: Theme.danger, text: agent.lastError ?? "The setup script failed.") {
+                Button("Retry Setup") { model.agents.retrySetup(session) }
+                    .buttonStyle(.primaryPill)
+                    .help("Run the setup script again in this worktree")
+            }
+        } else {
+            statusBanner(for: agent)
+        }
+    }
+
+    @ViewBuilder
+    private func statusBanner(for agent: Agent) -> some View {
         switch agent.status {
         case .takenOver:
             banner(icon: "hand.raised", color: Theme.info, text: "The worktree is yours. Edit freely, then hand it back and the agent picks up your changes.") {

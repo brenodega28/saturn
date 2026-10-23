@@ -9,6 +9,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case documentation
     case skills
     case agents
+    case workspaces
     case claudeAccess
     case tools
     case github
@@ -22,6 +23,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .documentation: "Documentation"
         case .skills: "Skills"
         case .agents: "Agents & models"
+        case .workspaces: "Workspaces"
         case .claudeAccess: "Claude access"
         case .tools: "Tools"
         case .github: "GitHub"
@@ -35,6 +37,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .documentation: "Docs"
         case .skills: "Skills"
         case .agents: "Agents"
+        case .workspaces: "Spaces"
         case .claudeAccess: "Access"
         case .tools: "Tools"
         case .github: "GitHub"
@@ -48,6 +51,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .documentation: "doc.text"
         case .skills: "sparkles"
         case .agents: "cpu"
+        case .workspaces: "square.stack.3d.up"
         case .claudeAccess: "key"
         case .tools: "wrench.and.screwdriver"
         case .github: "arrow.triangle.pull"
@@ -61,6 +65,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .documentation: Color(hex: 0x0A84FF)
         case .skills: Color(hex: 0x8E4FD9)
         case .agents: Color(hex: 0x2E9C5A)
+        case .workspaces: Color(hex: 0xA0522D)
         case .claudeAccess: Color(hex: 0xC23A54)
         case .tools: Color(hex: 0x48484A)
         case .github: Color(hex: 0x48484A)
@@ -101,6 +106,7 @@ struct SettingsContainer: View {
                 case .documentation: DocsSettingsView(project: project)
                 case .skills: SkillsSettingsView(project: project)
                 case .agents: AgentsSettings(project: project)
+                case .workspaces: WorkspacesSettingsView(project: project)
                 case .claudeAccess: ClaudeAccessSettings()
                 case .tools: ToolsSettings()
                 case .github: GitHubSettingsView(project: project)

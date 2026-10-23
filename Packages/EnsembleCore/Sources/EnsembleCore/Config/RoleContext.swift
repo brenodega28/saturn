@@ -41,7 +41,7 @@ public struct RoleContext: Sendable, Hashable {
         public var message: String {
             switch self {
             case .missingSkill(let name):
-                "Skill “\(name)” isn’t in .claude/skills, so agents start without it."
+                "Skill “\(name)” isn’t in .claude/skills or an installed plugin, so agents start without it."
             case .missingDoc(let path):
                 "Document \(path) doesn’t exist in the repository."
             case .truncatedDoc(let path, let characters, let limit):
@@ -89,6 +89,7 @@ public struct RoleContext: Sendable, Hashable {
         role: RoleDefinition,
         config: ProjectConfig,
         repository: URL,
+        pluginSkills: Set<String> = [],
         documentLimit: Int = defaultDocumentLimit
     ) -> RoleContext {
         var sections: [Section] = []
@@ -119,12 +120,12 @@ public struct RoleContext: Sendable, Hashable {
         }
 
         if !role.skills.isEmpty {
-            let installed = SkillLibrary.installedSkills(in: repository)
+            let installed = SkillLibrary.installedSkills(in: repository).union(pluginSkills)
             for skill in role.skills where !installed.contains(skill) {
                 warnings.append(.missingSkill(skill))
             }
             let list = role.skills.map { "- \($0)" }.joined(separator: "\n")
-            let text = "Use these project skills from .claude/skills whenever they apply to your work:\n\(list)"
+            let text = "Use these project skills whenever they apply to your work:\n\(list)"
             sections.append(Section(kind: .skills, title: "Skills", source: nil, text: text, isTruncated: false))
         }
 
@@ -140,15 +141,18 @@ public enum SkillLibrary {
     }
 
     public static func installedSkills(in repository: URL) -> Set<String> {
-        let root = directory(in: repository)
-        let folders = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-        return Set(folders
-            .filter { FileManager.default.fileExists(atPath: $0.appending(path: "SKILL.md").path) }
-            .map(\.lastPathComponent))
+        Set(skillFolders(in: directory(in: repository)))
     }
 
-    public static func missingSkills(for role: RoleDefinition, in repository: URL) -> [String] {
-        let installed = installedSkills(in: repository)
+    static func skillFolders(in directory: URL) -> [String] {
+        let folders = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        return folders
+            .filter { FileManager.default.fileExists(atPath: $0.appending(path: "SKILL.md").path) }
+            .map(\.lastPathComponent)
+    }
+
+    public static func missingSkills(for role: RoleDefinition, in repository: URL, pluginSkills: Set<String> = []) -> [String] {
+        let installed = installedSkills(in: repository).union(pluginSkills)
         return role.skills.filter { !installed.contains($0) }
     }
 

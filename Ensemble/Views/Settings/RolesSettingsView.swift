@@ -43,6 +43,7 @@ struct RolesSettingsView: View {
             }
         }
         .onAppear { selectFirst(in: config) }
+        .task(id: project.path) { try? await model.loadSkillPlugins(for: project) }
         .confirmationDialog("Delete \(draft?.name ?? "role")?", isPresented: $isConfirmingDelete) {
             Button("Delete Role", role: .destructive, action: delete)
             Button("Cancel", role: .cancel) {}
@@ -159,7 +160,8 @@ struct RolesSettingsView: View {
     private func editor(_ role: Binding<RoleDefinition>, config: ProjectConfig, proxy: ScrollViewProxy) -> some View {
         let value = role.wrappedValue
         let liveIssues = draftIssues(value, config: config)
-        let context = RoleContext.build(role: value, config: config, repository: project.url)
+        let pluginSkills = model.pluginSkills(for: project)
+        let context = RoleContext.build(role: value, config: config, repository: project.url, pluginSkills: pluginSkills)
         return VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 12) {
@@ -206,7 +208,7 @@ struct RolesSettingsView: View {
                     }
                 }
                 field("Skills") {
-                    TokenEditor(items: role.skills, placeholder: "Add a skill", suggestions: Array(SkillLibrary.installedSkills(in: project.url)).sorted(), missing: Set(SkillLibrary.missingSkills(for: value, in: project.url)))
+                    TokenEditor(items: role.skills, placeholder: "Add a skill", suggestions: SkillLibrary.installedSkills(in: project.url).sorted() + pluginSkills.sorted(), missing: Set(SkillLibrary.missingSkills(for: value, in: project.url, pluginSkills: pluginSkills)))
                 }
                 field("Documents this role reads") {
                     TokenEditor(items: role.docs, placeholder: "Add a repo path, e.g. docs/API.md", suggestions: config.docs.docs.compactMap(\.path), missing: Set(context.warnings.compactMap { warning in

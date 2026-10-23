@@ -42,6 +42,8 @@ public final class AgentSession: Identifiable {
 
     public var isQueued: Bool { waitingTurn != nil }
 
+    var isRetired: Bool { agent.archivedAt != nil && agent.status == .stopped && handle == nil && !isQueued }
+
     public var canResume: Bool {
         handle == nil && !isQueued && [.paused, .interrupted, .stopped, .failed].contains(agent.status)
     }

@@ -60,7 +60,7 @@ public final class LeadChat {
         guard let taskId = task.id, try database.task(id: taskId) != nil else { throw RunEngineError.invalidState("The request is gone.") }
         guard !(try hasActiveRun(taskId: taskId)) else { throw LeadChatError.runInProgress }
         for agent in try database.requestAgents(taskId: taskId) {
-            guard let session = runtime.session(for: agent) else { continue }
+            guard let session = runtime.session(for: agent), !session.isRetired else { continue }
             try await runtime.retire(session, in: project, git: git, detail: "The request was closed as \(reason.title).", now: now)
         }
         guard !(try hasActiveRun(taskId: taskId)), let closed = try database.setClosed(taskId: taskId, reason: reason, at: now) else {
@@ -89,6 +89,9 @@ public final class LeadChat {
         let lead = try database.leadAgent(taskId: proposal.taskId)
         let leadRoleIDs = Set(config.roles.filter(\.canSpawn).map(\.id))
         let assigned = lead.map { workflow.assigningLead($0.role, replacing: leadRoleIDs) } ?? workflow
+        if task.isClosed {
+            try database.setClosed(taskId: proposal.taskId, reason: nil, at: .now)
+        }
         let run = try engine.start(task: task, workflow: assigned, project: project, title: proposal.title, brief: proposal.text)
         if let lead, let runID = run.id {
             runtime.session(for: lead)?.attach(toRun: runID)

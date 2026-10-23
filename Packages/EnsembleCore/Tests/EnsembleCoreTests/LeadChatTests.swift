@@ -220,6 +220,46 @@ import Testing
         #expect(try setup.harness.database.agents(inProject: projectID).filter { $0.taskId == task.id }.count == 1)
     }
 
+    @Test func startingAnOpenProposalOnAClosedRequestReopensIt() async throws {
+        let (setup, chat, lead) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", lead: lead, in: setup.project)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
+        let proposal = try #require(messages(setup, task).first { $0.kind == .proposal })
+        try await chat.close(task, as: .dropped, in: setup.project, git: setup.harness.repo.git)
+
+        let run = try chat.start(proposal, in: setup.project)
+
+        #expect(run.isActive && run.taskId == task.id)
+        let reopened = try stored(setup, task)
+        #expect(!reopened.isClosed && reopened.closeReason == nil)
+        #expect(LeadRequest.partition(try setup.harness.database.leadRequests(projectId: setup.project.id!)).open.map(\.id) == [task.id])
+        try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
+        try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
+    }
+
+    @Test func closingAgainSkipsAgentsAnEarlierCloseAlreadyRetired() async throws {
+        let (setup, chat, lead) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, run) = try await startedRun(setup, chat, lead: lead)
+        try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
+        let builder = try await setup.harness.runtime.createRunAgent(
+            in: setup.project, role: try #require(setup.config.role("claude-code")), runId: run.id!, runStepId: nil,
+            task: "Add alpha", git: setup.harness.repo.git
+        )
+        try await chat.close(task, as: .done, in: setup.project, git: setup.harness.repo.git)
+        let noticesAfterFirstClose = builder.transcript.entries.count
+        let archivedAt = builder.agent.archivedAt
+
+        try await chat.send("CHAT back again", to: try stored(setup, task), lead: lead, in: setup.project)
+        try await waitUntil { messages(setup, task).filter { $0.kind == .lead }.count == 2 }
+        try await chat.close(try stored(setup, task), as: .dropped, in: setup.project, git: setup.harness.repo.git)
+
+        #expect(builder.transcript.entries.count == noticesAfterFirstClose)
+        #expect(builder.agent.archivedAt == archivedAt)
+        #expect(try stored(setup, task).closeReason == .dropped)
+    }
+
     @Test func requestsNeedALeadRole() async throws {
         let (setup, chat, _) = try await makeChat()
         defer { setup.harness.cleanUp() }

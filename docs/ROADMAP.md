@@ -172,12 +172,12 @@ Goal: the human approval step is fast and trustworthy.
 
 Goal: work arrives on its own, and nothing waiting on you gets missed.
 
-- [ ] Tasks tab: Incoming, Running, Waiting on you, Done, Failed; accept, dismiss, choose workflow
-- [ ] GitHub integration: device-flow sign-in, pick repo, label filter → workflow mapping (polling first; webhooks need a server)
-- [ ] Write-back: comment when a run starts and when it ends with the PR link; set `ensemble:running` / `ensemble:done` labels
-- [ ] Run detail: workflow graph with the live step highlighted, timeline of steps and hand-offs, loops taken, agents, cost, logs; pause, resume, cancel, retry step
-- [ ] Global Inbox: agent questions, plan approvals, pin reviews and failures across all projects, actionable inline
-- [ ] macOS notifications for anything that lands in the Inbox
+- [x] Tasks tab: Incoming, Running, Waiting on you, Done, Failed; accept, dismiss, choose workflow
+- [x] GitHub integration: device-flow sign-in, pick repo, label filter → workflow mapping (polling first; webhooks need a server)
+- [x] Write-back: comment when a run starts and when it ends with the PR link; set `ensemble:running` / `ensemble:done` labels
+- [x] Run detail: workflow graph with the live step highlighted, timeline of steps and hand-offs, loops taken, agents, cost, logs; pause, resume, cancel, retry step
+- [x] Global Inbox: agent questions, plan approvals, pin reviews and failures across all projects, actionable inline
+- [x] macOS notifications for anything that lands in the Inbox
 
 **Exit check:** label a GitHub issue, a run starts by itself, a question from an agent shows up in the Inbox and gets answered there.
 

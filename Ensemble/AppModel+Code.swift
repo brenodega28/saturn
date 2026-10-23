@@ -12,7 +12,7 @@ struct CodeSource: Identifiable, Hashable {
     let agent: Agent?
     let role: RoleDefinition?
 
-    var changeAuthor: String { agent?.name ?? "you" }
+    var changeAuthor: String { agent.map { AgentNaming.displayName(of: $0.name, role: role) } ?? "you" }
 }
 
 extension AppModel {
@@ -28,7 +28,7 @@ extension AppModel {
                 guard let id = agent.id, let worktree = agent.worktreeURL,
                       FileManager.default.fileExists(atPath: worktree.path) else { return nil }
                 return CodeSource(
-                    id: "agent-\(id)", title: "\(agent.name)’s worktree", branch: agent.branch, root: worktree,
+                    id: "agent-\(id)", title: "\(displayName(of: agent, in: project))’s worktree", branch: agent.branch, root: worktree,
                     baseBranch: agent.baseBranch, agent: agent, role: role(for: agent, in: project)
                 )
             }

@@ -9,6 +9,7 @@ struct DirectChatView: View {
 
     var body: some View {
         let role = model.role(for: session.agent, in: project)
+        let name = model.displayName(of: session.agent, in: project)
         let messages = model.directMessages(with: session)
         let isWaitingForReply = messages.contains(where: \.awaitingReply) && (session.isRunning || session.isQueued)
         VStack(spacing: 14) {
@@ -22,14 +23,14 @@ struct DirectChatView: View {
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                         ForEach(messages) { message in
-                            bubble(message, role: role)
+                            bubble(message, role: role, name: name)
                                 .id(message.id)
                         }
                         if isWaitingForReply {
-                            ThinkingRow(role: role, name: session.agent.name)
+                            ThinkingRow(role: role, name: name)
                                 .id(Self.thinkingID)
                         } else if session.agent.status == .failed, messages.contains(where: \.awaitingReply) {
-                            FailedReplyRow(name: session.agent.name, error: session.agent.lastError)
+                            FailedReplyRow(name: name, error: session.agent.lastError)
                                 .padding(.leading, 42)
                         }
                     }
@@ -51,19 +52,19 @@ struct DirectChatView: View {
     private static let thinkingID: Int64 = -1
 
     private var scopeNote: String {
-        let name = session.agent.name
+        let name = model.displayName(of: session.agent, in: project)
         return session.agent.runId == nil
             ? "Direct messages go only to \(name). They don’t start a run."
             : "Direct messages go only to \(name). They don’t start a run; the lead sees a summary."
     }
 
     @ViewBuilder
-    private func bubble(_ message: DirectMessage, role: RoleDefinition?) -> some View {
+    private func bubble(_ message: DirectMessage, role: RoleDefinition?, name: String) -> some View {
         switch message.kind {
         case .user:
             RequestBubble(text: message.text, date: message.createdAt, attachments: message.storedAttachments)
         case .agent:
-            LeadBubble(role: role, name: session.agent.name, date: message.createdAt) {
+            LeadBubble(role: role, name: name, date: message.createdAt) {
                 ChatText(message.text)
             }
         }
@@ -87,7 +88,7 @@ private struct DirectAgentCard: View {
         HStack(alignment: .center, spacing: 12) {
             AgentAvatar(size: 36, appearance: RoleAppearance(role: role))
             VStack(alignment: .leading, spacing: 2) {
-                (Text(agent.name).fontWeight(.semibold) + Text(" · \(role?.name ?? agent.role) · \(agent.model)").foregroundStyle(Theme.secondaryText))
+                (Text(model.displayName(of: agent, in: project)).fontWeight(.semibold) + Text(" · \(role?.name ?? agent.role) · \(agent.model)").foregroundStyle(Theme.secondaryText))
                     .font(.system(size: 13.5))
                     .lineLimit(1)
                 if !agent.task.isEmpty {
@@ -136,7 +137,7 @@ private struct DirectComposer: View {
     @State private var isDropTargeted = false
 
     var body: some View {
-        let name = session.agent.name
+        let name = model.displayName(of: session.agent, in: project)
         VStack(alignment: .leading, spacing: 10) {
             ChatComposerInput(
                 text: $text,

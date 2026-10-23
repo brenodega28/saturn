@@ -21,6 +21,11 @@ public enum AgentNaming {
         return names
     }
 
+    public static func displayName(of name: String, role: RoleDefinition?) -> String {
+        guard let role, role.canSpawn, number(of: name, base: role.name) != nil else { return name }
+        return role.name
+    }
+
     static func number(of name: String, base: String) -> Int? {
         if name.caseInsensitiveCompare(base) == .orderedSame { return 1 }
         let prefix = base + " "

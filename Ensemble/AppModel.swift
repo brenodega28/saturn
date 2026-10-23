@@ -279,6 +279,15 @@ final class AppModel {
         config(for: project).role(agent.role)
     }
 
+    func displayName(of agent: Agent, in project: Project) -> String {
+        AgentNaming.displayName(of: agent.name, role: role(for: agent, in: project))
+    }
+
+    func displayName(of agent: Agent) -> String {
+        guard let project = self.project(withID: agent.projectId) else { return agent.name }
+        return displayName(of: agent, in: project)
+    }
+
     func agentNames(for base: String, count: Int, in project: Project) -> [String] {
         guard let id = project.id else { return [] }
         _ = agents.usageRevision
@@ -328,7 +337,7 @@ final class AppModel {
             try await agents.delete(session, in: project, git: git, deleteBranch: deleteBranch)
             if selectedAgent(in: project)?.id == session.id { select(nil, in: project) }
         } catch {
-            alert = AppAlert(title: "Couldn’t delete \(session.agent.name)", message: error.localizedDescription)
+            alert = AppAlert(title: "Couldn’t delete \(displayName(of: session.agent, in: project))", message: error.localizedDescription)
         }
         await refresh(project)
     }

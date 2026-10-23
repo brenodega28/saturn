@@ -187,9 +187,9 @@ struct ChangesToolbar: View {
             ForEach(store.codingAgents) { agent in
                 ChipButton(isSelected: store.agentFilter == agent.id, height: 30, action: { store.agentFilter = agent.id }) {
                     AgentAvatar(size: 20, appearance: context.appearance(agent.id)).shadow(radius: 0)
-                    Text(agent.name)
+                    Text(model.displayName(of: agent, in: project))
                 }
-                .help("Only show \(agent.name)’s branch")
+                .help("Only show \(model.displayName(of: agent, in: project))’s branch")
             }
         }
         .font(.system(size: 12))
@@ -239,6 +239,7 @@ struct ChipButton<Label: View>: View {
 }
 
 struct ConflictBanner: View {
+    @Environment(AppModel.self) private var model
     let changeSet: RunChangeSet
 
     var body: some View {
@@ -265,7 +266,7 @@ struct ConflictBanner: View {
                         .foregroundStyle(Theme.warning)
                 }
                 ForEach(failures) { branch in
-                    Text("Couldn’t read \(branch.agent.name)’s branch \(branch.branch): \(branch.error ?? "")")
+                    Text("Couldn’t read \(model.displayName(of: branch.agent))’s branch \(branch.branch): \(branch.error ?? "")")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.warning)
                         .fixedSize(horizontal: false, vertical: true)

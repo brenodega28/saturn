@@ -57,7 +57,7 @@ extension AppModel {
             try directChat.send(text, attachments: attachments, to: session)
             return true
         } catch {
-            alert = AppAlert(title: "Couldn’t send the message to \(session.agent.name)", message: error.localizedDescription)
+            alert = AppAlert(title: "Couldn’t send the message to \(displayName(of: session.agent))", message: error.localizedDescription)
             return false
         }
     }

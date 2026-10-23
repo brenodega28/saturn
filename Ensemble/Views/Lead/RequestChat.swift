@@ -82,7 +82,7 @@ struct RequestChat: View {
                 }
             case .proposal:
                 LeadBubble(role: data.leadRole, name: data.leadName, date: message.createdAt) {
-                    ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil)
+                    ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed)
                 }
             case .note:
                 DirectMessageNote(text: message.text)
@@ -237,6 +237,7 @@ private struct ProposalCard: View {
     let proposal: LeadMessage
     let project: Project
     let hasActiveRun: Bool
+    let isRequestClosed: Bool
 
     var body: some View {
         let workflow = proposal.workflow.flatMap { model.config(for: project).workflow($0) }
@@ -257,8 +258,8 @@ private struct ProposalCard: View {
                 HStack(spacing: 8) {
                     Button { model.startProposal(proposal, in: project) } label: { Label("Start Run", systemImage: "play.fill") }
                         .buttonStyle(PillButtonStyle(.primary, height: 30))
-                        .disabled(hasActiveRun || workflow == nil)
-                        .help(hasActiveRun ? "Wait for the current run to end" : "Start the run; the lead plans it first")
+                        .disabled(hasActiveRun || isRequestClosed || workflow == nil)
+                        .help(startHelp)
                     Button("Dismiss") { model.dismissProposal(proposal) }
                         .buttonStyle(PillButtonStyle(height: 30))
                         .help("Don’t run this; keep talking to the lead")
@@ -269,6 +270,11 @@ private struct ProposalCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.accent.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.accent.opacity(0.28)))
+    }
+
+    private var startHelp: String {
+        if isRequestClosed { return "This request is closed. Send a message to reopen it first." }
+        return hasActiveRun ? "Wait for the current run to end" : "Start the run; the lead plans it first"
     }
 
     @ViewBuilder

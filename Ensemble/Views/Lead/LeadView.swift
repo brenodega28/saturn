@@ -147,7 +147,10 @@ private struct LeadRequestList: View {
                         Task { await model.closeRequest(request, as: reason, in: project) }
                     }
                     .disabled(hasActiveRun)
-                    .help(hasActiveRun ? RequestCloseReason.blockedHelp : "Mark this request \(reason.title.lowercased()) and clean up its worktrees")
+                }
+                if hasActiveRun {
+                    Divider()
+                    Text(RequestCloseReason.blockedHelp)
                 }
             }
         }

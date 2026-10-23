@@ -111,6 +111,10 @@ extension AppModel {
     }
 
     func startProposal(_ proposal: LeadMessage, in project: Project) {
+        if (try? database.task(id: proposal.taskId))?.isClosed == true {
+            alert = AppAlert(title: "Couldn’t start the run", message: "This request is closed. Send a message to reopen it first.")
+            return
+        }
         do {
             try ensureWithinBudget(project)
             try leadChat.start(proposal, in: project)

@@ -256,7 +256,9 @@ private final class PastingTextView: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76
-        if isReturn, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function])
+        let sendsMessage = modifiers.isEmpty && !hasMarkedText() || modifiers == .command
+        if isReturn, sendsMessage {
             coordinator?.parent.onSubmit()
             return
         }

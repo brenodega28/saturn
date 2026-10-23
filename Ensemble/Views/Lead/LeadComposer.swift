@@ -16,8 +16,6 @@ struct LeadComposer: View {
         VStack(alignment: .leading, spacing: 10) {
             ChatComposerInput(
                 text: $text,
-                prompt: Text(placeholder(leadName: leadName)),
-                axis: .vertical
                 attachments: $attachments,
                 isDropTargeted: $isDropTargeted,
                 placeholder: request == nil ? "Ask or describe what you need. The lead replies and proposes a run when it’s time." : "Message \(leadName)",

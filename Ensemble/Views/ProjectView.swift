@@ -86,7 +86,7 @@ struct ProjectView: View {
                 }
             }
         case .changes:
-            EmptyState("Nothing to review", message: "Diffs across a run’s branches and the pins agents flag for you appear here before anything reaches main.")
+            ChangesView(project: project)
         case .workflows:
             EmptyState("No workflows yet", message: "Workflows live in .ensemble/workflows/ in this repository, versioned with your code.")
         case .settings:

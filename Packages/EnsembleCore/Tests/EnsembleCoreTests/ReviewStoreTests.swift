@@ -119,6 +119,37 @@ import Testing
         #expect(other.first?.notes.isEmpty == true)
     }
 
+    @Test func pinDecisionsDriveTheApprovalStep() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        h.driver.script("plan", .result(.plan(H.plan)))
+        h.driver.script("build", H.done("Built v1"), H.done("Reworded the warning"))
+        h.driver.script("review", H.verdict(StepOutcome.approved, "Fine"), H.verdict(StepOutcome.approved, "Fine"))
+        h.driver.script("qa", H.verdict(StepOutcome.passed, "Green"), H.verdict(StepOutcome.passed, "Green"))
+        let id = try await h.start(try h.workflow("feature-delivery"))
+        try h.engine.approvePlan(try h.run(id), plan: H.plan)
+        await h.settle(id)
+        #expect(h.engine.waitingReason(runID: id)?.reason == .approval)
+
+        let wording = try h.database.createPin(PinDraft(file: "ui/Drawer.tsx", startLine: 27, endLine: 29, title: "Wording", explanation: ""), runId: id, agentId: nil)
+        try h.database.createPin(PinDraft(file: "orders/views.py", startLine: 49, endLine: 51, title: "Money", explanation: ""), runId: id, agentId: nil)
+        try h.database.updatePin(id: try #require(wording.id), status: .changeRequested, response: "Mention the original card.")
+        let summary = Pin.changeRequestSummary(try h.database.pins(runId: id))
+        try h.engine.resolveApproval(try h.run(id), approved: false, note: summary)
+        await h.settle(id)
+
+        #expect(h.driver.spawnCalls.last?.feedback?.summary == summary)
+        #expect(h.driver.spawnCalls.last?.feedback?.fromStep == "approve")
+        #expect(h.engine.waitingReason(runID: id)?.reason == .approval)
+
+        try h.database.updatePin(id: try #require(wording.id), status: .approved)
+        #expect(try h.database.approveOpenPins(runId: id) == 1)
+        #expect(try h.database.openPinCount(runId: id) == 0)
+        try h.engine.resolveApproval(try h.run(id), approved: true, note: nil)
+        await h.settle(id)
+        #expect(try h.run(id).status == .succeeded)
+    }
+
     @Test func matchesIssueFilesLoosely() {
         #expect(RunReviews.matches(issueFile: "views.py", path: "orders/views.py"))
         #expect(RunReviews.matches(issueFile: "./orders/views.py:10-12", path: "orders/views.py"))

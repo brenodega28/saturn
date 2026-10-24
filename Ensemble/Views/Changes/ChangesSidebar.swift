@@ -38,7 +38,7 @@ struct ChangesSidebar: View {
             ForEach(store.pins) { pin in
                 Button { jump(target(for: pin)) } label: { pinRow(pin) }
                     .buttonStyle(.plain)
-                    .help("Jump to \(pin.file):\(pin.lineLabel)")
+                    .help("Jump to \(pin.file):\(pin.sideLineLabel)")
             }
         }
     }
@@ -50,14 +50,14 @@ struct ChangesSidebar: View {
     private func pinRow(_ pin: Pin) -> some View {
         let isOpen = pin.status == .open
         return HStack(alignment: .top, spacing: 10) {
-            AgentAvatar(size: 20, appearance: context.appearance(pin.agentId)).shadow(radius: 0)
+            AgentAvatar(size: 20, appearance: pin.byUser ? .reviewer : context.appearance(pin.agentId)).shadow(radius: 0)
             VStack(alignment: .leading, spacing: 2) {
-                Text(pin.title)
+                Text(pin.byUser ? pin.explanation : pin.title)
                     .font(.system(size: 12.5, weight: isOpen ? .semibold : .medium))
                     .foregroundStyle(isOpen ? Color.white : Theme.secondaryText)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                Text("\((pin.file as NSString).lastPathComponent):\(pin.lineLabel)")
+                Text("\(pin.byUser ? "Your comment · " : "")\((pin.file as NSString).lastPathComponent):\(pin.sideLineLabel)")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.secondaryText)
                     .lineLimit(1)
@@ -144,7 +144,7 @@ struct ReviewBar: View {
             Image(systemName: "pin.fill")
                 .foregroundStyle(open > 0 ? DiffPalette.pin : Theme.successText)
                 .accessibilityHidden(true)
-            Text(title(open: open)).font(.system(size: 13.5, weight: .semibold))
+            Text(title(open: open, requested: requested.count)).font(.system(size: 13.5, weight: .semibold))
             Text(subtitle(requested: requested.count))
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.secondaryText)
@@ -170,9 +170,14 @@ struct ReviewBar: View {
         .padding(.bottom, 4)
     }
 
-    private func title(open: Int) -> String {
-        if store.pins.isEmpty { return "No pins" }
-        return open > 0 ? "\(open) open pin\(open == 1 ? "" : "s")" : "All pins reviewed"
+    private func title(open: Int, requested: Int) -> String {
+        let requests = "\(requested) change request\(requested == 1 ? "" : "s")"
+        if open > 0 {
+            let pins = "\(open) open pin\(open == 1 ? "" : "s")"
+            return requested > 0 ? "\(pins) · \(requests)" : pins
+        }
+        if requested > 0 { return requests }
+        return store.pins.isEmpty ? "No pins" : "All pins reviewed"
     }
 
     private func subtitle(requested: Int) -> String {

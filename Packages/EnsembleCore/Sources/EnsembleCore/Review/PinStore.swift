@@ -36,6 +36,39 @@ extension AppDatabase {
     }
 
     @discardableResult
+    public func createComment(
+        runId: Int64, branchAgentId: Int64?, file: String, side: PinSide, startLine: Int, endLine: Int,
+        text: String, now: Date = .now
+    ) throws -> Pin {
+        try writer.write { db in
+            var pin = Pin(
+                runId: runId, agentId: branchAgentId, file: file, startLine: min(startLine, endLine),
+                endLine: max(startLine, endLine), side: side, byUser: true, title: "Your comment",
+                explanation: text, status: .changeRequested, response: text, createdAt: now, updatedAt: now
+            )
+            try pin.insert(db)
+            return pin
+        }
+    }
+
+    @discardableResult
+    public func updateComment(id: Int64, text: String, now: Date = .now) throws -> Pin? {
+        try writer.write { db in
+            guard var pin = try Pin.fetchOne(db, id: id) else { return nil }
+            pin.explanation = text
+            pin.response = text
+            pin.updatedAt = now
+            try pin.update(db)
+            return pin
+        }
+    }
+
+    @discardableResult
+    public func deletePin(id: Int64) throws -> Bool {
+        try writer.write { db in try Pin.deleteOne(db, id: id) }
+    }
+
+    @discardableResult
     public func approveOpenPins(runId: Int64, now: Date = .now) throws -> Int {
         try writer.write { db in
             try Pin
@@ -89,17 +122,40 @@ extension Pin {
         startLine == endLine ? "\(startLine)" : "\(startLine)–\(endLine)"
     }
 
+    public var sideLineLabel: String {
+        side == .old ? "\(lineLabel) (removed)" : lineLabel
+    }
+
     public var lineRange: ClosedRange<Int> { min(startLine, endLine)...max(startLine, endLine) }
+
+    private var summaryLocation: String {
+        "\(file):\(lineLabel)" + (side == .old ? " (removed lines)" : "")
+    }
 
     public static func changeRequestSummary(_ pins: [Pin], agentNames: [Int64: String] = [:]) -> String {
         let requested = pins.filter { $0.status == .changeRequested }
         guard !requested.isEmpty else { return "" }
         let items = requested.map { pin in
-            let author = pin.agentId.flatMap { agentNames[$0] }.map { " (pinned by \($0))" } ?? ""
+            let agentName = pin.agentId.flatMap { agentNames[$0] }
             let note = pin.response?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let request = note.isEmpty ? "Please revisit this." : note
-            return "- \(pin.file):\(pin.lineLabel) “\(pin.title)”\(author): \(request)"
+            if pin.byUser {
+                let branch = agentName.map { ", on \($0)’s branch" } ?? ""
+                return "- Reviewer comment on \(pin.summaryLocation)\(branch): \(request)"
+            }
+            let author = agentName.map { " (pinned by \($0))" } ?? ""
+            return "- \(pin.summaryLocation) “\(pin.title)”\(author): \(request)"
         }
-        return (["Changes requested on \(requested.count) pin\(requested.count == 1 ? "" : "s"):"] + items).joined(separator: "\n")
+        return (["Changes requested on \(headerCount(requested)):"] + items).joined(separator: "\n")
+    }
+
+    private static func headerCount(_ requested: [Pin]) -> String {
+        let comments = requested.filter(\.byUser).count
+        let pins = requested.count - comments
+        let parts = [
+            pins > 0 ? "\(pins) pin\(pins == 1 ? "" : "s")" : nil,
+            comments > 0 ? "\(comments) comment\(comments == 1 ? "" : "s")" : nil,
+        ]
+        return parts.compactMap { $0 }.joined(separator: " and ")
     }
 }

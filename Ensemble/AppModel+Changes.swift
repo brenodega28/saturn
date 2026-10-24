@@ -64,6 +64,32 @@ extension AppModel {
         }
     }
 
+    func addComment(in run: Run, branchAgentId: Int64?, file: String, side: PinSide, lines: ClosedRange<Int>, text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let id = run.id, !text.isEmpty else { return }
+        performReview("Couldn’t save the comment") {
+            try database.createComment(
+                runId: id, branchAgentId: branchAgentId, file: file, side: side,
+                startLine: lines.lowerBound, endLine: lines.upperBound, text: text
+            )
+        }
+    }
+
+    func editComment(_ pin: Pin, text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let id = pin.id, !text.isEmpty else { return }
+        performReview("Couldn’t update the comment") {
+            try database.updateComment(id: id, text: text)
+        }
+    }
+
+    func deleteComment(_ pin: Pin) {
+        guard let id = pin.id else { return }
+        performReview("Couldn’t delete the comment") {
+            try database.deletePin(id: id)
+        }
+    }
+
     @discardableResult
     func askAgent(about pin: Pin, question: String) -> Bool {
         let text = question.trimmingCharacters(in: .whitespacesAndNewlines)

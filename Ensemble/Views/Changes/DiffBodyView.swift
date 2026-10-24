@@ -18,6 +18,7 @@ enum DiffPalette {
     static let lineNumber = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.45)
     static let cardBackground = Color(hex: 0x141417)
     static let conflict = Color(hex: 0xFF8A80)
+    static let selection = Color(red: 56 / 255, green: 139 / 255, blue: 253 / 255).opacity(0.2)
 
     static func background(_ kind: PatchLine.Kind) -> Color {
         switch kind {
@@ -44,11 +45,14 @@ enum DiffPalette {
     }
 }
 
-struct DiffBodyView<PinContent: View>: View {
+struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
     let rows: DiffRows
     let layout: DiffLayout
     let language: CodeLanguage
+    let selection: LineSelection?
+    let onSelectLine: (LineTarget, Bool) -> Void
     @ViewBuilder let pinContent: (Pin) -> PinContent
+    @ViewBuilder let composer: () -> ComposerContent
 
     private static var codeFont: Font { .system(size: 12.5, design: .monospaced) }
 
@@ -56,13 +60,43 @@ struct DiffBodyView<PinContent: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             switch layout {
             case .unified:
-                ForEach(rows.unified) { row in unifiedRow(row) }
+                let composerRowID = lastSelectedUnifiedRowID
+                ForEach(rows.unified) { row in
+                    unifiedRow(row)
+                    if row.id == composerRowID { composer() }
+                }
             case .split:
-                ForEach(rows.split) { row in splitRow(row) }
+                let composerRowID = lastSelectedSplitRowID
+                ForEach(rows.split) { row in
+                    splitRow(row)
+                    if row.id == composerRowID { composer() }
+                }
             }
         }
         .font(Self.codeFont)
         .textSelection(.enabled)
+    }
+
+    private var lastSelectedUnifiedRowID: Int? {
+        guard let selection else { return nil }
+        return rows.unified.last { row in
+            if case .line(let line, _) = row.content { return selection.contains(line) }
+            return false
+        }?.id
+    }
+
+    private var lastSelectedSplitRowID: Int? {
+        guard let selection else { return nil }
+        return rows.split.last { row in
+            if case .pair(let left, let right) = row.content {
+                return [left, right].contains { side in side.map { selection.contains($0.line) } ?? false }
+            }
+            return false
+        }?.id
+    }
+
+    private func isSelected(_ line: PatchLine) -> Bool {
+        selection?.contains(line) ?? false
     }
 
     @ViewBuilder
@@ -74,15 +108,23 @@ struct DiffBodyView<PinContent: View>: View {
             pinContent(pin)
         case .line(let line, let pinned):
             HStack(alignment: .top, spacing: 0) {
-                lineNumber(line.oldLine, kind: line.kind, width: 52)
-                lineNumber(line.newLine, kind: line.kind, width: 52)
+                HStack(alignment: .top, spacing: 0) {
+                    lineNumber(line.oldLine, kind: line.kind, width: 52)
+                    lineNumber(line.newLine, kind: line.kind, width: 52)
+                }
+                .modifier(LineGutterTap(target: line.commentTarget, onSelect: onSelectLine))
                 signView(line.kind, width: 24)
                 codeText(line)
             }
             .background(DiffPalette.background(line.kind))
+            .background(isSelected(line) ? DiffPalette.selection : .clear)
             .overlay(alignment: .leading) { marker(pinned) }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityText(line))
+            .accessibilityAddTraits(isSelected(line) ? .isSelected : [])
+            .accessibilityAction(named: "Comment on this line") {
+                if let target = line.commentTarget { onSelectLine(target, false) }
+            }
         }
     }
 
@@ -107,6 +149,7 @@ struct DiffBodyView<PinContent: View>: View {
         HStack(alignment: .top, spacing: 0) {
             if let side {
                 lineNumber(isLeft ? side.line.oldLine : side.line.newLine, kind: side.line.kind, width: 48)
+                    .modifier(LineGutterTap(target: side.line.commentTarget, onSelect: onSelectLine))
                 signView(side.line.kind, width: 22)
                 codeText(side.line)
             } else {
@@ -116,9 +159,14 @@ struct DiffBodyView<PinContent: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(side.map { DiffPalette.background($0.line.kind) } ?? DiffPalette.emptySide)
+        .background(side.map { isSelected($0.line) } == true ? DiffPalette.selection : .clear)
         .overlay(alignment: .leading) { marker(side?.pinned == true) }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(side.map { accessibilityText($0.line) } ?? "No line")
+        .accessibilityAddTraits(side.map { isSelected($0.line) } == true ? .isSelected : [])
+        .accessibilityAction(named: "Comment on this line") {
+            if let target = side?.line.commentTarget { onSelectLine(target, false) }
+        }
     }
 
     private func hunkHeader(_ header: String) -> some View {
@@ -184,5 +232,23 @@ struct DiffBodyView<PinContent: View>: View {
         case .context: "Line \(line.newLine ?? 0)"
         }
         return "\(prefix): \(line.text)"
+    }
+}
+
+struct LineGutterTap: ViewModifier {
+    let target: LineTarget?
+    let onSelect: (LineTarget, Bool) -> Void
+
+    func body(content: Content) -> some View {
+        if let target {
+            content
+                .contentShape(Rectangle())
+                .textSelection(.disabled)
+                .onTapGesture { onSelect(target, NSEvent.modifierFlags.contains(.shift)) }
+                .pointerStyle(.link)
+                .help("Click to comment on this line. Shift-click to extend the selection.")
+        } else {
+            content
+        }
     }
 }

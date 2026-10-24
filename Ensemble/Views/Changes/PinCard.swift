@@ -13,6 +13,7 @@ struct PinCard: View {
     @State private var composer: Composer?
     @State private var draft = ""
     @State private var confirmation: String?
+    @State private var isEditingComment = false
 
     enum Composer {
         case requestChange
@@ -22,19 +23,35 @@ struct PinCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            Text(pin.explanation)
-                .font(.system(size: 13.5))
-                .lineSpacing(4)
-                .foregroundStyle(Color.white.opacity(0.9))
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            if pin.status == .changeRequested, let response = pin.response, !response.isEmpty {
+            if pin.byUser && isEditingComment {
+                LineCommentComposer(
+                    text: pin.response ?? pin.explanation,
+                    saveTitle: "Save",
+                    onSave: { text in
+                        model.editComment(pin, text: text)
+                        isEditingComment = false
+                    },
+                    onCancel: { isEditingComment = false }
+                )
+            } else {
+                Text(pin.explanation)
+                    .font(.system(size: 13.5))
+                    .lineSpacing(4)
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            if !pin.byUser, pin.status == .changeRequested, let response = pin.response, !response.isEmpty {
                 Label(response, systemImage: "arrow.uturn.backward")
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            actions
+            if pin.byUser {
+                commentActions
+            } else {
+                actions
+            }
             if let composer {
                 composerView(composer)
             }
@@ -78,7 +95,7 @@ struct PinCard: View {
 
     private var titleRow: some View {
         HStack(spacing: 10) {
-            Image(systemName: "pin.fill")
+            Image(systemName: pin.byUser ? "text.bubble.fill" : "pin.fill")
                 .foregroundStyle(DiffPalette.pin)
                 .accessibilityHidden(true)
             Text(pin.title)
@@ -99,11 +116,44 @@ struct PinCard: View {
 
     private var byline: some View {
         HStack(spacing: 6) {
-            AgentAvatar(size: 18, appearance: appearance).shadow(radius: 0)
-            Text("Pinned by \(authorName) · lines \(pin.lineLabel)")
+            AgentAvatar(size: 18, appearance: pin.byUser ? .reviewer : appearance).shadow(radius: 0)
+            Text(pin.byUser ? "Comment by you · lines \(pin.sideLineLabel)" : "Pinned by \(authorName) · lines \(pin.sideLineLabel)")
         }
         .font(.system(size: 12))
         .foregroundStyle(Theme.secondaryText)
+    }
+
+    private var commentActions: some View {
+        HStack(spacing: 8) {
+            changeRequestedTag
+            if !isEditingComment {
+                Button("Edit") {
+                    confirmation = nil
+                    isEditingComment = true
+                }
+                .buttonStyle(PillButtonStyle(height: 30))
+                .help("Change the text of your comment")
+            }
+            Button("Delete") { model.deleteComment(pin) }
+                .buttonStyle(PillButtonStyle(height: 30))
+                .help("Withdraw this comment")
+            if let author {
+                Text(holdsApproval ? "Goes to \(author.name) when you send changes back" : "Goes to \(author.name) when the run reaches your approval")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+        .font(.system(size: 12.5))
+    }
+
+    private var changeRequestedTag: some View {
+        Text("Change requested")
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(Theme.warning)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(Theme.warning.opacity(0.15), in: Capsule())
     }
 
     private var actions: some View {
@@ -125,12 +175,7 @@ struct PinCard: View {
                 .help("Approve this pin")
             }
             if pin.status == .changeRequested {
-                Text("Change requested")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Theme.warning)
-                    .padding(.horizontal, 12)
-                    .frame(height: 30)
-                    .background(Theme.warning.opacity(0.15), in: Capsule())
+                changeRequestedTag
             }
             Button(requestTitle) { toggle(.requestChange) }
                 .buttonStyle(PillButtonStyle(height: 30))
@@ -190,6 +235,10 @@ struct PinCard: View {
         self.composer = nil
         draft = ""
     }
+}
+
+extension RoleAppearance {
+    static let reviewer = RoleAppearance(palette: .neutral, symbol: "person.fill")
 }
 
 struct PinPrimaryButtonStyle: ButtonStyle {

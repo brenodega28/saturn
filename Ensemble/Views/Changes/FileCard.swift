@@ -179,7 +179,20 @@ struct FileCard: View {
         } else if entry.diff.hunks.isEmpty {
             collapsedNote(emptyDiffMessage(entry.diff))
         } else {
-            DiffBodyView(rows: rows, layout: store.layout, language: CodeLanguage(path: entry.diff.path)) { pin in pinCard(pin) }
+            let selection = store.lineSelection(for: entry.id)
+            DiffBodyView(
+                rows: rows,
+                layout: store.layout,
+                language: CodeLanguage(path: entry.diff.path),
+                selection: selection,
+                onSelectLine: { target, extending in store.selectLine(target, in: entry.id, extending: extending) },
+                pinContent: { pin in pinCard(pin) },
+                composer: {
+                    if let selection {
+                        NewLineComment(selection: selection, entry: entry, file: path.path, run: run, store: store)
+                    }
+                }
+            )
             if !showsAll && rows.totalLines > Self.lineLimit {
                 Button("Show all \(rows.totalLines) lines") { store.fullyShown.insert(entry.id) }
                     .buttonStyle(.link)

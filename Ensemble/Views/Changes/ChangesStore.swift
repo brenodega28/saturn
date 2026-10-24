@@ -21,7 +21,10 @@ enum DiffLayout: String, CaseIterable, Identifiable {
 final class ChangesStore {
     var selectedRunID: Int64?
     var agentFilter: Int64?
-    var layout: DiffLayout = .unified
+    var layout: DiffLayout = .unified {
+        didSet { if layout != oldValue { lineSelection = nil } }
+    }
+    private(set) var lineSelection: LineSelection?
     private(set) var changeSet: RunChangeSet?
     private(set) var loadedRunID: Int64?
     private(set) var isLoading = false
@@ -46,6 +49,19 @@ final class ChangesStore {
         collapsed = []
         expandedGenerated = []
         fullyShown = []
+        lineSelection = nil
+    }
+
+    func selectLine(_ target: LineTarget, in entryID: String, extending: Bool) {
+        lineSelection = LineSelection.next(after: lineSelection, clicking: target, in: entryID, extending: extending)
+    }
+
+    func clearLineSelection() {
+        lineSelection = nil
+    }
+
+    func lineSelection(for entryID: String) -> LineSelection? {
+        lineSelection?.entryID == entryID ? lineSelection : nil
     }
 
     func selectedRun(from runs: [Run]) -> Run? {

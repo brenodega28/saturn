@@ -33,6 +33,8 @@ import Testing
         #expect(launch.contains("mcp__ensemble__propose_run"))
         #expect(launch.contains("mcp__ensemble__message_agent"))
         #expect(launch.contains("Chatting with the user"))
+        #expect(launch.contains("questions the run's agents ask with `mcp__ensemble__ask_human` come to you, not the user"))
+        #expect(launch.contains("ONE merged `mcp__ensemble__ask_human` that names the agents each point affects"))
         #expect(launch.contains("`feature-delivery`"))
         #expect(try setup.harness.database.leadRequests(projectId: setup.project.id!).map(\.id) == [task.id])
     }

@@ -116,6 +116,9 @@ public final class DirectChat {
             attachments: try ChatAttachmentStore(paths: runtime.paths).store(attachments)
         ))
         revision += 1
+        #if DEBUG
+        runtime.debugTrace?.chatMessage(body, direction: "user_to_agent", chat: "direct", agent: session.agent, at: now)
+        #endif
         session.send(ChatAttachment.prompt(text: body, attachments: attachments), images: attachments.filter(\.isImage))
     }
 
@@ -133,6 +136,9 @@ public final class DirectChat {
         } catch {
             return
         }
+        #if DEBUG
+        runtime.debugTrace?.chatMessage(reply, direction: "agent_to_user", chat: "direct", agent: agent, at: now)
+        #endif
         revision += 1
     }
 

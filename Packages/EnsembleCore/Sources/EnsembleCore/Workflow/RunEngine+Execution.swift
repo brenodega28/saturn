@@ -131,6 +131,9 @@ extension RunEngine {
                 if let outcome = row.outcome { result[row.stepId] = outcome }
             }
         let matched = step.condition?.evaluate(ConditionFacts(labels: task.labels, diff: diff, outcomes: outcomes)) ?? false
+        #if DEBUG
+        traceCondition(loaded, step: step, runStepId: runStepID, facts: ConditionFacts(labels: task.labels, diff: diff, outcomes: outcomes), matched: matched)
+        #endif
         let outcome = matched ? StepOutcome.yes : StepOutcome.no
         let output = StepOutput(summary: diff.map { "\($0.paths.count) files, \($0.lines) lines changed" })
         var loadedAfter = try load(runID)
@@ -151,6 +154,9 @@ extension RunEngine {
             projectId: loaded.run.projectId, runId: loaded.run.id, kind: .notice,
             title: step.displayTitle, body: message, createdAt: clock()
         ))
+        #if DEBUG
+        traceInboxItem(loaded, stepId: step.id, kind: .notice, title: step.displayTitle, body: message)
+        #endif
         let output = StepOutput(summary: message)
         runStep.status = .succeeded
         runStep.outcome = StepOutcome.done
@@ -246,6 +252,9 @@ extension RunEngine {
         loaded.run.currentStep = target.stepId
         loaded.run.status = .running
         try commit(loaded, steps: steps)
+        #if DEBUG
+        traceRouted(loaded, from: step, to: target.stepId, outcome: outcome, loopCount: used + 1, maxLoops: target.route?.maxLoops, iteration: iteration)
+        #endif
         return true
     }
 
@@ -260,21 +269,36 @@ extension RunEngine {
             steps = [row]
         }
         loaded.run.lastError = message
+        #if DEBUG
+        traceStepFailed(loaded, stepId: stepId, runStepId: runStepID, error: error, onFailure: onFailure)
+        #endif
         let title = loaded.workflow.step(stepId)?.displayTitle ?? stepId
         if case .timedOut? = error as? RunEngineError {
+            #if DEBUG
+            traceFailureAction(loaded, stepId: stepId, action: "ask_after_timeout")
+            #endif
             try hold(&loaded, .timedOut, stepId: stepId, runStepId: runStepID, title: "“\(title)” timed out", body: "\(message) Retry the step, or fail the run.", steps: steps)
             return false
         }
         switch onFailure {
         case .retry where (loaded.state.cursor?.attempt ?? 1) < 2:
+            #if DEBUG
+            traceFailureAction(loaded, stepId: stepId, action: "retry")
+            #endif
             loaded.state.cursor?.attempt += 1
             loaded.state.cursor?.start = .retry(previousRunStepID: runStepID)
             try commit(loaded, steps: steps)
             return true
         case .fail:
+            #if DEBUG
+            traceFailureAction(loaded, stepId: stepId, action: "fail")
+            #endif
             try fail(&loaded, message: message, steps: steps)
             return false
         case .retry, .ask:
+            #if DEBUG
+            traceFailureAction(loaded, stepId: stepId, action: "ask")
+            #endif
             try hold(&loaded, .stepFailed, stepId: stepId, runStepId: runStepID, title: "“\(title)” failed", body: "\(message) Retry the step, or fail the run.", steps: steps)
             return false
         }
@@ -289,6 +313,9 @@ extension RunEngine {
         let item = InboxItem(projectId: loaded.run.projectId, runId: loaded.run.id, kind: reason.inboxKind, title: title, body: body, createdAt: clock())
         try commit(loaded, steps: steps, inbox: item)
         loaded.state = try database.engineState(runId: try loaded.id)
+        #if DEBUG
+        traceHold(loaded, title: title, body: body)
+        #endif
     }
 
     private func beginStep(_ loaded: inout LoadedRun, stepId: String, cursor: RunCursor, status: RunStepStatus, input: String? = nil) throws -> RunStep {
@@ -297,6 +324,9 @@ extension RunEngine {
         ))
         loaded.run.currentStep = stepId
         try commit(loaded)
+        #if DEBUG
+        traceStepStarted(loaded, row: row, cursor: cursor)
+        #endif
         return row
     }
 

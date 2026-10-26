@@ -96,6 +96,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         guard let agent = try runtime.database.agent(id: agentID) else {
             throw HandoffError.notAllowed("This agent no longer exists.")
         }
+        #if DEBUG
+        runtime.debugTrace?.handoff(message, from: agent)
+        #endif
         switch message {
         case .plan(let plan):
             let config = try projectConfig(for: agent)
@@ -127,6 +130,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         case .question(let question, let questions):
             if let runId = agent.runId, try relayLead(for: agent, runId: runId) != nil {
                 awaitingLead.insert(agentID)
+                #if DEBUG
+                runtime.debugTrace?.questionAsked(by: agent, routedTo: "lead", body: question, questions: questions)
+                #endif
                 questionRelay.enqueue(RelayedQuestion(
                     projectId: agent.projectId, runId: runId, agentId: agentID, agentName: agent.name, body: question, questions: questions
                 ))
@@ -136,6 +142,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 projectId: agent.projectId, runId: agent.runId, agentId: agentID, kind: .question,
                 title: "\(agent.name) asks", body: question, questions: questions.isEmpty ? nil : questions, createdAt: .now
             ))
+            #if DEBUG
+            runtime.debugTrace?.questionAsked(by: agent, routedTo: "user", body: question, questions: questions)
+            #endif
             return "Your question was sent to the user. End your turn now; the answer arrives as your next message."
         case .proposal(let proposal):
             guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can propose runs.") }
@@ -155,6 +164,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             let target = try otherAgent(named: name, from: agent)
             guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(target.name) can’t receive messages.") }
             let sender = agent.taskId == nil ? "Message from \(agent.name):" : "Message from \(agent.name), passing on the user’s instruction:"
+            #if DEBUG
+            if awaitingLead.contains(session.id) { runtime.debugTrace?.questionAnswered(for: target, answer: text, via: "lead") }
+            #endif
             awaitingLead.remove(session.id)
             session.send("\(sender)\n\n\(text)")
             return "Sent to \(target.name)."
@@ -168,6 +180,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                   let session = runtime.session(for: target) else {
                 throw HandoffError.notAllowed("No agent named “\(name)” in this request’s run. Agents: \(candidates.map(\.name).joined(separator: ", ")).")
             }
+            #if DEBUG
+            if awaitingLead.contains(session.id) { runtime.debugTrace?.questionAnswered(for: target, answer: text, via: "lead") }
+            #endif
             awaitingLead.remove(session.id)
             session.send("Message from \(agent.name), passing on the user’s instruction:\n\n\(text)")
             return "Sent to \(target.name)."
@@ -230,9 +245,15 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
            let lead = try? runtime.database.leadAgent(taskId: run.taskId),
            !batch.contains(where: { $0.agentId == lead.id }),
            let session = runtime.session(for: lead) {
+            #if DEBUG
+            traceDelivery(batch, runId: runId, to: "lead")
+            #endif
             session.send(QuestionRelay.message(for: batch))
             return
         }
+        #if DEBUG
+        traceDelivery(batch, runId: runId, to: "user_inbox")
+        #endif
         for question in batch {
             _ = try? runtime.database.createInboxItem(InboxItem(
                 projectId: question.projectId, runId: question.runId, agentId: question.agentId, kind: .question,
@@ -307,6 +328,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let message = resuming
             ? resumeMessage(expected: expected)
             : stepMessage(context: context, role: role, expected: expected, config: config)
+        #if DEBUG
+        runtime.debugTrace?.assign(session.agent, toStep: context.step.id, runStepId: context.runStepID, runTitle: context.run.title, message: message)
+        #endif
 
         let sessionID = session.id
         try await withTaskCancellationHandler {
@@ -392,6 +416,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let activeIDs = active.map(\.0.id)
         try await withTaskCancellationHandler {
             for (session, message) in active {
+                #if DEBUG
+                runtime.debugTrace?.assign(session.agent, toStep: context.step.step.id, runStepId: context.step.runStepID, runTitle: context.step.run.title, message: message)
+                #endif
                 session.send(message)
             }
             for (session, _) in active {
@@ -505,6 +532,10 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
             if hasHandoff(session.id, expected: expected) { return }
             if try hasOpenQuestion(session) {
+                #if DEBUG
+                let waitStart = Date()
+                defer { traceInboxAnswer(for: session, since: waitStart) }
+                #endif
                 try await waitForAnswer(session)
                 awaitingLead.remove(session.id)
                 continue

@@ -154,6 +154,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--verbose",
+            "--include-partial-messages",
             "--model", model,
             "--permission-mode", "dontAsk",
             "--setting-sources", "project",

@@ -138,15 +138,34 @@ extension AppModel {
         leadChat.leadSession(for: task)
     }
 
+    func leadSendTarget(for request: ProjectTask?, in project: Project) -> PendingSendTarget? {
+        project.id.map { .lead(project: $0, request: request?.id) }
+    }
+
+    func holdLeadMessage(_ message: PendingMessage, lead: RoleDefinition?, to request: ProjectTask?, in project: Project) {
+        guard let target = leadSendTarget(for: request, in: project) else { return }
+        holdSend(message, to: target) { [weak self] held in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let current = request?.id.flatMap { try? self.database.task(id: $0) } ?? request
+                if await !sendLeadMessage(held.text, attachments: held.attachments, lead: lead, to: current, in: project) {
+                    pendingSends.returnToComposer(held, for: target)
+                }
+            }
+        }
+    }
+
     @discardableResult
-    func sendLeadMessage(_ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, in project: Project) async -> Bool {
+    func sendLeadMessage(_ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, to request: ProjectTask?, in project: Project) async -> Bool {
         do {
-            if let request = selectedRequest(in: project) {
+            if let request {
                 let role = lead ?? leadSession(for: request).flatMap { config(for: project).role($0.agent.role) } ?? leadRoles(in: project).first
                 try await leadChat.send(text, attachments: attachments, to: request, lead: role, in: project)
             } else {
                 let request = try await leadChat.createRequest(text, attachments: attachments, lead: lead ?? leadRoles(in: project).first, in: project)
-                showRequest(request)
+                if selectedRequest(in: project) == nil, directChatSession(in: project) == nil {
+                    showRequest(request)
+                }
             }
             leadChatRevision += 1
             return true

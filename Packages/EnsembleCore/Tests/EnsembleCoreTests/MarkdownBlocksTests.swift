@@ -1,0 +1,114 @@
+import Foundation
+import Testing
+@testable import EnsembleCore
+
+@Suite struct MarkdownBlocksTests {
+    @Test func parsesHeadingsParagraphsAndRules() {
+        let blocks = MarkdownParser.blocks("# Title\n\nFirst line\nsecond line\n\n---\n### Sub ###")
+
+        #expect(blocks == [
+            .heading(level: 1, text: "Title"),
+            .paragraph("First line\nsecond line"),
+            .rule,
+            .heading(level: 3, text: "Sub"),
+        ])
+    }
+
+    @Test func parsesNestedBulletAndNumberedLists() {
+        let blocks = MarkdownParser.blocks("- one\n  - nested\n- two\n\n1. first\n2) second\n   continued")
+
+        #expect(blocks == [
+            .list(ordered: false, items: [
+                MarkdownListItem(text: "one", depth: 0),
+                MarkdownListItem(text: "nested", depth: 1),
+                MarkdownListItem(text: "two", depth: 0),
+            ]),
+            .list(ordered: true, items: [
+                MarkdownListItem(text: "first", number: 1),
+                MarkdownListItem(text: "second\ncontinued", number: 2),
+            ]),
+        ])
+    }
+
+    @Test func keepsLooseListsTogetherAndReadsTaskBoxes() {
+        let blocks = MarkdownParser.blocks("- [x] done\n\n- [ ] todo\n\nAfter")
+
+        #expect(blocks == [
+            .list(ordered: false, items: [
+                MarkdownListItem(text: "done", isChecked: true),
+                MarkdownListItem(text: "todo", isChecked: false),
+            ]),
+            .paragraph("After"),
+        ])
+    }
+
+    @Test func boldLineIsNotAListItem() {
+        #expect(MarkdownParser.blocks("**Bold** start") == [.paragraph("**Bold** start")])
+    }
+
+    @Test func parsesFencedCodeWithLanguage() {
+        let blocks = MarkdownParser.blocks("Look:\n```swift\nlet a = 1\n\nlet b = 2\n```\nDone")
+
+        #expect(blocks == [
+            .paragraph("Look:"),
+            .code(language: "swift", code: "let a = 1\n\nlet b = 2", isClosed: true),
+            .paragraph("Done"),
+        ])
+    }
+
+    @Test func toleratesAnUnclosedFenceWhileStreaming() {
+        let blocks = MarkdownParser.blocks("Here:\n```py\nprint(1)\n# not a heading")
+
+        #expect(blocks == [
+            .paragraph("Here:"),
+            .code(language: "py", code: "print(1)\n# not a heading", isClosed: false),
+        ])
+    }
+
+    @Test func fenceNeedsAMatchingClosingRun() {
+        let blocks = MarkdownParser.blocks("````\n```\ninner\n```\n````")
+
+        #expect(blocks == [.code(language: nil, code: "```\ninner\n```", isClosed: true)])
+    }
+
+    @Test func parsesBlockQuotesRecursively() {
+        let blocks = MarkdownParser.blocks("> # Note\n> - a\n>\n> text\nafter")
+
+        #expect(blocks == [
+            .quote([.heading(level: 1, text: "Note"), .list(ordered: false, items: [MarkdownListItem(text: "a")]), .paragraph("text")]),
+            .paragraph("after"),
+        ])
+    }
+
+    @Test func parsesTablesWithAlignmentAndRaggedRows() {
+        let blocks = MarkdownParser.blocks("| Name | Count | Note |\n|:-----|------:|:----:|\n| a | 1 |\n| b \\| c | 2 | x | extra |\n\nEnd")
+
+        #expect(blocks == [
+            .table(
+                header: ["Name", "Count", "Note"],
+                alignments: [.leading, .trailing, .center],
+                rows: [["a", "1", ""], ["b | c", "2", "x"]]
+            ),
+            .paragraph("End"),
+        ])
+    }
+
+    @Test func tableHeaderWithoutDelimiterYetStaysAParagraph() {
+        #expect(MarkdownParser.blocks("| a | b |") == [.paragraph("| a | b |")])
+    }
+
+    @Test func paragraphStopsAtABlockStart() {
+        let blocks = MarkdownParser.blocks("Intro\n- item\n```\ncode")
+
+        #expect(blocks == [
+            .paragraph("Intro"),
+            .list(ordered: false, items: [MarkdownListItem(text: "item")]),
+            .code(language: nil, code: "code", isClosed: false),
+        ])
+    }
+
+    @Test func emptyTextHasNoBlocks() {
+        #expect(MarkdownParser.blocks("").isEmpty)
+        #expect(MarkdownParser.blocks("\n  \n").isEmpty)
+    }
+}

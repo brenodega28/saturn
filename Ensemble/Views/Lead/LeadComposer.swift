@@ -13,6 +13,16 @@ struct LeadComposer: View {
     var body: some View {
         let lead = model.chatLeadRole(in: project)
         let leadName = request.flatMap { model.leadSession(for: $0).map { model.displayName(of: $0.agent, in: project) } } ?? lead?.name ?? "the lead"
+        let sendTarget = model.leadSendTarget(for: request, in: project)
+        VStack(alignment: .leading, spacing: 8) {
+            PendingSendChip(target: sendTarget, onUndo: restore)
+            composer(lead: lead, leadName: leadName)
+        }
+        .animation(.snappy(duration: 0.2), value: sendTarget.map(model.pendingSends.holds(for:))?.count)
+        .restoresReturnedSends(for: sendTarget, perform: restore)
+    }
+
+    private func composer(lead: RoleDefinition?, leadName: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             ChatComposerInput(
                 text: $text,
@@ -57,15 +67,15 @@ struct LeadComposer: View {
 
     private func send(lead: RoleDefinition?) {
         guard canSend(lead: lead) else { return }
-        let message = text
-        let sentAttachments = attachments
+        let message = PendingMessage(text: text, attachments: attachments)
         text = ""
         attachments = []
-        Task {
-            if await !model.sendLeadMessage(message, attachments: sentAttachments, lead: lead, in: project), text.isEmpty, attachments.isEmpty {
-                text = message
-                attachments = sentAttachments
-            }
-        }
+        model.holdLeadMessage(message, lead: lead, to: request, in: project)
+    }
+
+    private func restore(_ message: PendingMessage) {
+        let merged = PendingMessage(text: text, attachments: attachments).appending(message)
+        text = merged.text
+        attachments = merged.attachments
     }
 }

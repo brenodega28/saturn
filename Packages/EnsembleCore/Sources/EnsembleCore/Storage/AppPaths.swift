@@ -29,6 +29,10 @@ public struct AppPaths: Sendable {
         attachmentsDirectory.appending(path: "\(id.uuidString.lowercased()).\(fileExtension)")
     }
 
+    public var debugLogsDirectory: URL {
+        root.appending(path: "debug-logs", directoryHint: .isDirectory)
+    }
+
     public func pendingWorkspaceDirectory(_ name: String) -> URL {
         root.appending(path: "workspaces/\(Slug.make(name))", directoryHint: .isDirectory)
     }

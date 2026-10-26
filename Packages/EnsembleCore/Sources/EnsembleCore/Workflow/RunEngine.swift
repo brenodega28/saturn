@@ -41,12 +41,18 @@ public final class RunEngine {
     @ObservationIgnored private var workflowCache: [Int64: WorkflowDefinition] = [:]
     @ObservationIgnored private var mergingRuns: Set<Int64> = []
     @ObservationIgnored private var openingPullRequests: Set<Int64> = []
+    #if DEBUG
+    @ObservationIgnored var debugTrace: DebugTrace?
+    #endif
 
     public init(database: AppDatabase, driver: any WorkflowDriver, minute: Duration = .seconds(60), clock: @escaping @MainActor () -> Date = { .now }) {
         self.database = database
         self.driver = driver
         self.minute = minute
         self.clock = clock
+        #if DEBUG
+        self.debugTrace = (driver as? AgentWorkflowDriver)?.runtime.debugTrace
+        #endif
     }
 
     public func activeRuns(projectID: Int64) -> [Run] {
@@ -89,6 +95,9 @@ public final class RunEngine {
             try db.execute(sql: "UPDATE task SET status = ?, workflow = ?, updatedAt = ? WHERE id = ?", arguments: [TaskStatus.running.rawValue, workflow.id, now, taskId])
         }
         refresh(run, state: state)
+        #if DEBUG
+        traceRunStarted(run, workflow: workflow)
+        #endif
         launch(runID)
         return run
     }
@@ -119,7 +128,7 @@ public final class RunEngine {
         runStep.status = .failed
         runStep.outcome = "rejected"
         runStep.endedAt = clock()
-        try release(&loaded, response: note)
+        try release(&loaded, response: note, decision: "rejected")
         loaded.state.feedback = Feedback(fromStep: hold.stepId, outcome: "rejected", summary: note)
         loaded.state.cursor = RunCursor(stepId: hold.stepId, iteration: try nextIteration(of: hold.stepId, runID: loaded.id))
         try commit(loaded, steps: [runStep])
@@ -138,7 +147,7 @@ public final class RunEngine {
         runStep.output = encode(output)
         runStep.status = .succeeded
         runStep.endedAt = clock()
-        try release(&loaded, response: note ?? outcome)
+        try release(&loaded, response: note ?? outcome, decision: outcome)
         if try conclude(&loaded, step: step, outcome: outcome, runStep: runStep, output: output, checkStepBudget: false) {
             launch(try loaded.id)
         }
@@ -168,6 +177,9 @@ public final class RunEngine {
         guard let hold = loaded.state.hold, [.stepBudget, .runBudget].contains(hold.reason) else {
             throw RunEngineError.notWaiting(.runBudget)
         }
+        #if DEBUG
+        traceBudgetDecision(loaded, proceed: proceed, newBudget: newBudget)
+        #endif
         guard proceed else {
             try fail(&loaded, message: hold.message, response: "fail")
             return
@@ -217,6 +229,9 @@ public final class RunEngine {
         loaded.run.endedAt = nil
         loaded.run.lastError = nil
         try commit(loaded)
+        #if DEBUG
+        traceControl(loaded.run, action: "retry_step")
+        #endif
         launch(try loaded.id)
     }
 
@@ -225,6 +240,9 @@ public final class RunEngine {
         guard loaded.run.status == .running else { throw RunEngineError.invalidState("Only a running run can be paused.") }
         loaded.run.status = .paused
         try commit(loaded)
+        #if DEBUG
+        traceControl(loaded.run, action: "pause")
+        #endif
         await stopDriving(try loaded.id)
         try interruptInFlightSteps(runID: loaded.id)
     }
@@ -236,6 +254,9 @@ public final class RunEngine {
         }
         loaded.run.status = .running
         try commit(loaded)
+        #if DEBUG
+        traceControl(loaded.run, action: "resume")
+        #endif
         launch(try loaded.id)
     }
 
@@ -247,6 +268,9 @@ public final class RunEngine {
         loaded.run.endedAt = clock()
         loaded.state.hold = nil
         try commit(loaded)
+        #if DEBUG
+        traceControl(loaded.run, action: "cancel")
+        #endif
         await stopDriving(runID)
         let now = clock()
         try await database.writer.write { db in
@@ -311,6 +335,9 @@ public final class RunEngine {
             var loaded = try load(run)
             loaded.run.status = loaded.state.hold == nil ? .running : .waitingOnYou
             try commit(loaded)
+            #if DEBUG
+            traceControl(loaded.run, action: "recover")
+            #endif
             launch(runID)
         }
         for run in try database.runs(status: [.waitingOnYou, .paused]) {
@@ -414,6 +441,9 @@ extension RunEngine {
             return state
         }
         refresh(run, state: state)
+        #if DEBUG
+        traceCommitted(loaded, steps: steps)
+        #endif
     }
 
     func refresh(_ run: Run, state: RunEngineState) {
@@ -438,7 +468,10 @@ extension RunEngine {
         }
     }
 
-    func release(_ loaded: inout LoadedRun, response: String?) throws {
+    func release(_ loaded: inout LoadedRun, response: String?, decision: String? = nil) throws {
+        #if DEBUG
+        traceReleased(loaded, response: response, decision: decision)
+        #endif
         if let inboxID = loaded.state.hold?.inboxItemId {
             try database.resolveInboxItem(id: inboxID, response: response, now: clock())
         }

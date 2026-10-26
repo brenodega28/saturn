@@ -61,6 +61,9 @@ public final class LeadChat {
             attachments: try ChatAttachmentStore(paths: runtime.paths).store(attachments)
         ))
         let prompt = ChatAttachment.prompt(text: body, attachments: attachments)
+        #if DEBUG
+        runtime.debugTrace?.chatMessage(body, direction: "user_to_agent", chat: "lead", agent: session.agent, at: now)
+        #endif
         let status = try statusNote(taskId: taskId).map { (prompt.isEmpty ? "" : "\n\n---\n") + $0 } ?? ""
         session.send(prompt + status, images: attachments.filter(\.isImage))
     }
@@ -146,6 +149,9 @@ public final class LeadChat {
     func record(reply: String, from agent: Agent) {
         guard let taskId = agent.taskId else { return }
         _ = try? database.insert(LeadMessage(projectId: agent.projectId, taskId: taskId, kind: .lead, text: reply, createdAt: .now))
+        #if DEBUG
+        runtime.debugTrace?.chatMessage(reply, direction: "agent_to_user", chat: "lead", agent: agent)
+        #endif
     }
 
     private func leadSession(for task: ProjectTask, lead: RoleDefinition?, in project: Project) throws -> AgentSession {

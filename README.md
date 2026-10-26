@@ -1,6 +1,6 @@
 # Ensemble
 
-A macOS app that runs a crew of Claude Code agents on a project, each in its own git worktree. See [docs/ROADMAP.md](docs/ROADMAP.md).
+A macOS app that runs a crew of Claude Code agents on a project, each in its own git worktree. See [spec/roadmap.md](spec/roadmap.md).
 
 ## Requirements
 

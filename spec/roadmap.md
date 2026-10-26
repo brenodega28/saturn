@@ -1,8 +1,8 @@
 # Ensemble — Roadmap
 
-Ensemble is a macOS app for solo developers that runs a crew of AI coding agents on a project. You define **roles** (Tech Lead, Django Developer, QA…) and **workflows** (Task → Tech Lead plans → devs build in parallel → review → QA → you approve). Every coding agent works in its own git worktree, flags what a human must read as **pins**, and nothing reaches `main` without your approval.
+Ensemble is a macOS app for solo developers that runs AI coding agents inside a verification harness: **agents propose, rails verify, humans approve** (see [mission.md](mission.md)). You define **roles** and **workflows** in the repo. Every coding agent works on a scoped task in its own git worktree and must pass the project's deterministic **checks** before its work reaches you. AI review flags what you must read as **pins**, and nothing reaches `main` without your approval.
 
-This document is the build order for the MVP and what comes after. Each phase ends with something usable and a clear exit check.
+This document is the build order for the MVP and what comes after. Each phase ends with something usable and a clear exit check. Phases 0–7 were planned before the mission was written and are kept as a record of what was built. Phases 8–10 bring the product in line with the mission, and Phase 11 closes the gaps with the [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD).
 
 ---
 
@@ -17,6 +17,7 @@ This document is the build order for the MVP and what comes after. Each phase en
 | One worktree per coding agent                                        | —                                     |
 | Workflow ends in PR, local merge, pushed branch, or left in worktree | —                                     |
 | Pinned agents with memory                                            | —                                     |
+| You approve every change                                             | Opt-in auto-merge for low-risk change classes with a proven record |
 | Dark mode only                                                       | Light mode                            |
 | macOS app                                                            | iOS companion app                     |
 
@@ -27,6 +28,7 @@ This document is the build order for the MVP and what comes after. Each phase en
 | Area              | Decision                                                                                                                                   | Why                                                                                                                           |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
 | App stack         | Swift 6 + SwiftUI, built in Xcode                                                                                                          | The most native macOS experience; the same language for the future iOS app                                                    |
+| Design reference  | The [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD) defines every screen; new screens are designed there before they are built | One source for layout, copy and behavior; QA compares the app against it |
 | Minimum OS        | macOS 26 Tahoe                                                                                                                             | Native Liquid Glass for the glassy design and the newest SwiftUI APIs                                                         |
 | Distribution      | Direct download: notarized, Developer ID–signed DMG, auto-updates with Sparkle                                                             | The App Store sandbox blocks spawning the `claude` CLI, running `git` and writing worktrees freely                            |
 | Agent runner      | Drive the `claude` CLI headlessly from Swift (`Process`), reading its streaming JSON output; one process per agent, cwd = its worktree     | No Node runtime to bundle; uses the user's own Claude Code login or API key; resumable sessions and MCP support come for free |
@@ -39,6 +41,10 @@ This document is the build order for the MVP and what comes after. Each phase en
 | GitHub            | Sign in with GitHub's OAuth device flow; open PRs and comment through the REST API                                                         | No local `gh` dependency                                                                                                      |
 | GitHub write-back | Comment on the issue when a run starts and when it ends (with the PR link); set `ensemble:running` / `ensemble:done` labels                | Visible progress without noisy live edits                                                                                     |
 | Worktrees         | Under `<repo>/.crew/<agent>/`, branch `crew/<agent>/<slug>`, excluded through `.git/info/exclude`                                          | Isolated per coding agent, invisible to the user's own git status                                                             |
+| Verification      | Ensemble runs the project's checks itself, in the agent's worktree, outside the agent's session; results go back to the agent as feedback   | The agent can't skip, fake or reinterpret a check it doesn't run; a separate verification runtime is what stopped agents gaming builds elsewhere |
+| Agent hooks       | Each worktree gets Claude Code hooks: lint after every edit, block edits to protected paths, block "done" while checks fail                | Enforcement in deterministic tools instead of prompt text                                                                     |
+| Instructions      | One lean `AGENTS.md` at the repo root (`CLAUDE.md` points to it); occasional know-how goes in skills                                       | Context files buy consistency and lower cost, not capability; bloat makes agents ignore them                                  |
+| AI review         | Reviewer roles comment through pins; they never approve and never block a run on their own                                                | Precision-tuned commenters help; rigid LLM gates block valid changes                                                          |
 | Mobile (later)    | iOS app is a remote control for the Mac: inbox, approvals, pins, run status. Agents always run on the Mac. Transport decided after the MVP | Keeps the engine in one place; the `EnsembleCore` boundary makes a remote client possible                                     |
 
 ---
@@ -53,6 +59,7 @@ This document is the build order for the MVP and what comes after. Each phase en
 | **Workflow** | A graph of steps                    | trigger, steps, edges (with loop limits), end action, run budget                                                               |
 | **Run**      | One task going through one workflow | task, workflow version, current step, step history, agents, branches, pins, cost, outcome                                      |
 | **Pin**      | A spot in a diff a human must read  | run, agent, file, line range, title, tags, explanation, status (`open` \| `approved` \| `change_requested`)                    |
+| **Check**    | A deterministic command that judges work | name, command, kind (format, lint, typecheck, test, scan), protected paths, timeout                                     |
 
 Rules that hold everywhere:
 
@@ -60,6 +67,9 @@ Rules that hold everywhere:
 - Any role with `edits_code: true` **always** gets its own git worktree and branch. There is no shared-folder mode.
 - Read-only roles (reviewers, QA, leads) can read every worktree in their run but never write to them.
 - QA runs against a separate, temporary worktree that merges the run's branches.
+- Work reaches human review only after its checks pass. Check retries are capped; after the cap the work goes to the Inbox, not back into the loop.
+- Existing tests and other protected paths are read-only to coding agents. Agents may add tests; any change to a protected file is pinned for separate review.
+- AI review comments; only you approve.
 
 ### Config on disk
 
@@ -74,9 +84,11 @@ Roles and workflows live in the repo so they are versioned and diffable. Runtime
   workflows/
     feature-delivery.yaml
     hotfix.yaml
+  checks.yaml          # format, lint, typecheck, test and scan commands; protected paths
   docs.yaml            # which docs each role reads
   memory/              # pinned-agent memory, one .md per agent (git-ignored)
   local.yaml           # personal overrides (git-ignored)
+<repo>/AGENTS.md       # lean shared instructions; CLAUDE.md points here
 <repo>/.claude/skills/ # skills, as Claude Code already expects
 <repo>/.crew/<agent>/  # git worktrees (excluded via .git/info/exclude)
 
@@ -207,16 +219,82 @@ Goal: ready for daily use.
 
 **Exit check:** a week of real use on one project with no lost runs and no surprise spend.
 
-**MVP is done when Phases 0–7 pass their exit checks.**
+## Phase 8 — Verification rails
+
+Goal: correctness comes from what the agent must pass, not from what it is told.
+
+- [ ] Check schema and loader for `.ensemble/checks.yaml`: one command each for format, lint, typecheck and test, with protected-path globs and timeouts; validation errors shown in the UI
+- [ ] Check detection on project open: suggest commands from the repo (package scripts, Makefile, test runners); warn when a project has no runnable test check
+- [ ] Harness health: run every check in a fresh worktree after the setup script; flag missing dependencies, network or credentials before any agent starts
+- [ ] **Check** step type: Ensemble runs the checks in the agent's worktree, outside the agent's session, and hands failures back to the author as feedback
+- [ ] Capped retries per check step (default 2 rounds); after the cap the run goes to the Inbox with the failing output
+- [ ] Context hygiene: after two failed correction rounds, restart the agent with a fresh session and a summary instead of piling on more context
+- [ ] Agent hooks written into each worktree: format and lint after every edit, block edits to protected paths, block "done" while checks fail
+- [ ] Protected tests: existing tests are read-only to coding agents; new tests are allowed; any change to a protected file becomes a pin tagged `test-change`
+- [ ] Test-first option for bug fixes: the agent first commits a failing test that reproduces the issue; the check step confirms it fails before the fix and passes after
+
+**Exit check:** an agent that tries to edit an existing test is blocked; a branch whose tests fail never reaches Changes; a task that stays red after two rounds lands in the Inbox with the failing output.
+
+## Phase 9 — Scope, gates and review
+
+Goal: you review small, verified changes, and AI review points you to what matters without getting in the way.
+
+- [ ] Plan format: a short spec naming files, interfaces, out-of-scope items, acceptance criteria and a verification step; skipped when the task fits in one sentence; you review the plan before building
+- [ ] Size guard: warn when a task's diff passes a line or file threshold and offer to split it
+- [ ] Pre-review gates: secret scanning, new-dependency check (the package exists in its registry and you approve it), duplication and complexity thresholds against the base branch
+- [ ] Evidence for performance and UI changes: benchmarks, screenshots or recorded runs attached to the run and shown in Changes
+- [ ] AI review as commenter: reviewer roles create pins with a confidence score; low-confidence and suppressed categories are hidden; "no comments" is a valid result
+- [ ] Reviewer verdicts are advisory: findings go to the author for one fix round at most, then to you; a reviewer can't block a run on its own
+- [ ] Risk tiers: classify paths and labels (core/security, standard, low-risk); Changes orders review by tier and asks for a line-by-line read on core/security files
+- [ ] Review capacity cap: no new run starts building while more than N changes are waiting on you (per project setting)
+- [ ] New default workflows and templates built on the mission pipeline: Scope → Plan (optional) → Build → Checks → Gates → AI review → You approve → End
+
+**Exit check:** a feature request becomes a plan you approve, then a small green branch with AI pins and gate results, and you approve it in Changes without reading files outside its risk tier.
+
+## Phase 10 — Close the loop and measure
+
+Goal: the harness gets better every week, and you can see whether it's working.
+
+- [ ] Lean `AGENTS.md`: create or import on setup, point `CLAUDE.md` to it, warn when it grows past about one page
+- [ ] Encode a correction: from a pin or a "Request change", propose one line for `AGENTS.md`, a hook or a check, and commit it with your approval
+- [ ] Repeated-mistake detection: when the same correction is made twice, Ensemble suggests encoding it
+- [ ] Quality screen: PR size, time to approve, check failure rate and retries, rework and revert rate, duplication and complexity trend, cost per approved change; no "lines generated" or AI-share metrics
+- [ ] Weekly summary in the Inbox: what moved, which rules were added, which checks failed most
+
+**Exit check:** a week of real use on one project: no lost runs, no surprise spend, no unverified change reached review, and the quality screen shows PR size and review time holding steady.
+
+## Phase 11 — Design parity
+
+Goal: the app matches the design canvas and works as one complete toolkit.
+
+- [ ] Extend the canvas to the mission's new surfaces: check and gate results, `test-change` pins, risk tiers, the quality screen, and plan specs
+- [ ] Project onboarding in five steps: scan the folder (stack, test runners, database, GitHub remote) to suggest roles, skills and checks; name, base branch and branch prefix; task sources; roles, including custom roles with a forced skill; lead, default workflow, end action and "approve plans first"; spending, concurrency and permissions; docs every agent reads; summary, then open Chat. "Skip and use recommended setup" at any step
+- [ ] New Project (⌘N) on the Welcome screen, next to Open Folder and Clone Repository
+- [ ] Permission profiles editor in Settings: per profile, Allow / Ask / Never for editing files, running shell commands, network, installing packages and git push; "Ask" sends a request to the Inbox; agents never push to the base branch
+- [ ] Command palette: search runs, agents and files; actions (new task, message an agent, approve pins, spawn, test-run a workflow, pause all agents); unmatched text goes to the lead as a new task; `>` filters to commands; ⌘↵ opens in a new window
+- [ ] Shortcuts: ⌘N new task, ⌘J message an agent, ⇧⌘A spawn, ⇧⌘P pause all agents, ⌘1… for sidebar sections
+- [ ] Conflict resolution in Changes: ask the lead to combine, keep one branch's version, or open in a merge tool
+- [ ] Workflow version history: save as a new version, list versions with their change note, run count and average cost
+- [ ] Workflow step options: reuse pinned agents of the same role in Spawn steps; daily reminder on human approval steps; post a summary back to the task's source at the end
+- [ ] Agents: pause all agents in a project; idle unpinned agents are removed after a set time
+- [ ] Weekly budgets alongside monthly ones, matching the canvas's weekly cap and sidebar meter
+- [ ] Design QA pass: every screen checked against the canvas, mismatches filed as issues
+
+**Exit check:** a new user goes from Welcome through onboarding to an approved change, and every screen on the way matches the canvas.
+
+**MVP is done when Phases 0–11 pass their exit checks.**
 
 ---
 
 ## After the MVP
 
+- [ ] Website and docs (the canvas's Website page), with copy updated to the mission's message
+
+- [ ] Opt-in auto-merge for low-risk change classes (docs, for example) once they have a clean track record
+- [ ] SAST and mutation testing as gates
 - [ ] Linear, Jira and Trello as task sources, with status written back
 - [ ] More providers: Codex, Gemini CLI; provider and model per role
-- [ ] Permission profiles (read-only, edit with approval, auto-edit, full shell), network and secrets access per role
-- [ ] Workflow version history
+- [ ] Secrets access per role
 - [ ] Menu-bar extra: running agents and items waiting on you
 - [ ] Light mode
 - [ ] iOS companion app: inbox, approvals, pins and run status for the Mac's engine
@@ -230,7 +308,13 @@ Goal: ready for daily use.
 | Multi-agent runs cost several times a single agent        | Cost shown everywhere; budget caps per step and run; a "small task" path that skips the lead |
 | Parallel branches conflict at merge                       | Lead plans by file ownership; Changes flags overlapping files early                          |
 | QA needs a running app per worktree                       | Setup scripts and port allocation per worktree                                               |
-| Review and QA loops never converge                        | Loop limits per edge plus a run budget stop                                                  |
+| Review and QA loops never converge                        | Loop limits per edge plus a run budget stop; capped check retries hand back to you           |
+| Agents game the checks (edit tests, hard-code outputs)    | Checks run outside the agent; protected tests; test changes pinned for separate review       |
+| Review becomes the bottleneck                             | Size guard, review capacity cap, risk tiers, pins that point to what matters                 |
+| Noisy AI review trains you to ignore it                   | Confidence threshold, suppressed categories, comments only; track how many pins you act on   |
+| Code quality drifts (duplication, complexity, warnings)   | Duplication and complexity gates; trends on the quality screen                               |
+| Instruction files bloat and get ignored                   | One-page `AGENTS.md` warning; move enforced rules into hooks and checks                      |
+| Hallucinated or malicious dependencies                    | New-dependency check against the registry; you approve every new package                     |
 | Long runs interrupted by quit or sleep                    | Persisted run state and resume                                                               |
-| Agents run shell commands as the user                     | Worktree isolation now; permission profiles after MVP                                        |
+| Agents run shell commands as the user                     | Worktree isolation; permission profiles with Allow / Ask / Never per capability (Phase 11)    |
 | The `claude` CLI's output format changes between versions | Parse it in one adapter inside `EnsembleCore`, pin a tested CLI version, warn on mismatch    |

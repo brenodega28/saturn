@@ -15,11 +15,11 @@ struct RequestChat: View {
             RequestHeader(task: task, project: project)
                 .frame(maxWidth: 820)
                 .frame(maxWidth: .infinity)
-            thread(isThinking: isThinking)
+            thread(isThinking: isThinking, session: session)
         }
     }
 
-    private func thread(isThinking: Bool) -> some View {
+    private func thread(isThinking: Bool, session: AgentSession?) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
@@ -31,7 +31,7 @@ struct RequestChat: View {
                         }
                     }
                     if isThinking {
-                        ThinkingRow(role: data?.leadRole, name: data?.leadName ?? "Lead")
+                        ThinkingRow(role: data?.leadRole, name: data?.leadName ?? "Lead", session: session)
                             .id(Self.thinkingID)
                     }
                 }
@@ -41,6 +41,7 @@ struct RequestChat: View {
                 .padding(.bottom, 8)
             }
             .defaultScrollAnchor(.bottom)
+            .followsBottom(of: isThinking ? (session?.transcript.liveEntry ?? session?.transcript.entries.last) : nil)
             .onChange(of: data?.thread.items.last?.id) { scrollToEnd(proxy) }
             .onChange(of: isThinking) { scrollToEnd(proxy) }
         }
@@ -211,31 +212,41 @@ struct ChatText: View {
     }
 
     var body: some View {
-        Text(attributed)
-            .font(.system(size: 14))
-            .lineSpacing(3)
-            .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
-    }
-
-    private var attributed: AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        MarkdownText(text: text, fontSize: 14)
     }
 }
 
 struct ThinkingRow: View {
     let role: RoleDefinition?
     let name: String
+    var session: AgentSession? = nil
 
     var body: some View {
-        HStack(spacing: 12) {
+        let activity = session.map { TranscriptLayout.activity($0.transcript.entries, live: $0.transcript.liveEntry) } ?? .working
+        let root = session.flatMap { $0.transcript.session?.cwd ?? $0.agent.worktreePath }
+        HStack(alignment: activity.isReply ? .top : .center, spacing: 12) {
             RoleBadge(role: role, size: 30)
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("\(name) is working…").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
-            }
+            SessionActivityView(activity: activity, name: name, root: root)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .animation(.snappy(duration: 0.2), value: activity.phase)
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: activity.isReply ? .contain : .combine)
+    }
+}
+
+private extension SessionActivity {
+    var isReply: Bool {
+        if case .replying = self { return true }
+        return false
+    }
+
+    var phase: Int {
+        switch self {
+        case .working: 0
+        case .replying: 1
+        case .thinking: 2
+        case .tool: 3
+        }
     }
 }
 

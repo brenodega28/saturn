@@ -262,6 +262,36 @@ extension TranscriptEntry {
         #expect(tool.finishedAt == paused)
     }
 
+    static let subagent = [
+        #"{"type":"assistant","message":{"id":"msg_1","content":[{"type":"tool_use","id":"toolu_task","name":"Task","input":{"description":"Find the config","prompt":"Find where the config is loaded","subagent_type":"Explore"}}]},"parent_tool_use_id":null,"session_id":"s-1"}"#,
+        #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Find where the config is loaded"}]},"parent_tool_use_id":"toolu_task","session_id":"s-1"}"#,
+        #"{"type":"assistant","message":{"id":"msg_sub","content":[{"type":"tool_use","id":"toolu_sub_1","name":"Grep","input":{"pattern":"loadConfig"}}]},"parent_tool_use_id":"toolu_task","session_id":"s-1"}"#,
+        #"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_sub_1","type":"tool_result","content":"Sources/Config.swift"}]},"parent_tool_use_id":"toolu_task","session_id":"s-1"}"#,
+        #"{"type":"assistant","message":{"id":"msg_sub2","content":[{"type":"tool_use","id":"toolu_sub_2","name":"Read","input":{"file_path":"/repo/Sources/Config.swift"}}]},"parent_tool_use_id":"toolu_task","session_id":"s-1"}"#,
+        #"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_sub_2","type":"tool_result","content":"struct Config {}"}]},"parent_tool_use_id":"toolu_task","session_id":"s-1"}"#,
+        #"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_task","type":"tool_result","content":[{"type":"text","text":"Config is loaded in Sources/Config.swift"}]}]},"parent_tool_use_id":null,"session_id":"s-1"}"#,
+    ]
+
+    @Test func subagentToolCallsCarryTheirTaskAsParent() {
+        let calls = Self.subagent.flatMap(ClaudeEvent.parse(line:)).compactMap { event -> ToolCall? in
+            if case .toolCall(let call) = event { return call }
+            return nil
+        }
+        #expect(calls.map(\.id) == ["toolu_task", "toolu_sub_1", "toolu_sub_2"])
+        #expect(calls.map(\.parentToolUseID) == [nil, "toolu_task", "toolu_task"])
+
+        var live = Transcript()
+        Self.applyLive(Self.subagent, to: &live)
+        let tools = live.entries.compactMap { entry -> ToolActivity? in
+            if case .tool(let tool) = entry.content { return tool }
+            return nil
+        }
+        #expect(tools.map(\.parentToolUseID) == [nil, "toolu_task", "toolu_task"])
+        #expect(tools.map(\.isFinished) == [true, true, true])
+        #expect(tools[0].result == "Config is loaded in Sources/Config.swift")
+        #expect(Transcript(lines: Self.subagent).entries.map(\.withoutTimes) == live.entries.map(\.withoutTimes))
+    }
+
     @Test func parsesRecordedStream() {
         let events = Self.recorded.flatMap(ClaudeEvent.parse(line:))
 

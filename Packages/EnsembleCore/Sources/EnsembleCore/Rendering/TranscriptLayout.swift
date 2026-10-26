@@ -60,10 +60,11 @@ public struct ToolGroup: Sendable, Hashable, Identifiable {
 public enum TranscriptItem: Sendable, Hashable, Identifiable {
     case entry(TranscriptEntry)
     case group(ToolGroup)
+    case subagent(TranscriptEntry, children: [TranscriptItem])
 
     public var id: String {
         switch self {
-        case .entry(let entry): "entry-\(entry.id)"
+        case .entry(let entry), .subagent(let entry, _): "entry-\(entry.id)"
         case .group(let group): "group-\(group.id)"
         }
     }
@@ -73,6 +74,24 @@ public enum TranscriptLayout {
     public static func items(_ entries: [TranscriptEntry], live: TranscriptEntry? = nil) -> [TranscriptItem] {
         var all = entries
         if let live, !entries.contains(where: { $0.id == live.id }) { all.append(live) }
+        let subagentIDs = Set(all.compactMap { entry -> String? in
+            guard case .tool(let tool) = entry.content, ToolKind(name: tool.name) == .subagent else { return nil }
+            return tool.id
+        })
+        var children: [String: [TranscriptEntry]] = [:]
+        var topLevel: [TranscriptEntry] = []
+        for entry in all {
+            if case .tool(let tool) = entry.content, let parent = tool.parentToolUseID, subagentIDs.contains(parent), parent != tool.id {
+                children[parent, default: []].append(entry)
+            } else {
+                topLevel.append(entry)
+            }
+        }
+        var visited: Set<String> = []
+        return layout(topLevel, children: children, visited: &visited)
+    }
+
+    private static func layout(_ entries: [TranscriptEntry], children: [String: [TranscriptEntry]], visited: inout Set<String>) -> [TranscriptItem] {
         var items: [TranscriptItem] = []
         var pending: [(entry: TranscriptEntry, tool: ToolActivity)] = []
 
@@ -85,8 +104,12 @@ public enum TranscriptLayout {
             pending = []
         }
 
-        for entry in all {
+        for entry in entries {
             switch entry.content {
+            case .tool(let tool) where ToolKind(name: tool.name) == .subagent && visited.insert(tool.id).inserted:
+                flush()
+                let nested = layout(children[tool.id] ?? [], children: children, visited: &visited)
+                items.append(nested.isEmpty ? .entry(entry) : .subagent(entry, children: nested))
             case .tool(let tool) where tool.isFinished && ToolKind(name: tool.name).isGroupable:
                 if let first = pending.first, ToolKind(name: first.tool.name) != ToolKind(name: tool.name) { flush() }
                 pending.append((entry, tool))
@@ -125,7 +148,7 @@ public enum TranscriptLayout {
 
     public static func latestTodos(in entries: [TranscriptEntry]) -> [TodoItem] {
         for entry in entries.reversed() {
-            if case .tool(let tool) = entry.content, ToolKind(name: tool.name) == .todo {
+            if case .tool(let tool) = entry.content, ToolKind(name: tool.name) == .todo, tool.parentToolUseID == nil {
                 return TodoItem.parse(tool.input)
             }
         }

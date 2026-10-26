@@ -11,7 +11,7 @@ struct TranscriptToolRow: View {
         case .shell: ShellToolRow(tool: tool)
         case .read, .search: FileToolRow(tool: tool, root: root)
         case .edit: EditToolRow(tool: tool, root: root)
-        case .subagent: SubagentCard(tool: tool)
+        case .subagent: SubagentCard(tool: tool, root: root)
         case .todo: TodoToolRow(tool: tool)
         default: GenericToolRow(tool: tool, root: root)
         }
@@ -249,8 +249,10 @@ private struct EditToolRow: View {
     }
 }
 
-private struct SubagentCard: View {
+struct SubagentCard: View {
     let tool: ToolActivity
+    let root: String?
+    var children: [TranscriptItem] = []
     @State private var isExpanded = false
 
     var body: some View {
@@ -271,12 +273,27 @@ private struct SubagentCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if !children.isEmpty {
+                Text(Self.callCount(children))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText)
+                    .fixedSize()
+            }
             ToolStatus(tool: tool)
         } detail: {
             if isExpanded {
                 VStack(alignment: .leading, spacing: 12) {
                     if !prompt.isEmpty {
                         section("Prompt") { MarkdownText(text: prompt, fontSize: 12.5).foregroundStyle(Theme.secondaryText) }
+                    }
+                    if !children.isEmpty {
+                        section("Tool calls") {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(children) { child in
+                                    AnyView(TranscriptItemView(item: child, root: root))
+                                }
+                            }
+                        }
                     }
                     if let result = tool.result, !result.isEmpty {
                         section(tool.isError ? "Error" : "Result") {
@@ -288,6 +305,21 @@ private struct SubagentCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.black.opacity(0.12))
                 .overlay(alignment: .leading) { Rectangle().fill(Theme.link.opacity(0.4)).frame(width: 2) }
+            }
+        }
+    }
+
+    static func callCount(_ items: [TranscriptItem]) -> String {
+        let count = toolCount(items)
+        return "\(count) tool call\(count == 1 ? "" : "s")"
+    }
+
+    static func toolCount(_ items: [TranscriptItem]) -> Int {
+        items.reduce(0) { total, item in
+            switch item {
+            case .entry: total + 1
+            case .group(let group): total + group.tools.count
+            case .subagent(_, let nested): total + 1 + toolCount(nested)
             }
         }
     }

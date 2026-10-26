@@ -22,8 +22,66 @@ import Testing
                 default: "other"
                 }
             case .group(let group): "group:\(group.summary)"
+            case .subagent(let entry, let children):
+                "subagent:\(entry.id)[\(shape(children).joined(separator: ","))]"
             }
         }
+    }
+
+    private func child(_ name: String, of parent: String, path: String? = nil, result: String? = "ok") -> TranscriptEntry.Content {
+        .tool(ToolActivity(
+            id: UUID().uuidString, name: name, input: .object(path.map { ["file_path": .string($0)] } ?? [:]),
+            result: result, isError: false, parentToolUseID: parent
+        ))
+    }
+
+    @Test func nestsSubagentToolCallsUnderTheirTaskWithoutMergingIntoParentGroups() {
+        let task = TranscriptEntry.Content.tool(ToolActivity(id: "toolu_task", name: "Task", input: .object(["description": .string("Explore")]), result: nil, isError: false))
+        let items = TranscriptLayout.items(entries([
+            tool("Read", ["file_path": .string("/a")]),
+            task,
+            child("Read", of: "toolu_task", path: "/x"),
+            tool("Read", ["file_path": .string("/b")]),
+            child("Read", of: "toolu_task", path: "/y"),
+            child("Read", of: "toolu_task", path: "/z"),
+            child("Bash", of: "toolu_task", result: nil),
+            tool("Read", ["file_path": .string("/c")]),
+            tool("Read", ["file_path": .string("/d")]),
+        ]))
+
+        #expect(shape(items) == [
+            "tool:Read",
+            "subagent:1[group:Read 3 files,tool:Bash]",
+            "group:Read 3 files",
+        ])
+        guard case .group(let parentReads) = items[2] else { Issue.record("expected the parent's reads grouped"); return }
+        #expect(parentReads.tools.map(\.filePath) == ["/b", "/c", "/d"])
+        #expect(parentReads.tools.allSatisfy { $0.parentToolUseID == nil })
+    }
+
+    @Test func nestsSubagentsInsideSubagentsAndKeepsOrphansAtTheTop() {
+        let outer = TranscriptEntry.Content.tool(ToolActivity(id: "outer", name: "Task", input: .null, result: "done", isError: false))
+        let inner = TranscriptEntry.Content.tool(ToolActivity(id: "inner", name: "Agent", input: .null, result: "done", isError: false, parentToolUseID: "outer"))
+        let items = TranscriptLayout.items(entries([
+            outer,
+            inner,
+            child("Grep", of: "inner"),
+            child("Glob", of: "missing"),
+            tool("Task"),
+        ]))
+
+        #expect(shape(items) == ["subagent:0[subagent:1[tool:Grep]]", "tool:Glob", "tool:Task"])
+    }
+
+    @Test func ignoresSubagentTodoListsForThePinnedChecklist() {
+        let main: JSONValue = .object(["todos": .array([.object(["content": .string("Main"), "status": .string("pending")])])])
+        let sub: JSONValue = .object(["todos": .array([.object(["content": .string("Sub"), "status": .string("pending")])])])
+        let list = entries([
+            .tool(ToolActivity(id: "1", name: "TodoWrite", input: main, result: "ok", isError: false)),
+            .tool(ToolActivity(id: "2", name: "TodoWrite", input: sub, result: "ok", isError: false, parentToolUseID: "task")),
+        ])
+
+        #expect(TranscriptLayout.latestTodos(in: list).map(\.content) == ["Main"])
     }
 
     @Test func groupsConsecutiveFinishedToolsOfTheSameKind() {

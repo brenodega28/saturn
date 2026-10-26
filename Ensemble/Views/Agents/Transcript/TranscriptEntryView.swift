@@ -10,6 +10,12 @@ struct TranscriptItemView: View {
         switch item {
         case .entry(let entry): TranscriptEntryView(entry: entry, root: root)
         case .group(let group): ToolGroupRow(group: group, root: root)
+        case .subagent(let entry, let children):
+            if case .tool(let tool) = entry.content {
+                SubagentCard(tool: tool, root: root, children: children)
+            } else {
+                TranscriptEntryView(entry: entry, root: root)
+            }
         }
     }
 }

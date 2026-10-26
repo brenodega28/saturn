@@ -56,7 +56,14 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     private var plans: [Int64: Plan] = [:]
     private var verdicts: [Int64: Verdict] = [:]
     private var results: [Int64: String] = [:]
+    private var awaitingLead: Set<Int64> = []
     private var serverStart: Task<EnsembleMCPServer, Error>?
+    private(set) lazy var questionRelay = QuestionRelay { [weak self] runId, batch in self?.deliverQuestions(batch, runId: runId) }
+
+    public var questionWindow: Duration {
+        get { questionRelay.window }
+        set { questionRelay.window = newValue }
+    }
 
     public init(runtime: AgentRuntime) {
         self.runtime = runtime
@@ -118,6 +125,13 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
             return "Pinned \(file):\(draft.startLine)-\(draft.endLine) for the user."
         case .question(let question, let questions):
+            if let runId = agent.runId, try relayLead(for: agent, runId: runId) != nil {
+                awaitingLead.insert(agentID)
+                questionRelay.enqueue(RelayedQuestion(
+                    projectId: agent.projectId, runId: runId, agentId: agentID, agentName: agent.name, body: question, questions: questions
+                ))
+                return "Your question was sent to your lead, who will answer it or ask the user. End your turn now; the answer arrives as your next message."
+            }
             _ = try runtime.database.createInboxItem(InboxItem(
                 projectId: agent.projectId, runId: agent.runId, agentId: agentID, kind: .question,
                 title: "\(agent.name) asks", body: question, questions: questions.isEmpty ? nil : questions, createdAt: .now
@@ -141,6 +155,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             let target = try otherAgent(named: name, from: agent)
             guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(target.name) can’t receive messages.") }
             let sender = agent.taskId == nil ? "Message from \(agent.name):" : "Message from \(agent.name), passing on the user’s instruction:"
+            awaitingLead.remove(session.id)
             session.send("\(sender)\n\n\(text)")
             return "Sent to \(target.name)."
         case .agentMessage(let name, let text):
@@ -153,6 +168,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                   let session = runtime.session(for: target) else {
                 throw HandoffError.notAllowed("No agent named “\(name)” in this request’s run. Agents: \(candidates.map(\.name).joined(separator: ", ")).")
             }
+            awaitingLead.remove(session.id)
             session.send("Message from \(agent.name), passing on the user’s instruction:\n\n\(text)")
             return "Sent to \(target.name)."
         case .listAgents:
@@ -197,6 +213,39 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             session.send("Your worktree at \(path)\(branch) is ready and you can now edit files there. Continue with the change you were about to make.")
             return "Worktree ready at \(path)\(branch). End your turn now; your next turn runs there with write access."
         }
+    }
+
+    private func relayLead(for agent: Agent, runId: Int64) throws -> Agent? {
+        guard let run = try runtime.database.run(id: runId),
+              let lead = try runtime.database.leadAgent(taskId: run.taskId), lead.id != agent.id,
+              runtime.session(for: lead) != nil,
+              let workflow = workflowSnapshot(run) else { return nil }
+        let config = try projectConfig(for: agent)
+        let hasLeadStep = workflow.steps.contains { $0.type == .agent && $0.role.flatMap(config.role)?.canSpawn == true }
+        return hasLeadStep ? lead : nil
+    }
+
+    private func deliverQuestions(_ batch: [RelayedQuestion], runId: Int64) {
+        if let run = try? runtime.database.run(id: runId),
+           let lead = try? runtime.database.leadAgent(taskId: run.taskId),
+           !batch.contains(where: { $0.agentId == lead.id }),
+           let session = runtime.session(for: lead) {
+            session.send(QuestionRelay.message(for: batch))
+            return
+        }
+        for question in batch {
+            _ = try? runtime.database.createInboxItem(InboxItem(
+                projectId: question.projectId, runId: question.runId, agentId: question.agentId, kind: .question,
+                title: "\(question.agentName) asks", body: question.body, questions: question.questions.isEmpty ? nil : question.questions, createdAt: .now
+            ))
+        }
+    }
+
+    private func endRelay(for run: Run) {
+        guard let runId = run.id else { return }
+        questionRelay.flush(runId: runId)
+        let agents = (try? runtime.database.agents(inProject: run.projectId).filter { $0.runId == runId }.compactMap(\.id)) ?? []
+        awaitingLead.subtract(agents)
     }
 
     private func isLead(_ agent: Agent) throws -> Bool {
@@ -390,6 +439,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     public func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult {
+        endRelay(for: run)
         let git = try requireGit()
         let runId = try requireRunID(run)
         guard let project = try runtime.database.project(id: run.projectId) else { throw WorkflowDriverError.notReady("The project is gone.") }
@@ -427,6 +477,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     public func cancel(_ run: Run) async {
+        endRelay(for: run)
         guard let runId = run.id, let sessions = try? runtime.runSessions(runId: runId, projectId: run.projectId) else { return }
         for session in sessions where session.isRunning || session.isQueued {
             session.stop()
@@ -455,6 +506,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             if hasHandoff(session.id, expected: expected) { return }
             if try hasOpenQuestion(session) {
                 try await waitForAnswer(session)
+                awaitingLead.remove(session.id)
                 continue
             }
             if expected == .result, nudged || results[session.id] != nil { return }
@@ -482,7 +534,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func hasOpenQuestion(_ session: AgentSession) throws -> Bool {
-        try runtime.database.openInboxItems(projectId: session.agent.projectId)
+        if awaitingLead.contains(session.id) { return true }
+        return try runtime.database.openInboxItems(projectId: session.agent.projectId)
             .contains { $0.agentId == session.id && $0.kind == .question }
     }
 

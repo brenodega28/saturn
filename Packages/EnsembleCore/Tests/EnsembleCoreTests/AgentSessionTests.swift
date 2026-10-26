@@ -252,6 +252,29 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: transcript.path))
     }
 
+    @Test func streamedDeltasReachTheTranscriptButNotTheLog() async throws {
+        let harness = try await AgentHarness.make(mode: "streaming")
+        defer { harness.cleanUp() }
+        var replies: [String] = []
+        harness.runtime.observeReplies { _, reply in replies.append(reply) }
+
+        let session = try await harness.spawn()
+        try await waitUntil { session.agent.status == .idle }
+
+        #expect(harness.launches().first?.contains("--include-partial-messages") == true)
+        #expect(transcriptKinds(session) == ["notice:started", "user", "thinking", "assistant", "finished"])
+        #expect(session.transcript.entries.contains { $0.content == .assistant("All done") })
+        #expect(session.transcript.liveEntry == nil)
+        #expect(replies == ["All done"])
+
+        let logged = try String(contentsOf: harness.runtime.paths.transcript(session.id), encoding: .utf8)
+        #expect(!logged.contains("stream_event"))
+        #expect(logged.contains("thinking_tokens"))
+
+        let replayed = Transcript(lines: logged.split(separator: "\n").map(String.init))
+        #expect(replayed.entries.map(\.withoutTimes) == session.transcript.entries.map(\.withoutTimes))
+    }
+
     private func transcriptKinds(_ session: AgentSession) -> [String] {
         session.transcript.entries.map { entry in
             switch entry.content {

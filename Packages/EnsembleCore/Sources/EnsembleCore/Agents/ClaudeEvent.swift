@@ -20,6 +20,7 @@ public struct ToolCall: Sendable, Hashable {
     public let id: String
     public let name: String
     public let input: JSONValue
+    public var parentToolUseID: String?
 }
 
 public struct ToolResult: Sendable, Hashable {
@@ -118,7 +119,7 @@ public enum ClaudeEvent: Sendable, Hashable {
                     return .thinking(block["thinking"]?.string ?? "")
                 case "tool_use":
                     guard let id = block["id"]?.string, let name = block["name"]?.string else { return nil }
-                    return .toolCall(ToolCall(id: id, name: name, input: block["input"] ?? .null))
+                    return .toolCall(ToolCall(id: id, name: name, input: block["input"] ?? .null, parentToolUseID: json["parent_tool_use_id"]?.string))
                 default:
                     return nil
                 }

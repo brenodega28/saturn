@@ -8,6 +8,7 @@ public struct ToolActivity: Sendable, Hashable {
     public var isError: Bool
     public var startedAt: Date?
     public var finishedAt: Date?
+    public var parentToolUseID: String?
 
     public var isFinished: Bool { result != nil }
 
@@ -188,7 +189,7 @@ public struct Transcript: Sendable, Hashable {
         case .toolCall(let call):
             finishThinking(at: now)
             toolIndex[call.id] = entries.count
-            append(.tool(ToolActivity(id: call.id, name: call.name, input: call.input, result: nil, isError: false, startedAt: now)))
+            append(.tool(ToolActivity(id: call.id, name: call.name, input: call.input, result: nil, isError: false, startedAt: now, parentToolUseID: call.parentToolUseID)))
         case .toolResult(let result):
             guard let index = toolIndex[result.toolUseID], case .tool(var tool) = entries[index].content else { return }
             tool.result = result.content

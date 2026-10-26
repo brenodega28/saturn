@@ -27,7 +27,7 @@ struct DirectChatView: View {
                                 .id(message.id)
                         }
                         if isWaitingForReply {
-                            ThinkingRow(role: role, name: name)
+                            ThinkingRow(role: role, name: name, session: session)
                                 .id(Self.thinkingID)
                         } else if session.agent.status == .failed, messages.contains(where: \.awaitingReply) {
                             FailedReplyRow(name: name, error: session.agent.lastError)

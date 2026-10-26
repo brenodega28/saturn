@@ -97,6 +97,7 @@ final class AppModel {
     let leadChat: LeadChat
     let directChat: DirectChat
     var chatTargets: [Int64: ChatTarget] = [:]
+    let pendingSends = PendingSends<PendingSendTarget>()
 
     var selection: SidebarItem? {
         didSet { persistNavigation() }

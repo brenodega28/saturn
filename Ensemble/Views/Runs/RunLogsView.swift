@@ -113,8 +113,9 @@ private struct AgentTail: View {
     var body: some View {
         let session = model.agents.session(for: agent)
         let live = session?.agent ?? agent
-        let entries = Array((session?.transcript.entries ?? []).suffix(limit))
-        let root = session?.transcript.session?.cwd ?? live.worktreePath
+        let transcript = session?.transcript
+        let items = Array(TranscriptLayout.items(transcript?.entries ?? [], live: transcript?.liveEntry).suffix(limit))
+        let root = transcript?.session?.cwd ?? live.worktreePath
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 AgentAvatar(size: 20, appearance: RoleAppearance(role: model.role(for: live, in: project)))
@@ -127,82 +128,20 @@ private struct AgentTail: View {
                     .fixedSize()
                     .help("Show the full transcript")
             }
-            if entries.isEmpty {
+            if items.isEmpty {
                 Text("No transcript yet.").font(.system(size: 12)).foregroundStyle(Theme.tertiaryText)
             }
-            ForEach(entries) { entry in
-                TailLine(entry: entry, root: root)
-            }
-            if let tool = session?.transcript.activeTool, session?.isRunning == true {
-                Label("Running \(tool.name) \(tool.target(relativeTo: root))", systemImage: "ellipsis")
-                    .font(.system(size: 11.5, design: .monospaced))
-                    .foregroundStyle(Theme.accent)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            ForEach(items) { item in
+                TranscriptItemView(item: item, root: root)
+                    .frame(maxHeight: Self.itemHeightLimit, alignment: .top)
+                    .clipped()
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .card(cornerRadius: 16)
-    }
-}
-
-private struct TailLine: View {
-    let entry: TranscriptEntry
-    let root: String?
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(kind)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(width: 58, alignment: .leading)
-            Text(text)
-                .font(.system(size: 12, design: isTool ? .monospaced : .default))
-                .foregroundStyle(Theme.secondaryText)
-                .lineLimit(isTool ? 1 : 3)
-                .truncationMode(isTool ? .middle : .tail)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .accessibilityElement(children: .combine)
+        .opensCodeFiles(in: project.id, root: root, model: model)
     }
 
-    private var isTool: Bool {
-        if case .tool = entry.content { return true }
-        return false
-    }
-
-    private var kind: String {
-        switch entry.content {
-        case .user: "Prompt"
-        case .assistant: "Agent"
-        case .tool(let tool): tool.name
-        case .notice: "Notice"
-        case .interrupted: "Stopped"
-        case .turnFinished: "Turn"
-        }
-    }
-
-    private var color: Color {
-        switch entry.content {
-        case .user: Theme.accent
-        case .assistant: Theme.primaryText
-        case .tool(let tool): tool.isError ? Theme.danger : Theme.link
-        case .notice(let notice, _): notice == .failed ? Theme.danger : Theme.tertiaryText
-        case .interrupted: Theme.warning
-        case .turnFinished(let result): result.isError ? Theme.danger : Theme.tertiaryText
-        }
-    }
-
-    private var text: String {
-        switch entry.content {
-        case .user(let text), .assistant(let text): text
-        case .tool(let tool): tool.target(relativeTo: root)
-        case .notice(let notice, let detail): ["\(notice)".capitalized, detail].compactMap(\.self).joined(separator: " · ")
-        case .interrupted: "Interrupted"
-        case .turnFinished(let result):
-            "\(result.isError ? "Failed" : "Finished") · \(RunDetailFormat.duration(Double(result.durationMS) / 1000)) · \(RunDetailFormat.dollars(result.totalCostUSD))"
-        }
-    }
+    private static let itemHeightLimit: CGFloat = 320
 }

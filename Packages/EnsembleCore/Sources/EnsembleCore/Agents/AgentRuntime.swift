@@ -79,6 +79,9 @@ public final class AgentRuntime {
     private var turnQueue: [Int64: [Int64]] = [:]
     @ObservationIgnored public internal(set) var memoryUpdateAgents: Set<Int64> = []
     @ObservationIgnored var reservedPorts: [String: Int] = [:]
+    #if DEBUG
+    @ObservationIgnored var debugTrace: DebugTrace?
+    #endif
 
     public init(
         database: AppDatabase,
@@ -98,6 +101,9 @@ public final class AgentRuntime {
         self.claudeExecutable = claudeExecutable
         self.processEnvironment = processEnvironment
         self.stopGracePeriod = stopGracePeriod
+        #if DEBUG
+        self.debugTrace = DebugTrace(paths: paths) { [database] runId in (try? database.run(id: runId))??.title }
+        #endif
     }
 
     public func observeReplies(_ observer: @escaping @MainActor (Agent, String) -> Void) {

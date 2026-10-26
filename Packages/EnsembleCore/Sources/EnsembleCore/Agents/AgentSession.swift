@@ -153,6 +153,9 @@ public final class AgentSession: Identifiable {
     func startQueuedTurn() {
         guard let turn = waitingTurn else { return }
         waitingTurn = nil
+        #if DEBUG
+        runtime.debugTrace?.lifecycle("dequeued", agent: agent)
+        #endif
         launchTurn(with: turn)
     }
 
@@ -251,6 +254,9 @@ public final class AgentSession: Identifiable {
             runtime.enqueue(self)
             agent.status = .waiting
             persist()
+            #if DEBUG
+            runtime.debugTrace?.lifecycle("queued", detail: "Concurrency limit \(runtime.maxConcurrentAgents(inProject: agent.projectId)) reached", agent: agent)
+            #endif
             return
         }
         launchTurn(with: turn)
@@ -309,6 +315,9 @@ public final class AgentSession: Identifiable {
             turnCompletedInProcess = false
             try handle.send(line: ClaudeEvent.userLine(turn.text, images: turn.images))
             record(line: ClaudeEvent.userLine(turn.text, images: turn.images, includingImageData: false))
+            #if DEBUG
+            runtime.debugTrace?.launched(launch, turn: turn, agent: agent)
+            #endif
             agent.status = .working
             agent.processID = handle.processIdentifier
             agent.lastError = nil
@@ -329,6 +338,9 @@ public final class AgentSession: Identifiable {
         guard source === handle else { return }
         switch output {
         case .line(let line):
+            #if DEBUG
+            runtime.debugTrace?.received(line, agent: agent)
+            #endif
             let events = ClaudeEvent.parse(line: line)
             guard !events.isEmpty else { return }
             log.append(line)
@@ -352,6 +364,9 @@ public final class AgentSession: Identifiable {
                 }
             }
         case .exited(let code, let standardError):
+            #if DEBUG
+            runtime.debugTrace?.processExited(code: code, standardError: standardError, agent: agent)
+            #endif
             processEnded(code: code, standardError: standardError)
         }
     }
@@ -360,6 +375,9 @@ public final class AgentSession: Identifiable {
         turnCompletedInProcess = true
         let cost = max(0, result.totalCostUSD - costInProcess)
         costInProcess = result.totalCostUSD
+        #if DEBUG
+        runtime.debugTrace?.turnCompleted(result, costUSD: cost, agent: agent)
+        #endif
         agent.inputTokens += result.usage.input
         agent.outputTokens += result.usage.output
         agent.cacheReadTokens += result.usage.cacheRead
@@ -440,6 +458,9 @@ public final class AgentSession: Identifiable {
     }
 
     private func record(notice: EnsembleNotice, detail: String? = nil) {
+        #if DEBUG
+        runtime.debugTrace?.lifecycle(notice.rawValue, detail: detail, agent: agent)
+        #endif
         record(line: ClaudeEvent.noticeLine(notice, detail: detail))
     }
 

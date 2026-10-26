@@ -137,8 +137,18 @@ private struct DirectComposer: View {
     @State private var isDropTargeted = false
 
     var body: some View {
+        let sendTarget = PendingSendTarget.direct(session.id)
+        VStack(alignment: .leading, spacing: 8) {
+            PendingSendChip(target: sendTarget, onUndo: restore)
+            composer
+        }
+        .animation(.snappy(duration: 0.2), value: model.pendingSends.holds(for: sendTarget).count)
+        .restoresReturnedSends(for: sendTarget, perform: restore)
+    }
+
+    private var composer: some View {
         let name = model.displayName(of: session.agent, in: project)
-        VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 10) {
             ChatComposerInput(
                 text: $text,
                 attachments: $attachments,
@@ -182,10 +192,16 @@ private struct DirectComposer: View {
 
     private func send() {
         guard canSend else { return }
-        if model.sendDirectMessage(text, attachments: attachments, to: session) {
-            text = ""
-            attachments = []
-        }
+        let message = PendingMessage(text: text, attachments: attachments)
+        text = ""
+        attachments = []
+        model.holdDirectMessage(message, to: session)
+    }
+
+    private func restore(_ message: PendingMessage) {
+        let merged = PendingMessage(text: text, attachments: attachments).appending(message)
+        text = merged.text
+        attachments = merged.attachments
     }
 }
 

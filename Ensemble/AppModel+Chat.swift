@@ -6,6 +6,12 @@ enum ChatTarget: Hashable {
     case agent(Int64)
 }
 
+enum PendingSendTarget: Hashable {
+    case session(Int64)
+    case direct(Int64)
+    case lead(project: Int64, request: Int64?)
+}
+
 extension AppModel {
     func chatTarget(in project: Project) -> ChatTarget? {
         guard let id = project.id else { return nil }
@@ -59,6 +65,29 @@ extension AppModel {
         } catch {
             alert = AppAlert(title: "Couldn’t send the message to \(displayName(of: session.agent))", message: error.localizedDescription)
             return false
+        }
+    }
+
+    static let sendHoldSecondsKey = "chat.sendHoldSeconds"
+    static let defaultSendHoldSeconds = 3
+
+    var sendHoldSeconds: Int {
+        max(UserDefaults.standard.object(forKey: Self.sendHoldSecondsKey) as? Int ?? Self.defaultSendHoldSeconds, 0)
+    }
+
+    func holdSend(_ message: PendingMessage, to target: PendingSendTarget, deliver: @escaping @MainActor (PendingMessage) -> Void) {
+        pendingSends.schedule(message, for: target, delay: TimeInterval(sendHoldSeconds), deliver: deliver)
+    }
+
+    func holdSessionMessage(_ text: String, to session: AgentSession) {
+        holdSend(PendingMessage(text: text), to: .session(session.id)) { session.send($0.text) }
+    }
+
+    func holdDirectMessage(_ message: PendingMessage, to session: AgentSession) {
+        let target = PendingSendTarget.direct(session.id)
+        holdSend(message, to: target) { [weak self] held in
+            guard let self, !sendDirectMessage(held.text, attachments: held.attachments, to: session) else { return }
+            pendingSends.returnToComposer(held, for: target)
         }
     }
 

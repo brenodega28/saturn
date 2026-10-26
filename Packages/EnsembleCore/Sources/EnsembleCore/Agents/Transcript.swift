@@ -6,6 +6,8 @@ public struct ToolActivity: Sendable, Hashable {
     public let input: JSONValue
     public var result: String?
     public var isError: Bool
+    public var startedAt: Date?
+    public var finishedAt: Date?
 
     public var isFinished: Bool { result != nil }
 
@@ -55,10 +57,27 @@ public struct ToolActivity: Sendable, Hashable {
     }
 }
 
+public struct ThinkingBlock: Sendable, Hashable {
+    public var text: String
+    public var isFinished: Bool
+    public var estimatedTokens: Int?
+    public var startedAt: Date?
+    public var finishedAt: Date?
+
+    public init(text: String = "", isFinished: Bool = false, estimatedTokens: Int? = nil, startedAt: Date? = nil, finishedAt: Date? = nil) {
+        self.text = text
+        self.isFinished = isFinished
+        self.estimatedTokens = estimatedTokens
+        self.startedAt = startedAt
+        self.finishedAt = finishedAt
+    }
+}
+
 public struct TranscriptEntry: Sendable, Hashable, Identifiable {
     public enum Content: Sendable, Hashable {
         case user(String)
         case assistant(String)
+        case thinking(ThinkingBlock)
         case tool(ToolActivity)
         case notice(EnsembleNotice, detail: String?)
         case interrupted
@@ -67,21 +86,44 @@ public struct TranscriptEntry: Sendable, Hashable, Identifiable {
 
     public let id: Int
     public var content: Content
+    public var isStreaming: Bool
+
+    public init(id: Int, content: Content, isStreaming: Bool = false) {
+        self.id = id
+        self.content = content
+        self.isStreaming = isStreaming
+    }
+
+    var isThinking: Bool {
+        if case .thinking = content { true } else { false }
+    }
+
+    var isAssistant: Bool {
+        if case .assistant = content { true } else { false }
+    }
 }
 
 public struct Transcript: Sendable, Hashable {
     public private(set) var entries: [TranscriptEntry] = []
     public private(set) var session: SessionInfo?
     private var toolIndex: [String: Int] = [:]
+    private var openBlocks: [Int: Int] = [:]
+    private var awaitingFinal: [Int] = []
+    private var liveIndex: Int?
 
     public init() {}
 
     public init(lines: some Sequence<String>) {
         for line in lines {
             for event in ClaudeEvent.parse(line: line) {
-                apply(event)
+                apply(event, at: nil)
             }
         }
+    }
+
+    public var liveEntry: TranscriptEntry? {
+        guard let liveIndex, entries[liveIndex].isStreaming else { return nil }
+        return entries[liveIndex]
     }
 
     public var activeTool: ToolActivity? {
@@ -92,47 +134,179 @@ public struct Transcript: Sendable, Hashable {
         return nil
     }
 
-    public mutating func apply(_ event: ClaudeEvent) {
+    public mutating func apply(_ event: ClaudeEvent, now: Date = .now) {
+        apply(event, at: now)
+    }
+
+    private mutating func apply(_ event: ClaudeEvent, at now: Date?) {
         switch event {
         case .sessionStarted(let info):
             session = info
         case .userMessage(let text):
+            closeStreaming(at: now)
             if text.hasPrefix("[Request interrupted") {
                 append(.interrupted)
             } else {
                 append(.user(text))
             }
         case .assistantText(let text):
-            append(.assistant(text))
+            finishThinking(at: now)
+            if let index = takeAwaitingFinal(where: \.isAssistant) {
+                settle(index, text: text, at: now)
+            } else {
+                append(.assistant(text))
+            }
+        case .thinking(let text):
+            if let index = takeAwaitingFinal(where: \.isThinking) {
+                settle(index, text: text, at: now)
+            } else {
+                append(.thinking(ThinkingBlock(text: text, isFinished: true, finishedAt: now)))
+            }
+        case .thinkingTokens(let tokens):
+            let index = awaitingFinal.last { entries[$0].isThinking }
+                ?? (entries.last?.isThinking == true ? entries.count - 1 : nil)
+                ?? startThinking(at: now)
+            guard case .thinking(var block) = entries[index].content else { return }
+            block.estimatedTokens = tokens
+            entries[index].content = .thinking(block)
+        case .messageStarted:
+            settleOpenBlocks(at: now)
+        case .thinkingStarted(let index):
+            openBlocks[index] = openBlocks[index] ?? unboundThinking() ?? startThinking(at: now)
+        case .assistantTextDelta(let index, let text):
+            let entryIndex = openBlocks[index] ?? openTextBlock(index)
+            extend(entryIndex, with: text)
+        case .thinkingDelta(let index, let text):
+            let entryIndex = openBlocks[index] ?? unboundThinking() ?? startThinking(at: now)
+            openBlocks[index] = entryIndex
+            extend(entryIndex, with: text)
+        case .blockStopped(let index):
+            guard let entryIndex = openBlocks.removeValue(forKey: index) else { return }
+            settle(entryIndex, text: nil, at: now)
+        case .messageStopped:
+            closeStreaming(at: now)
         case .toolCall(let call):
+            finishThinking(at: now)
             toolIndex[call.id] = entries.count
-            append(.tool(ToolActivity(id: call.id, name: call.name, input: call.input, result: nil, isError: false)))
+            append(.tool(ToolActivity(id: call.id, name: call.name, input: call.input, result: nil, isError: false, startedAt: now)))
         case .toolResult(let result):
             guard let index = toolIndex[result.toolUseID], case .tool(var tool) = entries[index].content else { return }
             tool.result = result.content
             tool.isError = result.isError
+            tool.finishedAt = now
             entries[index].content = .tool(tool)
         case .turnCompleted(let result):
-            closeUnfinishedTools()
+            closeStreaming(at: now)
+            closeUnfinishedTools(at: now)
             append(.turnFinished(result))
         case .notice(let notice, let detail):
-            closeUnfinishedTools()
+            closeStreaming(at: now)
+            closeUnfinishedTools(at: now)
             append(.notice(notice, detail: detail))
         }
     }
 
-    private mutating func closeUnfinishedTools() {
+    private mutating func startThinking(at now: Date?) -> Int {
+        let index = append(.thinking(ThinkingBlock(startedAt: now)), isStreaming: true)
+        awaitingFinal.append(index)
+        liveIndex = index
+        return index
+    }
+
+    private mutating func openTextBlock(_ block: Int) -> Int {
+        let index = append(.assistant(""), isStreaming: true)
+        awaitingFinal.append(index)
+        openBlocks[block] = index
+        liveIndex = index
+        return index
+    }
+
+    private func unboundThinking() -> Int? {
+        awaitingFinal.first { index in
+            guard case .thinking(let block) = entries[index].content else { return false }
+            return !block.isFinished && !openBlocks.values.contains(index)
+        }
+    }
+
+    private mutating func extend(_ index: Int, with delta: String) {
+        guard entries[index].isStreaming else { return }
+        switch entries[index].content {
+        case .assistant(var text):
+            entries[index].content = .interrupted
+            text += delta
+            entries[index].content = .assistant(text)
+        case .thinking(var block):
+            entries[index].content = .interrupted
+            block.text += delta
+            entries[index].content = .thinking(block)
+        default:
+            return
+        }
+        liveIndex = index
+    }
+
+    private mutating func takeAwaitingFinal(where matches: (TranscriptEntry) -> Bool) -> Int? {
+        guard let position = awaitingFinal.firstIndex(where: { matches(entries[$0]) }) else { return nil }
+        return awaitingFinal.remove(at: position)
+    }
+
+    private mutating func finishThinking(at now: Date?) {
+        while let index = takeAwaitingFinal(where: \.isThinking) {
+            settle(index, text: nil, at: now)
+        }
+    }
+
+    private mutating func settleOpenBlocks(at now: Date?) {
+        for index in openBlocks.values {
+            settle(index, text: nil, at: now)
+        }
+        openBlocks.removeAll()
+    }
+
+    private mutating func closeStreaming(at now: Date?) {
+        settleOpenBlocks(at: now)
+        for index in awaitingFinal {
+            settle(index, text: nil, at: now)
+        }
+        awaitingFinal.removeAll()
+        if let liveIndex {
+            settle(liveIndex, text: nil, at: now)
+        }
+    }
+
+    private mutating func settle(_ index: Int, text: String?, at now: Date?) {
+        entries[index].isStreaming = false
+        switch entries[index].content {
+        case .assistant:
+            if let text { entries[index].content = .assistant(text) }
+        case .thinking(var block):
+            if let text { block.text = text }
+            if !block.isFinished {
+                block.isFinished = true
+                block.finishedAt = now
+            }
+            entries[index].content = .thinking(block)
+        default:
+            break
+        }
+        if liveIndex == index { liveIndex = nil }
+    }
+
+    private mutating func closeUnfinishedTools(at now: Date?) {
         for (id, index) in toolIndex {
             guard case .tool(var tool) = entries[index].content, !tool.isFinished else { continue }
             tool.result = ""
             tool.isError = true
+            tool.finishedAt = now
             entries[index].content = .tool(tool)
             toolIndex[id] = nil
         }
     }
 
-    private mutating func append(_ content: TranscriptEntry.Content) {
-        entries.append(TranscriptEntry(id: entries.count, content: content))
+    @discardableResult
+    private mutating func append(_ content: TranscriptEntry.Content, isStreaming: Bool = false) -> Int {
+        entries.append(TranscriptEntry(id: entries.count, content: content, isStreaming: isStreaming))
+        return entries.count - 1
     }
 }
 

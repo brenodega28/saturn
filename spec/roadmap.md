@@ -2,7 +2,7 @@
 
 Ensemble is a macOS app for solo developers that runs AI coding agents inside a verification harness: **agents propose, rails verify, humans approve** (see [mission.md](mission.md)). You define **roles** and **workflows** in the repo. Every coding agent works on a scoped task in its own git worktree and must pass the project's deterministic **checks** before its work reaches you. AI review flags what you must read as **pins**, and nothing reaches `main` without your approval.
 
-This document is the build order for the MVP and what comes after. Each phase ends with something usable and a clear exit check. Phases 0–7 were planned before the mission was written and are kept as a record of what was built. Phases 8–10 bring the product in line with the mission, and Phase 11 closes the gaps with the [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD).
+This document is the build order for the MVP and what comes after. Each phase ends with something usable and a clear exit check. Phases 0–7 were planned before the mission was written and are kept as a record of what was built. Phases 8–10 bring the product in line with the mission, Phase 11 closes the gaps with the [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD), and Phase 12 moves the app into an IDE-style work-tool shell.
 
 ---
 
@@ -29,6 +29,7 @@ This document is the build order for the MVP and what comes after. Each phase en
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
 | App stack         | Swift 6 + SwiftUI, built in Xcode                                                                                                          | The most native macOS experience; the same language for the future iOS app                                                    |
 | Design reference  | The [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD) defines every screen; new screens are designed there before they are built | One source for layout, copy and behavior; QA compares the app against it |
+| App shell         | An IDE-style frame (toolbar, navigator, editor tabs, inspector, bottom panel, status bar) built on registries for panes, tabs and commands | Feels like Xcode or Android Studio; new features slot into existing panes instead of adding screens |
 | Minimum OS        | macOS 26 Tahoe                                                                                                                             | Native Liquid Glass for the glassy design and the newest SwiftUI APIs                                                         |
 | Distribution      | Direct download: notarized, Developer ID–signed DMG, auto-updates with Sparkle                                                             | The App Store sandbox blocks spawning the `claude` CLI, running `git` and writing worktrees freely                            |
 | Agent runner      | Drive the `claude` CLI headlessly from Swift (`Process`), reading its streaming JSON output; one process per agent, cwd = its worktree     | No Node runtime to bundle; uses the user's own Claude Code login or API key; resumable sessions and MCP support come for free |
@@ -282,7 +283,29 @@ Goal: the app matches the design canvas and works as one complete toolkit.
 
 **Exit check:** a new user goes from Welcome through onboarding to an approved change, and every screen on the way matches the canvas.
 
-**MVP is done when Phases 0–11 pass their exit checks.**
+## Phase 12 — Work-tool shell
+
+Goal: Ensemble feels like Xcode or Android Studio: one fixed frame of panes around an editor, where new features arrive as tabs in existing panes instead of new screens. The layout comes from the shell redesign in the design canvas; that redesign is done before this phase starts.
+
+- [ ] Extension registries in the app for navigator tabs, inspector tabs per selection type, bottom panel tabs, editor tab types, toolbar items and activity sources, status bar items, and commands; menus, the ⌘K palette and key bindings all read from the command registry
+- [ ] Frame: toolbar, navigator, editor area, inspector, bottom panel and status bar; every pane can be shown, hidden and resized, with state saved per window
+- [ ] Toolbar: scheme selector (project ▸ workflow ▸ base branch), start ▶ (⌘R) and stop ■ (⌘.), activity viewer with a popover of background work, pane toggles
+- [ ] Navigator tabs: Workspace (today's multi-project sidebar), Runs, Agents, Source, Source control, Pins, Checks, Problems, Find; each scoped to one project or all
+- [ ] Editor area: tabs for chats, runs, files, diffs, workflows and reports; split view; open in a new window; jump bar breadcrumbs with a menu per segment; back and forward history
+- [ ] Existing screens moved into the frame as editor tabs, with their per-screen chrome removed
+- [ ] Inspector that follows the selection: agent (details, context, memory, workspace, cost), file (info, history, pins, risk tier), workflow step, run (summary, budget, branches, outcome); the Agent session panel and Workflows inspector move here
+- [ ] Bottom panel: Log (live, filterable by agent, step and level), Terminal in any worktree, Checks output, Problems table, Servers (dev servers and ports), Activity (clones, syncs, setup scripts, polling)
+- [ ] Status bar: branch and worktree, agents working, check state, `claude` CLI version and health, rate-limit and offline warnings, weekly spend; each item opens its pane
+- [ ] Full menu bar (File, Edit, View, Navigate, Agent, Run, Review, Workflow, Window, Help) and context menus on agents, files, pins and runs
+- [ ] App-wide Settings window (⌘,): accounts, engines, key bindings, notifications, locations, updates, editor font
+- [ ] Organizer window (⇧⌘1) across projects: runs, usage, quality, the role and workflow template library, failed runs
+- [ ] Library panel (⇧⌘L): roles, skills, step types and prompt snippets to drag into workflows and chat
+- [ ] Key bindings editor
+- [ ] Problems and Checks navigators wired to the Phase 8–10 data (failed checks, gate findings, config errors, missing skills)
+
+**Exit check:** a full Refunds v2 run is started, followed, reviewed and approved without leaving the frame. The Log, Terminal, Checks and Problems panels, the inspector and the menus all work. A new navigator tab can be added by registering it, with no changes to the shell.
+
+**MVP is done when Phases 0–12 pass their exit checks.**
 
 ---
 

@@ -343,7 +343,9 @@ public final class AgentSession: Identifiable {
             #endif
             let events = ClaudeEvent.parse(line: line)
             guard !events.isEmpty else { return }
-            log.append(line)
+            if !events.allSatisfy(\.isPartial) {
+                log.append(line)
+            }
             for event in events {
                 if case .sessionStarted(let info) = event, let mode = launchedMode,
                    case let keySource = info.apiKeySource ?? "unreported", keySource != mode.expectedKeySource {

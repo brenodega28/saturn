@@ -50,6 +50,25 @@ enum FakeClaude {
     say() {
       printf '{"type":"assistant","message":{"content":[{"type":"text","text":"%s"}]}}\n' "$1"
     }
+    stream() {
+      printf '{"type":"stream_event","event":%s,"session_id":"%s","parent_tool_use_id":null,"uuid":"u-%s"}\n' "$1" "$session" "$$"
+    }
+    streaming_turn() {
+      stream '{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[]}}'
+      stream '{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}'
+      stream '{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Plan the "}}'
+      stream '{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"edit"}}'
+      printf '%s\n' '{"type":"system","subtype":"thinking_tokens","estimated_tokens":4}'
+      printf '%s\n' '{"type":"assistant","message":{"id":"msg_1","content":[{"type":"thinking","thinking":"Plan the edit","signature":"sig"}]}}'
+      stream '{"type":"content_block_stop","index":0}'
+      stream '{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}'
+      stream '{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"All "}}'
+      stream '{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"don"}}'
+      printf '%s\n' '{"type":"assistant","message":{"id":"msg_1","content":[{"type":"text","text":"All done"}]}}'
+      stream '{"type":"content_block_stop","index":1}'
+      stream '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":9}}'
+      stream '{"type":"message_stop"}'
+    }
     workflow_turn() {
       if printf '%s' "$1" | grep -q 'CHAT-PROPOSE'; then
         call_tool propose_run '{"workflow":"feature-delivery","title":"Add alpha and beta","brief":"Create alpha.txt and beta.txt, as agreed."}'
@@ -136,6 +155,11 @@ enum FakeClaude {
           if [ "$mode" = "crash" ]; then echo "boom: invalid api key" >&2; exit 3; fi
           if [ "$mode" = "workflow" ]; then
             workflow_turn "$line" "$@"
+            result success false
+            continue
+          fi
+          if [ "$mode" = "streaming" ]; then
+            streaming_turn
             result success false
             continue
           fi

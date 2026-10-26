@@ -20,6 +20,7 @@ public struct ToolCall: Sendable, Hashable {
     public let id: String
     public let name: String
     public let input: JSONValue
+    public var parentToolUseID: String?
 }
 
 public struct ToolResult: Sendable, Hashable {
@@ -76,11 +77,31 @@ public enum ClaudeEvent: Sendable, Hashable {
     case toolResult(ToolResult)
     case turnCompleted(TurnResult)
     case notice(EnsembleNotice, detail: String?)
+    case thinking(String)
+    case thinkingTokens(Int)
+    case messageStarted
+    case thinkingStarted(index: Int)
+    case assistantTextDelta(index: Int, text: String)
+    case thinkingDelta(index: Int, text: String)
+    case blockStopped(index: Int)
+    case messageStopped
+
+    public var isPartial: Bool {
+        switch self {
+        case .messageStarted, .thinkingStarted, .assistantTextDelta, .thinkingDelta, .blockStopped, .messageStopped: true
+        default: false
+        }
+    }
 
     public static func parse(line: String) -> [ClaudeEvent] {
         guard let json = JSONValue.parse(line), let type = json["type"]?.string else { return [] }
         switch type {
+        case "stream_event":
+            return streamEvent(json["event"]).map { [$0] } ?? []
         case "system":
+            if json["subtype"]?.string == "thinking_tokens" {
+                return json["estimated_tokens"]?.int.map { [.thinkingTokens($0)] } ?? []
+            }
             guard json["subtype"]?.string == "init", let sessionID = json["session_id"]?.string else { return [] }
             return [.sessionStarted(SessionInfo(
                 sessionID: sessionID,
@@ -94,9 +115,11 @@ public enum ClaudeEvent: Sendable, Hashable {
                 switch block["type"]?.string {
                 case "text":
                     return block["text"]?.string.flatMap { $0.isEmpty ? nil : .assistantText($0) }
+                case "thinking":
+                    return .thinking(block["thinking"]?.string ?? "")
                 case "tool_use":
                     guard let id = block["id"]?.string, let name = block["name"]?.string else { return nil }
-                    return .toolCall(ToolCall(id: id, name: name, input: block["input"] ?? .null))
+                    return .toolCall(ToolCall(id: id, name: name, input: block["input"] ?? .null, parentToolUseID: json["parent_tool_use_id"]?.string))
                 default:
                     return nil
                 }
@@ -200,6 +223,33 @@ public enum ClaudeEvent: Sendable, Hashable {
         ]
         if let detail { object["detail"] = .string(detail) }
         return JSONValue.object(object).compactJSON
+    }
+
+    private static func streamEvent(_ event: JSONValue?) -> ClaudeEvent? {
+        guard let event, let type = event["type"]?.string else { return nil }
+        switch type {
+        case "message_start":
+            return .messageStarted
+        case "message_stop":
+            return .messageStopped
+        case "content_block_start":
+            guard let index = event["index"]?.int, event["content_block"]?["type"]?.string == "thinking" else { return nil }
+            return .thinkingStarted(index: index)
+        case "content_block_delta":
+            guard let index = event["index"]?.int, let delta = event["delta"] else { return nil }
+            switch delta["type"]?.string {
+            case "text_delta":
+                return delta["text"]?.string.map { .assistantTextDelta(index: index, text: $0) }
+            case "thinking_delta":
+                return delta["thinking"]?.string.map { .thinkingDelta(index: index, text: $0) }
+            default:
+                return nil
+            }
+        case "content_block_stop":
+            return event["index"]?.int.map { .blockStopped(index: $0) }
+        default:
+            return nil
+        }
     }
 
     private static func contentBlocks(_ json: JSONValue) -> [JSONValue] {

@@ -257,6 +257,7 @@ import Testing
             switch entry.content {
             case .user: "user"
             case .assistant: "assistant"
+            case .thinking: "thinking"
             case .tool(let tool): "tool:\(tool.name)"
             case .notice(let notice, _): "notice:\(notice.rawValue)"
             case .interrupted: "interrupted"

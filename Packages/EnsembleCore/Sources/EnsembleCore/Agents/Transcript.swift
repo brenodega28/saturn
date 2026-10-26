@@ -6,6 +6,8 @@ public struct ToolActivity: Sendable, Hashable {
     public let input: JSONValue
     public var result: String?
     public var isError: Bool
+    public var startedAt: Date? = nil
+    public var finishedAt: Date? = nil
 
     public var isFinished: Bool { result != nil }
 
@@ -55,10 +57,27 @@ public struct ToolActivity: Sendable, Hashable {
     }
 }
 
+public struct ThinkingBlock: Sendable, Hashable {
+    public var text: String
+    public var isFinished: Bool
+    public var estimatedTokens: Int?
+    public var startedAt: Date?
+    public var finishedAt: Date?
+
+    public init(text: String, isFinished: Bool, estimatedTokens: Int? = nil, startedAt: Date? = nil, finishedAt: Date? = nil) {
+        self.text = text
+        self.isFinished = isFinished
+        self.estimatedTokens = estimatedTokens
+        self.startedAt = startedAt
+        self.finishedAt = finishedAt
+    }
+}
+
 public struct TranscriptEntry: Sendable, Hashable, Identifiable {
     public enum Content: Sendable, Hashable {
         case user(String)
         case assistant(String)
+        case thinking(ThinkingBlock)
         case tool(ToolActivity)
         case notice(EnsembleNotice, detail: String?)
         case interrupted
@@ -67,12 +86,15 @@ public struct TranscriptEntry: Sendable, Hashable, Identifiable {
 
     public let id: Int
     public var content: Content
+    public var isStreaming: Bool = false
 }
 
 public struct Transcript: Sendable, Hashable {
     public private(set) var entries: [TranscriptEntry] = []
     public private(set) var session: SessionInfo?
     private var toolIndex: [String: Int] = [:]
+
+    public var liveEntry: TranscriptEntry? { nil }
 
     public init() {}
 

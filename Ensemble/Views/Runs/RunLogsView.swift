@@ -120,7 +120,7 @@ private struct AgentTail: View {
             HStack(spacing: 8) {
                 AgentAvatar(size: 20, appearance: RoleAppearance(role: model.role(for: live, in: project)))
                 Text(live.name).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
-                StatusLabel(status: model.displayStatus(of: live), isQueued: session?.isQueued == true)
+                StatusLabel(status: model.displayStatus(of: live), isQueued: session?.isQueued == true, session: session)
                 Spacer(minLength: 6)
                 Button("Open Session") { model.openAgentSession(agent, in: project) }
                     .buttonStyle(PillButtonStyle(height: 24))

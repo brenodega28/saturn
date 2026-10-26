@@ -6,6 +6,7 @@ public enum WorkflowDriverError: Error, LocalizedError, Equatable {
     case notReady(String)
     case missingRole(String)
     case agentFailed(agent: String, message: String)
+    case setupFailed(agent: String, message: String)
     case missingHandoff(agent: String, tool: String)
     case mergeConflict(branch: String, files: [String])
     case unsafeMerge(String)
@@ -19,6 +20,8 @@ public enum WorkflowDriverError: Error, LocalizedError, Equatable {
             "The role “\(role)” doesn’t exist in this project."
         case .agentFailed(let agent, let message):
             "\(agent) failed: \(message)"
+        case .setupFailed(let agent, let message):
+            "The setup script failed in \(agent)’s worktree. \(message)\nFix the script in Settings › Workspaces before retrying."
         case .missingHandoff(let agent, let tool):
             "\(agent) ended its turn twice without calling \(tool)."
         case .mergeConflict(let branch, let files):
@@ -318,7 +321,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
         }
 
-        let session = try await stepAgent(for: role, context: context, runId: runId, git: git, worktree: qaWorktree, expected: expected)
+        let session = try await reportingSetupFailure(runId: runId, projectId: context.project.id) {
+            try await stepAgent(for: role, context: context, runId: runId, git: git, worktree: qaWorktree, expected: expected)
+        }
         let startCost = session.agent.costUSD
         clearHandoffs(session.id)
         let resuming = context.isResuming && session.transcript.session != nil
@@ -374,16 +379,19 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         for (task, copy) in assignments {
             let key = copy == 0 ? task.id : "\(task.id)#\(copy + 1)"
             if let session = existing.first(where: { $0.agent.planTaskId == key }) {
+                try await reportingSetupFailure(runId: runId, projectId: project.id) { try await runtime.repairSetup(of: session) }
                 builders.append((session, task))
                 continue
             }
             guard let role = config.role(task.role).flatMap({ $0.editsCode ? $0 : nil }) ?? fallbackRole else {
                 throw WorkflowDriverError.missingRole(task.role)
             }
-            let session = try await runtime.createRunAgent(
-                in: project, role: role, runId: runId, runStepId: context.step.runStepID,
-                planTaskId: key, task: task.title, git: git
-            )
+            let session = try await reportingSetupFailure(runId: runId, projectId: project.id) {
+                try await runtime.createRunAgent(
+                    in: project, role: role, runId: runId, runStepId: context.step.runStepID,
+                    planTaskId: key, task: task.title, git: git
+                )
+            }
             builders.append((session, task))
         }
 
@@ -600,8 +608,20 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             if role.canSpawn { return !agent.readOnly || agent.worktreePath == nil }
             return role.editsCode ? !agent.readOnly : agent.readOnly && agent.worktreePath == nil
         }
-        if let reusable { return reusable }
+        if let reusable {
+            try await runtime.repairSetup(of: reusable)
+            return reusable
+        }
         return try await runtime.createRunAgent(in: context.project, role: role, runId: runId, runStepId: context.runStepID, task: context.inputs.taskTitle, git: git)
+    }
+
+    private func reportingSetupFailure<Value>(runId: Int64, projectId: Int64?, _ operation: () async throws -> Value) async throws -> Value {
+        do {
+            return try await operation()
+        } catch let error as SetupScriptError {
+            let failed = (try? runtime.runSessions(runId: runId, projectId: projectId ?? -1))?.last { runtime.setupFailed($0) }
+            throw WorkflowDriverError.setupFailed(agent: failed?.agent.name ?? "a new agent", message: error.localizedDescription)
+        }
     }
 
     func expectedHandoff(for context: StepContext, role: RoleDefinition, workflow: WorkflowDefinition?) -> ExpectedHandoff {

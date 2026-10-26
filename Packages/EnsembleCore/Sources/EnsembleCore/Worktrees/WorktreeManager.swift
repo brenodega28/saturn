@@ -6,9 +6,11 @@ public enum WorktreeError: Error, LocalizedError, Equatable {
     case notFound(agent: String)
     case outsideCrewDirectory(URL)
     case noCommits
+    case branchMissing(String)
 
     public var errorDescription: String? {
         switch self {
+        case .branchMissing(let branch): "The branch \(branch) no longer exists."
         case .invalidName(let name): "“\(name)” can’t be used as a worktree name."
         case .alreadyExists(let agent): "A worktree for \(agent) already exists."
         case .notFound(let agent): "No worktree found for \(agent)."
@@ -58,6 +60,25 @@ public struct WorktreeManager: Sendable {
         try FileManager.default.createDirectory(at: crewDirectory, withIntermediateDirectories: true)
         try await git.run(["worktree", "add", "-b", branch, path.path] + (baseRef.map { [$0] } ?? []), in: repository)
 
+        guard let worktree = try await list().first(where: { Self.samePath($0.path, path) }) else {
+            throw WorktreeError.notFound(agent: path.lastPathComponent)
+        }
+        return worktree
+    }
+
+    @discardableResult
+    public func restore(at path: URL, branch: String) async throws -> Worktree {
+        guard isInsideCrewDirectory(path) else { throw WorktreeError.outsideCrewDirectory(path) }
+        guard !FileManager.default.fileExists(atPath: path.path) else {
+            throw WorktreeError.alreadyExists(agent: path.lastPathComponent)
+        }
+        guard try await git.hasCommit("refs/heads/\(branch)", in: repository) else {
+            throw WorktreeError.branchMissing(branch)
+        }
+        try await ensureExcluded()
+        try await git.run(["worktree", "prune"], in: repository)
+        try FileManager.default.createDirectory(at: crewDirectory, withIntermediateDirectories: true)
+        try await git.run(["worktree", "add", path.path, branch], in: repository)
         guard let worktree = try await list().first(where: { Self.samePath($0.path, path) }) else {
             throw WorktreeError.notFound(agent: path.lastPathComponent)
         }

@@ -93,15 +93,34 @@ struct AgentAvatar: View {
 struct StatusLabel: View {
     let status: AgentStatus
     var isQueued = false
+    var retryingAt: Date?
+    var apiRetry: APIRetry?
+
+    init(status: AgentStatus, isQueued: Bool = false, session: AgentSession? = nil) {
+        self.status = status
+        self.isQueued = isQueued
+        self.retryingAt = session?.retryingAt
+        self.apiRetry = session?.isRunning == true ? session?.apiRetry : nil
+    }
 
     var body: some View {
-        let color = isQueued ? Theme.neutral : status.color
         HStack(spacing: 6) {
             StatusDot(color)
-            Text(isQueued ? "Queued" : status.label)
+            Text(text)
         }
         .font(.system(size: 12, weight: .semibold))
         .foregroundStyle(color)
+    }
+
+    private var text: String {
+        if let retryingAt { return "Retrying at \(retryingAt.formatted(date: .omitted, time: .shortened))" }
+        if let apiRetry { return "Retrying \(apiRetry.attempt) of \(apiRetry.maxRetries)" }
+        return isQueued ? "Queued" : status.label
+    }
+
+    private var color: Color {
+        if retryingAt != nil || apiRetry != nil { return Theme.warning }
+        return isQueued ? Theme.neutral : status.color
     }
 }
 

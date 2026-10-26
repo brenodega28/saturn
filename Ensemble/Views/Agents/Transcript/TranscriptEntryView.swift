@@ -43,7 +43,7 @@ struct TranscriptEntryView: View {
         case .interrupted:
             TranscriptNotice(text: "Interrupted", color: Theme.warning)
         case .notice(let notice, let detail):
-            TranscriptNotice(text: Self.text(for: notice, detail: detail), color: notice == .failed ? Theme.danger : Theme.secondaryText)
+            TranscriptNotice(text: Self.text(for: notice, detail: detail), color: Self.color(for: notice))
         case .turnFinished(let result):
             TranscriptNotice(text: Self.summary(of: result), color: Theme.tertiaryText)
         }
@@ -59,9 +59,19 @@ struct TranscriptEntryView: View {
         case .interrupted: "Interrupted"
         case .takenOver: "You took over the worktree"
         case .handedBack: "Handed back to the agent"
+        case .retrying: "Retrying"
+        case .restoringWorktree: "Restoring the worktree"
         case .failed: "Failed"
         }
         return detail.map { "\(base) · \($0)" } ?? base
+    }
+
+    static func color(for notice: EnsembleNotice) -> Color {
+        switch notice {
+        case .failed: Theme.danger
+        case .retrying, .restoringWorktree: Theme.warning
+        default: Theme.secondaryText
+        }
     }
 
     static func summary(of result: TurnResult) -> String {

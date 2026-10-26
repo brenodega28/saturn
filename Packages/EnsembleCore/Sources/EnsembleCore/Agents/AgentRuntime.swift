@@ -68,8 +68,13 @@ public final class AgentRuntime {
     public var mcpServer: EnsembleMCPServer?
     public var handoffTools: @MainActor (Agent) -> Set<HandoffTool> = { _ in [] }
     public var worktreePrepared: (@MainActor (WorktreePreparation) async throws -> Void)?
+    public var gitProvider: @MainActor () -> GitClient? = { nil }
+    public var apiRetryDelays: [Duration] = [.seconds(60), .seconds(300), .seconds(900), .seconds(1800), .seconds(3600)]
+    public var crashRestartLimit = 1
     public internal(set) var settingUp: Set<Int64> = []
     public private(set) var usageRevision = 0
+    public private(set) var apiCooldownUntil: Date?
+    @ObservationIgnored private var cooldownTask: Task<Void, Never>?
 
     @ObservationIgnored let secrets: any SecretStore
     @ObservationIgnored let launcher: any AgentProcessLauncher
@@ -365,8 +370,29 @@ public final class AgentRuntime {
     func shouldQueue(_ session: AgentSession) -> Bool {
         let projectId = session.agent.projectId
         let waiting = turnQueue[projectId] ?? []
-        if waiting.contains(session.id) { return true }
+        if waiting.contains(session.id) || isCoolingDown { return true }
         return !waiting.isEmpty || runningCount(inProject: projectId) >= maxConcurrentAgents(inProject: projectId)
+    }
+
+    public var isCoolingDown: Bool {
+        apiCooldownUntil.map { $0 > .now } ?? false
+    }
+
+    func coolDown(for delay: Duration) -> Date {
+        let until = Date.now.addingTimeInterval(delay / .seconds(1))
+        if let current = apiCooldownUntil, current >= until { return current }
+        apiCooldownUntil = until
+        cooldownTask?.cancel()
+        cooldownTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled else { return }
+            self.apiCooldownUntil = nil
+            self.cooldownTask = nil
+            for projectId in self.turnQueue.keys {
+                self.startQueuedTurns(inProject: projectId)
+            }
+        }
+        return until
     }
 
     func enqueue(_ session: AgentSession) {
@@ -381,6 +407,7 @@ public final class AgentRuntime {
     }
 
     public func startQueuedTurns(inProject projectId: Int64) {
+        guard !isCoolingDown else { return }
         let limit = maxConcurrentAgents(inProject: projectId)
         while runningCount(inProject: projectId) < limit, let next = turnQueue[projectId]?.first {
             turnQueue[projectId]?.removeFirst()

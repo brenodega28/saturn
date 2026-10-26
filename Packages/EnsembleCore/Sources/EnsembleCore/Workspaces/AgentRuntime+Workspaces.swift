@@ -60,6 +60,12 @@ extension AgentRuntime {
         startAfterPreparing(session, startTurn: startTurn)
     }
 
+    public func repairSetup(of session: AgentSession) async throws {
+        guard setupFailed(session) else { return }
+        session.clearSetupFailure()
+        try await prepareWorktree(of: session)
+    }
+
     public func prepareIntegrationWorktree(at path: URL, name: String, projectId: Int64) async throws {
         guard needsSetup(projectId: projectId) else { return }
         let key = realPath(of: path)
@@ -87,6 +93,20 @@ extension AgentRuntime {
         if let id = owner?.id { settingUp.insert(id) }
         defer { if let id = owner?.id { settingUp.remove(id) } }
         try await hook(preparation)
+    }
+
+    func canRestoreWorktree(of agent: Agent) -> Bool {
+        !agent.readOnly && agent.worktreeURL != nil && agent.branch != nil && gitProvider() != nil
+    }
+
+    func restoreWorktree(of session: AgentSession) async throws {
+        let agent = session.agent
+        guard let git = gitProvider(), let path = agent.worktreeURL, let branch = agent.branch,
+              let project = try database.project(id: agent.projectId) else {
+            throw AgentLaunchError.missingWorktree(agent.name)
+        }
+        try await WorktreeManager(repository: project.url, git: git).restore(at: path, branch: branch)
+        try await prepareWorktree(of: session)
     }
 
     func nextPort(forProject projectId: Int64) throws -> Int? {

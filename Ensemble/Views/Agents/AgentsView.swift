@@ -166,7 +166,7 @@ private struct AgentCard: View {
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 8)
-                        StatusLabel(status: model.displayStatus(of: agent), isQueued: session.isQueued)
+                        StatusLabel(status: model.displayStatus(of: agent), isQueued: session.isQueued, session: session)
                     }
                     Text(headline)
                         .font(.system(size: 13))

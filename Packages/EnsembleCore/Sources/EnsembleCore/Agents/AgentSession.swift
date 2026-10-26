@@ -32,7 +32,14 @@ public final class AgentSession: Identifiable {
     public private(set) var transcript: Transcript
     public private(set) var queuedTurns: [AgentTurn] = []
     public private(set) var waitingTurn: AgentTurn?
+    public private(set) var apiRetry: APIRetry?
     @ObservationIgnored private var deferredTurn: AgentTurn?
+    @ObservationIgnored private var currentTurn: AgentTurn?
+    @ObservationIgnored private var apiErrorInProcess: ClaudeAPIError?
+    @ObservationIgnored private var sessionStartedInProcess = false
+    @ObservationIgnored private var apiFailures = 0
+    @ObservationIgnored private var crashRestarts = 0
+    @ObservationIgnored private var isRestoringWorktree = false
 
     @ObservationIgnored private unowned let runtime: AgentRuntime
     @ObservationIgnored private let log: TranscriptLog
@@ -60,6 +67,10 @@ public final class AgentSession: Identifiable {
     public var isStopping: Bool { stopTarget != nil }
 
     public var isQueued: Bool { waitingTurn != nil }
+
+    public var retryingAt: Date? {
+        isQueued && runtime.isCoolingDown ? runtime.apiCooldownUntil : nil
+    }
 
     public var canResume: Bool {
         handle == nil && !isQueued && [.paused, .interrupted, .stopped, .failed].contains(agent.status)
@@ -100,7 +111,7 @@ public final class AgentSession: Identifiable {
     public func send(_ message: String, images: [ChatAttachment] = []) {
         let turn = AgentTurn(message.trimmingCharacters(in: .whitespacesAndNewlines), images: images.filter(\.isImage))
         guard !turn.text.isEmpty || !turn.images.isEmpty else { return }
-        if handle != nil || isQueued {
+        if handle != nil || isQueued || isRestoringWorktree {
             queuedTurns.append(turn)
         } else {
             beginTurn(with: turn)
@@ -121,7 +132,7 @@ public final class AgentSession: Identifiable {
     }
 
     public func resume() {
-        guard handle == nil, !isQueued else { return }
+        guard handle == nil, !isQueued, !isRestoringWorktree else { return }
         let turn = deferredTurn ?? AgentTurn(transcript.session == nil && !agent.task.isEmpty ? agent.task : Self.continuePrompt)
         record(notice: .resumed)
         beginTurn(with: turn)
@@ -212,6 +223,8 @@ public final class AgentSession: Identifiable {
         restartAfterStop = false
         agent.sessionId = nil
         deferredTurn = nil
+        apiFailures = 0
+        crashRestarts = 0
         record(notice: .restarted)
         guard !agent.task.isEmpty else {
             agent.status = .idle
@@ -262,8 +275,9 @@ public final class AgentSession: Identifiable {
         launchTurn(with: turn)
     }
 
-    private func launchTurn(with turn: AgentTurn) {
+    private func launchTurn(with turn: AgentTurn, mayRestoreWorktree: Bool = true) {
         latestReply = nil
+        currentTurn = turn
         guard let executable = runtime.claudeExecutable else {
             fail("Claude Code isn’t available. Check Settings › Tools.")
             return
@@ -272,7 +286,11 @@ public final class AgentSession: Identifiable {
         do {
             setup = try runtime.turnSetup(for: agent)
         } catch {
-            fail(error.localizedDescription)
+            if case AgentLaunchError.missingWorktree = error, mayRestoreWorktree, runtime.canRestoreWorktree(of: agent) {
+                restoreWorktree(thenLaunch: turn)
+            } else {
+                fail(error.localizedDescription)
+            }
             return
         }
 
@@ -313,6 +331,9 @@ public final class AgentSession: Identifiable {
             pendingFailure = nil
             costInProcess = 0
             turnCompletedInProcess = false
+            apiErrorInProcess = nil
+            sessionStartedInProcess = false
+            apiRetry = nil
             try handle.send(line: ClaudeEvent.userLine(turn.text, images: turn.images))
             record(line: ClaudeEvent.userLine(turn.text, images: turn.images, includingImageData: false))
             #if DEBUG
@@ -347,22 +368,38 @@ public final class AgentSession: Identifiable {
                 log.append(line)
             }
             for event in events {
-                if case .sessionStarted(let info) = event, let mode = launchedMode,
-                   case let keySource = info.apiKeySource ?? "unreported", keySource != mode.expectedKeySource {
-                    pendingFailure = ProviderError.wrongCredentials(expected: mode, actualSource: keySource).localizedDescription
-                    source.kill()
+                if case .sessionStarted(let info) = event {
+                    sessionStartedInProcess = true
+                    if let mode = launchedMode, case let keySource = info.apiKeySource ?? "unreported", keySource != mode.expectedKeySource {
+                        pendingFailure = ProviderError.wrongCredentials(expected: mode, actualSource: keySource).localizedDescription
+                        source.kill()
+                    }
                 }
                 transcript.apply(event)
-                if case .assistantText(let text) = event {
+                switch event {
+                case .assistantText(let text):
                     latestReply = text
-                }
-                if case .turnCompleted(let result) = event {
+                case .apiRetry(let retry):
+                    apiRetry = retry
+                case .apiError(let error):
+                    apiErrorInProcess = error
+                    latestReply = nil
+                case .turnCompleted(let result):
+                    apiRetry = nil
+                    if result.isAPIError {
+                        var error = apiErrorInProcess ?? ClaudeAPIError(kind: "unknown", message: result.text ?? "")
+                        error.status = error.status ?? result.apiErrorStatus
+                        apiErrorInProcess = error
+                        latestReply = nil
+                    }
                     account(result)
                     source.closeInput()
                     if let reply = latestReply?.trimmingCharacters(in: .whitespacesAndNewlines), !reply.isEmpty {
                         latestReply = nil
                         runtime.turnReplied(agent, reply)
                     }
+                default:
+                    break
                 }
             }
         case .exited(let code, let standardError):
@@ -408,6 +445,7 @@ public final class AgentSession: Identifiable {
     private func processEnded(code: Int32, standardError: String) {
         handle = nil
         agent.processID = nil
+        apiRetry = nil
         defer { runtime.startQueuedTurns(inProject: agent.projectId) }
 
         if let failure = pendingFailure {
@@ -427,7 +465,15 @@ public final class AgentSession: Identifiable {
             return
         }
 
+        if let error = apiErrorInProcess {
+            apiErrorInProcess = nil
+            recover(from: error)
+            return
+        }
+
         if turnCompletedInProcess {
+            apiFailures = 0
+            crashRestarts = 0
             agent.status = .idle
             persist()
             if !queuedTurns.isEmpty {
@@ -438,8 +484,59 @@ public final class AgentSession: Identifiable {
             return
         }
 
-        let message = standardError.trimmingCharacters(in: .whitespacesAndNewlines)
-        fail(message.isEmpty ? "Claude Code exited with code \(code) before finishing the turn." : message)
+        let output = standardError.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = output.isEmpty ? "Claude Code exited with code \(code) before finishing the turn." : output
+        if sessionStartedInProcess, crashRestarts < runtime.crashRestartLimit {
+            crashRestarts += 1
+            record(notice: .retrying, detail: "Claude Code stopped unexpectedly, so Ensemble restarted the turn. \(message)")
+            beginTurn(with: retryTurn())
+            return
+        }
+        crashRestarts = 0
+        fail(message)
+    }
+
+    private func recover(from error: ClaudeAPIError) {
+        guard error.isTransient else {
+            apiFailures = 0
+            fail("\(error.summary). \(error.message)")
+            return
+        }
+        let delays = runtime.apiRetryDelays
+        apiFailures += 1
+        guard apiFailures <= delays.count else {
+            apiFailures = 0
+            fail("\(error.summary), and \(delays.count) retries didn’t get through. \(error.message)")
+            return
+        }
+        let until = runtime.coolDown(for: delays[apiFailures - 1])
+        let time = until.formatted(date: .omitted, time: .standard)
+        record(notice: .retrying, detail: "\(error.summary). Trying again at \(time) (retry \(apiFailures) of \(delays.count)).")
+        agent.lastError = error.message
+        beginTurn(with: retryTurn())
+    }
+
+    private func retryTurn() -> AgentTurn {
+        sessionStartedInProcess ? AgentTurn(Self.continuePrompt) : (currentTurn ?? AgentTurn(Self.continuePrompt))
+    }
+
+    private func restoreWorktree(thenLaunch turn: AgentTurn) {
+        agent.status = .working
+        record(notice: .restoringWorktree, detail: "\(agent.worktreePath ?? "The worktree") was missing, so Ensemble is recreating it from \(agent.branch ?? "its branch").")
+        persist()
+        isRestoringWorktree = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.isRestoringWorktree = false }
+            do {
+                try await self.runtime.restoreWorktree(of: self)
+                guard self.agent.status == .working, self.handle == nil else { return }
+                self.launchTurn(with: turn, mayRestoreWorktree: false)
+            } catch {
+                guard self.agent.status != .failed else { return }
+                self.fail("The worktree for \(self.agent.name) is missing and couldn’t be restored. \(error.localizedDescription)")
+            }
+        }
     }
 
     private func fail(_ message: String) {

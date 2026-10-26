@@ -37,8 +37,11 @@ public struct TurnResult: Sendable, Hashable {
     public let usage: TokenUsage
     public let permissionDenials: [String]
     public let durationMS: Int
+    public var terminalReason: String? = nil
+    public var apiErrorStatus: Int? = nil
 
     public var wasInterrupted: Bool { subtype == "error_during_execution" }
+    public var isAPIError: Bool { isError && terminalReason == "api_error" }
 }
 
 public struct SessionInfo: Sendable, Hashable {
@@ -66,6 +69,8 @@ public enum EnsembleNotice: String, Sendable, Hashable, Codable {
     case interrupted
     case takenOver
     case handedBack
+    case retrying
+    case restoringWorktree
     case failed
 }
 
@@ -85,10 +90,12 @@ public enum ClaudeEvent: Sendable, Hashable {
     case thinkingDelta(index: Int, text: String)
     case blockStopped(index: Int)
     case messageStopped
+    case apiRetry(APIRetry)
+    case apiError(ClaudeAPIError)
 
     public var isPartial: Bool {
         switch self {
-        case .messageStarted, .thinkingStarted, .assistantTextDelta, .thinkingDelta, .blockStopped, .messageStopped: true
+        case .messageStarted, .thinkingStarted, .assistantTextDelta, .thinkingDelta, .blockStopped, .messageStopped, .apiRetry: true
         default: false
         }
     }
@@ -102,6 +109,15 @@ public enum ClaudeEvent: Sendable, Hashable {
             if json["subtype"]?.string == "thinking_tokens" {
                 return json["estimated_tokens"]?.int.map { [.thinkingTokens($0)] } ?? []
             }
+            if json["subtype"]?.string == "api_retry" {
+                return [.apiRetry(APIRetry(
+                    attempt: json["attempt"]?.int ?? 0,
+                    maxRetries: json["max_retries"]?.int ?? 0,
+                    delayMS: json["retry_delay_ms"]?.int ?? 0,
+                    status: json["error_status"]?.int,
+                    error: json["error"]?.string
+                ))]
+            }
             guard json["subtype"]?.string == "init", let sessionID = json["session_id"]?.string else { return [] }
             return [.sessionStarted(SessionInfo(
                 sessionID: sessionID,
@@ -111,6 +127,10 @@ public enum ClaudeEvent: Sendable, Hashable {
                 apiKeySource: json["apiKeySource"]?.string
             ))]
         case "assistant":
+            if json["is_api_error_message"]?.bool == true {
+                let text = contentBlocks(json).compactMap { $0["text"]?.string }.joined(separator: "\n")
+                return [.apiError(ClaudeAPIError(kind: json["error"]?.string ?? "unknown", message: text))]
+            }
             return contentBlocks(json).compactMap { block in
                 switch block["type"]?.string {
                 case "text":
@@ -168,7 +188,9 @@ public enum ClaudeEvent: Sendable, Hashable {
                     cacheWrite: usage?["cache_creation_input_tokens"]?.int ?? 0
                 ),
                 permissionDenials: (json["permission_denials"]?.array ?? []).compactMap { $0["tool_name"]?.string },
-                durationMS: json["duration_ms"]?.int ?? 0
+                durationMS: json["duration_ms"]?.int ?? 0,
+                terminalReason: json["terminal_reason"]?.string,
+                apiErrorStatus: json["api_error_status"]?.int
             ))]
         case "ensemble":
             guard let notice = json["event"]?.string.flatMap(EnsembleNotice.init(rawValue:)) else { return [] }

@@ -6,6 +6,7 @@ extension AppModel {
         agents.worktreePrepared = { [weak agents] preparation in
             try await agents?.runSetupScript(preparation)
         }
+        agents.gitProvider = { [weak self] in self?.git }
         idleCleanup.gitProvider = { [weak self] in self?.git }
     }
 

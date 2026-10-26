@@ -66,7 +66,7 @@ private struct RunAgentRow: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 6)
-                StatusLabel(status: model.displayStatus(of: live), isQueued: session?.isQueued == true)
+                StatusLabel(status: model.displayStatus(of: live), isQueued: session?.isQueued == true, session: session)
             }
             if let branch = live.branch {
                 Label(branch, systemImage: "arrow.triangle.branch")

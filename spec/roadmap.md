@@ -215,7 +215,7 @@ Goal: ready for daily use.
 - [x] Usage screen: spend by project, run, role and model; budgets per run and per month with alerts
 - [x] Settings › Workspaces: setup script per worktree (install deps, migrate DB), port allocation per worktree, cleanup policy
 - [x] Dev-server status and port shown in the Agent session panel
-- [ ] Failure recovery across the board: rate limits, crashed agents, missing worktrees, failed setup scripts
+- [x] Failure recovery across the board: rate limits, crashed agents, missing worktrees, failed setup scripts
 - [x] Templates on the Welcome screen include roles **and** a workflow (Django + React, Solo with review, Led squad)
 
 **Exit check:** a week of real use on one project with no lost runs and no surprise spend.

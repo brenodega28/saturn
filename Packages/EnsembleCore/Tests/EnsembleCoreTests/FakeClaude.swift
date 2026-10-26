@@ -139,6 +139,17 @@ enum FakeClaude {
       printf '{"type":"system","subtype":"init","session_id":"%s","model":"claude-fake-1","cwd":"%s","claude_code_version":"9.9.9","apiKeySource":"%s"}\n' "$session" "$PWD" "$source"
       if [ "$mode" = "wrongsource" ]; then sleep 5; fi
     }
+    api_failure() {
+      printf '{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"retry_delay_ms":500,"error_status":%s,"error":"%s"}\n' "$1" "$2"
+      printf '{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"API Error: %s fake %s"}]},"error":"%s","is_api_error_message":true}\n' "$1" "$2" "$2"
+      printf '{"type":"result","subtype":"success","is_error":true,"result":"API Error: %s fake %s","terminal_reason":"api_error","api_error_status":%s,"total_cost_usd":0,"duration_ms":1,"usage":{"input_tokens":0,"output_tokens":0},"permission_denials":[]}\n' "$1" "$2" "$1"
+    }
+    failing() {
+      remaining=1
+      [ -f "$FAKE_DIR/remaining" ] && remaining="$(cat "$FAKE_DIR/remaining")"
+      [ "$remaining" -gt 0 ] || return 1
+      echo $((remaining - 1)) > "$FAKE_DIR/remaining"
+    }
     result() {
       cost=$((cost + 1))
       printf '{"type":"result","subtype":"%s","is_error":%s,"result":"ok","total_cost_usd":0.0%s,"duration_ms":5,"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":100,"cache_creation_input_tokens":20},"permission_denials":[]}\n' "$1" "$2" "$cost"
@@ -153,6 +164,10 @@ enum FakeClaude {
         *'"type":"user"'*)
           init
           if [ "$mode" = "crash" ]; then echo "boom: invalid api key" >&2; exit 3; fi
+          if [ "$mode" = "crashonce" ] && failing; then echo "claude: killed" >&2; exit 139; fi
+          if [ "$mode" = "ratelimit" ] && failing; then api_failure 429 rate_limit; continue; fi
+          if [ "$mode" = "overloaded" ] && failing; then api_failure 529 server_error; continue; fi
+          if [ "$mode" = "autherror" ] && failing; then api_failure 401 authentication_failed; continue; fi
           if [ "$mode" = "workflow" ]; then
             workflow_turn "$line" "$@"
             result success false

@@ -204,6 +204,8 @@ public struct Transcript: Sendable, Hashable {
             closeStreaming(at: now)
             closeUnfinishedTools(at: now)
             append(.notice(notice, detail: detail))
+        case .apiRetry, .apiError:
+            break
         }
     }
 

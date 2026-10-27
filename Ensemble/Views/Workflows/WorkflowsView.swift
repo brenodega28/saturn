@@ -5,6 +5,7 @@ import SwiftUI
 struct WorkflowsView: View {
     @Environment(AppModel.self) private var model
     let project: Project
+    @Environment(\.isInWorkbench) private var isInWorkbench
     @State private var editor: WorkflowEditor?
     @State private var pendingAction: PendingAction?
     @State private var isConfirmingDelete = false
@@ -59,6 +60,9 @@ struct WorkflowsView: View {
         .onChange(of: project.id) { _, _ in
             editor = nil
             openFirst(in: model.config(for: project))
+        }
+        .onChange(of: editor.map(ObjectIdentifier.init), initial: true) {
+            if let id = project.id { model.workflowEditors[id] = editor }
         }
         .onChange(of: editor?.selection) { _, selection in
             isInspectorPanelOpen = selection != nil && selection != .workflow
@@ -117,7 +121,7 @@ struct WorkflowsView: View {
     }
 
     private func editorArea(_ editor: WorkflowEditor, config: ProjectConfig, mode: WorkflowsLayoutMode, height: CGFloat) -> some View {
-        let issues = liveIssues(editor, config: config)
+        let issues = model.workflowIssues(editor, config: config)
         let runs = editor.saved.map { model.activeRuns(ofWorkflow: $0.id, in: project) } ?? []
         let inspector = WorkflowInspector(
             editor: editor,
@@ -125,11 +129,14 @@ struct WorkflowsView: View {
             checks: config.checks?.checks ?? [],
             issues: issues,
             activeRuns: runs,
-            suggestedLabels: suggestedLabels(config)
+            suggestedLabels: model.suggestedWorkflowLabels(config, project: project)
         )
         return VStack(alignment: .leading, spacing: 12) {
             header(editor, config: config, issueCount: issues.count, mode: mode)
-            if mode.showsInspectorColumn {
+            if isInWorkbench {
+                WorkflowCanvas(editor: editor, roles: config.roles)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if mode.showsInspectorColumn {
                 HStack(alignment: .top, spacing: WorkflowsLayoutMode.columnSpacing) {
                     WorkflowCanvas(editor: editor, roles: config.roles)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -280,23 +287,6 @@ struct WorkflowsView: View {
                 .disabled(!editor.isDirty || editor.draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
                 .help(issueCount > 0 ? "Save anyway; the problems are listed in the inspector" : "Write the workflow to .ensemble/workflows")
         }
-    }
-
-    private func liveIssues(_ editor: WorkflowEditor, config: ProjectConfig) -> [ConfigIssue] {
-        var draft = editor.draft
-        if editor.isNew {
-            draft.id = ProjectConfigLoader.newWorkflowID(for: draft.name, existing: config.workflows)
-        }
-        var issues = ConfigValidator.validate(ProjectConfig(roles: config.roles, workflows: [draft]))
-        if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
-            issues.append(ConfigIssue(file: "", message: "a workflow needs a name"))
-        }
-        return issues
-    }
-
-    private func suggestedLabels(_ config: ProjectConfig) -> [String] {
-        let labels = config.workflows.flatMap(\.trigger.labels) + project.settings.githubMappings.map(\.label)
-        return Array(Set(labels)).sorted()
     }
 
     private func confirmLeaving(_ action: @escaping () -> Void) {

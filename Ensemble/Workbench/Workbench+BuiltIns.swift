@@ -39,6 +39,7 @@ extension WorkbenchRegistry {
         register(NavigatorTabSpec(id: "find", title: "Find", systemImage: "magnifyingglass", order: 80, showsScope: true) {
             AnyView(FindNavigator())
         })
+        registerInspectors()
         registerToolbar()
         registerStatusItems()
         registerViewCommands()
@@ -85,6 +86,10 @@ extension WorkbenchRegistry {
                         JumpOption(title: $0.title, isCurrent: $0 == tab, item: .section($0, in: id))
                     }),
                 ]
+            },
+            inspectorSubject: { item, model in
+                guard item.tab == .workflows, let project = item.project, let editor = model.workflowEditors[project] else { return nil }
+                return .step(project: project, workflow: editor.draft.id, step: editor.selection.nodeID ?? "")
             },
             accessory: { item in
                 AnyView(ProjectAccessoryHost(item: item))

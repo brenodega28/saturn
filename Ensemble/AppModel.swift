@@ -100,6 +100,7 @@ final class AppModel {
     var paletteMode: PaletteMode = .everything
     var testRunRequest: TestRunRequest?
     var settingsSections: [Int64: SettingsSection] = [:]
+    var workflowEditors: [Int64: WorkflowEditor] = [:]
     let leadChat: LeadChat
     let directChat: DirectChat
     var chatTargets: [Int64: ChatTarget] = [:]

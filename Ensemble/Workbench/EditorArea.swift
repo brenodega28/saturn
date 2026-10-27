@@ -46,6 +46,7 @@ struct EditorContent: View {
             }
         }
         .environment(\.showsScreenHeader, false)
+        .environment(\.isInWorkbench, true)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

@@ -7,6 +7,7 @@ struct AgentSessionView: View {
     let session: AgentSession
     let project: Project
     @AppStorage("preferredEditor") private var preferredEditor = ""
+    @Environment(\.isInWorkbench) private var isInWorkbench
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -22,8 +23,10 @@ struct AgentSessionView: View {
                         .disabled(model.agents.isSettingUp(session))
                 }
                 .frame(maxWidth: .infinity)
-                AgentSidePanel(session: session, project: project)
-                    .frame(width: 300)
+                if !isInWorkbench {
+                    AgentSidePanel(session: session, project: project)
+                        .frame(width: 300)
+                }
             }
         }
     }

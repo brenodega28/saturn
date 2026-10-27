@@ -6,6 +6,10 @@ public protocol HandoffSink: AnyObject, Sendable {
     func receive(_ message: HandoffMessage, from agentID: Int64) async throws -> String
 }
 
+public protocol AgentHookSink: AnyObject, Sendable {
+    func handleHook(_ input: JSONValue, from agentID: Int64) async -> JSONValue
+}
+
 public struct MCPEndpoint: Sendable, Hashable {
     public let agentID: Int64
     public let token: String

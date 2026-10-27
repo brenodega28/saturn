@@ -321,7 +321,8 @@ public final class AgentSession: Identifiable {
             readOnly: setup.readOnly,
             additionalDirectories: setup.additionalDirectories,
             extraArguments: setup.extraArguments,
-            extraAllowedTools: setup.extraAllowedTools
+            extraAllowedTools: setup.extraAllowedTools,
+            hooks: setup.hooks
         )
 
         do {

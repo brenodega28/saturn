@@ -116,6 +116,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
     public var additionalDirectories: [URL]
     public var extraArguments: [String]
     public var extraAllowedTools: [String]
+    public var hooks: JSONValue?
 
     public init(
         executable: URL,
@@ -127,7 +128,8 @@ public struct ClaudeLaunch: Sendable, Equatable {
         readOnly: Bool = false,
         additionalDirectories: [URL] = [],
         extraArguments: [String] = [],
-        extraAllowedTools: [String] = []
+        extraAllowedTools: [String] = [],
+        hooks: JSONValue? = nil
     ) {
         self.executable = executable
         self.worktree = worktree
@@ -139,6 +141,15 @@ public struct ClaudeLaunch: Sendable, Equatable {
         self.additionalDirectories = additionalDirectories
         self.extraArguments = extraArguments
         self.extraAllowedTools = extraAllowedTools
+        self.hooks = hooks
+    }
+
+    public var settings: String {
+        guard let hooks, case .object(var fields)? = JSONValue.parse(AgentPermissions.projectSkillsOnlySettings) else {
+            return AgentPermissions.projectSkillsOnlySettings
+        }
+        fields["hooks"] = hooks
+        return JSONValue.object(fields).compactJSON
     }
 
     public var workingDirectory: URL { worktree }
@@ -159,7 +170,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
             "--permission-mode", "dontAsk",
             "--setting-sources", "project",
             "--tools", AgentPermissions.builtInTools(readOnly: readOnly, extraAllowedTools: extraAllowedTools).joined(separator: ","),
-            "--settings", AgentPermissions.projectSkillsOnlySettings,
+            "--settings", settings,
             "--append-system-prompt", systemPrompt,
         ]
         switch session {

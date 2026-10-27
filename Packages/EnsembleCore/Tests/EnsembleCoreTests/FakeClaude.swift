@@ -116,6 +116,26 @@ enum FakeClaude {
         call_tool submit_result '{"summary":"Resolved the conflict keeping both sides"}'
         return
       fi
+      if printf '%s' "$1" | grep -q 'Checks failed'; then
+        printf '%s\n' "$1" > "$FAKE_DIR/last-correction.txt"
+        echo fixed > status.txt
+        [ -f "$FAKE_DIR/touch-readme" ] && echo "weakened" >> README.md
+        git add -A >/dev/null 2>&1
+        git -c user.name=Fake -c user.email=fake@x commit -qm "Fix checks" >/dev/null 2>&1
+        call_tool submit_result '{"summary":"Fixed the checks"}'
+        return
+      fi
+      if printf '%s' "$1" | grep -q '## Test first'; then
+        echo "reproduces the bug" > repro.txt
+        [ -f "$FAKE_DIR/bad-repro" ] && echo fixed > fixed.txt
+        git add -A >/dev/null 2>&1
+        git -c user.name=Fake -c user.email=fake@x commit -qm "Reproduce: refunds over the captured total" >/dev/null 2>&1
+        echo fixed > fixed.txt
+        git add -A >/dev/null 2>&1
+        git -c user.name=Fake -c user.email=fake@x commit -qm "Fix refunds" >/dev/null 2>&1
+        call_tool submit_result '{"summary":"Reproduced, then fixed"}'
+        return
+      fi
       if printf '%s' "$1" | grep -q 'submit_result'; then
         name=$(basename "$PWD")
         file="$name.txt"

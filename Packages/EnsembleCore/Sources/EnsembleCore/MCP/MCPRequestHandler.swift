@@ -9,11 +9,13 @@ enum JSONRPCErrorCode: Int {
 
 struct MCPRequestHandler: Sendable {
     static let pathPrefix = "/mcp/"
+    static let hookPathPrefix = "/hooks/"
     static let supportedProtocolVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
     static let serverVersion = "1.0.0"
 
     let registry: MCPTokenRegistry
     let sink: any HandoffSink
+    var hooks: (any AgentHookSink)?
 
     static func isLoopbackHost(_ host: String?) -> Bool {
         guard let host else { return false }
@@ -26,6 +28,9 @@ struct MCPRequestHandler: Sendable {
             return .text(403, "Forbidden.")
         }
         let path = request.path
+        if path.hasPrefix(Self.hookPathPrefix) {
+            return await respondToHook(request, token: String(path.dropFirst(Self.hookPathPrefix.count)))
+        }
         guard path.hasPrefix(Self.pathPrefix) else { return .text(404, "Not found.") }
         let token = String(path.dropFirst(Self.pathPrefix.count))
         guard !token.isEmpty, !token.contains("/"), let grant = registry.grant(for: token) else {
@@ -51,6 +56,19 @@ struct MCPRequestHandler: Sendable {
 
         guard let reply = await reply(to: message, grant: grant) else { return HTTPResponse(status: 202) }
         return .json(reply)
+    }
+
+    private func respondToHook(_ request: HTTPRequest, token: String) async -> HTTPResponse {
+        guard let hooks, !token.isEmpty, !token.contains("/"), let grant = registry.grant(for: token) else {
+            return .text(404, "Not found.")
+        }
+        guard request.method == "POST" else {
+            return .text(405, "Use POST.", headers: [("Allow", "POST")])
+        }
+        guard let input = try? JSONDecoder().decode(JSONValue.self, from: request.body) else {
+            return .json(.object([:]))
+        }
+        return .json(await hooks.handleHook(input, from: grant.agentID))
     }
 
     func reply(to message: JSONValue, grant: MCPGrant) async -> JSONValue? {

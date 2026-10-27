@@ -72,6 +72,7 @@ extension StepType {
         case .condition: "diamond"
         case .approval: "person.fill.checkmark"
         case .notify: "bell"
+        case .check: "checkmark.shield"
         }
     }
 }

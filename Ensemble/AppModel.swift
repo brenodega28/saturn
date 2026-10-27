@@ -436,6 +436,7 @@ final class AppModel {
             let branch = try await git.currentBranch(in: project.url)
             projectStates[id] = ProjectState(branch: branch, worktrees: recovery.worktrees, recovery: recovery)
             reloadConfig(for: project)
+            _ = try? CheckSetupNotice.postIfNeeded(for: project, config: config(for: project), database: database)
         } catch {
             alert = AppAlert(title: "Couldn’t read worktrees for \(project.name)", message: error.localizedDescription)
         }

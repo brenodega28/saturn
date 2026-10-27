@@ -135,6 +135,7 @@ extension WorkflowDefinition {
         case .condition: "check"
         case .approval: "approve"
         case .notify: "notify"
+        case .check: "checks"
         }
     }
 
@@ -208,6 +209,7 @@ extension WorkflowDefinition {
         case .approval: [StepOutcome.approved, StepOutcome.changesRequested]
         case .agent, .spawn: [StepOutcome.approved, StepOutcome.changesRequested, StepOutcome.passed, StepOutcome.failed, StepOutcome.done]
         case .notify: [StepOutcome.done]
+        case .check: [StepOutcome.passed]
         }
     }
 

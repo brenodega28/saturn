@@ -4,6 +4,7 @@ import Foundation
 public protocol WorkflowDriver: AnyObject, Sendable {
     func runAgentStep(_ context: StepContext) async throws -> StepResult
     func runSpawnStep(_ context: SpawnContext) async throws -> StepResult
+    func runCheckStep(_ context: StepContext) async throws -> StepResult
     func diffInfo(_ run: Run) async -> DiffInfo
     func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult
     func cancel(_ run: Run) async
@@ -35,13 +36,18 @@ public struct StepOutput: Sendable, Hashable, Codable {
     public var summary: String?
     public var taskResults: [TaskResult]
     public var branchHeads: [String: String]
+    public var checks: [CheckReport]
 
-    public init(plan: Plan? = nil, verdict: Verdict? = nil, summary: String? = nil, taskResults: [TaskResult] = [], branchHeads: [String: String] = [:]) {
+    public init(
+        plan: Plan? = nil, verdict: Verdict? = nil, summary: String? = nil, taskResults: [TaskResult] = [],
+        branchHeads: [String: String] = [:], checks: [CheckReport] = []
+    ) {
         self.plan = plan
         self.verdict = verdict
         self.summary = summary
         self.taskResults = taskResults
         self.branchHeads = branchHeads
+        self.checks = checks
     }
 
     public init(from decoder: Decoder) throws {
@@ -51,6 +57,7 @@ public struct StepOutput: Sendable, Hashable, Codable {
         self.summary = try container.decodeIfPresent(String.self, forKey: .summary)
         self.taskResults = try container.decodeIfPresent([TaskResult].self, forKey: .taskResults) ?? []
         self.branchHeads = try container.decodeIfPresent([String: String].self, forKey: .branchHeads) ?? [:]
+        self.checks = try container.decodeIfPresent([CheckReport].self, forKey: .checks) ?? []
     }
 }
 

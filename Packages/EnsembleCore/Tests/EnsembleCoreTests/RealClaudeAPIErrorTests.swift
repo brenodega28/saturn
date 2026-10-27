@@ -16,7 +16,7 @@ struct RealClaudeAPIErrorTests {
                 executable: launch.executable, worktree: launch.worktree, session: launch.session, model: launch.model,
                 systemPrompt: launch.systemPrompt, environment: environment, readOnly: launch.readOnly,
                 additionalDirectories: launch.additionalDirectories, extraArguments: launch.extraArguments,
-                extraAllowedTools: launch.extraAllowedTools
+                extraAllowedTools: launch.extraAllowedTools, hooks: launch.hooks
             ))
         }
     }

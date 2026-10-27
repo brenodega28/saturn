@@ -22,6 +22,7 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
     var diff = DiffInfo()
     private(set) var agentCalls: [StepContext] = []
     private(set) var spawnCalls: [SpawnContext] = []
+    private(set) var checkCalls: [StepContext] = []
     private(set) var finishCalls: [WorkflowEnd] = []
     private(set) var diffRequests = 0
     private(set) var cancelledRuns: [Int64] = []
@@ -33,7 +34,7 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
     }
 
     var calledSteps: [String] {
-        agentCalls.map(\.step.id) + spawnCalls.map(\.step.step.id)
+        agentCalls.map(\.step.id) + spawnCalls.map(\.step.step.id) + checkCalls.map(\.step.id)
     }
 
     func runAgentStep(_ context: StepContext) async throws -> StepResult {
@@ -44,6 +45,11 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
     func runSpawnStep(_ context: SpawnContext) async throws -> StepResult {
         spawnCalls.append(context)
         return try await reply(for: context.step.step.id)
+    }
+
+    func runCheckStep(_ context: StepContext) async throws -> StepResult {
+        checkCalls.append(context)
+        return try await reply(for: context.step.id)
     }
 
     func diffInfo(_ run: Run) async -> DiffInfo {

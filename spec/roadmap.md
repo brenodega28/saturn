@@ -224,15 +224,15 @@ Goal: ready for daily use.
 
 Goal: correctness comes from what the agent must pass, not from what it is told.
 
-- [ ] Check schema and loader for `.ensemble/checks.yaml`: one command each for format, lint, typecheck and test, with protected-path globs and timeouts; validation errors shown in the UI
-- [ ] Check detection on project open: suggest commands from the repo (package scripts, Makefile, test runners); warn when a project has no runnable test check
-- [ ] Harness health: run every check in a fresh worktree after the setup script; flag missing dependencies, network or credentials before any agent starts
-- [ ] **Check** step type: Ensemble runs the checks in the agent's worktree, outside the agent's session, and hands failures back to the author as feedback
-- [ ] Capped retries per check step (default 2 rounds); after the cap the run goes to the Inbox with the failing output
-- [ ] Context hygiene: after two failed correction rounds, restart the agent with a fresh session and a summary instead of piling on more context
-- [ ] Agent hooks written into each worktree: format and lint after every edit, block edits to protected paths, block "done" while checks fail
-- [ ] Protected tests: existing tests are read-only to coding agents; new tests are allowed; any change to a protected file becomes a pin tagged `test-change`
-- [ ] Test-first option for bug fixes: the agent first commits a failing test that reproduces the issue; the check step confirms it fails before the fix and passes after
+- [x] Check schema and loader for `.ensemble/checks.yaml`: one command each for format, lint, typecheck and test, with protected-path globs and timeouts; validation errors shown in the UI
+- [x] Check detection on project open: suggest commands from the repo (package scripts, Makefile, test runners); warn when a project has no runnable test check
+- [x] Harness health: run every check in a fresh worktree after the setup script; flag missing dependencies, network or credentials before any agent starts
+- [x] **Check** step type: Ensemble runs the checks in the agent's worktree, outside the agent's session, and hands failures back to the author as feedback
+- [x] Capped retries per check step (default 2 rounds); after the cap the run goes to the Inbox with the failing output
+- [x] Context hygiene: after two failed correction rounds, restart the agent with a fresh session and a summary instead of piling on more context
+- [x] Agent hooks written into each worktree: format and lint after every edit, block edits to protected paths, block "done" while checks fail
+- [x] Protected tests: existing tests are read-only to coding agents; new tests are allowed; any change to a protected file becomes a pin tagged `test-change`
+- [x] Test-first option for bug fixes: the agent first commits a failing test that reproduces the issue; the check step confirms it fails before the fix and passes after
 
 **Exit check:** an agent that tries to edit an existing test is blocked; a branch whose tests fail never reaches Changes; a task that stays red after two rounds lands in the Inbox with the failing output.
 

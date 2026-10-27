@@ -37,6 +37,8 @@ public struct DryRunScript: Sendable, Hashable {
             return []
         case .notify:
             return [StepOutcome.done]
+        case .check:
+            return [StepOutcome.passed]
         case .agent, .spawn:
             var options = step.routes.keys.sorted()
             if (step.next != nil || step.routes.isEmpty) && !options.contains(StepOutcome.done) {
@@ -84,6 +86,12 @@ public final class DryRunDriver: WorkflowDriver {
         let outcome = script.outcome(for: context.step.step, iteration: context.iteration)
         let results = context.plan.tasks.map { TaskResult(planTaskId: $0.id, agentName: "Stub \($0.role)", summary: "Dry run: built “\($0.title)”.") }
         return StepResult(outcome: outcome, output: StepOutput(summary: "Dry run: \(results.count) stubbed agents finished.", taskResults: results))
+    }
+
+    public func runCheckStep(_ context: StepContext) async throws -> StepResult {
+        calledSteps.append(context.step.id)
+        let outcome = script.outcome(for: context.step, iteration: context.iteration)
+        return StepResult(outcome: outcome, output: StepOutput(summary: "Dry run: checks stubbed as passing."))
     }
 
     public func diffInfo(_ run: Run) async -> DiffInfo {

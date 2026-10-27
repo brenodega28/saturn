@@ -7,6 +7,7 @@ public enum WorkflowDriverError: Error, LocalizedError, Equatable {
     case missingRole(String)
     case agentFailed(agent: String, message: String)
     case setupFailed(agent: String, message: String)
+    case checksFailed(rounds: Int, details: String)
     case missingHandoff(agent: String, tool: String)
     case mergeConflict(branch: String, files: [String])
     case unsafeMerge(String)
@@ -20,6 +21,8 @@ public enum WorkflowDriverError: Error, LocalizedError, Equatable {
             "The role “\(role)” doesn’t exist in this project."
         case .agentFailed(let agent, let message):
             "\(agent) failed: \(message)"
+        case .checksFailed(let rounds, let details):
+            "Checks still fail after \(rounds) round\(rounds == 1 ? "" : "s").\n\n\(details)"
         case .setupFailed(let agent, let message):
             "The setup script failed in \(agent)’s worktree. \(message)\nFix the script in Settings › Workspaces before retrying."
         case .missingHandoff(let agent, let tool):
@@ -58,8 +61,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     private var plans: [Int64: Plan] = [:]
     private var verdicts: [Int64: Verdict] = [:]
-    private var results: [Int64: String] = [:]
+    var results: [Int64: String] = [:]
     private var awaitingLead: Set<Int64> = []
+    var failedCorrections: [Int64: Int] = [:]
     private var serverStart: Task<EnsembleMCPServer, Error>?
     private(set) lazy var questionRelay = QuestionRelay { [weak self] runId, batch in self?.deliverQuestions(batch, runId: runId) }
 
@@ -75,7 +79,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     public func ensureServer() async throws {
         if runtime.mcpServer != nil { return }
-        let start = serverStart ?? Task { try await EnsembleMCPServer.start(sink: self) }
+        let start = serverStart ?? Task { try await EnsembleMCPServer.start(sink: self, hooks: self) }
         serverStart = start
         runtime.mcpServer = try await start.value
     }
@@ -445,7 +449,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         return .done(summary, taskResults: taskResults, branchHeads: heads, costUSD: cost)
     }
 
-    private func branchHeads(of sessions: [AgentSession], in project: Project, git: GitClient) async -> [String: String] {
+    func branchHeads(of sessions: [AgentSession], in project: Project, git: GitClient) async -> [String: String] {
         var heads: [String: String] = [:]
         for branch in sessions.compactMap(\.agent.branch) {
             guard let head = try? await git.run(["rev-parse", branch], in: project.url) else { continue }
@@ -524,7 +528,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         try await follow(session, expected: expected)
     }
 
-    private func stopAgents(_ ids: [Int64]) {
+    func stopAgents(_ ids: [Int64]) {
         for id in ids {
             guard let agent = try? runtime.database.agent(id: id), let session = runtime.session(for: agent) else { continue }
             session.stop()
@@ -586,7 +590,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
     }
 
-    private func clearHandoffs(_ agentID: Int64) {
+    func clearHandoffs(_ agentID: Int64) {
         plans[agentID] = nil
         verdicts[agentID] = nil
         results[agentID] = nil
@@ -643,7 +647,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         !Set(step.routes.keys).isDisjoint(with: [StepOutcome.passed, StepOutcome.failed])
     }
 
-    private func workflowSnapshot(_ run: Run) -> WorkflowDefinition? {
+    func workflowSnapshot(_ run: Run) -> WorkflowDefinition? {
         try? YAMLWorkflow.decode(run.workflowSnapshot)
     }
 
@@ -678,6 +682,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         case .result:
             if let feedback = context.inputs.feedback {
                 parts.append("## Feedback to address\n\(feedback.summary)\n" + feedback.issues.map { "- \($0.description)" }.joined(separator: "\n"))
+            } else if let guide = testFirstGuide(for: context.run) {
+                parts.append(guide)
             }
             parts.append("When you’re done and tests pass, commit, then call `\(HandoffTool.submitResult.qualifiedName)` with what you changed and how you verified it. Then end your turn.")
         }
@@ -715,6 +721,11 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         return parts.joined(separator: "\n\n")
     }
 
+    func testFirstGuide(for run: Run) -> String? {
+        guard workflowSnapshot(run)?.steps.contains(where: { $0.type == .check && $0.testFirst }) == true else { return nil }
+        return "## Test first\nBefore changing any code, add a test that reproduces the problem and fails, and commit it on its own with a message starting with “\(Self.reproductionPrefix)”. Then fix the code so the test passes. Ensemble checks that the test fails without your fix."
+    }
+
     private func resumeMessage(expected: ExpectedHandoff) -> String {
         "Ensemble restarted while you were working. Continue where you left off, then call `\(expected.tool.qualifiedName)` and end your turn."
     }
@@ -726,6 +737,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         parts.append("## Overall request\n\(context.step.inputs.taskTitle)" + (context.step.inputs.taskBody.isEmpty ? "" : "\n\n\(context.step.inputs.taskBody)"))
         parts.append("## Plan\n\(context.plan.summary)\n" + context.plan.tasks.enumerated().map { "\($0.offset + 1). \($0.element.title) (\($0.element.role))" }.joined(separator: "\n"))
         if !context.step.step.instructions.isEmpty { parts.append(context.step.step.instructions) }
+        if let guide = testFirstGuide(for: context.step.run) { parts.append(guide) }
         parts.append("Build it in your worktree, run the tests, commit, then call `\(HandoffTool.submitResult.qualifiedName)` with what you changed and how you verified it. Then end your turn.")
         return parts.joined(separator: "\n\n")
     }
@@ -748,7 +760,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
     }
 
-    private func lastAssistantText(_ session: AgentSession) -> String {
+    func lastAssistantText(_ session: AgentSession) -> String {
         for entry in session.transcript.entries.reversed() {
             if case .assistant(let text) = entry.content { return text }
         }
@@ -786,12 +798,12 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         return (project, ProjectConfigLoader.load(repository: project.url))
     }
 
-    private func requireGit() throws -> GitClient {
+    func requireGit() throws -> GitClient {
         guard let git = gitProvider() else { throw WorkflowDriverError.notReady("git isn’t available.") }
         return git
     }
 
-    private func requireRunID(_ run: Run) throws -> Int64 {
+    func requireRunID(_ run: Run) throws -> Int64 {
         guard let id = run.id else { throw WorkflowDriverError.notReady("The run hasn’t been saved.") }
         return id
     }

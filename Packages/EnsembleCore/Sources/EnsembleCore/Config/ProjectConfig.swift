@@ -106,12 +106,14 @@ public struct ProjectConfig: Sendable, Hashable {
     public var roles: [RoleDefinition]
     public var workflows: [WorkflowDefinition]
     public var docs: DocsIndex
+    public var checks: ChecksConfig?
     public var issues: [ConfigIssue]
 
-    public init(roles: [RoleDefinition] = [], workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), issues: [ConfigIssue] = []) {
+    public init(roles: [RoleDefinition] = [], workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil, issues: [ConfigIssue] = []) {
         self.roles = roles
         self.workflows = workflows
         self.docs = docs
+        self.checks = checks
         self.issues = issues
     }
 
@@ -174,7 +176,12 @@ public enum ProjectConfigLoader {
             ? decode(DocsIndex.self, file: docsFile, relativeTo: repository, issues: &issues) ?? DocsIndex()
             : DocsIndex()
 
-        var config = ProjectConfig(roles: roles, workflows: workflows, docs: docs, issues: issues)
+        let checksFile = ChecksConfig.file(in: repository)
+        let checks = FileManager.default.fileExists(atPath: checksFile.path)
+            ? decode(ChecksConfig.self, file: checksFile, relativeTo: repository, issues: &issues)
+            : nil
+
+        var config = ProjectConfig(roles: roles, workflows: workflows, docs: docs, checks: checks, issues: issues)
         config.issues += ConfigValidator.validate(config)
         return config
     }
@@ -189,6 +196,10 @@ public enum ProjectConfigLoader {
 
     public static func write(_ docs: DocsIndex, repository: URL) throws {
         try writeYAML(docs, to: ProjectConfig.directory(in: repository).appending(path: "docs.yaml"))
+    }
+
+    public static func write(_ checks: ChecksConfig, repository: URL) throws {
+        try writeYAML(checks, to: ChecksConfig.file(in: repository))
     }
 
     public static func deleteRole(_ id: String, repository: URL) throws {
@@ -286,6 +297,11 @@ public enum ConfigValidator {
             }
         }
 
+        if let checks = config.checks {
+            let file = "\(ProjectConfig.directoryName)/\(ChecksConfig.fileName)"
+            issues += ChecksConfig.validate(checks).map { ConfigIssue(file: file, message: $0) }
+        }
+
         for workflow in config.workflows {
             let file = "\(ProjectConfig.directoryName)/workflows/\(workflow.id).yaml"
             let stepIDs = Set(workflow.steps.map(\.id))
@@ -312,6 +328,17 @@ public enum ConfigValidator {
                 case .condition:
                     if step.condition == nil {
                         issues.append(ConfigIssue(file: file, message: prefix + "needs a condition"))
+                    }
+                case .check:
+                    guard let checks = config.checks, !checks.checks.isEmpty else {
+                        issues.append(ConfigIssue(file: file, message: prefix + "needs checks in \(ProjectConfig.directoryName)/\(ChecksConfig.fileName)"))
+                        continue
+                    }
+                    for name in step.checks ?? [] where checks.check(named: name) == nil {
+                        issues.append(ConfigIssue(file: file, message: prefix + "check “\(name)” doesn’t exist"))
+                    }
+                    if step.testFirst, !checks.checks(named: step.checks).contains(where: { $0.kind == .test }) {
+                        issues.append(ConfigIssue(file: file, message: prefix + "test_first needs a check of kind test"))
                     }
                 case .approval, .notify:
                     break

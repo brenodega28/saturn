@@ -33,7 +33,7 @@ public final class EnsembleMCPServer: Sendable {
         self.queue = queue
     }
 
-    public static func start(sink: any HandoffSink, maximumBodySize: Int = 16 * 1024 * 1024) async throws -> EnsembleMCPServer {
+    public static func start(sink: any HandoffSink, hooks: (any AgentHookSink)? = nil, maximumBodySize: Int = 16 * 1024 * 1024) async throws -> EnsembleMCPServer {
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
         parameters.allowLocalEndpointReuse = true
@@ -44,7 +44,7 @@ public final class EnsembleMCPServer: Sendable {
             throw MCPServerError.listenerFailed(error.localizedDescription)
         }
         let registry = MCPTokenRegistry()
-        let handler = MCPRequestHandler(registry: registry, sink: sink)
+        let handler = MCPRequestHandler(registry: registry, sink: sink, hooks: hooks)
         let queue = DispatchQueue(label: "ensemble.mcp.server")
         let pending = PendingServer()
 
@@ -87,6 +87,10 @@ public final class EnsembleMCPServer: Sendable {
     public func register(agent: Int64, tools: Set<HandoffTool>) -> MCPEndpoint {
         let token = registry.issue(agentID: agent, tools: tools)
         return MCPEndpoint(agentID: agent, token: token, url: baseURL.appending(path: token), tools: tools)
+    }
+
+    public func hookURL(for endpoint: MCPEndpoint) -> URL {
+        URL(string: "http://127.0.0.1:\(port)\(MCPRequestHandler.hookPathPrefix)\(endpoint.token)") ?? URL(filePath: "/")
     }
 
     public func revoke(token: String) {

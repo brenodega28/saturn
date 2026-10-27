@@ -39,6 +39,9 @@ struct NodeStyle {
             return NodeStyle(shape: .card, size: CGSize(width: 200, height: 64), symbol: "person.fill", fill: AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x9AA0AA), Color(hex: 0x5A606A)], startPoint: .top, endPoint: .bottom)), kind: "Human approval", tag: nil)
         case .notify:
             return NodeStyle(shape: .card, size: CGSize(width: 200, height: 58), symbol: "bell.fill", fill: AnyShapeStyle(LinearGradient(colors: [Color(hex: 0xFF708C), Color(hex: 0xCF2149)], startPoint: .top, endPoint: .bottom)), kind: "Notify", tag: nil)
+        case .check:
+            let tag = [step.maxRounds.map { "up to \($0) rounds" }, step.testFirst ? "test first" : nil].compactMap(\.self).joined(separator: " · ")
+            return NodeStyle(shape: .card, size: CGSize(width: 200, height: tag.isEmpty ? 58 : 72), symbol: "checkmark.shield.fill", fill: AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x4BD97B), Color(hex: 0x1E8F55)], startPoint: .top, endPoint: .bottom)), kind: "Checks", tag: tag.isEmpty ? nil : tag)
         }
     }
 
@@ -66,6 +69,7 @@ extension StepType {
         case .condition: "Condition"
         case .approval: "Human approval"
         case .notify: "Notify"
+        case .check: "Checks"
         }
     }
 
@@ -76,6 +80,7 @@ extension StepType {
         case .condition: "diamond"
         case .approval: "checkmark"
         case .notify: "bell"
+        case .check: "checkmark.shield"
         }
     }
 
@@ -86,6 +91,7 @@ extension StepType {
         case .condition: Color(hex: 0xFFC24A)
         case .approval: Theme.successText
         case .notify: Color(hex: 0xFF8AA2)
+        case .check: Color(hex: 0x4BD97B)
         }
     }
 
@@ -96,6 +102,7 @@ extension StepType {
         case .condition: "Route on labels, changed paths, diff size or an earlier outcome"
         case .approval: "Pause until you approve or send the work back"
         case .notify: "Post a message to your Inbox and continue"
+        case .check: "Ensemble runs the project’s checks on every branch and sends failures back to their authors"
         }
     }
 }

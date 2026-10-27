@@ -90,6 +90,7 @@ public enum StepType: String, Sendable, Hashable, Codable, CaseIterable {
     case condition
     case approval
     case notify
+    case check
 }
 
 public enum FailureAction: String, Sendable, Hashable, Codable, CaseIterable {
@@ -167,6 +168,9 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
     public var role: String?
     public var instructions: String
     public var maxAgents: Int?
+    public var checks: [String]?
+    public var maxRounds: Int?
+    public var testFirst: Bool
     public var condition: StepCondition?
     public var message: String?
     public var timeoutMinutes: Int?
@@ -183,6 +187,9 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         role: String? = nil,
         instructions: String = "",
         maxAgents: Int? = nil,
+        checks: [String]? = nil,
+        maxRounds: Int? = nil,
+        testFirst: Bool = false,
         condition: StepCondition? = nil,
         message: String? = nil,
         timeoutMinutes: Int? = nil,
@@ -198,6 +205,9 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         self.role = role
         self.instructions = instructions
         self.maxAgents = maxAgents
+        self.checks = checks
+        self.maxRounds = maxRounds
+        self.testFirst = testFirst
         self.condition = condition
         self.message = message
         self.timeoutMinutes = timeoutMinutes
@@ -209,8 +219,10 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, type, title, role, instructions, condition, message, budget, next, routes, position
+        case id, type, title, role, instructions, checks, condition, message, budget, next, routes, position
         case maxAgents = "max_agents"
+        case maxRounds = "max_rounds"
+        case testFirst = "test_first"
         case timeoutMinutes = "timeout_minutes"
         case onFailure = "on_failure"
     }
@@ -223,6 +235,9 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         self.role = try container.decodeIfPresent(String.self, forKey: .role)
         self.instructions = try container.decodeIfPresent(String.self, forKey: .instructions) ?? ""
         self.maxAgents = try container.decodeIfPresent(Int.self, forKey: .maxAgents)
+        self.checks = try container.decodeIfPresent([String].self, forKey: .checks)
+        self.maxRounds = try container.decodeIfPresent(Int.self, forKey: .maxRounds)
+        self.testFirst = try container.decodeIfPresent(Bool.self, forKey: .testFirst) ?? false
         self.condition = try container.decodeIfPresent(StepCondition.self, forKey: .condition)
         self.message = try container.decodeIfPresent(String.self, forKey: .message)
         self.timeoutMinutes = try container.decodeIfPresent(Int.self, forKey: .timeoutMinutes)
@@ -241,6 +256,9 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         try container.encodeIfPresent(role, forKey: .role)
         if !instructions.isEmpty { try container.encode(instructions, forKey: .instructions) }
         try container.encodeIfPresent(maxAgents, forKey: .maxAgents)
+        try container.encodeIfPresent(checks, forKey: .checks)
+        try container.encodeIfPresent(maxRounds, forKey: .maxRounds)
+        if testFirst { try container.encode(testFirst, forKey: .testFirst) }
         try container.encodeIfPresent(condition, forKey: .condition)
         try container.encodeIfPresent(message, forKey: .message)
         try container.encodeIfPresent(timeoutMinutes, forKey: .timeoutMinutes)

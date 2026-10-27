@@ -5,6 +5,7 @@ import SwiftUI
 struct WorkflowInspector: View {
     @Bindable var editor: WorkflowEditor
     let roles: [RoleDefinition]
+    let checks: [CheckDefinition]
     let issues: [ConfigIssue]
     let activeRuns: [Run]
     let suggestedLabels: [String]
@@ -47,7 +48,7 @@ struct WorkflowInspector: View {
             EndSection(end: $editor.draft.end)
         case .step(let id):
             if let index = editor.draft.index(of: id) {
-                StepSection(editor: editor, step: $editor.draft.steps[index], roles: roles)
+                StepSection(editor: editor, step: $editor.draft.steps[index], roles: roles, checks: checks)
                     .id(id)
             } else {
                 WorkflowSettingsSection(editor: editor)
@@ -251,6 +252,7 @@ private struct StepSection: View {
     @Bindable var editor: WorkflowEditor
     @Binding var step: WorkflowStep
     let roles: [RoleDefinition]
+    let checks: [CheckDefinition]
     @State private var idText = ""
     @State private var idError: String?
 
@@ -288,6 +290,9 @@ private struct StepSection: View {
                         .labelsHidden()
                         .lineLimit(1...4)
                 }
+            }
+            if step.type == .check {
+                CheckStepEditor(step: $step, checks: checks)
             }
             if step.type == .condition {
                 ConditionEditor(condition: Binding(get: { step.condition ?? StepCondition() }, set: { step.condition = $0 }), workflow: editor.draft, stepID: step.id)
@@ -334,13 +339,15 @@ private struct StepSection: View {
                 Text("Ensemble checks the rule below").font(.system(size: 13, weight: .medium))
             case .notify:
                 Text("Ensemble posts to your Inbox").font(.system(size: 13, weight: .medium))
+            case .check:
+                Text("Ensemble runs the project’s checks").font(.system(size: 13, weight: .medium))
             }
         }
     }
 
     @ViewBuilder
     private var rules: some View {
-        if [.agent, .spawn].contains(step.type) {
+        if [.agent, .spawn, .check].contains(step.type) {
             InspectorField("Rules") {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
@@ -619,6 +626,9 @@ enum StepInputsDescription {
             return "The run’s branches, pins and the latest verdict. Approve to continue or send it back with changes."
         case .notify:
             return "The run so far. Posts the message to your Inbox and continues."
+        case .check:
+            let rounds = step.maxRounds.map { "\($0)" } ?? "the project’s"
+            return "Every branch built in this run. Failing checks go back to the branch’s author with their output, up to \(rounds) rounds, then to your Inbox."
         }
     }
 

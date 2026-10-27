@@ -51,6 +51,7 @@ struct TurnSetup {
     let additionalDirectories: [URL]
     var extraArguments: [String] = []
     var extraAllowedTools: [String] = []
+    var hooks: JSONValue?
 }
 
 extension String {
@@ -75,6 +76,7 @@ public final class AgentRuntime {
     public private(set) var usageRevision = 0
     public private(set) var apiCooldownUntil: Date?
     @ObservationIgnored private var cooldownTask: Task<Void, Never>?
+    @ObservationIgnored var hookStates: [Int64: AgentHookState] = [:]
 
     @ObservationIgnored let secrets: any SecretStore
     @ObservationIgnored let launcher: any AgentProcessLauncher
@@ -288,6 +290,7 @@ public final class AgentRuntime {
                 prompt += "\n\n" + Self.webToolsGuide
             }
             if let memory = memoryPromptSection(for: agent, repository: repository) { prompt += "\n\n" + memory }
+            if !agent.readOnly, let checks = config.checks, let guide = Self.checksGuide(checks) { prompt += "\n\n" + guide }
         }
         if let port = agent.port {
             prompt += "\n\n" + Self.portGuide(port)
@@ -306,19 +309,25 @@ public final class AgentRuntime {
         if agent.taskId != nil || agent.runId != nil {
             setup.extraAllowedTools += AgentPermissions.webTools + AgentPermissions.artifactTools
         }
-        if let server = mcpServer, let agentID = agent.id, !tools.isEmpty {
+        let hookChecks = agent.readOnly ? nil : config?.checks
+        if let server = mcpServer, let agentID = agent.id, !tools.isEmpty || hookChecks != nil {
             server.revokeAll(agent: agentID)
             let endpoint = server.register(agent: agentID, tools: tools)
-            setup.extraArguments = try endpoint.launchArguments(configDirectory: paths.agentDirectory(agentID))
-            setup.extraAllowedTools += endpoint.allowedTools
-            setup = TurnSetup(
-                directory: setup.directory,
-                systemPrompt: setup.systemPrompt + "\n\n" + Self.handoffGuide(tools),
-                readOnly: setup.readOnly,
-                additionalDirectories: setup.additionalDirectories,
-                extraArguments: setup.extraArguments,
-                extraAllowedTools: setup.extraAllowedTools
-            )
+            if !tools.isEmpty {
+                setup.extraArguments = try endpoint.launchArguments(configDirectory: paths.agentDirectory(agentID))
+                setup.extraAllowedTools += endpoint.allowedTools
+                setup = TurnSetup(
+                    directory: setup.directory,
+                    systemPrompt: setup.systemPrompt + "\n\n" + Self.handoffGuide(tools),
+                    readOnly: setup.readOnly,
+                    additionalDirectories: setup.additionalDirectories,
+                    extraArguments: setup.extraArguments,
+                    extraAllowedTools: setup.extraAllowedTools
+                )
+            }
+            if let hookChecks {
+                setup.hooks = Self.hookSettings(checks: hookChecks, url: server.hookURL(for: endpoint))
+            }
         }
         return try addingMemoryAccess(to: setup, for: agent, repository: repository)
     }

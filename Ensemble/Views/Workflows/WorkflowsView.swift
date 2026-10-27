@@ -117,6 +117,7 @@ struct WorkflowsView: View {
         let inspector = WorkflowInspector(
             editor: editor,
             roles: config.roles,
+            checks: config.checks?.checks ?? [],
             issues: issues,
             activeRuns: runs,
             suggestedLabels: suggestedLabels(config)

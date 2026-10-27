@@ -29,7 +29,7 @@ extension RunEngine {
             return false
         }
         switch step.type {
-        case .agent, .spawn:
+        case .agent, .spawn, .check:
             return try await executeWork(&loaded, step: step, cursor: cursor)
         case .condition:
             return try await executeCondition(&loaded, step: step, cursor: cursor)
@@ -65,6 +65,8 @@ extension RunEngine {
             }
             let spawn = SpawnContext(step: context, plan: plan, maxAgents: step.maxAgents)
             result = await race(stepId: step.id, timeoutMinutes: step.timeoutMinutes) { try await driver.runSpawnStep(spawn) }
+        } else if step.type == .check {
+            result = await race(stepId: step.id, timeoutMinutes: step.timeoutMinutes) { try await driver.runCheckStep(context) }
         } else {
             result = await race(stepId: step.id, timeoutMinutes: step.timeoutMinutes) { try await driver.runAgentStep(context) }
         }

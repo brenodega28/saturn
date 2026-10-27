@@ -10,8 +10,22 @@ extension AppModel {
     }
 
     @discardableResult
-    func saveWorkflow(_ draft: WorkflowDefinition, comparedTo saved: WorkflowDefinition?, in project: Project) throws -> WorkflowDefinition {
-        let written = try ProjectConfigLoader.save(draft, comparedTo: saved, repository: project.url)
+    func saveWorkflow(_ draft: WorkflowDefinition, comparedTo saved: WorkflowDefinition?, note: String = "", in project: Project) throws -> WorkflowDefinition {
+        let written = try ProjectConfigLoader.save(draft, comparedTo: saved, note: note, repository: project.url)
+        reloadConfig(for: project)
+        return written
+    }
+
+    func workflowHistory(_ workflowID: String, in project: Project) -> [WorkflowVersionStats] {
+        guard let projectID = project.id else { return [] }
+        _ = engine.runs
+        let versions = ProjectConfigLoader.history(of: workflowID, repository: project.url)
+        return (try? database.versionStats(of: workflowID, projectId: projectID, versions: versions)) ?? []
+    }
+
+    @discardableResult
+    func restoreWorkflow(_ version: WorkflowVersion, of current: WorkflowDefinition, in project: Project) throws -> WorkflowDefinition {
+        let written = try ProjectConfigLoader.restore(version, of: current, repository: project.url)
         reloadConfig(for: project)
         return written
     }

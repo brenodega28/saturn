@@ -106,3 +106,44 @@ import Testing
         #expect(builders.count == 2)
     }
 }
+
+@MainActor
+@Suite struct WorkflowHistoryTests {
+    @Test func savesKeepNotedVersionsThatCanBeRestored() throws {
+        let repository = FileManager.default.temporaryDirectory.appending(path: "history-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repository) }
+        let first = WorkflowDefinition(id: "hotfix", name: "Hotfix", steps: [WorkflowStep(id: "fix", type: .agent, role: "claude-code")])
+        let v1 = try ProjectConfigLoader.save(first, comparedTo: nil, note: "", repository: repository)
+        var changed = v1
+        changed.steps.append(WorkflowStep(id: "checks", type: .check))
+        let v2 = try ProjectConfigLoader.save(changed, comparedTo: v1, note: "Run the checks", repository: repository)
+        var moved = v2
+        moved.steps[0].position = CanvasPosition(x: 40, y: 40)
+        _ = try ProjectConfigLoader.save(moved, comparedTo: v2, note: "", repository: repository)
+
+        let history = ProjectConfigLoader.history(of: "hotfix", repository: repository)
+        #expect(history.map(\.version) == [2, 1])
+        #expect(history.map(\.note) == ["Run the checks", "First version"])
+        #expect(history.first?.workflow?.steps.map(\.id) == ["fix", "checks"])
+
+        let restored = try ProjectConfigLoader.restore(history[1], of: v2, repository: repository)
+        #expect(restored.version == 3)
+        #expect(restored.steps.map(\.id) == ["fix"])
+        #expect(ProjectConfigLoader.history(of: "hotfix", repository: repository).first?.note == "Restored v1")
+        #expect(ProjectConfigLoader.load(repository: repository).workflow("hotfix")?.version == 3)
+
+        let database = try AppDatabase.inMemory()
+        let project = try database.openProject(at: repository)
+        let projectId = try #require(project.id)
+        let task = try database.insert(ProjectTask(projectId: projectId, title: "T", body: "", source: .chat, status: .done, createdAt: .now, updatedAt: .now))
+        let taskId = try #require(task.id)
+        for cost in [2.0, 4.0] {
+            _ = try database.insert(Run(projectId: projectId, taskId: taskId, workflow: "hotfix", workflowVersion: "2", status: .succeeded, costUSD: cost, startedAt: .now, endedAt: .now), state: RunEngineState())
+        }
+        _ = try database.insert(Run(projectId: projectId, taskId: taskId, workflow: "hotfix", workflowVersion: "2", status: .running, startedAt: .now), state: RunEngineState())
+        let stats = try database.versionStats(of: "hotfix", projectId: projectId, versions: ProjectConfigLoader.history(of: "hotfix", repository: repository))
+        let two = try #require(stats.first { $0.version.version == 2 })
+        #expect(two.runs == 3 && two.activeRuns == 1 && two.averageCostUSD == 3)
+    }
+}

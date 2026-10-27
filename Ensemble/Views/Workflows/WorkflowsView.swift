@@ -9,6 +9,7 @@ struct WorkflowsView: View {
     @State private var pendingAction: PendingAction?
     @State private var isConfirmingDelete = false
     @State private var isTestRunPresented = false
+    @State private var isHistoryPresented = false
     @State private var isInspectorPanelOpen = false
 
     private struct PendingAction: Identifiable {
@@ -162,10 +163,20 @@ struct WorkflowsView: View {
                         .font(.system(size: 15, weight: .bold))
                         .lineLimit(1)
                         .help(editor.draft.name)
-                    Text("v\(editor.draft.version)")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(Theme.secondaryText)
-                        .fixedSize()
+                    Button {
+                        isHistoryPresented.toggle()
+                    } label: {
+                        Text("v\(editor.draft.version) · History")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(Theme.secondaryText)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(editor.isNew)
+                    .fixedSize()
+                    .help("Earlier versions, with their runs and average cost. Running tasks keep the version they started with.")
+                    .popover(isPresented: $isHistoryPresented, arrowEdge: .bottom) {
+                        WorkflowHistoryView(project: project, editor: editor) { isHistoryPresented = false }
+                    }
                 }
                 .layoutPriority(1)
                 Spacer(minLength: 12)
@@ -253,7 +264,13 @@ struct WorkflowsView: View {
             .buttonStyle(.pill)
             .disabled(editor.draft.steps.isEmpty)
             .help("Dry-run this workflow on a sample task with every agent stubbed")
-            Button("Save") { save(editor) }
+            if !editor.isNew, editor.isDirty, editor.nextVersion != editor.draft.version {
+                TextField("What changed?", text: Binding(get: { editor.changeNote }, set: { editor.changeNote = $0 }))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 200)
+                    .help("A short note for the version history")
+            }
+            Button(!editor.isNew && editor.isDirty && editor.nextVersion != editor.draft.version ? "Save as v\(editor.nextVersion)" : "Save") { save(editor) }
                 .buttonStyle(.primaryPill)
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!editor.isDirty || editor.draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -311,7 +328,7 @@ struct WorkflowsView: View {
             draft.id = ProjectConfigLoader.newWorkflowID(for: draft.name, existing: config.workflows)
         }
         do {
-            let written = try model.saveWorkflow(draft, comparedTo: editor.saved, in: project)
+            let written = try model.saveWorkflow(draft, comparedTo: editor.saved, note: editor.changeNote, in: project)
             editor.markSaved(written)
             editor.errorMessage = nil
         } catch {

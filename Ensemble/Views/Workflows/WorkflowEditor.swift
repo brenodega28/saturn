@@ -30,6 +30,7 @@ enum WorkflowSelection: Hashable {
 @Observable
 final class WorkflowEditor {
     private(set) var saved: WorkflowDefinition?
+    var changeNote = ""
     var draft: WorkflowDefinition
     var selection: WorkflowSelection = .workflow
     var script: DryRunScript
@@ -111,6 +112,7 @@ final class WorkflowEditor {
     }
 
     func markSaved(_ written: WorkflowDefinition) {
+        changeNote = ""
         saved = written
         draft = written
         select(selection)

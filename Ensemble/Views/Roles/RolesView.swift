@@ -204,6 +204,22 @@ struct RolesView: View {
                     settingToggle("Can spawn agents", detail: "Plans work and hands it to other roles, like a lead. Can start, stop, message and delete any agent, and opens its own worktree when it needs to code.", isOn: role.canSpawn)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                field("Permissions") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Picker("Permissions", selection: role.permissionProfile) {
+                            Text("Default (\(defaultProfileName(for: value, config: config)))").tag(PermissionsConfig.defaultProfileID)
+                            ForEach(choices(config.permissions.profiles.map(\.id), including: value.permissionProfile).filter { $0 != PermissionsConfig.defaultProfileID }, id: \.self) { id in
+                                Text(config.permissions.profile(id)?.name ?? id).tag(id)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 260, alignment: .leading)
+                        Text(PermissionSummary.line(config.permissions.resolve(for: value)))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.tertiaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 field("Budget per run") {
                     VStack(alignment: .leading, spacing: 4) {
                         TextField("Budget per run", value: role.budgetPerRun, format: .currency(code: "USD"), prompt: Text("No limit"))
@@ -329,6 +345,12 @@ struct RolesView: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func defaultProfileName(for role: RoleDefinition, config: ProjectConfig) -> String {
+        var unassigned = role
+        unassigned.permissionProfile = PermissionsConfig.defaultProfileID
+        return config.permissions.resolve(for: unassigned).name
     }
 
     private func choices(_ base: [String], including current: String) -> [String] {

@@ -16,14 +16,8 @@ extension AgentRuntime {
         let memory = AgentMemory(repository: repository, agentName: agent.name)
         let directory = try memory.prepareDirectory()
         let file = "/" + realPath(of: directory) + "/" + memory.url.lastPathComponent
-        var updated = TurnSetup(
-            directory: setup.directory,
-            systemPrompt: setup.systemPrompt,
-            readOnly: setup.readOnly,
-            additionalDirectories: setup.additionalDirectories + [directory],
-            extraArguments: setup.extraArguments,
-            extraAllowedTools: setup.extraAllowedTools
-        )
+        var updated = setup
+        updated.additionalDirectories.append(directory)
         if !setup.readOnly {
             updated.extraAllowedTools += ["Write(\(file))", "Edit(\(file))"]
         }

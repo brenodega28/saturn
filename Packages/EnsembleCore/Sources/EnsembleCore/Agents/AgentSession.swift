@@ -335,7 +335,9 @@ public final class AgentSession: Identifiable {
             additionalDirectories: setup.additionalDirectories,
             extraArguments: setup.extraArguments,
             extraAllowedTools: setup.extraAllowedTools,
-            hooks: setup.hooks
+            hooks: setup.hooks,
+            permissions: setup.permissions,
+            askTools: setup.askTools
         )
 
         do {

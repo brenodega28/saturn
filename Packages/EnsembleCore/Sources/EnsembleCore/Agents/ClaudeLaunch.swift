@@ -32,6 +32,12 @@ public enum AgentPermissions {
     ]
 
     public static let writingGitCommands = ["git add", "git commit", "git restore", "git stash", "git mv", "git rm", "git merge"]
+    public static let installCommands = ["npm ci", "npm install", "pip install", "uv sync", "uv add", "pnpm install", "pnpm add", "yarn add", "yarn install", "bun install", "bun add", "poetry install", "poetry add", "bundle install", "cargo add", "go get"]
+    public static let networkCommands = ["curl", "wget", "ssh", "scp", "nc"]
+    public static let inspectionCommands = [
+        "git status", "git diff", "git log", "git show", "git branch", "git rev-parse", "git ls-files", "git grep",
+        "ls", "cat", "head", "tail", "wc", "grep", "rg", "pwd", "which",
+    ]
 
     public static var readOnlyCommands: [String] {
         commands.filter { !writingGitCommands.contains($0) }
@@ -68,26 +74,6 @@ public enum AgentPermissions {
     }
 }
 
-public enum PermissionProfile: String, CaseIterable, Sendable {
-    case standard = "default"
-    case appTesting = "app_testing"
-
-    public init(name: String) {
-        self = PermissionProfile(rawValue: name) ?? .standard
-    }
-
-    public var commands: [String] {
-        switch self {
-        case .standard: []
-        case .appTesting: ["xcodegen", "open", "screencapture", "pkill", "killall"]
-        }
-    }
-
-    public var allowedTools: [String] {
-        commands.map { "Bash(\($0):*)" }
-    }
-}
-
 func realPath(of url: URL) -> String {
     guard let resolved = realpath(url.path, nil) else { return url.standardizedFileURL.path }
     defer { free(resolved) }
@@ -117,6 +103,8 @@ public struct ClaudeLaunch: Sendable, Equatable {
     public var extraArguments: [String]
     public var extraAllowedTools: [String]
     public var hooks: JSONValue?
+    public var permissions: PermissionPolicy?
+    public var askTools: [String]
 
     public init(
         executable: URL,
@@ -129,8 +117,12 @@ public struct ClaudeLaunch: Sendable, Equatable {
         additionalDirectories: [URL] = [],
         extraArguments: [String] = [],
         extraAllowedTools: [String] = [],
-        hooks: JSONValue? = nil
+        hooks: JSONValue? = nil,
+        permissions: PermissionPolicy? = nil,
+        askTools: [String] = []
     ) {
+        self.permissions = permissions
+        self.askTools = askTools
         self.executable = executable
         self.worktree = worktree
         self.session = session
@@ -169,7 +161,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
             "--model", model,
             "--permission-mode", "dontAsk",
             "--setting-sources", "project",
-            "--tools", AgentPermissions.builtInTools(readOnly: readOnly, extraAllowedTools: extraAllowedTools).joined(separator: ","),
+            "--tools", tools.joined(separator: ","),
             "--settings", settings,
             "--append-system-prompt", systemPrompt,
         ]
@@ -180,18 +172,43 @@ public struct ClaudeLaunch: Sendable, Equatable {
         for directory in additionalDirectories {
             arguments += ["--add-dir", realPath(of: directory)]
         }
-        if readOnly {
+        if !writes {
             arguments.append("--disallowedTools")
             arguments += AgentPermissions.fileWritingTools
         }
         arguments += extraArguments
         arguments.append("--allowedTools")
-        arguments += readOnly ? AgentPermissions.readOnlyAllowedTools() : AgentPermissions.allowedTools(worktree: worktree)
+        arguments += allowedTools
         arguments += extraAllowedTools
         return arguments
     }
 
-    public static func readOnlySystemPrompt(agentName: String, directory: URL, canOpenWorktree: Bool = false, extraCommands: [String] = []) -> String {
+    var writes: Bool {
+        guard !readOnly else { return false }
+        guard let permissions else { return true }
+        return permissions.level(.editFiles) != .never
+    }
+
+    var tools: [String] {
+        var tools = AgentPermissions.builtInTools(readOnly: !writes, extraAllowedTools: extraAllowedTools)
+        if let permissions, permissions.commands.isEmpty, permissions.level(.runShell) == .never {
+            tools.removeAll { $0 == "Bash" }
+        }
+        for tool in askTools.map(AgentPermissions.toolName) where !tools.contains(tool) { tools.append(tool) }
+        return tools
+    }
+
+    var allowedTools: [String] {
+        guard let permissions else {
+            return readOnly ? AgentPermissions.readOnlyAllowedTools() : AgentPermissions.allowedTools(worktree: worktree)
+        }
+        let commands = permissions.commands.map { "Bash(\($0):*)" }
+        guard writes, permissions.level(.editFiles) == .allow else { return AgentPermissions.tools + commands }
+        let scope = "/" + realPath(of: worktree) + "/**"
+        return AgentPermissions.tools + AgentPermissions.fileWritingTools.map { "\($0)(\(scope))" } + commands
+    }
+
+    public static func readOnlySystemPrompt(agentName: String, directory: URL, canOpenWorktree: Bool = false, extraCommands: [String] = [], commands: [String]? = nil) -> String {
         let editing = canOpenWorktree
             ? "You start read-only and never edit, create or delete files here or commit. When you must change code yourself, "
                 + "call `\(HandoffTool.openWorktree.qualifiedName)` to get your own worktree and branch; your next turn runs there with write access."
@@ -200,12 +217,12 @@ public struct ClaudeLaunch: Sendable, Equatable {
         You are \(agentName), a read-only agent run by Ensemble. You work from \(directory.path) and can read every file \
         and worktree you are given, run tests and inspect history. \(editing)
 
-        \(shellRules(writing: false, extraCommands: extraCommands))
+        \(shellRules(writing: false, extraCommands: extraCommands, commands: commands))
         """
     }
 
-    public static func shellRules(writing: Bool, extraCommands: [String] = []) -> String {
-        let commands = ((writing ? AgentPermissions.commands : AgentPermissions.readOnlyCommands) + extraCommands)
+    public static func shellRules(writing: Bool, extraCommands: [String] = [], commands override: [String]? = nil) -> String {
+        let commands = (override ?? ((writing ? AgentPermissions.commands : AgentPermissions.readOnlyCommands) + extraCommands))
             .map { "`\($0)`" }
             .joined(separator: ", ")
         return """
@@ -216,13 +233,20 @@ public struct ClaudeLaunch: Sendable, Equatable {
             """
     }
 
-    public static func systemPrompt(agentName: String, worktree: URL, branch: String?, extraCommands: [String] = []) -> String {
+    public static func systemPrompt(agentName: String, worktree: URL, branch: String?, extraCommands: [String] = [], commands: [String]? = nil) -> String {
         """
         You are \(agentName), a coding agent run by Ensemble. You work alone in the git worktree at \(worktree.path)\
         \(branch.map { " on branch \($0)" } ?? ""). Keep all changes inside this worktree. \
         Run the project's tests when you change behavior. Commit finished work to your branch with clear messages; never push.
 
-        \(shellRules(writing: true, extraCommands: extraCommands))
+        \(shellRules(writing: true, extraCommands: extraCommands, commands: commands))
         """
+    }
+
+    public static func askGuide(_ policy: PermissionPolicy) -> String? {
+        let asks = PermissionCapability.allCases.filter { policy.level($0) == .ask }
+        guard !asks.isEmpty else { return nil }
+        return "Some actions need the user’s OK first: " + asks.map { $0.title.lowercased() }.joined(separator: ", ")
+            + ". Just try the action; Ensemble holds it, asks the user in their Inbox and messages you with the answer. Carry on with other work or end your turn meanwhile."
     }
 }

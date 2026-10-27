@@ -284,6 +284,19 @@ public final class AppDatabase: Sendable {
                 t.column("encoding", .text)
             }
         }
+        migrator.registerMigration("v16-permission-requests") { db in
+            try db.create(table: "permissionRequest") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.belongsTo("project", onDelete: .cascade).notNull()
+                t.column("agentId", .integer).notNull()
+                t.column("capability", .text).notNull()
+                t.column("request", .text).notNull()
+                t.column("status", .text).notNull()
+                t.column("inboxItemId", .integer)
+                t.column("createdAt", .datetime).notNull()
+                t.column("answeredAt", .datetime)
+            }
+        }
 
         return migrator
     }

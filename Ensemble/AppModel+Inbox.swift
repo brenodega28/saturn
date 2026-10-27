@@ -29,6 +29,15 @@ extension AppModel {
         }
     }
 
+    func answerPermission(_ item: InboxItem, allow: Bool) {
+        guard let id = item.id else { return }
+        do {
+            try agents.answerPermission(inboxItemId: id, allow: allow)
+        } catch {
+            alert = AppAlert(title: "Couldn’t answer “\(item.title)”", message: error.localizedDescription)
+        }
+    }
+
     func dismissInboxItem(_ item: InboxItem) {
         guard let id = item.id else { return }
         do {
@@ -51,7 +60,7 @@ extension AppModel {
         }
     }
 
-    static let needsYouKinds: Set<InboxKind> = [.question, .planApproval, .approval]
+    static let needsYouKinds: Set<InboxKind> = [.question, .planApproval, .approval, .permission]
 
     var needsYouItems: [InboxItem] {
         inbox.items.filter { Self.needsYouKinds.contains($0.kind) }
@@ -146,6 +155,7 @@ final class InboxNotifier: NSObject, UNUserNotificationCenterDelegate {
         case .loopLimit: "Loop limit"
         case .budget: "Budget"
         case .gate: "Gate findings"
+        case .permission: "Permission"
         }
     }
 

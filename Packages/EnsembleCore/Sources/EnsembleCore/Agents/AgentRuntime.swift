@@ -46,12 +46,14 @@ public enum AgentLaunchError: Error, LocalizedError, Equatable {
 
 struct TurnSetup {
     let directory: URL
-    let systemPrompt: String
+    var systemPrompt: String
     let readOnly: Bool
-    let additionalDirectories: [URL]
+    var additionalDirectories: [URL]
     var extraArguments: [String] = []
     var extraAllowedTools: [String] = []
     var hooks: JSONValue?
+    var permissions: PermissionPolicy?
+    var askTools: [String] = []
 }
 
 extension String {
@@ -273,10 +275,11 @@ public final class AgentRuntime {
 
         let tools = handoffTools(agent)
         let config = repository.map { ProjectConfigLoader.load(repository: $0) }
-        let profile = PermissionProfile(name: config?.role(agent.role)?.permissionProfile ?? "")
+        let policy = PermissionPolicy(profile: (config?.permissions ?? PermissionsConfig()).resolve(for: config?.role(agent.role), readOnly: agent.readOnly), readOnly: agent.readOnly)
         var prompt = agent.readOnly
-            ? ClaudeLaunch.readOnlySystemPrompt(agentName: agent.name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree), extraCommands: profile.commands)
-            : ClaudeLaunch.systemPrompt(agentName: agent.name, worktree: directory, branch: agent.branch, extraCommands: profile.commands)
+            ? ClaudeLaunch.readOnlySystemPrompt(agentName: agent.name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree), commands: policy.commands)
+            : ClaudeLaunch.systemPrompt(agentName: agent.name, worktree: directory, branch: agent.branch, commands: policy.commands)
+        if let guide = ClaudeLaunch.askGuide(policy), mcpServer != nil { prompt += "\n\n" + guide }
         var isLead = false
         if let repository, let config {
             if let role = config.role(agent.role) {
@@ -305,29 +308,26 @@ public final class AgentRuntime {
                 .filter { FileManager.default.fileExists(atPath: $0.path) && !(realPath(of: $0) + "/").hasPrefix(root) }
         }
         var setup = TurnSetup(directory: directory, systemPrompt: prompt, readOnly: agent.readOnly, additionalDirectories: additional)
-        setup.extraAllowedTools += profile.allowedTools
+        setup.permissions = policy
         if agent.taskId != nil || agent.runId != nil {
-            setup.extraAllowedTools += AgentPermissions.webTools + AgentPermissions.artifactTools
+            switch policy.level(.network) {
+            case .allow: setup.extraAllowedTools += AgentPermissions.webTools
+            case .ask where mcpServer != nil: setup.askTools += AgentPermissions.webTools
+            default: break
+            }
+            setup.extraAllowedTools += AgentPermissions.artifactTools
         }
+        if policy.level(.editFiles) == .ask, mcpServer != nil { setup.askTools += AgentPermissions.fileWritingTools }
         let hookChecks = agent.readOnly ? nil : config?.checks
-        if let server = mcpServer, let agentID = agent.id, !tools.isEmpty || hookChecks != nil {
+        if let server = mcpServer, let agentID = agent.id {
             server.revokeAll(agent: agentID)
             let endpoint = server.register(agent: agentID, tools: tools)
             if !tools.isEmpty {
                 setup.extraArguments = try endpoint.launchArguments(configDirectory: paths.agentDirectory(agentID))
                 setup.extraAllowedTools += endpoint.allowedTools
-                setup = TurnSetup(
-                    directory: setup.directory,
-                    systemPrompt: setup.systemPrompt + "\n\n" + Self.handoffGuide(tools),
-                    readOnly: setup.readOnly,
-                    additionalDirectories: setup.additionalDirectories,
-                    extraArguments: setup.extraArguments,
-                    extraAllowedTools: setup.extraAllowedTools
-                )
+                setup.systemPrompt += "\n\n" + Self.handoffGuide(tools)
             }
-            if let hookChecks {
-                setup.hooks = Self.hookSettings(checks: hookChecks, url: server.hookURL(for: endpoint))
-            }
+            setup.hooks = Self.hookSettings(checks: hookChecks, policy: policy, url: server.hookURL(for: endpoint))
         }
         return try addingMemoryAccess(to: setup, for: agent, repository: repository)
     }

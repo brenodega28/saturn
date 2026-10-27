@@ -255,6 +255,7 @@ public enum InboxKind: String, Codable, Sendable, CaseIterable {
     case loopLimit = "loop_limit"
     case budget
     case gate
+    case permission
 }
 
 public enum InboxStatus: String, Codable, Sendable, CaseIterable {

@@ -15,14 +15,23 @@ extension AgentRuntime {
     nonisolated static let editingToolMatcher = "Edit|MultiEdit|Write|NotebookEdit"
     nonisolated static let maxStopBlocks = 2
 
-    nonisolated static func hookSettings(checks: ChecksConfig, url: URL) -> JSONValue? {
+    nonisolated static func hookSettings(checks: ChecksConfig?, policy: PermissionPolicy? = nil, url: URL) -> JSONValue? {
         let hook = { (timeout: Int) -> JSONValue in
             .object(["type": .string("http"), "url": .string(url.absoluteString), "timeout": .number(Double(timeout))])
         }
         var events: [String: JSONValue] = [:]
-        if !checks.protectedPaths.isEmpty {
-            events["PreToolUse"] = .array([.object(["matcher": .string(editingToolMatcher), "hooks": .array([hook(30)])])])
+        var guarded: [String] = []
+        if checks?.protectedPaths.isEmpty == false { guarded += editingToolMatcher.split(separator: "|").map(String.init) }
+        if let policy {
+            guarded.append("Bash")
+            if policy.level(.editFiles) == .ask { guarded += AgentPermissions.fileWritingTools }
+            if policy.level(.network) == .ask { guarded += AgentPermissions.webTools }
         }
+        let matcher = guarded.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        if !matcher.isEmpty {
+            events["PreToolUse"] = .array([.object(["matcher": .string(matcher.joined(separator: "|")), "hooks": .array([hook(30)])])])
+        }
+        guard let checks else { return events.isEmpty ? nil : .object(events) }
         if !checks.editChecks.isEmpty {
             let timeout = min(3600, checks.editChecks.reduce(0) { $0 + $1.timeoutMinutes * 60 } + 30)
             events["PostToolUse"] = .array([.object(["matcher": .string(editingToolMatcher), "hooks": .array([hook(timeout)])])])
@@ -48,12 +57,18 @@ extension AgentRuntime {
     }
 
     func handleHook(_ input: JSONValue, agentID: Int64) async -> JSONValue {
-        guard let agent = try? database.agent(id: agentID), !agent.readOnly, let worktree = agent.worktreeURL,
-              let project = try? database.project(id: agent.projectId),
-              let checks = ProjectConfigLoader.load(repository: project.url).checks else { return .object([:]) }
+        guard let agent = try? database.agent(id: agentID), let project = try? database.project(id: agent.projectId) else { return .object([:]) }
+        let config = ProjectConfigLoader.load(repository: project.url)
+        if input["hook_event_name"]?.string == "PreToolUse" {
+            if !agent.readOnly, let worktree = agent.worktreeURL, let checks = config.checks {
+                let protected = await protectFiles(input, agent: agent, worktree: worktree, checks: checks)
+                if protected != .object([:]) { return protected }
+            }
+            let policy = PermissionPolicy(profile: config.permissions.resolve(for: config.role(agent.role), readOnly: agent.readOnly), readOnly: agent.readOnly)
+            return (try? permissionDecision(input, agent: agent, policy: policy)) ?? .object([:])
+        }
+        guard !agent.readOnly, let worktree = agent.worktreeURL, let checks = config.checks else { return .object([:]) }
         switch input["hook_event_name"]?.string {
-        case "PreToolUse":
-            return await protectFiles(input, agent: agent, worktree: worktree, checks: checks)
         case "PostToolUse":
             return await checkAfterEdit(agent: agent, checks: checks)
         case "Stop":

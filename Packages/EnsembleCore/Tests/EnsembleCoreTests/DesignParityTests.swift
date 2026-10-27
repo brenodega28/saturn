@@ -195,3 +195,87 @@ import Testing
         #expect(first.transcript.entries.contains { if case .user(let text) = $0.content { text.contains("# Resolve a merge conflict") } else { false } })
     }
 }
+
+@Suite struct PermissionPolicyTests {
+    func profile(_ levels: [PermissionCapability: PermissionLevel]) -> PermissionProfileDefinition {
+        PermissionProfileDefinition(id: "p", name: "Custom", levels: levels)
+    }
+
+    @Test func levelsShapeTheCommandsAndTools() {
+        let developer = PermissionPolicy(profile: PermissionsConfig().resolve(for: RoleDefinition(id: "dev", name: "Dev")), readOnly: false)
+        #expect(developer.profile.id == "developer")
+        #expect(developer.commands.contains("pytest"))
+        #expect(!developer.commands.contains("npm install"))
+        #expect(!developer.commands.contains("git push"))
+
+        let pusher = PermissionPolicy(profile: profile([.editFiles: .allow, .runShell: .ask, .installPackages: .allow, .gitPush: .allow]), readOnly: false)
+        #expect(pusher.commands.contains("git status") && !pusher.commands.contains("pytest"))
+        #expect(pusher.commands.contains("npm install") && pusher.commands.contains("git push"))
+
+        let quiet = PermissionPolicy(profile: profile([.editFiles: .ask, .runShell: .never, .network: .ask]), readOnly: false)
+        let launch = ClaudeLaunch(
+            executable: URL(filePath: "/bin/claude"), worktree: URL(filePath: "/tmp"), session: .new("s"), model: "sonnet",
+            systemPrompt: "", environment: [:], permissions: quiet, askTools: AgentPermissions.webTools + AgentPermissions.fileWritingTools
+        )
+        let arguments = launch.arguments
+        let tools = arguments[arguments.firstIndex(of: "--tools")! + 1].split(separator: ",").map(String.init)
+        #expect(!tools.contains("Bash"))
+        #expect(tools.contains("Edit") && tools.contains("WebFetch"))
+        let allowed = Set(arguments[(arguments.lastIndex(of: "--allowedTools")! + 1)...])
+        #expect(allowed.isDisjoint(with: ["Edit", "WebFetch"]) && !allowed.contains { $0.hasPrefix("Edit(") })
+
+        let reviewer = PermissionPolicy(profile: PermissionsConfig().resolve(for: nil, readOnly: true), readOnly: true)
+        #expect(reviewer.level(.editFiles) == .never && !reviewer.commands.contains("npm ci"))
+    }
+
+    @Test func requestsAreClassifiedByCapability() {
+        let policy = PermissionPolicy(profile: profile([:]), readOnly: false)
+        #expect(policy.capability(ofTool: "Bash", input: .object(["command": .string("npm install left-pad")]))?.0 == .installPackages)
+        #expect(policy.capability(ofTool: "Bash", input: .object(["command": .string("git push origin HEAD")]))?.0 == .gitPush)
+        #expect(policy.capability(ofTool: "Bash", input: .object(["command": .string("curl https://x.dev")]))?.0 == .network)
+        #expect(policy.capability(ofTool: "Bash", input: .object(["command": .string("pytest -q")]))?.0 == .runShell)
+        #expect(policy.capability(ofTool: "WebFetch", input: .object(["url": .string("https://docs.dev")]))?.1 == "https://docs.dev")
+        #expect(policy.capability(ofTool: "Read", input: nil) == nil)
+    }
+}
+
+@MainActor
+@Suite(.serialized) struct PermissionRequestTests {
+    @Test func askHoldsTheActionUntilTheUserAnswers() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        let projectId = try #require(harness.project.id)
+        let session = try await harness.spawn()
+        try await waitUntil { session.agent.status == .idle }
+        let install: JSONValue = .object(["hook_event_name": .string("PreToolUse"), "tool_name": .string("Bash"), "tool_input": .object(["command": .string("npm install left-pad")])])
+
+        let first = await harness.runtime.handleHook(install, agentID: session.id)
+        #expect(first["hookSpecificOutput"]?["permissionDecision"] == .string("deny"))
+        let item = try #require(try harness.database.openInboxItems(projectId: projectId).first { $0.kind == .permission })
+        #expect(item.title == "Dev 1 asks to install packages: `npm install left-pad`")
+        let again = await harness.runtime.handleHook(install, agentID: session.id)
+        #expect(again["hookSpecificOutput"]?["permissionDecisionReason"]?.string?.hasPrefix("Still waiting") == true)
+        #expect(try harness.database.openInboxItems(projectId: projectId).count { $0.kind == .permission } == 1)
+
+        try harness.runtime.answerPermission(inboxItemId: try #require(item.id), allow: true)
+        try await waitUntil { harness.launches().count == 2 }
+        #expect(session.transcript.entries.contains { if case .user(let text) = $0.content { text.contains("The user allowed you to install packages") } else { false } })
+        let allowed = await harness.runtime.handleHook(install, agentID: session.id)
+        #expect(allowed["hookSpecificOutput"]?["permissionDecision"] == .string("allow"))
+        #expect(try harness.database.openInboxItems(projectId: projectId).allSatisfy { $0.kind != .permission })
+    }
+
+    @Test func neverDeniesWithoutAsking() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        let session = try await harness.spawn()
+        try await waitUntil { session.agent.status == .idle }
+        let push: JSONValue = .object(["hook_event_name": .string("PreToolUse"), "tool_name": .string("Bash"), "tool_input": .object(["command": .string("git push origin HEAD")])])
+        let reply = await harness.runtime.handleHook(push, agentID: session.id)
+        #expect(reply["hookSpecificOutput"]?["permissionDecision"] == .string("deny"))
+        #expect(reply["hookSpecificOutput"]?["permissionDecisionReason"]?.string?.hasPrefix("Developer agents may never push") == true)
+        #expect(try harness.database.openInboxItems(projectId: try #require(harness.project.id)).isEmpty)
+        let test: JSONValue = .object(["hook_event_name": .string("PreToolUse"), "tool_name": .string("Bash"), "tool_input": .object(["command": .string("pytest -q")])])
+        #expect(await harness.runtime.handleHook(test, agentID: session.id) == .object([:]))
+    }
+}

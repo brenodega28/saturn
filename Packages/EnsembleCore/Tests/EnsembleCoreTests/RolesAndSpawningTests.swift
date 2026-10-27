@@ -272,9 +272,9 @@ import Testing
         defer { harness.cleanUp() }
         var tester = reviewer
         tester.id = "qa-engineer"
-        tester.permissionProfile = PermissionProfile.appTesting.rawValue
+        tester.permissionProfile = "app_testing"
         var builder = django
-        builder.permissionProfile = PermissionProfile.appTesting.rawValue
+        builder.permissionProfile = "app_testing"
         let roles = [builder, tester, RoleDefinition(id: "plain", name: "Plain", editsCode: false)]
         for role in roles {
             try ProjectConfigLoader.write(role, repository: harness.repo.root)
@@ -284,9 +284,9 @@ import Testing
         for role in roles {
             let session = try #require(try await harness.runtime.spawn(in: harness.project, role: role, count: 1, config: config, git: harness.repo.git).first)
             let setup = try harness.runtime.turnSetup(for: session.agent)
-            let opted = role.permissionProfile == PermissionProfile.appTesting.rawValue
+            let opted = role.permissionProfile == "app_testing"
             for command in ["xcodegen", "open", "screencapture", "pkill", "killall"] {
-                #expect(setup.extraAllowedTools.contains("Bash(\(command):*)") == opted, "\(role.id) \(command)")
+                #expect(setup.permissions?.commands.contains(command) == opted, "\(role.id) \(command)")
                 #expect(setup.systemPrompt.contains("`\(command)`") == opted, "\(role.id) \(command)")
             }
         }
@@ -329,8 +329,9 @@ import Testing
             #expect(!allowed.contains("Artifact"), "\(session.agent.name)")
             #expect(allowed.isSuperset(of: AgentPermissions.artifactTools) == isBound, "\(session.agent.name)")
             #expect(allowed.isDisjoint(with: AgentPermissions.artifactTools) == !isBound, "\(session.agent.name)")
-            #expect(allowed.isSuperset(of: AgentPermissions.webTools) == isBound, "\(session.agent.name)")
-            #expect(allowed.isDisjoint(with: AgentPermissions.webTools) == !isBound, "\(session.agent.name)")
+            let mayBrowse = isBound && session.agent.readOnly
+            #expect(allowed.isSuperset(of: AgentPermissions.webTools) == mayBrowse, "\(session.agent.name)")
+            #expect(allowed.isDisjoint(with: AgentPermissions.webTools) == !mayBrowse, "\(session.agent.name)")
             #expect(setup.systemPrompt.contains("`ArtifactData`, `ArtifactComments` and `ArtifactCheck`") == isBound, "\(session.agent.name)")
         }
     }

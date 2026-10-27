@@ -85,7 +85,7 @@ import Testing
         #expect(messages.contains(".ensemble/roles/broken.yaml: missing “name”"))
         #expect(messages.contains(".ensemble/roles/lead.yaml: model “gpt” isn’t a known model"))
         #expect(messages.contains(".ensemble/roles/lead.yaml: a role can’t both spawn agents and edit code"))
-        #expect(messages.contains(".ensemble/roles/lead.yaml: permission profile “root” isn’t known; use one of “default”, “app_testing”"))
+        #expect(messages.contains(".ensemble/roles/lead.yaml: permission profile “root” isn’t known; use one of “default”, “developer”, “reviewer”, “tester”, “lead”, “app_testing”"))
         #expect(messages.contains(".ensemble/workflows/bad.yaml: steps.a: role “ghost” doesn’t exist"))
         #expect(messages.contains(".ensemble/workflows/bad.yaml: steps.a: routes to unknown step “nowhere”"))
         #expect(messages.contains(".ensemble/workflows/bad.yaml: steps.c: needs a condition"))

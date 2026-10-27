@@ -108,12 +108,14 @@ public struct ProjectConfig: Sendable, Hashable {
     public var docs: DocsIndex
     public var checks: ChecksConfig?
     public var review: ReviewPolicy
+    public var permissions: PermissionsConfig
     public var issues: [ConfigIssue]
 
     public init(
         roles: [RoleDefinition] = [], workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil,
-        review: ReviewPolicy = ReviewPolicy(), issues: [ConfigIssue] = []
+        review: ReviewPolicy = ReviewPolicy(), permissions: PermissionsConfig = PermissionsConfig(), issues: [ConfigIssue] = []
     ) {
+        self.permissions = permissions
         self.roles = roles
         self.workflows = workflows
         self.docs = docs
@@ -191,7 +193,12 @@ public enum ProjectConfigLoader {
             ? decode(ReviewPolicy.self, file: reviewFile, relativeTo: repository, issues: &issues) ?? ReviewPolicy()
             : ReviewPolicy()
 
-        var config = ProjectConfig(roles: roles, workflows: workflows, docs: docs, checks: checks, review: review, issues: issues)
+        let permissionsFile = PermissionsConfig.file(in: repository)
+        let permissions = FileManager.default.fileExists(atPath: permissionsFile.path)
+            ? decode(PermissionsConfig.self, file: permissionsFile, relativeTo: repository, issues: &issues) ?? PermissionsConfig()
+            : PermissionsConfig()
+
+        var config = ProjectConfig(roles: roles, workflows: workflows, docs: docs, checks: checks, review: review, permissions: permissions, issues: issues)
         config.issues += ConfigValidator.validate(config)
         return config
     }
@@ -210,6 +217,10 @@ public enum ProjectConfigLoader {
 
     public static func write(_ checks: ChecksConfig, repository: URL) throws {
         try writeYAML(checks, to: ChecksConfig.file(in: repository))
+    }
+
+    public static func write(_ permissions: PermissionsConfig, repository: URL) throws {
+        try writeYAML(permissions, to: PermissionsConfig.file(in: repository))
     }
 
     public static func write(_ review: ReviewPolicy, repository: URL) throws {
@@ -302,8 +313,8 @@ public enum ConfigValidator {
             if role.provider != "claude-code" {
                 issues.append(ConfigIssue(file: file, message: "provider “\(role.provider)” isn’t supported yet; only claude-code"))
             }
-            if PermissionProfile(rawValue: role.permissionProfile) == nil {
-                let known = PermissionProfile.allCases.map { "“\($0.rawValue)”" }.joined(separator: ", ")
+            if !config.permissions.knownIDs.contains(role.permissionProfile) {
+                let known = config.permissions.knownIDs.map { "“\($0)”" }.joined(separator: ", ")
                 issues.append(ConfigIssue(file: file, message: "permission profile “\(role.permissionProfile)” isn’t known; use one of \(known)"))
             }
             if role.canSpawn && role.editsCode {

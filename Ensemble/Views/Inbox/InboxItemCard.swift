@@ -59,6 +59,16 @@ struct InboxItemCard: View {
             }
         case .pinReview:
             openButton(help: "Review the pins in the Changes tab")
+        case .permission:
+            HStack {
+                Spacer()
+                Button("Deny") { model.answerPermission(item, allow: false) }
+                    .buttonStyle(PillButtonStyle(height: 28))
+                    .help("Tell the agent to find another way")
+                Button("Allow") { model.answerPermission(item, allow: true) }
+                    .buttonStyle(PillButtonStyle(.primary, height: 28))
+                    .help("Let the agent do this once")
+            }
         case .planApproval, .approval, .loopLimit, .budget, .failure, .gate:
             openButton(help: "Decide in the project’s Lead tab")
         }
@@ -86,12 +96,13 @@ extension InboxKind {
         case .loopLimit: "arrow.triangle.2.circlepath"
         case .budget: "dollarsign.circle"
         case .gate: "exclamationmark.shield"
+        case .permission: "hand.raised"
         }
     }
 
     var tint: Color {
         switch self {
-        case .question, .planApproval, .approval: Theme.warning
+        case .question, .planApproval, .approval, .permission: Theme.warning
         case .pinReview: Theme.info
         case .failure, .budget, .loopLimit, .gate: Theme.danger
         case .notice: Theme.neutral

@@ -87,3 +87,87 @@ struct RealClaudeHookTests {
         #expect(requests.count == 5)
     }
 }
+
+@MainActor
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["ENSEMBLE_REAL_CLAUDE"] == "1"), .serialized)
+struct RealClaudePermissionTests {
+    static let scriptedModel = #"""
+    import http.server, json, sys
+    log = sys.argv[2]
+    def events(blocks, stop):
+        out = [("message_start", {"type": "message_start", "message": {"id": "msg", "type": "message", "role": "assistant", "model": "claude-sonnet-4-5", "content": [], "stop_reason": None, "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}}})]
+        for index, block in enumerate(blocks):
+            if block["type"] == "tool_use":
+                out.append(("content_block_start", {"type": "content_block_start", "index": index, "content_block": {"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}}))
+                out.append(("content_block_delta", {"type": "content_block_delta", "index": index, "delta": {"type": "input_json_delta", "partial_json": json.dumps(block["input"])}}))
+            else:
+                out.append(("content_block_start", {"type": "content_block_start", "index": index, "content_block": {"type": "text", "text": ""}}))
+                out.append(("content_block_delta", {"type": "content_block_delta", "index": index, "delta": {"type": "text_delta", "text": block["text"]}}))
+            out.append(("content_block_stop", {"type": "content_block_stop", "index": index}))
+        out.append(("message_delta", {"type": "message_delta", "delta": {"stop_reason": stop, "stop_sequence": None}, "usage": {"output_tokens": 1}}))
+        out.append(("message_stop", {"type": "message_stop"}))
+        return "".join("event: %s\ndata: %s\n\n" % (name, json.dumps(data)) for name, data in out).encode()
+    def push(tool_id):
+        return {"type": "tool_use", "id": tool_id, "name": "Bash", "input": {"command": "git push --dry-run origin HEAD"}}
+    class Handler(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
+            if "/count_tokens" in self.path:
+                return self.reply(b'{"input_tokens": 1}', "application/json")
+            if not body.get("tools"):
+                return self.reply(events([{"type": "text", "text": "ok"}], "end_turn"), "text/event-stream")
+            text = json.dumps(body)
+            with open(log, "a") as handle:
+                handle.write(text + "\n")
+            if "The user allowed you" in text and "toolu_second" not in text:
+                return self.reply(events([push("toolu_second")], "tool_use"), "text/event-stream")
+            if "toolu_first" not in text:
+                return self.reply(events([push("toolu_first")], "tool_use"), "text/event-stream")
+            return self.reply(events([{"type": "text", "text": "Done."}], "end_turn"), "text/event-stream")
+        def reply(self, data, kind):
+            self.send_response(200)
+            self.send_header("content-type", kind)
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        def log_message(self, *args):
+            pass
+    http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
+    """#
+
+    @Test(.timeLimit(.minutes(3))) func askHoldsAPushUntilTheUserAllowsIt() async throws {
+        let log = FileManager.default.temporaryDirectory.appending(path: "permission-model-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        let port = Int.random(in: 40000...49999)
+        let model = Process()
+        model.executableURL = URL(filePath: "/usr/bin/python3")
+        model.arguments = ["-I", "-c", Self.scriptedModel, String(port), log.path]
+        try model.run()
+        defer { model.terminate() }
+        try await Task.sleep(for: .milliseconds(800))
+
+        let harness = try await RealClaudeAPIErrorTests().makeHarness(stubURL: "http://127.0.0.1:\(port)")
+        defer { harness.cleanUp() }
+        var profiles = PermissionsConfig()
+        if let index = profiles.profiles.firstIndex(where: { $0.id == "developer" }) { profiles.profiles[index].levels[.gitPush] = .ask }
+        try ProjectConfigLoader.write(profiles, repository: harness.repo.root)
+        let driver = AgentWorkflowDriver(runtime: harness.runtime)
+        driver.gitProvider = { harness.repo.git }
+        try await driver.ensureServer()
+
+        let session = try await harness.spawn()
+        try await waitUntil(timeout: .seconds(60)) { session.agent.status == .idle || session.agent.status == .failed }
+        let projectId = try #require(harness.project.id)
+        let item = try #require(try harness.database.openInboxItems(projectId: projectId).first { $0.kind == .permission })
+        #expect(item.title.contains("git push --dry-run origin HEAD"))
+
+        try harness.runtime.answerPermission(inboxItemId: try #require(item.id), allow: true)
+        try await waitUntil(timeout: .seconds(60)) { (try? String(contentsOf: log, encoding: .utf8))?.contains("toolu_second") == true && session.agent.status == .idle }
+
+        let requests = try String(contentsOf: log, encoding: .utf8)
+        #expect(requests.contains("so Ensemble asked them in their Inbox"))
+        let second = try #require(requests.components(separatedBy: "toolu_second").last)
+        #expect(!second.contains("Permission to use Bash has been denied"))
+    }
+}

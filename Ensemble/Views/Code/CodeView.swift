@@ -34,7 +34,7 @@ struct CodeView: View {
     }
 }
 
-private struct CodeExplorer: View {
+struct CodeExplorer: View {
     @Bindable var browser: CodeBrowser
 
     var body: some View {

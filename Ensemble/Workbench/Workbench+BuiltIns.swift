@@ -8,6 +8,37 @@ extension WorkbenchRegistry {
         register(NavigatorTabSpec(id: NavigatorTabID.workspace, title: "Workspace", systemImage: "folder", order: 0) {
             AnyView(SidebarView())
         })
+        register(NavigatorTabSpec(id: "runs", title: "Runs", systemImage: "play.circle", order: 10, showsScope: true) {
+            AnyView(RunsNavigator())
+        })
+        register(NavigatorTabSpec(id: "agents", title: "Agents", systemImage: "person.2", order: 20, showsScope: true) {
+            AnyView(AgentsNavigator())
+        })
+        register(NavigatorTabSpec(id: "source", title: "Source", systemImage: "list.bullet.indent", order: 30) {
+            AnyView(SourceNavigator())
+        })
+        register(NavigatorTabSpec(id: "source-control", title: "Source control", systemImage: "arrow.triangle.branch", order: 40) {
+            AnyView(SourceControlNavigator())
+        })
+        register(NavigatorTabSpec(id: "pins", title: "Pins", systemImage: "pin", order: 50, showsScope: true, badge: { model in
+            model.currentProject.flatMap(\.id).map { ((try? model.database.openPinCounts(projectId: $0)) ?? [:]).values.reduce(0, +) }
+        }) {
+            AnyView(PinsNavigator())
+        })
+        register(NavigatorTabSpec(id: "checks", title: "Checks", systemImage: "checklist", order: 60, showsScope: true, badge: { model in
+            let runs = model.runs(in: model.navigatorProjects(.project)).filter { ProjectSignals.activeStatuses.contains($0.status) }
+            return ProjectSignals.checkBoard(runs: runs, steps: model.steps(of: runs), holds: model.engine.holds).filter { $0.state != .passed }.count
+        }) {
+            AnyView(ChecksNavigator())
+        })
+        register(NavigatorTabSpec(id: "problems", title: "Problems", systemImage: "exclamationmark.triangle", order: 70, showsScope: true, badge: { model in
+            model.problems(scope: .project).count
+        }) {
+            AnyView(ProblemsNavigator())
+        })
+        register(NavigatorTabSpec(id: "find", title: "Find", systemImage: "magnifyingglass", order: 80, showsScope: true) {
+            AnyView(FindNavigator())
+        })
         registerToolbar()
         registerStatusItems()
         registerViewCommands()

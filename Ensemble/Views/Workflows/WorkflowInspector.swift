@@ -341,6 +341,8 @@ private struct StepSection: View {
                 Text("Ensemble posts to your Inbox").font(.system(size: 13, weight: .medium))
             case .check:
                 Text("Ensemble runs the project’s checks").font(.system(size: 13, weight: .medium))
+            case .gates:
+                Text("Ensemble scans every branch").font(.system(size: 13, weight: .medium))
             }
         }
     }
@@ -626,6 +628,8 @@ enum StepInputsDescription {
             return "The run’s branches, pins and the latest verdict. Approve to continue or send it back with changes."
         case .notify:
             return "The run so far. Posts the message to your Inbox and continues."
+        case .gates:
+            return "Every branch built in this run. Secrets, new dependencies and oversized changes wait for your decision; duplication, complexity and missing evidence are shown as warnings in Changes. Limits come from \(ProjectConfig.directoryName)/\(ReviewPolicy.fileName)."
         case .check:
             let rounds = step.maxRounds.map { "\($0)" } ?? "the project’s"
             return "Every branch built in this run. Failing checks go back to the branch’s author with their output, up to \(rounds) rounds, then to your Inbox."

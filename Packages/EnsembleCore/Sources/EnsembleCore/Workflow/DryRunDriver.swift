@@ -37,7 +37,7 @@ public struct DryRunScript: Sendable, Hashable {
             return []
         case .notify:
             return [StepOutcome.done]
-        case .check:
+        case .check, .gates:
             return [StepOutcome.passed]
         case .agent, .spawn:
             var options = step.routes.keys.sorted()
@@ -86,6 +86,12 @@ public final class DryRunDriver: WorkflowDriver {
         let outcome = script.outcome(for: context.step.step, iteration: context.iteration)
         let results = context.plan.tasks.map { TaskResult(planTaskId: $0.id, agentName: "Stub \($0.role)", summary: "Dry run: built “\($0.title)”.") }
         return StepResult(outcome: outcome, output: StepOutput(summary: "Dry run: \(results.count) stubbed agents finished.", taskResults: results))
+    }
+
+    public func runGateStep(_ context: StepContext) async throws -> StepResult {
+        calledSteps.append(context.step.id)
+        let outcome = script.outcome(for: context.step, iteration: context.iteration)
+        return StepResult(outcome: outcome, output: StepOutput(summary: "Dry run: gates stubbed as passing.", gates: GateReport()))
     }
 
     public func runCheckStep(_ context: StepContext) async throws -> StepResult {
@@ -266,6 +272,9 @@ public enum DryRun {
             let approved = outcome == StepOutcome.approved
             notes.append("“\(title)” \(approved ? "approved" : "sent back with changes") by the script.")
             try engine.resolveApproval(run, approved: approved, note: "Dry run")
+        case .gates:
+            notes.append("Gate findings on “\(title)” accepted automatically.")
+            try engine.resolveGates(run, proceed: true, note: "Dry run")
         case .loopLimit:
             notes.append("“\(title)” hit its loop limit; the run stops here.")
             try engine.resolveLoopLimit(run, continueOnce: false)

@@ -251,6 +251,22 @@ public final class AppDatabase: Sendable {
                 t.add(column: "byUser", .boolean).notNull().defaults(to: false)
             }
         }
+        migrator.registerMigration("v14-review-gates") { db in
+            try db.alter(table: "pin") { t in
+                t.add(column: "confidence", .double)
+                t.add(column: "category", .text)
+            }
+            try db.create(table: "evidence") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.belongsTo("run", onDelete: .cascade).notNull()
+                t.column("agentId", .integer)
+                t.column("kind", .text).notNull()
+                t.column("title", .text).notNull()
+                t.column("file", .text).notNull()
+                t.column("note", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
 
         return migrator
     }

@@ -5,6 +5,7 @@ public protocol WorkflowDriver: AnyObject, Sendable {
     func runAgentStep(_ context: StepContext) async throws -> StepResult
     func runSpawnStep(_ context: SpawnContext) async throws -> StepResult
     func runCheckStep(_ context: StepContext) async throws -> StepResult
+    func runGateStep(_ context: StepContext) async throws -> StepResult
     func diffInfo(_ run: Run) async -> DiffInfo
     func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult
     func cancel(_ run: Run) async
@@ -37,11 +38,13 @@ public struct StepOutput: Sendable, Hashable, Codable {
     public var taskResults: [TaskResult]
     public var branchHeads: [String: String]
     public var checks: [CheckReport]
+    public var gates: GateReport?
 
     public init(
         plan: Plan? = nil, verdict: Verdict? = nil, summary: String? = nil, taskResults: [TaskResult] = [],
-        branchHeads: [String: String] = [:], checks: [CheckReport] = []
+        branchHeads: [String: String] = [:], checks: [CheckReport] = [], gates: GateReport? = nil
     ) {
+        self.gates = gates
         self.plan = plan
         self.verdict = verdict
         self.summary = summary
@@ -58,6 +61,7 @@ public struct StepOutput: Sendable, Hashable, Codable {
         self.taskResults = try container.decodeIfPresent([TaskResult].self, forKey: .taskResults) ?? []
         self.branchHeads = try container.decodeIfPresent([String: String].self, forKey: .branchHeads) ?? [:]
         self.checks = try container.decodeIfPresent([CheckReport].self, forKey: .checks) ?? []
+        self.gates = try container.decodeIfPresent(GateReport.self, forKey: .gates)
     }
 }
 

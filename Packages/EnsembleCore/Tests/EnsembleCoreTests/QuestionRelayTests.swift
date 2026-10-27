@@ -101,6 +101,7 @@ import Testing
     func makeLeadRun(workflow workflowID: String = "feature-delivery", withLead: Bool = true) async throws -> LeadRun {
         let harness = try await AgentHarness.make(mode: "workflow")
         try ProjectConfigLoader.installDefaults(repository: harness.repo.root)
+        try LegacyWorkflows.install(repository: harness.repo.root)
         let config = ProjectConfigLoader.load(repository: harness.repo.root)
         let workflow = try #require(config.workflow(workflowID))
         let driver = AgentWorkflowDriver(runtime: harness.runtime)

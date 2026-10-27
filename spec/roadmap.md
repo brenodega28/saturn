@@ -240,15 +240,15 @@ Goal: correctness comes from what the agent must pass, not from what it is told.
 
 Goal: you review small, verified changes, and AI review points you to what matters without getting in the way.
 
-- [ ] Plan format: a short spec naming files, interfaces, out-of-scope items, acceptance criteria and a verification step; skipped when the task fits in one sentence; you review the plan before building
-- [ ] Size guard: warn when a task's diff passes a line or file threshold and offer to split it
-- [ ] Pre-review gates: secret scanning, new-dependency check (the package exists in its registry and you approve it), duplication and complexity thresholds against the base branch
-- [ ] Evidence for performance and UI changes: benchmarks, screenshots or recorded runs attached to the run and shown in Changes
-- [ ] AI review as commenter: reviewer roles create pins with a confidence score; low-confidence and suppressed categories are hidden; "no comments" is a valid result
-- [ ] Reviewer verdicts are advisory: findings go to the author for one fix round at most, then to you; a reviewer can't block a run on its own
-- [ ] Risk tiers: classify paths and labels (core/security, standard, low-risk); Changes orders review by tier and asks for a line-by-line read on core/security files
-- [ ] Review capacity cap: no new run starts building while more than N changes are waiting on you (per project setting)
-- [ ] New default workflows and templates built on the mission pipeline: Scope → Plan (optional) → Build → Checks → Gates → AI review → You approve → End
+- [x] Plan format: a short spec naming files, interfaces, out-of-scope items, acceptance criteria and a verification step; skipped when the task fits in one sentence; you review the plan before building
+- [x] Size guard: warn when a task's diff passes a line or file threshold and offer to split it
+- [x] Pre-review gates: secret scanning, new-dependency check (the package exists in its registry and you approve it), duplication and complexity thresholds against the base branch
+- [x] Evidence for performance and UI changes: benchmarks, screenshots or recorded runs attached to the run and shown in Changes
+- [x] AI review as commenter: reviewer roles create pins with a confidence score; low-confidence and suppressed categories are hidden; "no comments" is a valid result
+- [x] Reviewer verdicts are advisory: findings go to the author for one fix round at most, then to you; a reviewer can't block a run on its own
+- [x] Risk tiers: classify paths and labels (core/security, standard, low-risk); Changes orders review by tier and asks for a line-by-line read on core/security files
+- [x] Review capacity cap: no new run starts building while more than N changes are waiting on you (per project setting)
+- [x] New default workflows and templates built on the mission pipeline: Scope → Plan (optional) → Build → Checks → Gates → AI review → You approve → End
 
 **Exit check:** a feature request becomes a plan you approve, then a small green branch with AI pins and gate results, and you approve it in Changes without reading files outside its risk tier.
 

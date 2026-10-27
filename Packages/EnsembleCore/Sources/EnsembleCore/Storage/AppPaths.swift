@@ -21,6 +21,10 @@ public struct AppPaths: Sendable {
         agentDirectory(agentID).appending(path: "transcript.jsonl")
     }
 
+    public func evidenceDirectory(runId: Int64) -> URL {
+        root.appending(path: "runs/\(runId)/evidence", directoryHint: .isDirectory)
+    }
+
     public var attachmentsDirectory: URL {
         root.appending(path: "attachments", directoryHint: .isDirectory)
     }

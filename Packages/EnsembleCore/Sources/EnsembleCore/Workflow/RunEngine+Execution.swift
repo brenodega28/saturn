@@ -29,17 +29,17 @@ extension RunEngine {
             return false
         }
         switch step.type {
-        case .agent, .spawn, .check:
+        case .agent, .spawn, .check, .gates:
             return try await executeWork(&loaded, step: step, cursor: cursor)
         case .condition:
             return try await executeCondition(&loaded, step: step, cursor: cursor)
         case .approval:
             let runStep = try beginStep(&loaded, stepId: step.id, cursor: cursor, status: .waitingOnYou)
-            try hold(
-                &loaded, .approval, stepId: step.id, runStepId: runStep.id,
-                title: step.displayTitle,
-                body: step.message ?? (step.instructions.isEmpty ? "Approve “\(loaded.run.title)” or send it back with changes." : step.instructions)
-            )
+            var body = step.message ?? (step.instructions.isEmpty ? "Approve “\(loaded.run.title)” or send it back with changes." : step.instructions)
+            if !loaded.state.reviewNotes.isEmpty {
+                body += "\n\nReviewer comments that weren’t addressed:\n" + loaded.state.reviewNotes.map { "• \($0)" }.joined(separator: "\n")
+            }
+            try hold(&loaded, .approval, stepId: step.id, runStepId: runStep.id, title: step.displayTitle, body: body)
             return false
         case .notify:
             return try executeNotify(&loaded, step: step, cursor: cursor)
@@ -49,6 +49,11 @@ extension RunEngine {
     private func executeWork(_ loaded: inout LoadedRun, step: WorkflowStep, cursor: RunCursor) async throws -> Bool {
         let runID = try loaded.id
         let (task, project) = try taskAndProject(of: loaded.run)
+        if buildsCode(step, project: project) {
+            try await waitForReviewCapacity(runID: runID, project: project)
+            loaded = try load(runID)
+            guard loaded.run.status == .running else { return false }
+        }
         let inputs = try makeInputs(loaded, step: step, task: task)
         let runStep = try beginStep(&loaded, stepId: step.id, cursor: cursor, status: .running, input: encode(inputs))
         guard let runStepID = runStep.id else { throw RunEngineError.runNotFound }
@@ -67,6 +72,8 @@ extension RunEngine {
             result = await race(stepId: step.id, timeoutMinutes: step.timeoutMinutes) { try await driver.runSpawnStep(spawn) }
         } else if step.type == .check {
             result = await race(stepId: step.id, timeoutMinutes: step.timeoutMinutes) { try await driver.runCheckStep(context) }
+        } else if step.type == .gates {
+            result = await race(stepId: step.id, timeoutMinutes: step.timeoutMinutes) { try await driver.runGateStep(context) }
         } else {
             result = await race(stepId: step.id, timeoutMinutes: step.timeoutMinutes) { try await driver.runAgentStep(context) }
         }
@@ -92,6 +99,15 @@ extension RunEngine {
                 &loaded, .planApproval, stepId: step.id, runStepId: runStepID, outcome: result.outcome,
                 title: "Approve the plan for “\(loaded.run.title)”",
                 body: Self.describe(plan), steps: [runStep]
+            )
+            return false
+        }
+        if step.type == .gates, let gates = result.output.gates, !gates.passed {
+            runStep.status = .waitingOnYou
+            try hold(
+                &loaded, .gates, stepId: step.id, runStepId: runStepID, outcome: result.outcome,
+                title: "“\(loaded.run.title)” needs your decision on \(gates.blocking.count) gate finding\(gates.blocking.count == 1 ? "" : "s")",
+                body: gates.details + "\n\nContinue to accept them, or send the work back with these findings.", steps: [runStep]
             )
             return false
         }
@@ -236,6 +252,19 @@ extension RunEngine {
         }
         let key = RunEngineState.loopKey(from: step.id, outcome: outcome)
         let used = loaded.state.loopCounts[key] ?? 0
+        if step.type == .agent, outcome == StepOutcome.changesRequested, Self.isLoopBack(from: step.id, to: target.stepId, in: loaded.workflow),
+           used >= reviewerFixRounds(projectID: loaded.run.projectId), let forward = Self.forwardTarget(of: step, in: loaded.workflow) {
+            let verdict = output.verdict
+            loaded.state.reviewNotes += (verdict?.issues.map { issue in
+                issue.description + ([issue.agent, issue.file].compactMap(\.self).isEmpty ? "" : " (\([issue.agent, issue.file].compactMap(\.self).joined(separator: ", ")))")
+            } ?? []).ifEmpty([verdict?.summary ?? output.summary ?? "The reviewer asked for changes."])
+            loaded.state.feedback = nil
+            loaded.state.cursor = RunCursor(stepId: forward, iteration: forward == WorkflowDefinition.endStepID ? 1 : try nextIteration(of: forward, runID: runID))
+            loaded.run.currentStep = forward
+            loaded.run.status = .running
+            try commit(loaded, steps: steps)
+            return true
+        }
         if let maxLoops = target.route?.maxLoops, used >= maxLoops + (loaded.state.extraLoops[key] ?? 0) {
             let destination = loaded.workflow.step(target.stepId)?.displayTitle ?? target.stepId
             try hold(
@@ -366,6 +395,46 @@ extension RunEngine {
         return (workflow.steps[index + 1].id, nil)
     }
 
+    static func forwardTarget(of step: WorkflowStep, in workflow: WorkflowDefinition) -> String? {
+        for outcome in [StepOutcome.approved, StepOutcome.passed, StepOutcome.done] {
+            if let route = step.routes[outcome], !isLoopBack(from: step.id, to: route.to, in: workflow) { return route.to }
+        }
+        if let next = step.next, !isLoopBack(from: step.id, to: next, in: workflow) { return next }
+        guard let index = workflow.steps.firstIndex(where: { $0.id == step.id }) else { return nil }
+        return index + 1 < workflow.steps.count ? workflow.steps[index + 1].id : WorkflowDefinition.endStepID
+    }
+
+    static func authorStep(before step: WorkflowStep, in workflow: WorkflowDefinition) -> String? {
+        guard let index = workflow.steps.firstIndex(where: { $0.id == step.id }) else { return nil }
+        return workflow.steps[..<index].last { $0.type == .spawn || $0.type == .agent }?.id
+    }
+
+    func reviewerFixRounds(projectID: Int64) -> Int {
+        guard let project = try? database.project(id: projectID) else { return ReviewPolicy.Reviewer().fixRounds }
+        return ProjectConfigLoader.load(repository: project.url).review.reviewer.fixRounds
+    }
+
+    func buildsCode(_ step: WorkflowStep, project: Project) -> Bool {
+        if step.type == .spawn { return true }
+        guard step.type == .agent, let role = step.role else { return false }
+        return ProjectConfigLoader.load(repository: project.url).role(role)?.editsCode == true
+    }
+
+    func changesWaitingOnYou(projectID: Int64, excluding runID: Int64) -> Int {
+        runs.values.filter { $0.projectId == projectID && $0.id != runID && holds[$0.id ?? -1]?.reason == .approval }.count
+    }
+
+    private func waitForReviewCapacity(runID: Int64, project: Project) async throws {
+        guard let projectID = project.id else { return }
+        while let cap = (try? database.project(id: projectID))??.settings.reviewCapacity, cap > 0,
+              changesWaitingOnYou(projectID: projectID, excluding: runID) >= cap {
+            waitingForCapacity.insert(runID)
+            defer { waitingForCapacity.remove(runID) }
+            try await Task.sleep(for: capacityPollInterval)
+            try Task.checkCancellation()
+        }
+    }
+
     static func isLoopBack(from source: String, to target: String, in workflow: WorkflowDefinition) -> Bool {
         guard let from = workflow.steps.firstIndex(where: { $0.id == source }),
               let to = workflow.steps.firstIndex(where: { $0.id == target }) else { return false }
@@ -377,7 +446,9 @@ extension RunEngine {
     }
 
     static func describe(_ plan: Plan) -> String {
-        ([plan.summary] + plan.tasks.map { "• \($0.title) (\($0.role)\($0.count > 1 ? " ×\($0.count)" : ""))" }).joined(separator: "\n")
+        let tasks = ([plan.summary] + plan.tasks.map { "• \($0.title) (\($0.role)\($0.count > 1 ? " ×\($0.count)" : ""))" }).joined(separator: "\n")
+        guard let spec = plan.spec else { return tasks }
+        return tasks + "\n\n" + spec.markdown
     }
 
     func race<Value: Sendable>(stepId: String, timeoutMinutes: Int?, _ operation: @escaping @MainActor () async throws -> Value) async -> Result<Value, any Error> {

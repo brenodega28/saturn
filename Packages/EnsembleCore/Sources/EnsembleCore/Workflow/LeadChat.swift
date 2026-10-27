@@ -216,6 +216,7 @@ public final class LeadChat {
         case .stepBudget, .runBudget: "a budget decision"
         case .stepFailed: "a failed step"
         case .timedOut: "a timed-out step"
+        case .gates: "a decision on gate findings"
         }
     }
 }

@@ -10,7 +10,7 @@ struct ChangesSidebar: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                if !store.pins.isEmpty {
+                if !store.reviewPins.isEmpty {
                     pinSection
                 }
                 fileSection
@@ -35,7 +35,7 @@ struct ChangesSidebar: View {
             }
             .padding(.horizontal, 4)
             .padding(.bottom, 6)
-            ForEach(store.pins) { pin in
+            ForEach(store.reviewPins) { pin in
                 Button { jump(target(for: pin)) } label: { pinRow(pin) }
                     .buttonStyle(.plain)
                     .help("Jump to \(pin.file):\(pin.sideLineLabel)")
@@ -155,9 +155,13 @@ struct ReviewBar: View {
                     .buttonStyle(PillButtonStyle(.primary, height: 36))
                     .help("Sends the \(requested.count) requested change\(requested.count == 1 ? "" : "s") back to the authors’ workflow step")
             } else if open > 0 || holdsApproval {
+                let unreadCore = store.unviewedCoreFiles.count
                 Button(holdsApproval ? "Approve all & continue run" : "Approve all pins") { model.approveAllPins(in: run) }
                     .buttonStyle(PillButtonStyle(.primary, height: 36))
-                    .help(holdsApproval ? "Approves every open pin and lets the run continue" : "Approves every open pin. The run continues when it reaches your approval step.")
+                    .disabled(unreadCore > 0)
+                    .help(unreadCore > 0
+                        ? "Read and mark the \(unreadCore) core file\(unreadCore == 1 ? "" : "s") as viewed first"
+                        : holdsApproval ? "Approves every open pin and lets the run continue" : "Approves every open pin. The run continues when it reaches your approval step.")
             }
         }
         .padding(EdgeInsets(top: 10, leading: 18, bottom: 10, trailing: 10))
@@ -177,15 +181,18 @@ struct ReviewBar: View {
             return requested > 0 ? "\(pins) · \(requests)" : pins
         }
         if requested > 0 { return requests }
-        return store.pins.isEmpty ? "No pins" : "All pins reviewed"
+        return store.reviewPins.isEmpty ? "No pins" : "All pins reviewed"
     }
 
     private func subtitle(requested: Int) -> String {
         var parts: [String] = []
         let conflicts = store.changeSet?.conflictingPaths.count ?? 0
         if conflicts > 0 { parts.append("\(conflicts) conflict\(conflicts == 1 ? "" : "s")") }
+        let unreadCore = store.unviewedCoreFiles.count
+        if unreadCore > 0 { parts.append("\(unreadCore) core file\(unreadCore == 1 ? "" : "s") to read line by line") }
         let unviewed = store.allPaths.filter { !store.viewed.contains($0.path) }.count
         if unviewed > 0 { parts.append("\(unviewed) file\(unviewed == 1 ? "" : "s") not viewed") }
+        if store.hiddenPinCount > 0 { parts.append("\(store.hiddenPinCount) low-confidence comment\(store.hiddenPinCount == 1 ? "" : "s") hidden") }
         if requested > 0 && !holdsApproval { parts.append("\(requested) change request\(requested == 1 ? "" : "s") wait for your approval step") }
         if parts.isEmpty, let step = run.currentStep { parts.append("Run is at \(step.capitalized)") }
         return parts.joined(separator: " · ")

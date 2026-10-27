@@ -44,6 +44,15 @@ struct HoldCard: View {
                     reload: reload
                 ) { engine, proceed in try engine.resolveBudget(run, proceed: proceed) }
             }
+        case .gates:
+            DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
+                DecisionButtons(
+                    primary: ("Continue", "Accept these findings, including any new dependencies, and carry on"),
+                    secondary: ("Send Back", "Send the findings to the authors to fix"),
+                    failureTitle: "Couldn’t resolve the gate findings",
+                    reload: reload
+                ) { engine, proceed in try engine.resolveGates(run, proceed: proceed) }
+            }
         case .stepFailed, .timedOut:
             DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
                 DecisionButtons(

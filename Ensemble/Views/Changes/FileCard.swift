@@ -86,6 +86,7 @@ struct FileCard: View {
             }
 
             Spacer(minLength: 8)
+            TierBadge(tier: store.tier(of: path.path))
             ReviewedPill(reviews: reviews, project: context.project)
             viewedToggle
         }

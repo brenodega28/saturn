@@ -179,6 +179,7 @@ struct TaskCardView: View {
         case .stepBudget, .runBudget: "Budget"
         case .stepFailed: "Step failed"
         case .timedOut: "Timed out"
+        case .gates: "Gate findings"
         }
     }
 }

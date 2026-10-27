@@ -107,13 +107,18 @@ public struct ProjectConfig: Sendable, Hashable {
     public var workflows: [WorkflowDefinition]
     public var docs: DocsIndex
     public var checks: ChecksConfig?
+    public var review: ReviewPolicy
     public var issues: [ConfigIssue]
 
-    public init(roles: [RoleDefinition] = [], workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil, issues: [ConfigIssue] = []) {
+    public init(
+        roles: [RoleDefinition] = [], workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil,
+        review: ReviewPolicy = ReviewPolicy(), issues: [ConfigIssue] = []
+    ) {
         self.roles = roles
         self.workflows = workflows
         self.docs = docs
         self.checks = checks
+        self.review = review
         self.issues = issues
     }
 
@@ -181,7 +186,12 @@ public enum ProjectConfigLoader {
             ? decode(ChecksConfig.self, file: checksFile, relativeTo: repository, issues: &issues)
             : nil
 
-        var config = ProjectConfig(roles: roles, workflows: workflows, docs: docs, checks: checks, issues: issues)
+        let reviewFile = ReviewPolicy.file(in: repository)
+        let review = FileManager.default.fileExists(atPath: reviewFile.path)
+            ? decode(ReviewPolicy.self, file: reviewFile, relativeTo: repository, issues: &issues) ?? ReviewPolicy()
+            : ReviewPolicy()
+
+        var config = ProjectConfig(roles: roles, workflows: workflows, docs: docs, checks: checks, review: review, issues: issues)
         config.issues += ConfigValidator.validate(config)
         return config
     }
@@ -200,6 +210,10 @@ public enum ProjectConfigLoader {
 
     public static func write(_ checks: ChecksConfig, repository: URL) throws {
         try writeYAML(checks, to: ChecksConfig.file(in: repository))
+    }
+
+    public static func write(_ review: ReviewPolicy, repository: URL) throws {
+        try writeYAML(review, to: ReviewPolicy.file(in: repository))
     }
 
     public static func deleteRole(_ id: String, repository: URL) throws {
@@ -297,6 +311,7 @@ public enum ConfigValidator {
             }
         }
 
+        issues += ReviewPolicy.validate(config.review).map { ConfigIssue(file: "\(ProjectConfig.directoryName)/\(ReviewPolicy.fileName)", message: $0) }
         if let checks = config.checks {
             let file = "\(ProjectConfig.directoryName)/\(ChecksConfig.fileName)"
             issues += ChecksConfig.validate(checks).map { ConfigIssue(file: file, message: $0) }
@@ -331,7 +346,9 @@ public enum ConfigValidator {
                     }
                 case .check:
                     guard let checks = config.checks, !checks.checks.isEmpty else {
-                        issues.append(ConfigIssue(file: file, message: prefix + "needs checks in \(ProjectConfig.directoryName)/\(ChecksConfig.fileName)"))
+                        if step.checks?.isEmpty == false || step.testFirst {
+                            issues.append(ConfigIssue(file: file, message: prefix + "needs checks in \(ProjectConfig.directoryName)/\(ChecksConfig.fileName)"))
+                        }
                         continue
                     }
                     for name in step.checks ?? [] where checks.check(named: name) == nil {
@@ -340,7 +357,7 @@ public enum ConfigValidator {
                     if step.testFirst, !checks.checks(named: step.checks).contains(where: { $0.kind == .test }) {
                         issues.append(ConfigIssue(file: file, message: prefix + "test_first needs a check of kind test"))
                     }
-                case .approval, .notify:
+                case .approval, .notify, .gates:
                     break
                 }
                 for target in step.targets where target != WorkflowDefinition.endStepID && !stepIDs.contains(target) {

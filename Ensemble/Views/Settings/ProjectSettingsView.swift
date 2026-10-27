@@ -326,6 +326,30 @@ private struct AgentsSettings: View {
             .padding(16)
             .card(cornerRadius: 16)
 
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Review capacity").font(.system(size: 13.5, weight: .semibold))
+                    Text(project.settings.reviewCapacity == 0
+                        ? "No limit: runs start building no matter how much waits on you."
+                        : "New runs wait before building while \(project.settings.reviewCapacity) or more changes wait for your approval.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                CountStepper(count: Binding(
+                    get: { project.settings.reviewCapacity },
+                    set: { newValue in
+                        var settings = project.settings
+                        settings.reviewCapacity = newValue
+                        model.updateSettings(settings, for: project)
+                    }
+                ), range: 0...20)
+                .help("Changes that may wait for your approval before new runs hold off building; 0 means no limit")
+            }
+            .padding(16)
+            .card(cornerRadius: 16)
+
             ProjectBudgetCard(project: project)
 
             Text("Each role picks its model in Crew › Roles.")

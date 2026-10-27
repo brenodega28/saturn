@@ -30,6 +30,17 @@ struct PlanCard: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 10)
             }
+            if let spec = plan.spec {
+                PlanSpecView(spec: spec)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+            } else {
+                Text("No spec: the lead treated this as a one-sentence change.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.tertiaryText)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 10)
+            }
             ForEach(Array(plan.tasks.enumerated()), id: \.element.id) { index, task in
                 PlanTaskRow(
                     task: task, number: index + 1, isFirst: index == 0, isLast: index == plan.tasks.count - 1,
@@ -217,5 +228,38 @@ private struct PlanTaskRow: View {
         .opacity(disabled ? 0.35 : 1)
         .help(label)
         .accessibilityLabel(label)
+    }
+}
+
+struct PlanSpecView: View {
+    let spec: PlanSpec
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            section("Acceptance criteria", spec.acceptanceCriteria)
+            section("Interfaces", spec.interfaces)
+            section("Out of scope", spec.outOfScope)
+            if !spec.verification.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Verification").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+                    Text(spec.verification).font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.04), in: .rect(cornerRadius: 12, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func section(_ title: String, _ items: [String]) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+                ForEach(items, id: \.self) { item in
+                    Text("• " + item).font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 }

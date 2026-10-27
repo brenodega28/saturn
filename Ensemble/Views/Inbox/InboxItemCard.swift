@@ -59,7 +59,7 @@ struct InboxItemCard: View {
             }
         case .pinReview:
             openButton(help: "Review the pins in the Changes tab")
-        case .planApproval, .approval, .loopLimit, .budget, .failure:
+        case .planApproval, .approval, .loopLimit, .budget, .failure, .gate:
             openButton(help: "Decide in the project’s Lead tab")
         }
     }
@@ -85,6 +85,7 @@ extension InboxKind {
         case .notice: "info.circle"
         case .loopLimit: "arrow.triangle.2.circlepath"
         case .budget: "dollarsign.circle"
+        case .gate: "exclamationmark.shield"
         }
     }
 
@@ -92,7 +93,7 @@ extension InboxKind {
         switch self {
         case .question, .planApproval, .approval: Theme.warning
         case .pinReview: Theme.info
-        case .failure, .budget, .loopLimit: Theme.danger
+        case .failure, .budget, .loopLimit, .gate: Theme.danger
         case .notice: Theme.neutral
         }
     }

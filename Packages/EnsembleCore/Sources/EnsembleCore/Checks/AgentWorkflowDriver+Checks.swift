@@ -5,13 +5,14 @@ extension AgentWorkflowDriver {
     nonisolated static let reproductionPrefix = "Reproduce:"
     nonisolated static let testChangeTag = "test-change"
     nonisolated static let freshSessionAfterFailedCorrections = 2
+    nonisolated static let noChecksSummary = "No checks are set up, so nothing was verified. Add them in Settings › Checks."
 
     public func runCheckStep(_ context: StepContext) async throws -> StepResult {
         let git = try requireGit()
         let runId = try requireRunID(context.run)
         let config = ProjectConfigLoader.load(repository: context.project.url)
         guard let checksConfig = config.checks, case let checks = checksConfig.checks(named: context.step.checks), !checks.isEmpty else {
-            throw WorkflowDriverError.notReady("There are no checks to run. Add them to \(ProjectConfig.directoryName)/\(ChecksConfig.fileName).")
+            return StepResult(outcome: StepOutcome.passed, output: StepOutput(summary: Self.noChecksSummary))
         }
         let builders = try runtime.runSessions(runId: runId, projectId: context.project.id ?? -1)
             .filter { !$0.agent.readOnly && $0.agent.worktreeURL != nil && $0.agent.archivedAt == nil }

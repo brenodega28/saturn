@@ -91,6 +91,7 @@ public enum StepType: String, Sendable, Hashable, Codable, CaseIterable {
     case approval
     case notify
     case check
+    case gates
 }
 
 public enum FailureAction: String, Sendable, Hashable, Codable, CaseIterable {

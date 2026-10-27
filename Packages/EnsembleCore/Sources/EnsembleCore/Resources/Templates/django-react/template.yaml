@@ -1,4 +1,4 @@
 name: Django + React
-description: A Tech Lead splits the work between 2 Django Devs and a React Dev; a PR Reviewer and QA check it
+description: A Tech Lead specs the work for 2 Django Devs and a React Dev; checks and gates verify it and a PR Reviewer comments
 order: 1
 crew: [tech-lead, django-developer, django-developer, react-developer, pr-reviewer, qa-engineer]

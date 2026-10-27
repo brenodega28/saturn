@@ -195,6 +195,7 @@ final class DebugTrace: @unchecked Sendable {
         case .plan(let plan): (HandoffTool.submitPlan.rawValue, JSONValue(encoding: plan) ?? .null)
         case .verdict(let verdict): (HandoffTool.submitVerdict.rawValue, JSONValue(encoding: verdict) ?? .null)
         case .pin(let draft): (HandoffTool.createPin.rawValue, JSONValue(encoding: draft) ?? .null)
+        case .evidence(let draft): (HandoffTool.attachEvidence.rawValue, JSONValue(encoding: draft) ?? .null)
         case .question(let body, let questions): (HandoffTool.askHuman.rawValue, .object(["question": JSONValue(body), "questions": JSONValue(encoding: questions) ?? .null]))
         case .result(let summary): (HandoffTool.submitResult.rawValue, .object(["summary": JSONValue(summary)]))
         case .proposal(let proposal): (HandoffTool.proposeRun.rawValue, JSONValue(encoding: proposal) ?? .null)

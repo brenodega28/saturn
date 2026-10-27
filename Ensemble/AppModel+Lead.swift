@@ -229,8 +229,9 @@ extension AppModel {
 
     func currentStepTitle(of run: Run) -> String? {
         guard let step = run.currentStep else { return nil }
-        guard let workflow = runWorkflow(run) else { return step }
-        return RunTimeline.title(ofStep: step, in: workflow)
+        let title = runWorkflow(run).map { RunTimeline.title(ofStep: step, in: $0) } ?? step
+        guard let id = run.id, engine.waitingForCapacity.contains(id) else { return title }
+        return title + " · waiting for your reviews to clear"
     }
 
     func leadRole(for run: Run, in project: Project) -> RoleDefinition? {

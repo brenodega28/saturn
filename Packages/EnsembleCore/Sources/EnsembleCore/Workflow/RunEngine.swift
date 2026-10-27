@@ -33,6 +33,8 @@ public final class RunEngine {
     public let database: AppDatabase
     public private(set) var runs: [Int64: Run] = [:]
     public private(set) var holds: [Int64: RunHold] = [:]
+    public internal(set) var waitingForCapacity: Set<Int64> = []
+    @ObservationIgnored public var capacityPollInterval: Duration = .seconds(2)
 
     @ObservationIgnored let driver: any WorkflowDriver
     @ObservationIgnored let minute: Duration
@@ -148,9 +150,46 @@ public final class RunEngine {
         runStep.status = .succeeded
         runStep.endedAt = clock()
         try release(&loaded, response: note ?? outcome, decision: outcome)
+        if approved { loaded.state.reviewNotes = [] }
         if try conclude(&loaded, step: step, outcome: outcome, runStep: runStep, output: output, checkStepBudget: false) {
             launch(try loaded.id)
         }
+    }
+
+    public func resolveGates(_ run: Run, proceed: Bool, note: String? = nil) throws {
+        var loaded = try load(run)
+        let hold = try requireHold(loaded, .gates)
+        guard let runStepId = hold.runStepId, var runStep = try database.runStep(id: runStepId),
+              let step = loaded.workflow.step(hold.stepId) else { throw RunEngineError.invalidState("The gates step is missing.") }
+        var output = decodeOutput(runStep.output)
+        runStep.endedAt = clock()
+        if proceed {
+            runStep.status = .succeeded
+            runStep.outcome = StepOutcome.passed
+            output.summary = (output.summary ?? "") + " You continued past them."
+            runStep.output = encode(output)
+            try release(&loaded, response: note ?? "continue", decision: StepOutcome.passed)
+            if try conclude(&loaded, step: step, outcome: StepOutcome.passed, runStep: runStep, output: output, checkStepBudget: false) {
+                launch(try loaded.id)
+            }
+            return
+        }
+        guard let target = step.routes[StepOutcome.changesRequested]?.to ?? Self.authorStep(before: step, in: loaded.workflow) else {
+            throw RunEngineError.invalidState("There is no step to send the work back to.")
+        }
+        runStep.status = .succeeded
+        runStep.outcome = StepOutcome.changesRequested
+        runStep.output = encode(output)
+        try release(&loaded, response: note ?? "send back", decision: StepOutcome.changesRequested)
+        loaded.state.feedback = Feedback(
+            fromStep: step.id, outcome: StepOutcome.changesRequested,
+            summary: note.flatMap { $0.isEmpty ? nil : $0 } ?? "The user sent the work back over these gate findings.",
+            issues: output.gates?.blocking.map(\.issue) ?? []
+        )
+        loaded.state.cursor = RunCursor(stepId: target, iteration: try nextIteration(of: target, runID: loaded.id))
+        loaded.run.currentStep = target
+        try commit(loaded, steps: [runStep])
+        launch(try loaded.id)
     }
 
     public func resolveLoopLimit(_ run: Run, continueOnce: Bool) throws {

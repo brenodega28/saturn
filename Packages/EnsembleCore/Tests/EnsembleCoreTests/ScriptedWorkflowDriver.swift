@@ -47,6 +47,11 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
         return try await reply(for: context.step.step.id)
     }
 
+    func runGateStep(_ context: StepContext) async throws -> StepResult {
+        checkCalls.append(context)
+        return try await reply(for: context.step.id)
+    }
+
     func runCheckStep(_ context: StepContext) async throws -> StepResult {
         checkCalls.append(context)
         return try await reply(for: context.step.id)
@@ -108,6 +113,7 @@ struct WorkflowHarness {
         let repository = FileManager.default.temporaryDirectory.appending(path: "ensemble-workflow-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
         try ProjectConfigLoader.installDefaults(repository: repository)
+        try LegacyWorkflows.install(repository: repository)
         let database = try AppDatabase.inMemory()
         let project = try database.openProject(at: repository)
         let driver = ScriptedWorkflowDriver()

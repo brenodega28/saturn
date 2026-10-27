@@ -6,6 +6,21 @@ extension AppDatabase {
         try writer.read { db in try Self.pinsRequest(runId: runId).fetchAll(db) }
     }
 
+    public func evidence(runId: Int64) throws -> [Evidence] {
+        try writer.read { db in
+            try Evidence.filter(Column("runId") == runId).order(Column("createdAt"), Column("id")).fetchAll(db)
+        }
+    }
+
+    @discardableResult
+    public func addEvidence(_ evidence: Evidence) throws -> Evidence {
+        try writer.write { db in
+            var evidence = evidence
+            try evidence.insert(db)
+            return evidence
+        }
+    }
+
     public func pin(id: Int64) throws -> Pin? {
         try writer.read { db in try Pin.fetchOne(db, id: id) }
     }
@@ -16,7 +31,7 @@ extension AppDatabase {
             var pin = Pin(
                 runId: runId, agentId: agentId, file: draft.file, startLine: min(draft.startLine, draft.endLine),
                 endLine: max(draft.startLine, draft.endLine), title: draft.title, tags: draft.tags,
-                explanation: draft.explanation, createdAt: now, updatedAt: now
+                explanation: draft.explanation, confidence: draft.confidence, category: draft.category, createdAt: now, updatedAt: now
             )
             try pin.insert(db)
             return pin

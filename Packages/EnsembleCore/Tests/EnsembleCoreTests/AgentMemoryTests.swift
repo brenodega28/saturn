@@ -135,6 +135,7 @@ import Testing
     func makeSetup() async throws -> Setup {
         let harness = try await AgentHarness.make(mode: "workflow")
         try ProjectConfigLoader.installDefaults(repository: harness.repo.root)
+        try LegacyWorkflows.install(repository: harness.repo.root)
         var feature = try #require(ProjectConfigLoader.load(repository: harness.repo.root).workflow("feature-delivery"))
         feature.end = WorkflowEnd(action: .merge, cleanUpWorktrees: true)
         try ProjectConfigLoader.write(feature, repository: harness.repo.root)

@@ -38,6 +38,14 @@ extension AppModel {
         return RunReviews.derive(run: run, steps: steps, agents: agents(inRun: run))
     }
 
+    func latestGateReport(in run: Run) -> GateReport? {
+        guard let id = run.id else { return nil }
+        let steps = (try? database.runSteps(runId: id)) ?? []
+        return steps.reversed().lazy.compactMap { step in
+            step.output.flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) }?.gates
+        }.first
+    }
+
     func reviewerTitle(_ review: FileReview, in project: Project) -> String {
         if review.reviewer == review.role, let role = review.role, let name = config(for: project).role(role)?.name {
             return name

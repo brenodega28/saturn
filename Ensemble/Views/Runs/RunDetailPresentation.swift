@@ -73,6 +73,7 @@ extension StepType {
         case .approval: "person.fill.checkmark"
         case .notify: "bell"
         case .check: "checkmark.shield"
+        case .gates: "exclamationmark.shield"
         }
     }
 }
@@ -97,6 +98,7 @@ extension HoldReason {
         case .runBudget: "Run reached its budget"
         case .stepFailed: "Step failed"
         case .timedOut: "Step timed out"
+        case .gates: "Gate findings"
         }
     }
 

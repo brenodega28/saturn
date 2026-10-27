@@ -145,6 +145,7 @@ final class InboxNotifier: NSObject, UNUserNotificationCenterDelegate {
         case .notice: "Notice"
         case .loopLimit: "Loop limit"
         case .budget: "Budget"
+        case .gate: "Gate findings"
         }
     }
 

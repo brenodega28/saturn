@@ -64,6 +64,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     var results: [Int64: String] = [:]
     private var awaitingLead: Set<Int64> = []
     var failedCorrections: [Int64: Int] = [:]
+    public var packageRegistry: any PackageRegistry = PublicPackageRegistry()
     private var serverStart: Task<EnsembleMCPServer, Error>?
     private(set) lazy var questionRelay = QuestionRelay { [weak self] runId, batch in self?.deliverQuestions(batch, runId: runId) }
 
@@ -92,7 +93,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .messageAgent, .askHuman]
         let requestTools = chatTools.union(leadTools)
         guard agent.runId != nil else { return requestTools }
-        var tools: Set<HandoffTool> = requestTools.union([.askHuman, .createPin])
+        var tools: Set<HandoffTool> = requestTools.union([.askHuman, .createPin, .attachEvidence])
         if isLead { tools.formUnion([.submitPlan, .submitVerdict]) }
         if agent.readOnly { tools.insert(.submitVerdict) }
         if !agent.readOnly { tools.insert(.submitResult) }
@@ -129,11 +130,15 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             try await runtime.database.writer.write { db in
                 var pin = Pin(
                     runId: runId, agentId: agentID, file: file, startLine: draft.startLine, endLine: draft.endLine,
-                    title: draft.title, tags: draft.tags, explanation: draft.explanation, createdAt: now, updatedAt: now
+                    title: draft.title, tags: draft.tags, explanation: draft.explanation, confidence: draft.confidence, category: draft.category,
+                    createdAt: now, updatedAt: now
                 )
                 try pin.insert(db)
             }
             return "Pinned \(file):\(draft.startLine)-\(draft.endLine) for the user."
+        case .evidence(let draft):
+            guard let runId = agent.runId else { throw HandoffError.notAllowed("Evidence belongs to workflow runs.") }
+            return try attachEvidence(draft, runId: runId, agent: agent)
         case .question(let question, let questions):
             if let runId = agent.runId, try relayLead(for: agent, runId: runId) != nil {
                 awaitingLead.insert(agentID)
@@ -664,10 +669,12 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             if let feedback = context.inputs.feedback {
                 parts.append("## The user asked for a new plan\n\(feedback.summary)")
             }
+            parts.append(Self.planGuide)
             parts.append("Read the codebase, then call `\(HandoffTool.submitPlan.qualifiedName)` with tasks that don’t touch the same files. Use only the role ids above. Then end your turn.")
         case .verdict:
             if let plan = context.inputs.plan {
                 parts.append("## Plan\n\(plan.summary)\n" + plan.tasks.enumerated().map { "\($0.offset + 1). \($0.element.title) (\($0.element.role))" }.joined(separator: "\n"))
+                if let spec = plan.spec { parts.append("## Spec to check against\n" + spec.markdown) }
             }
             let builds = context.inputs.previousOutputs.last { !$0.output.taskResults.isEmpty }
             if let builds {
@@ -677,8 +684,11 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             if let lastCheck = previousCheck(in: context) {
                 parts.append(lastCheck)
             }
-            let outcomes = isTestingStep(context.step) ? "`passed` or `failed`" : "`approved` or `changes_requested`"
-            parts.append("When you’re done, call `\(HandoffTool.submitVerdict.qualifiedName)` with outcome \(outcomes), a summary, and concrete issues naming the agent and file. Pin anything a human must read with `\(HandoffTool.createPin.qualifiedName)`. Then end your turn.")
+            if isTestingStep(context.step) {
+                parts.append("When you’re done, call `\(HandoffTool.submitVerdict.qualifiedName)` with outcome `passed` or `failed`, a summary, and concrete issues naming the agent and file. Pin anything a human must read with `\(HandoffTool.createPin.qualifiedName)`. Then end your turn.")
+            } else {
+                parts.append(Self.reviewerGuide)
+            }
         case .result:
             if let feedback = context.inputs.feedback {
                 parts.append("## Feedback to address\n\(feedback.summary)\n" + feedback.issues.map { "- \($0.description)" }.joined(separator: "\n"))
@@ -721,6 +731,19 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         return parts.joined(separator: "\n\n")
     }
 
+    static let reviewerGuide = """
+        ## How to review
+        You comment; you don’t approve or block. The project’s checks and gates already ran, so don’t repeat them: look for real defects against the plan and its acceptance criteria, missing tests, security and data problems, and code that will be hard to change.
+        Pin each finding worth a person’s time with `\(HandoffTool.createPin.qualifiedName)`, with your confidence that it’s a real problem (0 to 1) and a category. Skip style and nits; findings below the project’s confidence bar are hidden. No pins is a good result when the work is right.
+        Then call `\(HandoffTool.submitVerdict.qualifiedName)`: `approved`, or `changes_requested` only for real defects, with concrete issues naming the agent and file. The authors get one round to fix them; after that the work goes to the user with your remaining comments. Then end your turn.
+        """
+
+    static let planGuide = """
+        ## How to plan
+        Keep each task one reviewable unit: small enough that a person can read its diff in one sitting. Name the files each task owns.
+        Unless the request fits in one sentence, add a short spec: the interfaces it adds or changes, acceptance criteria someone can check, what is out of scope, and how to verify the whole change end to end. Keep it short; this is not a design document.
+        """
+
     func testFirstGuide(for run: Run) -> String? {
         guard workflowSnapshot(run)?.steps.contains(where: { $0.type == .check && $0.testFirst }) == true else { return nil }
         return "## Test first\nBefore changing any code, add a test that reproduces the problem and fails, and commit it on its own with a message starting with “\(Self.reproductionPrefix)”. Then fix the code so the test passes. Ensemble checks that the test fails without your fix."
@@ -736,6 +759,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         if !task.files.isEmpty { parts.append("You own: \(task.files.joined(separator: ", ")). Don’t change files other tasks own.") }
         parts.append("## Overall request\n\(context.step.inputs.taskTitle)" + (context.step.inputs.taskBody.isEmpty ? "" : "\n\n\(context.step.inputs.taskBody)"))
         parts.append("## Plan\n\(context.plan.summary)\n" + context.plan.tasks.enumerated().map { "\($0.offset + 1). \($0.element.title) (\($0.element.role))" }.joined(separator: "\n"))
+        if let spec = context.plan.spec { parts.append("## Spec\n" + spec.markdown) }
         if !context.step.step.instructions.isEmpty { parts.append(context.step.step.instructions) }
         if let guide = testFirstGuide(for: context.step.run) { parts.append(guide) }
         parts.append("Build it in your worktree, run the tests, commit, then call `\(HandoffTool.submitResult.qualifiedName)` with what you changed and how you verified it. Then end your turn.")

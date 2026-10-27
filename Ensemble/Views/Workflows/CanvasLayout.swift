@@ -165,6 +165,8 @@ struct CanvasLayout {
             return ("You", step.displayTitle)
         case .notify:
             return ("Notify", step.message.flatMap { $0.isEmpty ? nil : $0 } ?? step.displayTitle)
+        case .gates:
+            return ("Gates", step.displayTitle)
         case .check:
             return ("Checks", step.checks.map { $0.joined(separator: ", ") } ?? step.displayTitle)
         }

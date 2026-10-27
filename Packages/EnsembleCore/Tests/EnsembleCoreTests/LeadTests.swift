@@ -72,6 +72,7 @@ struct LeadRequestTests {
         try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: repository) }
         try ProjectConfigLoader.installDefaults(repository: repository)
+        try LegacyWorkflows.install(repository: repository)
         let config = ProjectConfigLoader.load(repository: repository)
         let workflow = try #require(config.workflow("feature-delivery"))
         let leads = Set(config.roles.filter(\.canSpawn).map(\.id))

@@ -74,6 +74,7 @@ final class WorkflowEditor {
         case .approval: "You approve"
         case .notify: "Notify me"
         case .check: "Run checks"
+        case .gates: "Gates"
         }
         let step = draft.addStep(type, role: role?.id, title: title, position: position ?? nextFreePosition())
         selection = .step(step.id)

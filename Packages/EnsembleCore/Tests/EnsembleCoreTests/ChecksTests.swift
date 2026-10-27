@@ -59,9 +59,11 @@ import Testing
         #expect(messages.contains(".ensemble/workflows/checked.yaml: steps.verify: test_first needs a check of kind test"))
     }
 
-    @Test func aCheckStepWithoutChecksIsReported() throws {
-        let config = ProjectConfig(workflows: [WorkflowDefinition(id: "w", name: "W", steps: [WorkflowStep(id: "verify", type: .check)])])
-        #expect(ConfigValidator.validate(config).map(\.message) == ["steps.verify: needs checks in .ensemble/checks.yaml"])
+    @Test func aCheckStepWithoutChecksIsOnlyReportedWhenItNamesChecks() throws {
+        let plain = ProjectConfig(workflows: [WorkflowDefinition(id: "w", name: "W", steps: [WorkflowStep(id: "verify", type: .check)])])
+        #expect(ConfigValidator.validate(plain).isEmpty)
+        let named = ProjectConfig(workflows: [WorkflowDefinition(id: "w", name: "W", steps: [WorkflowStep(id: "verify", type: .check, checks: ["unit"])])])
+        #expect(ConfigValidator.validate(named).map(\.message) == ["steps.verify: needs checks in .ensemble/checks.yaml"])
     }
 
     @Test func hookSettingsCoverOnlyWhatIsConfigured() throws {

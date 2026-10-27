@@ -8,6 +8,7 @@ public enum HoldReason: String, Sendable, Hashable, Codable, CaseIterable {
     case runBudget = "run_budget"
     case stepFailed = "step_failed"
     case timedOut = "timed_out"
+    case gates
 
     public var inboxKind: InboxKind {
         switch self {
@@ -16,6 +17,7 @@ public enum HoldReason: String, Sendable, Hashable, Codable, CaseIterable {
         case .loopLimit: .loopLimit
         case .stepBudget, .runBudget: .budget
         case .stepFailed, .timedOut: .failure
+        case .gates: .gate
         }
     }
 }
@@ -71,11 +73,13 @@ public struct RunEngineState: Sendable, Hashable, Codable {
     public var loopCounts: [String: Int]
     public var extraLoops: [String: Int]
     public var feedback: Feedback?
+    public var reviewNotes: [String]
 
     public init(
         cursor: RunCursor? = nil, hold: RunHold? = nil, loopCounts: [String: Int] = [:], extraLoops: [String: Int] = [:],
-        feedback: Feedback? = nil
+        feedback: Feedback? = nil, reviewNotes: [String] = []
     ) {
+        self.reviewNotes = reviewNotes
         self.cursor = cursor
         self.hold = hold
         self.loopCounts = loopCounts
@@ -90,6 +94,7 @@ public struct RunEngineState: Sendable, Hashable, Codable {
         self.loopCounts = try container.decodeIfPresent([String: Int].self, forKey: .loopCounts) ?? [:]
         self.extraLoops = try container.decodeIfPresent([String: Int].self, forKey: .extraLoops) ?? [:]
         self.feedback = try container.decodeIfPresent(Feedback.self, forKey: .feedback)
+        self.reviewNotes = try container.decodeIfPresent([String].self, forKey: .reviewNotes) ?? []
     }
 
     static func loopKey(from stepId: String, outcome: String) -> String { "\(stepId)->\(outcome)" }

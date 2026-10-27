@@ -145,6 +145,7 @@ struct RequestChat: View {
         case .loopLimit: return "The work keeps going back and forth. Tell me whether to try once more."
         case .stepBudget, .runBudget: return "We hit a budget limit. Decide whether to spend more."
         case .stepFailed, .timedOut: return "“\(step)” didn’t finish. Retry it, or stop the run."
+        case .gates: return "The gates found things you need to decide on: continue, or send the work back."
         }
     }
 }

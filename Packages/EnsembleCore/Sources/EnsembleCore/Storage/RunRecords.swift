@@ -33,6 +33,7 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
     public var setupTimeoutMinutes: Int
     public var monthlyBudgetUSD: Double?
     public var budgetOverrideMonth: String?
+    public var reviewCapacity: Int
 
     public init(
         maxConcurrentAgents: Int = 4,
@@ -44,8 +45,10 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         idleCleanupMinutes: Int = 10,
         setupTimeoutMinutes: Int = 10,
         monthlyBudgetUSD: Double? = nil,
-        budgetOverrideMonth: String? = nil
+        budgetOverrideMonth: String? = nil,
+        reviewCapacity: Int = 3
     ) {
+        self.reviewCapacity = reviewCapacity
         self.setupTimeoutMinutes = setupTimeoutMinutes
         self.maxConcurrentAgents = maxConcurrentAgents
         self.githubRepository = githubRepository
@@ -71,6 +74,7 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         self.setupTimeoutMinutes = try container.decodeIfPresent(Int.self, forKey: .setupTimeoutMinutes) ?? defaults.setupTimeoutMinutes
         self.monthlyBudgetUSD = try container.decodeIfPresent(Double.self, forKey: .monthlyBudgetUSD)
         self.budgetOverrideMonth = try container.decodeIfPresent(String.self, forKey: .budgetOverrideMonth)
+        self.reviewCapacity = try container.decodeIfPresent(Int.self, forKey: .reviewCapacity) ?? defaults.reviewCapacity
     }
 }
 
@@ -156,6 +160,8 @@ public struct Pin: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
     public var explanation: String
     public var status: PinStatus
     public var response: String?
+    public var confidence: Double?
+    public var category: String?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -163,8 +169,10 @@ public struct Pin: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
         id: Int64? = nil, runId: Int64, agentId: Int64?, file: String, startLine: Int, endLine: Int,
         side: PinSide = .new, byUser: Bool = false,
         title: String, tags: [String] = [], explanation: String, status: PinStatus = .open,
-        response: String? = nil, createdAt: Date, updatedAt: Date
+        response: String? = nil, confidence: Double? = nil, category: String? = nil, createdAt: Date, updatedAt: Date
     ) {
+        self.confidence = confidence
+        self.category = category
         self.side = side
         self.byUser = byUser
         self.id = id
@@ -192,6 +200,43 @@ public struct Pin: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
     }
 }
 
+public enum EvidenceKind: String, Codable, Sendable, CaseIterable {
+    case screenshot
+    case recording
+    case benchmark
+    case log
+}
+
+public struct Evidence: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "evidence"
+
+    public var id: Int64?
+    public var runId: Int64
+    public var agentId: Int64?
+    public var kind: EvidenceKind
+    public var title: String
+    public var file: String
+    public var note: String
+    public var createdAt: Date
+
+    public init(id: Int64? = nil, runId: Int64, agentId: Int64?, kind: EvidenceKind, title: String, file: String, note: String = "", createdAt: Date) {
+        self.id = id
+        self.runId = runId
+        self.agentId = agentId
+        self.kind = kind
+        self.title = title
+        self.file = file
+        self.note = note
+        self.createdAt = createdAt
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+
+    public var url: URL { URL(filePath: file) }
+}
+
 public enum InboxKind: String, Codable, Sendable, CaseIterable {
     case question
     case planApproval = "plan_approval"
@@ -201,6 +246,7 @@ public enum InboxKind: String, Codable, Sendable, CaseIterable {
     case notice
     case loopLimit = "loop_limit"
     case budget
+    case gate
 }
 
 public enum InboxStatus: String, Codable, Sendable, CaseIterable {

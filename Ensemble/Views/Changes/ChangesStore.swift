@@ -29,6 +29,10 @@ final class ChangesStore {
     private(set) var loadedRunID: Int64?
     private(set) var isLoading = false
     var pins: [Pin] = []
+    var policy = ReviewPolicy()
+    var labels: [String] = []
+    var evidence: [Evidence] = []
+    var gates: GateReport?
     var viewed: Set<String> = []
     var collapsed: Set<String> = []
     var expandedGenerated: Set<String> = []
@@ -76,9 +80,37 @@ final class ChangesStore {
         changeSet = loaded
         loadedRunID = run.id
         viewed = model.viewedPaths(in: run, current: loaded?.paths ?? [])
+        policy = model.config(for: project).review
+        labels = (try? model.database.task(id: run.taskId))??.labels ?? []
+        if let id = run.id {
+            evidence = (try? model.database.evidence(runId: id)) ?? []
+            gates = model.latestGateReport(in: run)
+        }
+        for path in allPaths where tier(of: path.path) == .low && !viewed.contains(path.path) {
+            collapsed.insert(path.path)
+        }
     }
 
-    var allPaths: [ChangedPath] { changeSet?.paths ?? [] }
+    var allPaths: [ChangedPath] {
+        (changeSet?.paths ?? []).sorted { lhs, rhs in
+            let left = tier(of: lhs.path), right = tier(of: rhs.path)
+            return left == right ? lhs.path < rhs.path : left < right
+        }
+    }
+
+    func tier(of path: String) -> RiskTier {
+        policy.riskTiers.tier(of: path, labels: labels)
+    }
+
+    var unviewedCoreFiles: [ChangedPath] {
+        allPaths.filter { tier(of: $0.path) == .core && !viewed.contains($0.path) }
+    }
+
+    var reviewPins: [Pin] {
+        pins.filter { $0.byUser || !policy.reviewer.hides(confidence: $0.confidence, category: $0.category) }
+    }
+
+    var hiddenPinCount: Int { pins.count - reviewPins.count }
 
     var visiblePaths: [ChangedPath] {
         guard let agentFilter else { return allPaths }
@@ -93,16 +125,16 @@ final class ChangesStore {
 
     var codingAgents: [Agent] { changeSet?.branches.map(\.agent) ?? [] }
 
-    var openPins: [Pin] { pins.filter { $0.status == .open } }
-    var changeRequests: [Pin] { pins.filter { $0.status == .changeRequested } }
+    var openPins: [Pin] { reviewPins.filter { $0.status == .open } }
+    var changeRequests: [Pin] { reviewPins.filter { $0.status == .changeRequested } }
 
     func pins(for path: ChangedPath) -> [Pin] {
-        pins.filter { Self.pin($0, belongsTo: path.path) }
+        reviewPins.filter { Self.pin($0, belongsTo: path.path) }
     }
 
     var pinsOutsideChanges: [Pin] {
         let paths = allPaths
-        return pins.filter { pin in !paths.contains { Self.pin(pin, belongsTo: $0.path) } }
+        return reviewPins.filter { pin in !paths.contains { Self.pin(pin, belongsTo: $0.path) } }
     }
 
     static func pin(_ pin: Pin, belongsTo path: String) -> Bool {

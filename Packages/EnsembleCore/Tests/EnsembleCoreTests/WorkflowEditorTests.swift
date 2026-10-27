@@ -42,14 +42,23 @@ struct DryRunTests {
     }
 
     @Test func loopLimitStopsTheRun() async throws {
+        let workflow = try defaults("feature-delivery")
+        var script = DryRunScript.happyPath(for: workflow)
+        script.outcomes["qa"] = Array(repeating: StepOutcome.failed, count: 5)
+        let report = try await DryRun.run(workflow, script: script)
+        #expect(report.status == .failed)
+        #expect(report.steps.filter { $0.stepId == "qa" }.count == 3)
+        #expect(report.notes.contains("“Test end to end” hit its loop limit; the run stops here."))
+        #expect(!report.visitedNodes.contains("end"))
+    }
+
+    @Test func aReviewerThatKeepsAskingForChangesOnlyGetsOneFixRound() async throws {
         let workflow = try defaults("small-task")
         var script = DryRunScript.happyPath(for: workflow)
         script.outcomes["review"] = Array(repeating: StepOutcome.changesRequested, count: 5)
         let report = try await DryRun.run(workflow, script: script)
-        #expect(report.status == .failed)
-        #expect(report.steps.filter { $0.stepId == "review" }.count == 3)
-        #expect(report.notes.contains("“Review” hit its loop limit; the run stops here."))
-        #expect(!report.visitedNodes.contains("end"))
+        #expect(report.status == .succeeded)
+        #expect(report.steps.map(\.stepId) == ["build", "review", "build", "review", "approve", "end"])
     }
 
     @Test func conditionsUseTheSampleLabelsAndDiff() async throws {
@@ -233,7 +242,7 @@ struct WorkflowEditingTests {
         let edges = workflow.edges
         #expect(edges.first == WorkflowEdge(from: WorkflowDefinition.triggerNodeID, to: "build", kind: .start))
         let loop = try #require(edges.first { $0.from == "review" && $0.outcome == "changes_requested" })
-        #expect(loop.isLoopBack && loop.maxLoops == 2 && loop.to == "build")
+        #expect(loop.isLoopBack && loop.maxLoops == 1 && loop.to == "build")
         let forward = try #require(edges.first { $0.from == "review" && $0.outcome == "approved" })
         #expect(!forward.isLoopBack)
         #expect(edges.contains(WorkflowEdge(from: "approve", to: "end", kind: .route, outcome: "approved")))

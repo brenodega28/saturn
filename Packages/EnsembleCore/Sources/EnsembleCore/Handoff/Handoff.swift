@@ -32,13 +32,67 @@ public struct PlanTask: Sendable, Hashable, Codable, Identifiable {
     }
 }
 
+public struct PlanSpec: Sendable, Hashable, Codable {
+    public var interfaces: [String]
+    public var outOfScope: [String]
+    public var acceptanceCriteria: [String]
+    public var verification: String
+
+    public init(interfaces: [String] = [], outOfScope: [String] = [], acceptanceCriteria: [String] = [], verification: String = "") {
+        self.interfaces = interfaces
+        self.outOfScope = outOfScope
+        self.acceptanceCriteria = acceptanceCriteria
+        self.verification = verification
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case interfaces, verification
+        case outOfScope = "out_of_scope"
+        case acceptanceCriteria = "acceptance_criteria"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.interfaces = try container.decodeIfPresent([String].self, forKey: .interfaces) ?? []
+        self.outOfScope = try container.decodeIfPresent([String].self, forKey: .outOfScope) ?? []
+        self.acceptanceCriteria = try container.decodeIfPresent([String].self, forKey: .acceptanceCriteria) ?? []
+        self.verification = try container.decodeIfPresent(String.self, forKey: .verification) ?? ""
+    }
+
+    public var isEmpty: Bool {
+        interfaces.isEmpty && outOfScope.isEmpty && acceptanceCriteria.isEmpty && verification.isEmpty
+    }
+
+    public var markdown: String {
+        var parts: [String] = []
+        if !interfaces.isEmpty { parts.append("Interfaces:\n" + interfaces.map { "- \($0)" }.joined(separator: "\n")) }
+        if !acceptanceCriteria.isEmpty { parts.append("Acceptance criteria:\n" + acceptanceCriteria.map { "- \($0)" }.joined(separator: "\n")) }
+        if !outOfScope.isEmpty { parts.append("Out of scope:\n" + outOfScope.map { "- \($0)" }.joined(separator: "\n")) }
+        if !verification.isEmpty { parts.append("Verification: \(verification)") }
+        return parts.joined(separator: "\n\n")
+    }
+}
+
 public struct Plan: Sendable, Hashable, Codable {
     public var summary: String
     public var tasks: [PlanTask]
+    public var spec: PlanSpec?
 
-    public init(summary: String, tasks: [PlanTask]) {
+    public init(summary: String, tasks: [PlanTask], spec: PlanSpec? = nil) {
         self.summary = summary
         self.tasks = tasks
+        self.spec = spec
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case summary, tasks, spec
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.summary = try container.decode(String.self, forKey: .summary)
+        self.tasks = try container.decode([PlanTask].self, forKey: .tasks)
+        self.spec = try container.decodeIfPresent(PlanSpec.self, forKey: .spec).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     public var agentCount: Int { tasks.reduce(0) { $0 + $1.count } }
@@ -86,18 +140,22 @@ public struct PinDraft: Sendable, Hashable, Codable {
     public var title: String
     public var tags: [String]
     public var explanation: String
+    public var confidence: Double?
+    public var category: String?
 
-    public init(file: String, startLine: Int, endLine: Int, title: String, tags: [String] = [], explanation: String) {
+    public init(file: String, startLine: Int, endLine: Int, title: String, tags: [String] = [], explanation: String, confidence: Double? = nil, category: String? = nil) {
         self.file = file
         self.startLine = startLine
         self.endLine = endLine
         self.title = title
         self.tags = tags
         self.explanation = explanation
+        self.confidence = confidence
+        self.category = category
     }
 
     enum CodingKeys: String, CodingKey {
-        case file, title, tags, explanation
+        case file, title, tags, explanation, confidence, category
         case startLine = "start_line"
         case endLine = "end_line"
     }
@@ -110,6 +168,34 @@ public struct PinDraft: Sendable, Hashable, Codable {
         self.title = try container.decode(String.self, forKey: .title)
         self.tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
         self.explanation = try container.decodeIfPresent(String.self, forKey: .explanation) ?? ""
+        self.confidence = try container.decodeIfPresent(Double.self, forKey: .confidence).map { min(1, max(0, $0)) }
+        self.category = try container.decodeIfPresent(String.self, forKey: .category)?.lowercased()
+    }
+}
+
+public struct EvidenceDraft: Sendable, Hashable, Codable {
+    public var kind: EvidenceKind
+    public var file: String
+    public var title: String
+    public var note: String
+
+    public init(kind: EvidenceKind, file: String, title: String, note: String = "") {
+        self.kind = kind
+        self.file = file
+        self.title = title
+        self.note = note
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case kind, file, title, note
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try container.decode(EvidenceKind.self, forKey: .kind)
+        self.file = try container.decode(String.self, forKey: .file)
+        self.title = try container.decode(String.self, forKey: .title)
+        self.note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
     }
 }
 
@@ -137,6 +223,7 @@ public enum HandoffMessage: Sendable, Hashable {
     case plan(Plan)
     case verdict(Verdict)
     case pin(PinDraft)
+    case evidence(EvidenceDraft)
     case question(String, [HumanQuestion] = [])
     case result(String)
     case proposal(RunProposal)
@@ -182,6 +269,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     case submitVerdict = "submit_verdict"
     case submitResult = "submit_result"
     case createPin = "create_pin"
+    case attachEvidence = "attach_evidence"
     case askHuman = "ask_human"
     case proposeRun = "propose_run"
     case messageAgent = "message_agent"
@@ -200,13 +288,15 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     public var description: String {
         switch self {
         case .submitPlan:
-            "Submit your plan: a short summary and the list of tasks, each with the role that should build it. Call once when planning is done, then end your turn."
+            "Submit your plan: a short summary, the list of tasks with the role that builds each and the files it owns, and a short spec (interfaces, acceptance criteria, out of scope, verification). Skip the spec only when the request fits in one sentence. Call once when planning is done, then end your turn."
         case .submitVerdict:
             "Submit your review or test verdict. outcome is approved or changes_requested for reviews, passed or failed for tests. List concrete issues. Then end your turn."
         case .submitResult:
             "Summarize what you built and how you verified it. Call when your task is finished, then end your turn."
         case .createPin:
-            "Flag lines a human must read before this work ships: risky logic, security, migrations, money, data loss. Lines refer to the file in your worktree."
+            "Flag lines a human must read before this work ships: risky logic, security, migrations, money, data loss. Lines refer to the file in your worktree. Reviewers: give your confidence that it’s a real problem and a category; only pin what is worth a person’s time."
+        case .attachEvidence:
+            "Attach evidence for the user to see with your change: a screenshot or recording of UI you changed, or benchmark output for performance work. The file must be in your worktree or a folder you can read; Ensemble keeps a copy."
         case .proposeRun:
             "Propose a workflow run for this request. The user sees it with a Start button; nothing runs until they click it. If they start it, you plan it. Give the workflow id, a short title and a brief with everything the planner needs from this conversation. Then end your turn."
         case .messageAgent:
@@ -243,6 +333,12 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                     "count": .object(["type": .string("integer"), "minimum": .number(1)]),
                     "files": array(string("A file or folder this task owns")),
                 ], required: ["title", "role"])),
+                "spec": object([
+                    "interfaces": array(string("A function, endpoint, type or command the work adds or changes, with its signature")),
+                    "acceptance_criteria": array(string("A checkable statement that is true when the work is done")),
+                    "out_of_scope": array(string("Something this work deliberately doesn't do")),
+                    "verification": string("How to verify the whole change end to end"),
+                ], required: []),
             ], required: ["summary", "tasks"])
         case .submitVerdict:
             return object([
@@ -264,7 +360,16 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "title": string("One line a reviewer reads first"),
                 "tags": array(string("Short tag such as security, migration, money")),
                 "explanation": string("Why a human must read this"),
+                "confidence": .object(["type": .string("number"), "minimum": .number(0), "maximum": .number(1), "description": .string("How sure you are this is a real problem, from 0 to 1")]),
+                "category": .object(["type": .string("string"), "enum": .array(["correctness", "security", "data", "performance", "tests", "design", "style", "nit"].map(JSONValue.string))]),
             ], required: ["file", "start_line", "end_line", "title", "explanation"])
+        case .attachEvidence:
+            return object([
+                "kind": .object(["type": .string("string"), "enum": .array(EvidenceKind.allCases.map { JSONValue.string($0.rawValue) })]),
+                "file": string("Path to the screenshot, recording or benchmark output"),
+                "title": string("What it shows, in one line"),
+                "note": string("Anything the reviewer should know, such as the numbers before and after"),
+            ], required: ["kind", "file", "title"])
         case .proposeRun:
             return object([
                 "workflow": string("Workflow id from the list in your instructions"),
@@ -311,6 +416,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .submitPlan: return .plan(try decoder.decode(Plan.self, from: data))
         case .submitVerdict: return .verdict(try decoder.decode(Verdict.self, from: data))
         case .createPin: return .pin(try decoder.decode(PinDraft.self, from: data))
+        case .attachEvidence: return .evidence(try decoder.decode(EvidenceDraft.self, from: data))
         case .askHuman:
             guard let question = arguments["question"]?.string, !question.isEmpty else { throw HandoffError.missing("question") }
             let questions = try arguments["questions"].map { try decoder.decode([HumanQuestion].self, from: Data($0.compactJSON.utf8)) } ?? []

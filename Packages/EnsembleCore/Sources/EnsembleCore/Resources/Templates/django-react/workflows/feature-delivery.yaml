@@ -1,6 +1,6 @@
 name: Feature delivery
-version: 1
-description: The lead splits the work between Django and React developers, the PR Reviewer checks it, QA tests, you approve.
+version: 2
+description: The lead specs the work for Django and React developers, checks and gates verify it, the PR Reviewer comments, you approve.
 trigger:
   sources: [chat, github]
   labels: [feature]
@@ -8,41 +8,41 @@ budget: 20
 steps:
   - id: plan
     type: agent
-    title: Plan & split the task
+    title: Plan & spec the task
     role: tech-lead
-    instructions: Break the request into backend tasks for django-developer and frontend tasks for react-developer that don't touch the same files, and submit the plan.
+    instructions: Break the request into backend tasks for django-developer and frontend tasks for react-developer that don't touch the same files, with a short spec unless the request fits in one sentence. Submit the plan.
     budget: 2
     next: build
   - id: build
     type: spawn
     title: Build in parallel
     role: django-developer
-    instructions: Build your task from the plan in your own worktree, run the tests, and commit.
+    instructions: Build your task from the plan in your own worktree, add tests, run them, and commit.
     max_agents: 3
-    next: review
+    next: checks
+  - id: checks
+    type: check
+    title: Run the checks
+    next: gates
+  - id: gates
+    type: gates
+    title: Gates
+    routes:
+      passed: review
+      changes_requested: build
   - id: review
     type: agent
-    title: Review the code
+    title: AI review
     role: pr-reviewer
-    instructions: Read every branch against the plan. Approve, or request changes naming the agent and file.
+    instructions: Read every branch against the plan and its acceptance criteria. Pin real findings with your confidence; approve unless something is actually wrong.
     routes:
-      approved: qa
+      approved: approve
       changes_requested:
         to: build
-        max_loops: 3
-  - id: qa
-    type: agent
-    title: Test end to end
-    role: qa-engineer
-    instructions: Run the Django and React test suites on the merged work, exercise the changed behavior, and report passed or failed.
-    routes:
-      passed: approve
-      failed:
-        to: build
-        max_loops: 2
+        max_loops: 1
   - id: approve
     type: approval
-    title: You approve the pins
+    title: You approve
     routes:
       approved: end
       changes_requested:

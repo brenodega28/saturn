@@ -24,8 +24,19 @@ import Testing
         #expect(config.leadRoles.map(\.id) == ["tech-lead", "project-manager"])
         #expect(config.role("qa-engineer")?.editsCode == false)
         let feature = try #require(config.workflow("feature-delivery"))
-        #expect(feature.steps.map(\.id) == ["plan", "build", "review", "qa", "approve"])
-        #expect(feature.step("review")?.routes["changes_requested"] == WorkflowRoute(to: "build", maxLoops: 3))
+        #expect(feature.steps.map(\.id) == ["plan", "build", "checks", "gates", "review", "approve"])
+        #expect(feature.steps.map(\.type) == [.agent, .spawn, .check, .gates, .agent, .approval])
+        #expect(feature.step("gates")?.routes["changes_requested"]?.to == "build")
+        #expect(feature.step("review")?.routes["changes_requested"] == WorkflowRoute(to: "build", maxLoops: 1))
+        #expect(try #require(config.workflow("small-task")).steps.map(\.id) == ["build", "checks", "gates", "review", "approve"])
+        for template in CrewTemplates.bundled {
+            let templateRepository = try makeRepository()
+            defer { try? FileManager.default.removeItem(at: templateRepository) }
+            try template.install(in: templateRepository)
+            let installed = ProjectConfigLoader.load(repository: templateRepository)
+            #expect(installed.issues.isEmpty, "\(template.id): \(installed.issues)")
+            #expect(installed.workflows.allSatisfy { $0.steps.contains { $0.type == .check } && $0.steps.contains { $0.type == .gates } })
+        }
         #expect(feature.step("approve")?.routes["approved"]?.to == WorkflowDefinition.endStepID)
         #expect(feature.end.action == .pullRequest)
         #expect(FileManager.default.fileExists(atPath: repository.appending(path: ".ensemble/.gitignore").path))

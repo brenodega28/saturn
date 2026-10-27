@@ -108,19 +108,19 @@ import Testing
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "tight", name: "Tight", steps: [
             WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "review"),
-            WorkflowStep(id: "review", type: .agent, role: "pr-reviewer", routes: [
-                StepOutcome.approved: WorkflowRoute(to: "end"),
-                StepOutcome.changesRequested: WorkflowRoute(to: "build", maxLoops: 1),
+            WorkflowStep(id: "review", type: .agent, role: "qa-engineer", routes: [
+                StepOutcome.passed: WorkflowRoute(to: "end"),
+                StepOutcome.failed: WorkflowRoute(to: "build", maxLoops: 1),
             ]),
         ])
         h.driver.script("build", H.done(), H.done(), H.done())
-        h.driver.script("review", H.verdict(StepOutcome.changesRequested, "1"), H.verdict(StepOutcome.changesRequested, "2"), H.verdict(StepOutcome.approved))
+        h.driver.script("review", H.verdict(StepOutcome.failed, "1"), H.verdict(StepOutcome.failed, "2"), H.verdict(StepOutcome.passed))
 
         let id = try await h.start(workflow)
 
         let hold = try #require(try h.hold(id))
         #expect(hold.reason == .loopLimit)
-        #expect(hold.outcome == StepOutcome.changesRequested)
+        #expect(hold.outcome == StepOutcome.failed)
         #expect(try h.run(id).status == .waitingOnYou)
         #expect(try h.database.inboxItems(runId: id).last?.kind == .loopLimit)
         #expect(h.driver.calledSteps.filter { $0 == "build" }.count == 2)
@@ -132,8 +132,8 @@ import Testing
         #expect(try h.steps(id).filter { $0.stepId == "build" }.map(\.iteration) == [1, 2, 3])
         #expect(h.driver.agentCalls.last { $0.step.id == "build" }?.inputs.feedback?.summary == "2")
         let state = try h.database.engineState(runId: id)
-        #expect(state.extraLoops["review->changes_requested"] == 1)
-        #expect(state.loopCounts["review->changes_requested"] == 2)
+        #expect(state.extraLoops["review->failed"] == 1)
+        #expect(state.loopCounts["review->failed"] == 2)
     }
 
     @Test func aBuildThatCommitsNothingAsksBeforeTheWorkIsCheckedAgain() async throws {

@@ -99,6 +99,12 @@ struct ChangesView: View {
                     if let changeSet = store.changeSet {
                         ConflictBanner(changeSet: changeSet)
                     }
+                    if let gates = store.gates, !gates.findings.isEmpty {
+                        GatesCard(report: gates)
+                    }
+                    if !store.evidence.isEmpty {
+                        EvidenceCard(evidence: store.evidence, context: context)
+                    }
                     if store.visiblePaths.isEmpty {
                         Text("No file changes on these branches yet.")
                             .font(.system(size: 13))

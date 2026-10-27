@@ -1,0 +1,204 @@
+import AppKit
+import EnsembleCore
+import EnsembleUI
+import SwiftUI
+
+enum NotificationPreferences {
+    static func key(_ kind: InboxKind) -> String {
+        "notify.\(kind.rawValue)"
+    }
+
+    static func isEnabled(_ kind: InboxKind) -> Bool {
+        UserDefaults.standard.object(forKey: key(kind)) as? Bool ?? true
+    }
+}
+
+struct AppSettingsView: View {
+    static let tabKey = "settings.tab"
+    let updater: Updater
+    @AppStorage(AppSettingsView.tabKey) private var tab = "accounts"
+
+    var body: some View {
+        TabView(selection: $tab) {
+            Tab("Accounts", systemImage: "person.crop.circle", value: "accounts") { AccountsSettings() }
+            Tab("Engines", systemImage: "terminal", value: "engines") { EnginesSettings() }
+            Tab("Key Bindings", systemImage: "keyboard", value: "keys") {
+                KeyBindingsEditor().padding(20)
+            }
+            Tab("Notifications", systemImage: "bell", value: "notifications") { NotificationSettings() }
+            Tab("Locations", systemImage: "folder", value: "locations") { LocationSettings() }
+            Tab("Updates", systemImage: "arrow.clockwise", value: "updates") { UpdateSettings(updater: updater) }
+            Tab("Editor Font", systemImage: "textformat", value: "font") { EditorFontSettings() }
+        }
+        .frame(width: 720, height: 560)
+    }
+}
+
+private struct SettingsPane<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                content
+                Text("These settings apply to every project. Project settings (roles, checks, budgets, docs) live in each project’s Settings tab.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct AccountsSettings: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        SettingsPane {
+            ClaudeAccessSettings()
+            VStack(alignment: .leading, spacing: 8) {
+                Text("GitHub").font(.system(size: 13, weight: .semibold))
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.triangle.pull").font(.system(size: 16)).frame(width: 32, height: 32)
+                        .background(Theme.fill, in: .rect(cornerRadius: 8))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(model.gitHub.user.map { "Signed in as \($0.login)" } ?? "Not signed in").font(.system(size: 12.5, weight: .semibold))
+                        Text(model.gitHub.user == nil ? "Sign in from a project’s Settings › GitHub to import issues." : "\(model.gitHub.repositories.count) repositories you can reach")
+                            .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+                    }
+                    Spacer()
+                    if model.gitHub.user != nil {
+                        Button("Sign Out") { model.gitHub.signOut() }
+                    }
+                }
+                ForEach(model.openProjects) { project in
+                    HStack {
+                        Text(project.settings.githubRepository ?? project.name).font(.system(size: 12, design: .monospaced))
+                        Spacer()
+                        Text(project.settings.githubRepository == nil ? "not watching issues" : "watching issues").font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+                    }
+                }
+            }
+            .padding(14)
+            .background(Theme.fill, in: .rect(cornerRadius: 12))
+            .task { await model.gitHub.loadRepositories() }
+        }
+    }
+}
+
+private struct EnginesSettings: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        SettingsPane {
+            ToolsSettings()
+            HStack {
+                Button("Check Again") { Task { await model.checkEnvironment() } }
+                    .disabled(model.isCheckingEnvironment)
+                if model.isCheckingEnvironment { ProgressView().controlSize(.small) }
+            }
+            Text("More engines (Codex, Gemini CLI) arrive after the MVP; each role already has a provider field.")
+                .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+        }
+    }
+}
+
+private struct NotificationSettings: View {
+    @State private var revision = 0
+
+    var body: some View {
+        SettingsPane {
+            Text("Notify me about").font(.system(size: 13, weight: .semibold))
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(InboxKind.allCases, id: \.self) { kind in
+                    Toggle(InboxNotifier.kindTitle(kind), isOn: Binding(
+                        get: { _ = revision; return NotificationPreferences.isEnabled(kind) },
+                        set: {
+                            UserDefaults.standard.set($0, forKey: NotificationPreferences.key(kind))
+                            revision += 1
+                        }
+                    ))
+                }
+            }
+            Button("Open System Notification Settings") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") { NSWorkspace.shared.open(url) }
+            }
+        }
+    }
+}
+
+private struct LocationSettings: View {
+    var body: some View {
+        SettingsPane {
+            location("Ensemble data", detail: "Database, transcripts, attachments and run evidence", url: AppPaths.standard.root)
+            location("Debug logs", detail: "Traces of runs and chats, kept for a week", url: AppPaths.standard.debugLogsDirectory)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Worktrees").font(.system(size: 12.5, weight: .semibold))
+                Text("Each project keeps agent worktrees in .crew/ next to its code. Change the setup script and ports in a project’s Settings › Workspaces.")
+                    .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+            }
+        }
+    }
+
+    private func location(_ title: String, detail: String, url: URL) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 12.5, weight: .semibold))
+                Text(detail).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+                Text(url.path.abbreviatingHome).font(.system(size: 11.5, design: .monospaced)).textSelection(.enabled)
+            }
+            Spacer()
+            Button("Show in Finder") {
+                try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        }
+    }
+}
+
+private struct UpdateSettings: View {
+    let updater: Updater
+    @State private var automatic = false
+
+    var body: some View {
+        SettingsPane {
+            if updater.isConfigured {
+                Toggle("Check for updates automatically", isOn: Binding(get: { automatic }, set: {
+                    automatic = $0
+                    updater.automaticallyChecks = $0
+                }))
+                Text(updater.lastChecked.map { "Last checked \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Not checked yet")
+                    .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+                Button("Check Now") { updater.checkForUpdates() }
+            } else {
+                Text("Updates aren’t configured in this build.").foregroundStyle(Theme.secondaryText)
+            }
+            Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")")
+                .font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Theme.secondaryText)
+        }
+        .onAppear { automatic = updater.isConfigured && updater.automaticallyChecks }
+    }
+}
+
+private struct EditorFontSettings: View {
+    @AppStorage(CodeStyle.fontSizeKey) private var size = CodeStyle.defaultFontSize
+
+    var body: some View {
+        SettingsPane {
+            HStack {
+                Text("Code size")
+                Slider(value: $size, in: 10...18, step: 0.5).frame(width: 220)
+                Text("\(size.formatted(.number.precision(.fractionLength(1)))) pt").font(.system(size: 12, design: .monospaced))
+                Button("Default") { size = CodeStyle.defaultFontSize }.disabled(size == CodeStyle.defaultFontSize)
+            }
+            Text("def create_refund(order, amount):\n    return gateway.refund(order.payment_id, amount)")
+                .font(.system(size: size, design: .monospaced))
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(CodeStyle.background, in: .rect(cornerRadius: 10))
+            Text("Used by the source editor, file tabs and code blocks in transcripts.")
+                .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+        }
+    }
+}

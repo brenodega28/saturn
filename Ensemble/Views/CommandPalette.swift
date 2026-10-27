@@ -351,7 +351,7 @@ struct CommandPalette: View {
             return PaletteGroup(name: "\(menu) menu", commands: commands.map { command in
                 PaletteCommand(
                     id: "m-\(command.id)", title: command.title, meta: menu, keywords: command.keywords,
-                    glyph: .symbol("chevron.right"), tint: Theme.fillSelected, shortcut: command.shortcut?.displayString ?? ""
+                    glyph: .symbol("chevron.right"), tint: Theme.fillSelected, shortcut: KeyBindings.shared.shortcut(for: command)?.displayString ?? ""
                 ) {
                     DispatchQueue.main.async { command.perform(context) }
                 }

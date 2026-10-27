@@ -390,6 +390,18 @@ extension WorkbenchRegistry {
     }
 
     private func registerWindowCommands() {
+        register(WorkbenchCommand(id: "window.organizer", title: "Organizer", menu: "Window", section: 0, order: 0, shortcut: KeyboardShortcut("1", modifiers: [.command, .shift])) { context in
+            context.openWindow?(id: WindowID.organizer)
+        })
+        register(WorkbenchCommand(id: "window.library", title: "Library", menu: "Window", section: 0, order: 1, shortcut: KeyboardShortcut("l", modifiers: [.command, .shift]),
+                                  isEnabled: { $0.workbench != nil }, isChecked: { $0.workbench?.isLibraryShown ?? false }) { context in
+            context.workbench?.isLibraryShown.toggle()
+        })
+        register(WorkbenchCommand(id: "help.shortcuts", title: "Keyboard Shortcuts", menu: "Help", section: 0, order: 1, shortcut: KeyboardShortcut("/")) { _ in
+            UserDefaults.standard.set("keys", forKey: AppSettingsView.tabKey)
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            NSApp.activate()
+        })
         register(WorkbenchCommand(id: "window.inbox", title: "Inbox", menu: "Window", section: 1, order: 0) { $0.model.selection = .inbox })
         register(WorkbenchCommand(id: "window.usage", title: "Usage", menu: "Window", section: 1, order: 1) { $0.model.selection = .usage })
         register(WorkbenchCommand(id: "window.quality", title: "Quality", menu: "Window", section: 1, order: 2) { $0.model.selection = .quality })
@@ -425,7 +437,7 @@ struct ContextCommands: View {
                         .disabled(!command.isEnabled(context))
                 } else {
                     Button(command.title) { command.perform(context) }
-                        .keyboardShortcut(command.shortcut)
+                        .keyboardShortcut(KeyBindings.shared.shortcut(for: command))
                         .disabled(!command.isEnabled(context))
                 }
             }

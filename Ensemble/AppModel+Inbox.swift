@@ -10,7 +10,7 @@ extension AppModel {
         inboxNotifier.onOpen = { [weak self] in self?.selection = .inbox }
         inbox.onNewItems = { [weak self] items in
             guard let self else { return }
-            inboxNotifier.post(items, projectName: { [weak self] id in self?.project(withID: id)?.name })
+            inboxNotifier.post(items.filter { NotificationPreferences.isEnabled($0.kind) }, projectName: { [weak self] id in self?.project(withID: id)?.name })
         }
         inbox.start()
         inboxNotifier.requestAuthorization()

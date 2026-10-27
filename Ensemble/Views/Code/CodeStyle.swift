@@ -4,8 +4,16 @@ import SwiftUI
 
 enum CodeStyle {
     static let background = Color(hex: 0x141416)
-    static let codeFont = Font.system(size: 12.5, design: .monospaced)
-    static let lineHeight: CGFloat = 21
+    static let fontSizeKey = "editor.fontSize"
+    static let defaultFontSize = 12.5
+
+    static var fontSize: Double {
+        let stored = UserDefaults.standard.double(forKey: fontSizeKey)
+        return stored > 0 ? stored : defaultFontSize
+    }
+
+    static var codeFont: Font { Font.system(size: fontSize, design: .monospaced) }
+    static var lineHeight: CGFloat { (fontSize * 1.68).rounded() }
     static let added = Color(hex: 0x7DB6FF)
     static let pin = Color(hex: 0xFF7A2F)
     static let match = Color(hex: 0x5AB0FF)

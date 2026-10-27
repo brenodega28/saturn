@@ -41,6 +41,25 @@ struct EnsembleApp: App {
         }
         .defaultSize(width: 900, height: 700)
 
+        Window("Organizer", id: WindowID.organizer) {
+            if case .ready(let model) = launch {
+                OrganizerView()
+                    .environment(model)
+                    .preferredColorScheme(.dark)
+                    .tint(Theme.accent)
+            }
+        }
+        .defaultSize(width: 1240, height: 780)
+
+        Settings {
+            if case .ready(let model) = launch {
+                AppSettingsView(updater: updater)
+                    .environment(model)
+                    .preferredColorScheme(.dark)
+                    .tint(Theme.accent)
+            }
+        }
+
         Window("Worktrees", id: WindowID.debugWorktrees) {
             if case .ready(let model) = launch {
                 DebugWorktreesView()
@@ -66,6 +85,7 @@ enum WindowID {
     static let main = "main"
     static let debugWorktrees = "debug-worktrees"
     static let detail = "detail"
+    static let organizer = "organizer"
 }
 
 enum Launch {

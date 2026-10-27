@@ -106,11 +106,11 @@ private struct RegistryMenuItem: View {
     var body: some View {
         if let isChecked = command.isChecked {
             Toggle(command.title, isOn: Binding(get: { isChecked(context) }, set: { _ in command.perform(context) }))
-                .keyboardShortcut(command.shortcut)
+                .keyboardShortcut(KeyBindings.shared.shortcut(for: command))
                 .disabled(!command.isEnabled(context))
         } else {
             Button(command.title) { command.perform(context) }
-                .keyboardShortcut(command.shortcut)
+                .keyboardShortcut(KeyBindings.shared.shortcut(for: command))
                 .disabled(!command.isEnabled(context))
         }
     }

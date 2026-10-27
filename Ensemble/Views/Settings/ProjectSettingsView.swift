@@ -374,7 +374,7 @@ private struct AgentsSettings: View {
     }
 }
 
-private struct ClaudeAccessSettings: View {
+struct ClaudeAccessSettings: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -388,7 +388,7 @@ private struct ClaudeAccessSettings: View {
     }
 }
 
-private struct ToolsSettings: View {
+struct ToolsSettings: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {

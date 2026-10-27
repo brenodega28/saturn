@@ -39,6 +39,13 @@ struct WorkbenchView: View {
             StatusBar()
         }
         .background(Theme.windowBackground)
+        .overlay(alignment: .top) {
+            if state.isLibraryShown {
+                LibraryPanel { state.isLibraryShown = false }
+                    .padding(.top, 50)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+        }
         .toolbar { WorkbenchToolbar(isHidden: state.isToolbarHidden) }
         .toolbar(removing: .title)
         .toolbarBackground(Color(hex: 0x2C2C32), for: .windowToolbar)
@@ -116,7 +123,7 @@ enum WorkbenchShortcuts {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
         return overriding.compactMap(WorkbenchRegistry.shared.command).first { command in
-            guard let shortcut = command.shortcut else { return false }
+            guard let shortcut = KeyBindings.shared.shortcut(for: command) else { return false }
             return String(shortcut.key.character) == key && shortcut.modifiers.eventFlags == modifiers
         }
     }

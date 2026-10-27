@@ -47,6 +47,7 @@ final class WorkbenchState {
     var bottomTab: String?
     var inspectorTabs: [String: String] = [:]
     var isToolbarHidden = false
+    var isLibraryShown = false
     private(set) var back: [EditorItem] = []
     private(set) var forward: [EditorItem] = []
 

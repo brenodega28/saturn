@@ -1,3 +1,4 @@
+import AppKit
 import EnsembleCore
 import EnsembleUI
 import SwiftUI
@@ -97,7 +98,9 @@ struct ChangesView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     if let changeSet = store.changeSet {
-                        ConflictBanner(changeSet: changeSet)
+                        ConflictBanner(changeSet: changeSet, run: run) {
+                            Task { await store.load(run, in: project, model: model) }
+                        }
                     }
                     if let gates = store.gates, !gates.findings.isEmpty {
                         GatesCard(report: gates)
@@ -260,6 +263,10 @@ struct ChipButton<Label: View>: View {
 struct ConflictBanner: View {
     @Environment(AppModel.self) private var model
     let changeSet: RunChangeSet
+    let run: Run
+    let reload: () -> Void
+    @State private var busy = false
+    @State private var note: String?
 
     var body: some View {
         let failures = changeSet.branches.filter { $0.error != nil }
@@ -270,10 +277,23 @@ struct ConflictBanner: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(DiffPalette.conflict)
                     ForEach(changeSet.conflicts) { conflict in
-                        Text("\(conflict.branch) ↔ \(conflict.otherIsBase ? "\(conflict.other) (base)" : conflict.other): \(conflict.paths.joined(separator: ", "))")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(Theme.primaryText)
-                            .fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("\(conflict.branch) ↔ \(conflict.otherIsBase ? "\(conflict.other) (base)" : conflict.other): \(conflict.paths.joined(separator: ", "))")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(Theme.primaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("These can’t both merge as they are. Pick one, or send it back to be combined.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.secondaryText)
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: 8) { conflictActions(conflict) }
+                                VStack(alignment: .leading, spacing: 6) { conflictActions(conflict) }
+                            }
+                            .disabled(busy)
+                        }
+                    }
+                    if let note {
+                        Text(note).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
                     }
                     Text("Checked on committed work. Uncommitted changes in worktrees aren’t part of this check.")
                         .font(.system(size: 11.5))
@@ -295,6 +315,59 @@ struct ConflictBanner: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.danger.opacity(changeSet.conflicts.isEmpty ? 0.04 : 0.08), in: .rect(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.danger.opacity(0.35)))
+        }
+    }
+
+    @ViewBuilder
+    private func conflictActions(_ conflict: MergeConflict) -> some View {
+        Button("Ask \(owner(of: conflict.branch)) to combine") {
+            perform { name in "\(name) is merging the branches and resolving the conflict." } action: { try await model.driver.askToCombine(conflict, in: run) }
+        }
+        .buttonStyle(PillButtonStyle(.primary, height: 28))
+        .help("Merge the other side into \(conflict.branch) and send its author the conflict to resolve")
+        Button("Keep \(owner(of: conflict.branch))’s") {
+            perform { _ in "Kept \(conflict.branch)’s version." } action: { try await model.driver.keep(conflict.branch, resolving: conflict, in: run); return "" }
+        }
+        .buttonStyle(PillButtonStyle(height: 28))
+        Button("Keep \(conflict.otherIsBase ? conflict.other : owner(of: conflict.other))’s") {
+            perform { _ in "Kept \(conflict.other)’s version." } action: { try await model.driver.keep(conflict.other, resolving: conflict, in: run); return "" }
+        }
+        .buttonStyle(PillButtonStyle(height: 28))
+        Button("Open in Merge Tool") {
+            busy = true
+            Task {
+                defer { busy = false }
+                do {
+                    let staged = try await model.driver.stageForMergeTool(conflict, in: run)
+                    if let editor = ExternalApp.installed(ExternalApp.editorCandidates).first {
+                        editor.open(staged.worktree)
+                    } else {
+                        NSWorkspace.shared.activateFileViewerSelecting([staged.worktree])
+                    }
+                    note = "Resolve \(staged.files.joined(separator: ", ")) in \(staged.worktree.path), then commit. Ensemble picks it up when you reload."
+                } catch {
+                    model.alert = AppAlert(title: "Couldn’t stage the merge", message: error.localizedDescription)
+                }
+            }
+        }
+        .buttonStyle(PillButtonStyle(height: 28))
+        .help("Start the merge in the worktree and open it in your editor")
+    }
+
+    private func owner(of branch: String) -> String {
+        changeSet.branches.first { $0.branch == branch }.map { model.displayName(of: $0.agent) } ?? branch
+    }
+
+    private func perform(_ message: @escaping (String) -> String, action: @escaping () async throws -> String) {
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                note = message(try await action())
+                reload()
+            } catch {
+                model.alert = AppAlert(title: "Couldn’t resolve the conflict", message: error.localizedDescription)
+            }
         }
     }
 

@@ -147,3 +147,51 @@ import Testing
         #expect(two.runs == 3 && two.activeRuns == 1 && two.averageCostUSD == 3)
     }
 }
+
+@MainActor
+@Suite(.serialized) struct ConflictResolutionTests {
+    func makeConflict() async throws -> (AgentHarness, AgentWorkflowDriver, Run, AgentSession, AgentSession) {
+        let harness = try await AgentHarness.make()
+        let driver = AgentWorkflowDriver(runtime: harness.runtime)
+        driver.gitProvider = { harness.repo.git }
+        let projectId = try #require(harness.project.id)
+        let task = try harness.database.insert(ProjectTask(projectId: projectId, title: "Greeting", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
+        let taskId = try #require(task.id)
+        let run = try harness.database.insert(Run(projectId: projectId, taskId: taskId, workflow: "w", status: .waitingOnYou, startedAt: .now, title: "Greeting"), state: RunEngineState())
+        let role = RoleDefinition(id: "claude-code", name: "Claude Code")
+        var sessions: [AgentSession] = []
+        for (index, text) in ["hello from A", "hello from B"].enumerated() {
+            let session = try await harness.runtime.createRunAgent(in: harness.project, role: role, name: "Dev \(index + 1)", runId: try #require(run.id), runStepId: nil, planTaskId: "t\(index)", task: "Greeting", git: harness.repo.git)
+            let worktree = try #require(session.agent.worktreeURL)
+            try "\(text)\n".write(to: worktree.appending(path: "README.md"), atomically: true, encoding: .utf8)
+            try await harness.repo.git.run(["commit", "-qam", "Change greeting"], in: worktree)
+            sessions.append(session)
+        }
+        return (harness, driver, run, sessions[0], sessions[1])
+    }
+
+    @Test func keepingOneSideResolvesTheConflict() async throws {
+        let (harness, driver, run, first, second) = try await makeConflict()
+        defer { harness.cleanUp() }
+        let conflict = MergeConflict(branch: try #require(first.agent.branch), other: try #require(second.agent.branch), otherIsBase: false, paths: ["README.md"])
+
+        try await driver.keep(conflict.branch, resolving: conflict, in: run)
+        let loserWorktree = try #require(second.agent.worktreeURL)
+        #expect(try String(contentsOf: loserWorktree.appending(path: "README.md"), encoding: .utf8) == "hello from A\n")
+        let merge = try await harness.repo.git.runner.run(harness.repo.git.executable, ["merge-tree", "--write-tree", conflict.branch, conflict.other], in: harness.repo.root)
+        #expect(merge.succeeded)
+    }
+
+    @Test func askingToCombineStagesTheMergeForTheAuthor() async throws {
+        let (harness, driver, run, first, second) = try await makeConflict()
+        defer { harness.cleanUp() }
+        let conflict = MergeConflict(branch: try #require(first.agent.branch), other: try #require(second.agent.branch), otherIsBase: false, paths: ["README.md"])
+
+        #expect(try await driver.askToCombine(conflict, in: run) == "Dev 1")
+        let worktree = try #require(first.agent.worktreeURL)
+        let unmerged = try await harness.repo.git.run(["diff", "--name-only", "--diff-filter=U"], in: worktree)
+        #expect(unmerged.contains("README.md"))
+        try await waitUntil { harness.launches().count == 1 }
+        #expect(first.transcript.entries.contains { if case .user(let text) = $0.content { text.contains("# Resolve a merge conflict") } else { false } })
+    }
+}

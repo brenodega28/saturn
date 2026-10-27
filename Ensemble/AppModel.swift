@@ -101,6 +101,9 @@ final class AppModel {
     var testRunRequest: TestRunRequest?
     var settingsSections: [Int64: SettingsSection] = [:]
     var workflowEditors: [Int64: WorkflowEditor] = [:]
+    let activityLog = ActivityLog()
+    var activeClones: [String: Date] = [:]
+    var listeningPorts: Set<Int> = []
     let leadChat: LeadChat
     let directChat: DirectChat
     var chatTargets: [Int64: ChatTarget] = [:]
@@ -242,6 +245,7 @@ final class AppModel {
         idleCleanup.start()
         await refreshAllProjects()
         startWeeklySummaries()
+        startActivityRecorder()
     }
 
     func pauseAllAgents(in project: Project) {
@@ -433,6 +437,8 @@ final class AppModel {
         guard !FileManager.default.fileExists(atPath: destination.path) else {
             throw CloneError.destinationExists(destination)
         }
+        activeClones[remote] = .now
+        defer { activeClones[remote] = nil }
         try await git.clone(remote, to: destination)
         await openFolder(destination)
     }

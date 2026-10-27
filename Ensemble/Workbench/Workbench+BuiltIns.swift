@@ -40,6 +40,8 @@ extension WorkbenchRegistry {
             AnyView(FindNavigator())
         })
         registerInspectors()
+        registerBottomPanels()
+        registerActivitySources()
         registerToolbar()
         registerStatusItems()
         registerViewCommands()

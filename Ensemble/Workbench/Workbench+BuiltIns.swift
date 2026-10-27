@@ -340,13 +340,20 @@ private struct AgentEditor: View {
 
 private struct FileEditor: View {
     @Environment(AppModel.self) private var model
+    @Environment(WorkbenchState.self) private var state
     let item: EditorItem
 
     var body: some View {
-        if let project = model.project(of: item), let path = item.ref {
+        if let project = model.project(of: item), let path = item.ref, let id = project.id {
             let browser = model.codeBrowser(for: project)
             CodeReader(browser: browser, project: project)
-                .task(id: path) { browser.open(path) }
+                .overlay {
+                    if browser.isFinderPresented { CodeFinder(browser: browser) }
+                }
+                .task(id: path) { if browser.activePath != path { browser.open(path) } }
+                .onChange(of: browser.activePath) { _, next in
+                    if let next, next != path, state.active == item { state.open(.file(next, in: id)) }
+                }
         }
     }
 }

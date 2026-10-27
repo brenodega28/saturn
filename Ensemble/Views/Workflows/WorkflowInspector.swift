@@ -239,6 +239,8 @@ private struct EndSection: View {
                 .help("What Ensemble does with the approved branches")
             }
             Toggle("Clean up worktrees", isOn: $end.cleanUpWorktrees)
+            Toggle("Post a summary back to the source", isOn: $end.postSummary)
+                .help("Comment on the GitHub issue with what was built when the run finishes")
                 .help("Remove each agent’s worktree once the run is done")
             InspectorField("Receives") {
                 Text("Every approved branch from the run.")
@@ -293,6 +295,10 @@ private struct StepSection: View {
             }
             if step.type == .check {
                 CheckStepEditor(step: $step, checks: checks)
+            }
+            if step.type == .approval {
+                Toggle("Remind me daily", isOn: $step.remindDaily)
+                    .help("Post a reminder to your Inbox each day this approval waits")
             }
             if step.type == .condition {
                 ConditionEditor(condition: Binding(get: { step.condition ?? StepCondition() }, set: { step.condition = $0 }), workflow: editor.draft, stepID: step.id)
@@ -385,6 +391,8 @@ private struct StepSection: View {
                             }
                         }
                         .help("The most agents this step runs at once")
+                        Toggle("Reuse pinned agents of the same role", isOn: $step.reusePinned)
+                            .help("Give tasks to idle pinned agents first, so their memory carries over, before spawning new ones")
                     }
                 }
             }

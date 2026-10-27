@@ -395,6 +395,14 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             guard let role = config.role(task.role).flatMap({ $0.editsCode ? $0 : nil }) ?? fallbackRole else {
                 throw WorkflowDriverError.missingRole(task.role)
             }
+            if context.step.step.reusePinned, let projectID = project.id,
+               let pinned = try runtime.pinnedAgentToReuse(role: role.id, inProject: projectID, excluding: Set(builders.map(\.session.id)), activeRunIDs: activeRunIDs(projectID: projectID, except: runId)) {
+                try await reportingSetupFailure(runId: runId, projectId: project.id) {
+                    try await runtime.reassign(pinned, toRun: runId, runStepId: context.step.runStepID, planTaskId: key, task: task.title, in: project, git: git)
+                }
+                builders.append((pinned, task))
+                continue
+            }
             let session = try await reportingSetupFailure(runId: runId, projectId: project.id) {
                 try await runtime.createRunAgent(
                     in: project, role: role, runId: runId, runStepId: context.step.runStepID,
@@ -452,6 +460,10 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let summary = taskResults.map { "\($0.agentName ?? "Agent"): \($0.summary)" }.joined(separator: "\n")
         let heads = await branchHeads(of: builders.map(\.session), in: project, git: git)
         return .done(summary, taskResults: taskResults, branchHeads: heads, costUSD: cost)
+    }
+
+    private func activeRunIDs(projectID: Int64, except runId: Int64) throws -> Set<Int64> {
+        Set(try runtime.database.runs(status: [.pending, .running, .waitingOnYou, .paused, .interrupted]).filter { $0.projectId == projectID && $0.id != runId }.compactMap(\.id))
     }
 
     func branchHeads(of sessions: [AgentSession], in project: Project, git: GitClient) async -> [String: String] {

@@ -80,6 +80,25 @@ final class RecordingWriteBack: IssueWriteBack {
         observer.stop()
     }
 
+    @Test(arguments: [true, false]) func successPostsWhatWasBuiltUnlessTheWorkflowSaysNot(postSummary: Bool) async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let writeBack = RecordingWriteBack()
+        let observer = observer(h, writeBack)
+        observer.start()
+        let workflow = WorkflowDefinition(
+            id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")],
+            end: WorkflowEnd(action: .leave, postSummary: postSummary)
+        )
+        h.driver.script("build", .result(.done("Built", taskResults: [TaskResult(planTaskId: "api", agentName: "Dev 1", summary: "Added the refund endpoint")])))
+
+        let run = try h.engine.start(task: try githubTask(h), workflow: workflow, project: h.project)
+        await h.settle(try #require(run.id))
+        try await waitUntil { writeBack.calls.count == 2 }
+        #expect(writeBack.calls.last == .ended(issue: 42, conclusion: .succeeded, summary: postSummary ? "- Dev 1: Added the refund endpoint" : nil, pullRequest: nil))
+        observer.stop()
+    }
+
     @Test func postsFailureWithTheRunError() async throws {
         let h = try H.make()
         defer { h.cleanUp() }

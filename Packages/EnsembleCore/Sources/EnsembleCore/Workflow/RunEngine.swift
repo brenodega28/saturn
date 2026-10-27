@@ -385,6 +385,27 @@ public final class RunEngine {
         }
     }
 
+    public nonisolated static let reminderPrefix = "Still waiting for you: "
+
+    @discardableResult
+    public func postApprovalReminders(now: Date = .now) throws -> [InboxItem] {
+        var posted: [InboxItem] = []
+        for run in try database.runs(status: [.waitingOnYou]) {
+            guard let id = run.id, let hold = try database.engineState(runId: id).hold, hold.reason == .approval,
+                  (try? workflow(for: run))?.step(hold.stepId)?.remindDaily == true else { continue }
+            let items = try database.inboxItems(runId: id)
+            guard let opened = items.first(where: { $0.id == hold.inboxItemId })?.createdAt else { continue }
+            let lastNudge = items.filter { $0.title.hasPrefix(Self.reminderPrefix) }.map(\.createdAt).max() ?? opened
+            guard now.timeIntervalSince(lastNudge) >= 86_400 else { continue }
+            let days = Int(now.timeIntervalSince(opened) / 86_400)
+            posted.append(try database.createInboxItem(InboxItem(
+                projectId: run.projectId, runId: id, kind: .notice, title: Self.reminderPrefix + run.title,
+                body: "“\(hold.message)” has waited \(days) day\(days == 1 ? "" : "s") for your approval.", createdAt: now
+            )))
+        }
+        return posted
+    }
+
     public func waitUntilIdle(runID: Int64) async {
         while let entry = drivers[runID] {
             await entry.task.value

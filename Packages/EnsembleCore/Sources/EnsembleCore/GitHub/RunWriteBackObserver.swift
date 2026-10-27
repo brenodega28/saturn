@@ -134,11 +134,20 @@ public final class RunWriteBackObserver {
             in: item.repository,
             workflow: workflow,
             conclusion: conclusion,
-            summary: conclusion == .failed ? failureSummary(for: run) : nil,
+            summary: conclusion == .failed ? failureSummary(for: run) : successSummary(for: run),
             pullRequestURL: run.pullRequestURL.flatMap(URL.init(string:))
         )
         try database.recordWriteBack(.ended, runId: runID)
         sentCount += 1
+    }
+
+    private func successSummary(for run: Run) -> String? {
+        guard run.workflowDefinition?.end.postSummary ?? true, let id = run.id, let steps = try? database.runSteps(runId: id) else { return nil }
+        let outputs = steps.compactMap { $0.output.flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) } }
+        let tasks = outputs.last { !$0.taskResults.isEmpty }?.taskResults.map { "- \($0.agentName.map { "\($0): " } ?? "")\($0.summary)" } ?? []
+        let checks = outputs.last { !$0.checks.isEmpty }?.summary
+        let lines = tasks + [checks, run.outcome].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     private func failureSummary(for run: Run) -> String? {

@@ -231,12 +231,18 @@ final class AppModel {
         startWeeklySummaries()
     }
 
+    func pauseAllAgents(in project: Project) {
+        guard let id = project.id else { return }
+        perform("Couldn’t pause the agents") { _ = try agents.pauseAll(inProject: id) }
+    }
+
     func startWeeklySummaries() {
         Task { [weak self] in
             while let self, !Task.isCancelled {
                 for project in self.openProjects {
                     _ = try? WeeklySummary.postIfDue(for: project, database: self.database)
                 }
+                _ = try? self.engine.postApprovalReminders()
                 try? await Task.sleep(for: .seconds(3600))
             }
         }

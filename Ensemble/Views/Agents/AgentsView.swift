@@ -132,6 +132,11 @@ struct AgentsView: View {
                 parts[index]
             }
             Spacer()
+            if working + queued > 0 {
+                Button("Pause All") { model.pauseAllAgents(in: project) }
+                    .buttonStyle(PillButtonStyle(height: 26))
+                    .help("Pause every working or queued agent in \(project.name) (⇧⌘P)")
+            }
             Text("Up to \(project.settings.maxConcurrentAgents) at once")
                 .help("Change the limit in Settings › Agents & models")
         }

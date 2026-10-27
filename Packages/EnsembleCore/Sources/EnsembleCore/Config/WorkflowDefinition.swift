@@ -172,6 +172,8 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
     public var checks: [String]?
     public var maxRounds: Int?
     public var testFirst: Bool
+    public var reusePinned: Bool
+    public var remindDaily: Bool
     public var condition: StepCondition?
     public var message: String?
     public var timeoutMinutes: Int?
@@ -191,6 +193,8 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         checks: [String]? = nil,
         maxRounds: Int? = nil,
         testFirst: Bool = false,
+        reusePinned: Bool = false,
+        remindDaily: Bool = false,
         condition: StepCondition? = nil,
         message: String? = nil,
         timeoutMinutes: Int? = nil,
@@ -209,6 +213,8 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         self.checks = checks
         self.maxRounds = maxRounds
         self.testFirst = testFirst
+        self.reusePinned = reusePinned
+        self.remindDaily = remindDaily
         self.condition = condition
         self.message = message
         self.timeoutMinutes = timeoutMinutes
@@ -224,6 +230,8 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         case maxAgents = "max_agents"
         case maxRounds = "max_rounds"
         case testFirst = "test_first"
+        case reusePinned = "reuse_pinned"
+        case remindDaily = "remind_daily"
         case timeoutMinutes = "timeout_minutes"
         case onFailure = "on_failure"
     }
@@ -239,6 +247,8 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         self.checks = try container.decodeIfPresent([String].self, forKey: .checks)
         self.maxRounds = try container.decodeIfPresent(Int.self, forKey: .maxRounds)
         self.testFirst = try container.decodeIfPresent(Bool.self, forKey: .testFirst) ?? false
+        self.reusePinned = try container.decodeIfPresent(Bool.self, forKey: .reusePinned) ?? false
+        self.remindDaily = try container.decodeIfPresent(Bool.self, forKey: .remindDaily) ?? false
         self.condition = try container.decodeIfPresent(StepCondition.self, forKey: .condition)
         self.message = try container.decodeIfPresent(String.self, forKey: .message)
         self.timeoutMinutes = try container.decodeIfPresent(Int.self, forKey: .timeoutMinutes)
@@ -260,6 +270,8 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         try container.encodeIfPresent(checks, forKey: .checks)
         try container.encodeIfPresent(maxRounds, forKey: .maxRounds)
         if testFirst { try container.encode(testFirst, forKey: .testFirst) }
+        if reusePinned { try container.encode(reusePinned, forKey: .reusePinned) }
+        if remindDaily { try container.encode(remindDaily, forKey: .remindDaily) }
         try container.encodeIfPresent(condition, forKey: .condition)
         try container.encodeIfPresent(message, forKey: .message)
         try container.encodeIfPresent(timeoutMinutes, forKey: .timeoutMinutes)
@@ -309,21 +321,32 @@ public enum EndAction: String, Sendable, Hashable, Codable, CaseIterable {
 public struct WorkflowEnd: Sendable, Hashable, Codable {
     public var action: EndAction
     public var cleanUpWorktrees: Bool
+    public var postSummary: Bool
 
-    public init(action: EndAction = .pullRequest, cleanUpWorktrees: Bool = true) {
+    public init(action: EndAction = .pullRequest, cleanUpWorktrees: Bool = true, postSummary: Bool = true) {
         self.action = action
         self.cleanUpWorktrees = cleanUpWorktrees
+        self.postSummary = postSummary
     }
 
     enum CodingKeys: String, CodingKey {
         case action
         case cleanUpWorktrees = "clean_up_worktrees"
+        case postSummary = "post_summary"
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.action = try container.decodeIfPresent(EndAction.self, forKey: .action) ?? .pullRequest
         self.cleanUpWorktrees = try container.decodeIfPresent(Bool.self, forKey: .cleanUpWorktrees) ?? true
+        self.postSummary = try container.decodeIfPresent(Bool.self, forKey: .postSummary) ?? true
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(action, forKey: .action)
+        try container.encode(cleanUpWorktrees, forKey: .cleanUpWorktrees)
+        if !postSummary { try container.encode(postSummary, forKey: .postSummary) }
     }
 }
 

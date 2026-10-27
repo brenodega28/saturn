@@ -586,6 +586,54 @@ extension AgentRuntime {
         return session
     }
 
+    public func pauseAll(inProject projectId: Int64) throws -> Int {
+        var paused = 0
+        for session in try sessions(inProject: projectId) where session.isRunning || session.isQueued {
+            session.pause()
+            paused += 1
+        }
+        return paused
+    }
+
+    public func pinnedAgentToReuse(role: String, inProject projectId: Int64, excluding: Set<Int64>, activeRunIDs: Set<Int64>) throws -> AgentSession? {
+        try database.agents(inProject: projectId)
+            .filter { agent in
+                guard let id = agent.id, agent.isPinned, agent.role == role, !agent.readOnly, agent.archivedAt == nil, agent.taskId == nil,
+                      !excluding.contains(id), !(agent.runId.map(activeRunIDs.contains) ?? false) else { return false }
+                return [.idle, .stopped, .interrupted].contains(agent.status)
+            }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .lazy.compactMap { self.session(for: $0) }
+            .first { !$0.isRunning && !$0.isQueued }
+    }
+
+    public func reassign(
+        _ session: AgentSession, toRun runId: Int64, runStepId: Int64?, planTaskId: String, task: String, in project: Project, git: GitClient
+    ) async throws {
+        let agent = session.agent
+        let manager = WorktreeManager(repository: project.url, git: git)
+        let base = try await git.currentBranch(in: project.url) ?? "HEAD"
+        let slug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " ")).nilIfEmpty ?? "task"
+        var branch = try manager.branchName(agent: agent.name, slug: slug)
+        if try await git.hasCommit("refs/heads/\(branch)", in: project.url) { branch += "-run-\(runId)" }
+        let worktree: URL
+        if let existing = agent.worktreeURL, FileManager.default.fileExists(atPath: existing.path) {
+            let status = try await git.run(["status", "--porcelain"], in: existing)
+            guard status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw WorkflowDriverError.notReady("\(agent.name) has uncommitted changes in its worktree, so it can’t take a new task.")
+            }
+            try await git.run(["switch", "-c", branch, base], in: existing)
+            worktree = existing
+        } else {
+            let created = try await manager.create(agent: agent.name, slug: slug + (branch.hasSuffix("-run-\(runId)") ? "-run-\(runId)" : ""), from: base)
+            worktree = created.path
+            branch = created.branch ?? branch
+        }
+        session.reassign(runId: runId, runStepId: runStepId, planTaskId: planTaskId, task: task, worktree: worktree, branch: branch, baseBranch: base)
+        usageDidChange()
+        try await prepareWorktree(of: session)
+    }
+
     public func runSessions(runId: Int64, projectId: Int64) throws -> [AgentSession] {
         try database.agents(inProject: projectId).filter { $0.runId == runId }.compactMap { session(for: $0) }
     }

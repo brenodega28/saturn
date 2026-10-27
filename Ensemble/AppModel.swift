@@ -96,14 +96,22 @@ final class AppModel {
     var changesRunSelections: [Int64: Int64] = [:]
     var skillPlugins: [Int64: [SkillPlugin]] = [:]
     var leadChatRevision = 0
+    var composerFocusToken = 0
+    var paletteMode: PaletteMode = .everything
+    var testRunRequest: TestRunRequest?
+    var settingsSections: [Int64: SettingsSection] = [:]
     let leadChat: LeadChat
     let directChat: DirectChat
     var chatTargets: [Int64: ChatTarget] = [:]
     let pendingSends = PendingSends<PendingSendTarget>()
 
     var selection: SidebarItem? {
-        didSet { persistNavigation() }
+        didSet {
+            if case .project(let id) = selection { lastProjectID = id }
+            persistNavigation()
+        }
     }
+    var lastProjectID: Int64?
     var tabs: [Int64: ProjectTab] = [:] {
         didSet { persistNavigation() }
     }
@@ -145,6 +153,10 @@ final class AppModel {
     var selectedProject: Project? {
         guard case .project(let id) = selection else { return nil }
         return openProjects.first { $0.id == id }
+    }
+
+    var currentProject: Project? {
+        selectedProject ?? openProjects.first { $0.id == lastProjectID } ?? openProjects.first
     }
 
     func tab(for project: Project) -> ProjectTab {

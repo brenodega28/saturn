@@ -25,7 +25,8 @@ struct ChatComposerInput: View {
                 onPaste: paste,
                 onDropTargeted: { isDropTargeted = $0 },
                 onDrop: drop,
-                onSubmit: onSubmit
+                onSubmit: onSubmit,
+                focusToken: model.composerFocusToken
             )
             .overlay(alignment: .topLeading) {
                 if text.isEmpty {
@@ -158,6 +159,7 @@ private struct ComposerTextView: NSViewRepresentable {
     let onDropTargeted: (Bool) -> Void
     let onDrop: (NSPasteboard) -> Bool
     let onSubmit: () -> Void
+    let focusToken: Int
 
     static let font = NSFont.systemFont(ofSize: 14)
     static let lineRange = 2...8
@@ -217,6 +219,10 @@ private struct ComposerTextView: NSViewRepresentable {
         }
         textView.setAccessibilityLabel(accessibilityLabel)
         textView.setAccessibilityPlaceholderValue(placeholder)
+        if context.coordinator.focusToken != focusToken {
+            context.coordinator.focusToken = focusToken
+            DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
@@ -233,9 +239,11 @@ private struct ComposerTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ComposerTextView
+        var focusToken: Int
 
         init(_ parent: ComposerTextView) {
             self.parent = parent
+            self.focusToken = parent.focusToken
         }
 
         func textDidChange(_ notification: Notification) {

@@ -29,7 +29,7 @@ struct WelcomeView: View {
                 AppMark(size: 96)
                 VStack(spacing: 4) {
                     Text("Ensemble").font(.system(size: 26, weight: .bold)).kerning(-0.5)
-                    Text("A crew of agents for every project").foregroundStyle(Theme.secondaryText)
+                    Text("Agents propose. Rails verify. You approve.").foregroundStyle(Theme.secondaryText)
                 }
             }
             .padding(.top, 30)
@@ -40,6 +40,9 @@ struct WelcomeView: View {
                 }
                 LauncherButton(title: "Clone Repository…", systemImage: "arrow.triangle.branch", shortcut: "⇧⌘O", isPrimary: false) {
                     model.isClonePresented = true
+                }
+                LauncherButton(title: "New Project", systemImage: "plus.rectangle.on.folder", shortcut: "⌘N", isPrimary: false) {
+                    model.newProject()
                 }
             }
         }
@@ -117,6 +120,11 @@ private struct RecentProjectRow: View {
                 }
                 Spacer(minLength: 8)
                 CrewStack(palettes: crew)
+                if let activity = model.recentActivity(of: project) {
+                    Text(activity.text)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(activity.isFailure ? Theme.danger : Theme.successText)
+                }
                 Text(project.lastOpenedAt.relativeDay)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)

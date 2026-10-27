@@ -39,6 +39,8 @@ struct RootView: View {
                 FirstRunView(report: environment)
             } else if model.openProjects.isEmpty {
                 WelcomeView()
+            } else if let project = model.onboardingProject {
+                OnboardingView(project: project).id(project.id)
             } else {
                 ShellView()
             }

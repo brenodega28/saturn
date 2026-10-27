@@ -109,13 +109,16 @@ public struct ProjectConfig: Sendable, Hashable {
     public var checks: ChecksConfig?
     public var review: ReviewPolicy
     public var permissions: PermissionsConfig
+    public var preferences: ProjectPreferences
     public var issues: [ConfigIssue]
 
     public init(
         roles: [RoleDefinition] = [], workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil,
-        review: ReviewPolicy = ReviewPolicy(), permissions: PermissionsConfig = PermissionsConfig(), issues: [ConfigIssue] = []
+        review: ReviewPolicy = ReviewPolicy(), permissions: PermissionsConfig = PermissionsConfig(),
+        preferences: ProjectPreferences = ProjectPreferences(), issues: [ConfigIssue] = []
     ) {
         self.permissions = permissions
+        self.preferences = preferences
         self.roles = roles
         self.workflows = workflows
         self.docs = docs
@@ -132,7 +135,8 @@ public struct ProjectConfig: Sendable, Hashable {
 
     public var leadRoles: [RoleDefinition] {
         let leads = roles.filter(\.canSpawn)
-        return leads.filter { $0.id == Self.defaultLeadID } + leads.filter { $0.id != Self.defaultLeadID }
+        let preferred = preferences.defaultLead.flatMap { id in leads.contains { $0.id == id } ? id : nil } ?? Self.defaultLeadID
+        return leads.filter { $0.id == preferred } + leads.filter { $0.id != preferred }
     }
 
     public func workflow(_ id: String) -> WorkflowDefinition? {
@@ -198,7 +202,10 @@ public enum ProjectConfigLoader {
             ? decode(PermissionsConfig.self, file: permissionsFile, relativeTo: repository, issues: &issues) ?? PermissionsConfig()
             : PermissionsConfig()
 
-        var config = ProjectConfig(roles: roles, workflows: workflows, docs: docs, checks: checks, review: review, permissions: permissions, issues: issues)
+        var config = ProjectConfig(
+            roles: roles, workflows: workflows, docs: docs, checks: checks, review: review, permissions: permissions,
+            preferences: ProjectPreferences.load(repository: repository), issues: issues
+        )
         config.issues += ConfigValidator.validate(config)
         return config
     }
@@ -262,7 +269,7 @@ public enum ProjectConfigLoader {
         return try encoder.encode(value)
     }
 
-    private static func writeYAML<T: Encodable>(_ value: T, to file: URL) throws {
+    static func writeYAML<T: Encodable>(_ value: T, to file: URL) throws {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try encodeYAML(value).write(to: file, atomically: true, encoding: .utf8)
     }
@@ -304,6 +311,13 @@ public enum ConfigValidator {
     public static func validate(_ config: ProjectConfig) -> [ConfigIssue] {
         var issues: [ConfigIssue] = []
         let roleIDs = Set(config.roles.map(\.id))
+        let preferencesFile = "\(ProjectConfig.directoryName)/\(ProjectPreferences.fileName)"
+        if let lead = config.preferences.defaultLead, !config.roles.contains(where: { $0.id == lead && $0.canSpawn }) {
+            issues.append(ConfigIssue(file: preferencesFile, message: "default lead “\(lead)” isn’t a role that can spawn agents"))
+        }
+        if let workflow = config.preferences.defaultWorkflow, config.workflow(workflow) == nil {
+            issues.append(ConfigIssue(file: preferencesFile, message: "default workflow “\(workflow)” doesn’t exist"))
+        }
 
         for role in config.roles {
             let file = "\(ProjectConfig.directoryName)/roles/\(role.id).yaml"

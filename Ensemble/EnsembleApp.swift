@@ -30,6 +30,17 @@ struct EnsembleApp: App {
             }
         }
 
+        WindowGroup("Ensemble", id: WindowID.detail, for: DetailDestination.self) { $destination in
+            if case .ready(let model) = launch {
+                DetailWindow(destination: destination)
+                    .environment(model)
+                    .preferredColorScheme(.dark)
+                    .tint(Theme.accent)
+                    .navigationTitle(destination?.title ?? "Ensemble")
+            }
+        }
+        .defaultSize(width: 900, height: 700)
+
         Window("Worktrees", id: WindowID.debugWorktrees) {
             if case .ready(let model) = launch {
                 DebugWorktreesView()
@@ -54,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 enum WindowID {
     static let main = "main"
     static let debugWorktrees = "debug-worktrees"
+    static let detail = "detail"
 }
 
 enum Launch {

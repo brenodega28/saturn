@@ -13,6 +13,9 @@ struct AgentSessionView: View {
             header
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 12) {
+                    if let run = model.exhaustedChecksRun(for: session), let hold = run.id.flatMap({ model.engine.holds[$0] }) {
+                        ChecksExhaustedCard(run: run, project: project, rounds: run.checkRounds(at: hold.stepId, in: project))
+                    }
                     StatusBanner(session: session)
                     TranscriptView(session: session)
                     Composer(session: session)

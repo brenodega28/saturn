@@ -51,7 +51,11 @@ struct WorkflowsView: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
         }
-        .onAppear { openFirst(in: config) }
+        .onAppear {
+            openFirst(in: config)
+            takeTestRunRequest(config: config)
+        }
+        .onChange(of: model.testRunRequest) { takeTestRunRequest(config: model.config(for: project)) }
         .onChange(of: project.id) { _, _ in
             editor = nil
             openFirst(in: model.config(for: project))
@@ -306,6 +310,15 @@ struct WorkflowsView: View {
     private func open(_ workflow: WorkflowDefinition, isNew: Bool) {
         if !isNew, let editor, !editor.isNew, editor.saved?.id == workflow.id { return }
         editor = WorkflowEditor(workflow: workflow, isNew: isNew)
+    }
+
+    private func takeTestRunRequest(config: ProjectConfig) {
+        guard let request = model.testRunRequest, request.project == project.id, let workflow = config.workflow(request.workflow) else { return }
+        model.testRunRequest = nil
+        confirmLeaving {
+            open(workflow, isNew: false)
+            isTestRunPresented = true
+        }
     }
 
     private func openFirst(in config: ProjectConfig) {

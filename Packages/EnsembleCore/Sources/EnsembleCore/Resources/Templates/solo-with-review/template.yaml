@@ -1,4 +1,4 @@
-name: Solo with review
-description: One Claude Code agent, checks and gates, and a PR Reviewer who comments
+name: One agent, checked
+description: One agent per issue in its own worktree. Ensemble runs your checks; an AI reviewer pins comments.
 order: 2
 crew: [claude-code, pr-reviewer]

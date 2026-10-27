@@ -33,6 +33,7 @@ struct SidebarView: View {
                     Menu {
                         Button("Open Folder…") { model.isOpenPanelPresented = true }
                         Button("Clone Repository…") { model.isClonePresented = true }
+                        Button("New Project…") { model.newProject() }
                     } label: {
                         Image(systemName: "plus")
                     }

@@ -87,6 +87,10 @@ import Testing
         #expect(item.title == "“checks” failed")
         #expect(item.body.hasPrefix("Checks still fail after 2 rounds."))
         #expect(item.body.contains("FAILED test_refund_cap"))
+        let hold = try #require(setup.engine.holds[run.id!])
+        let stored = try #require(try setup.harness.database.run(id: run.id!))
+        #expect(hold.isChecksExhausted(in: stored.snapshotWorkflow))
+        #expect(!RunHold(reason: .stepFailed, stepId: "build", message: "").isChecksExhausted(in: stored.snapshotWorkflow))
     }
 
     @Test func afterTwoFailedCorrectionsTheBuilderStartsAFreshSession() async throws {

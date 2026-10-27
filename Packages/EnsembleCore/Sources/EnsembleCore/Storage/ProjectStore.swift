@@ -36,6 +36,14 @@ extension AppDatabase {
         }
     }
 
+    public func renameProject(id: Int64, to name: String) throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        _ = try writer.write { db in
+            try Project.filter(id: id).updateAll(db, Project.Columns.name.set(to: trimmed))
+        }
+    }
+
     public func closeProject(id: Int64) throws {
         _ = try writer.write { db in
             try Project.filter(id: id).updateAll(db, Project.Columns.isOpen.set(to: false))

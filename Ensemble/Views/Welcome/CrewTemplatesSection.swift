@@ -37,7 +37,7 @@ struct CrewTemplatesSection: View {
     @ViewBuilder
     private var heading: some View {
         SectionLabel("Start with a crew template")
-        Text("Adds the crew’s roles and a workflow to .ensemble/")
+        Text("Adds roles, checks and a workflow. Agents are only created when a task needs them")
             .font(.system(size: 12))
             .foregroundStyle(Theme.tertiaryText)
     }
@@ -87,6 +87,9 @@ private struct TemplateCard: View {
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                Text(template.workflows.map { $0.replacingOccurrences(of: "-", with: " ").capitalizedFirst }.joined(separator: " + "))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Theme.link)
             }
             .padding(14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

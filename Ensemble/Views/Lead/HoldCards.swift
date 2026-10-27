@@ -53,6 +53,8 @@ struct HoldCard: View {
                     reload: reload
                 ) { engine, proceed in try engine.resolveGates(run, proceed: proceed) }
             }
+        case .stepFailed where hold.isChecksExhausted(in: run.snapshotWorkflow):
+            ChecksExhaustedCard(run: run, project: project, rounds: run.checkRounds(at: hold.stepId, in: project), reload: reload)
         case .stepFailed, .timedOut:
             DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
                 DecisionButtons(

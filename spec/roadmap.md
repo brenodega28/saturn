@@ -268,17 +268,17 @@ Goal: the harness gets better every week, and you can see whether it's working.
 
 Goal: the app matches the design canvas and works as one complete toolkit.
 
-- [ ] Extend the canvas to the mission's new surfaces: check and gate results, `test-change` pins, risk tiers, the quality screen, and plan specs
-- [ ] Project onboarding in five steps: scan the folder (stack, test runners, database, GitHub remote) to suggest roles, skills and checks; name, base branch and branch prefix; task sources; roles, including custom roles with a forced skill; lead, default workflow, end action and "approve plans first"; spending, concurrency and permissions; docs every agent reads; summary, then open Chat. "Skip and use recommended setup" at any step
-- [ ] New Project (⌘N) on the Welcome screen, next to Open Folder and Clone Repository
-- [ ] Permission profiles editor in Settings: per profile, Allow / Ask / Never for editing files, running shell commands, network, installing packages and git push; "Ask" sends a request to the Inbox; agents never push to the base branch
-- [ ] Command palette: search runs, agents and files; actions (new task, message an agent, approve pins, spawn, test-run a workflow, pause all agents); unmatched text goes to the lead as a new task; `>` filters to commands; ⌘↵ opens in a new window
-- [ ] Shortcuts: ⌘N new task, ⌘J message an agent, ⇧⌘A spawn, ⇧⌘P pause all agents, ⌘1… for sidebar sections
-- [ ] Conflict resolution in Changes: ask the lead to combine, keep one branch's version, or open in a merge tool
-- [ ] Workflow version history: save as a new version, list versions with their change note, run count and average cost
-- [ ] Workflow step options: reuse pinned agents of the same role in Spawn steps; daily reminder on human approval steps; post a summary back to the task's source at the end
-- [ ] Agents: pause all agents in a project; idle unpinned agents are removed after a set time
-- [ ] Weekly budgets alongside monthly ones, matching the canvas's weekly cap and sidebar meter
+- [x] Extend the canvas to the mission's new surfaces: check and gate results, `test-change` pins, risk tiers, the quality screen, and plan specs
+- [x] Project onboarding in five steps: scan the folder (stack, test runners, database, GitHub remote) to suggest roles, skills and checks; name, base branch and branch prefix; task sources; roles, including custom roles with a forced skill; lead, default workflow, end action and "approve plans first"; spending, concurrency and permissions; docs every agent reads; summary, then open Chat. "Skip and use recommended setup" at any step
+- [x] New Project (⌘N) on the Welcome screen, next to Open Folder and Clone Repository
+- [x] Permission profiles editor in Settings: per profile, Allow / Ask / Never for editing files, running shell commands, network, installing packages and git push; "Ask" sends a request to the Inbox; agents never push to the base branch
+- [x] Command palette: search runs, agents and files; actions (new task, message an agent, approve pins, spawn, test-run a workflow, pause all agents); unmatched text goes to the lead as a new task; `>` filters to commands; ⌘↵ opens in a new window
+- [x] Shortcuts: ⌘N new task, ⌘J message an agent, ⇧⌘A spawn, ⇧⌘P pause all agents, ⌘1… for sidebar sections
+- [x] Conflict resolution in Changes: ask the lead to combine, keep one branch's version, or open in a merge tool
+- [x] Workflow version history: save as a new version, list versions with their change note, run count and average cost
+- [x] Workflow step options: reuse pinned agents of the same role in Spawn steps; daily reminder on human approval steps; post a summary back to the task's source at the end
+- [x] Agents: pause all agents in a project; idle unpinned agents are removed after a set time
+- [x] Weekly budgets alongside monthly ones, matching the canvas's weekly cap and sidebar meter
 - [ ] Design QA pass: every screen checked against the canvas, mismatches filed as issues
 
 **Exit check:** a new user goes from Welcome through onboarding to an approved change, and every screen on the way matches the canvas.

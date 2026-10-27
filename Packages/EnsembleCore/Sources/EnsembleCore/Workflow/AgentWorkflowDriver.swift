@@ -860,7 +860,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         if let base = try runtime.runSessions(runId: runId, projectId: project.id ?? -1).compactMap(\.agent.baseBranch).first {
             return base
         }
-        return try await git.currentBranch(in: project.url) ?? "main"
+        return try await git.baseBranch(of: project.url) ?? "main"
     }
 
     enum IntegrationResult {

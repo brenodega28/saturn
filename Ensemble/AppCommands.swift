@@ -12,31 +12,52 @@ struct AppCommands: Commands {
         }
 
         CommandGroup(replacing: .newItem) {
+            if model.currentProject == nil {
+                Button("New Project…") { model.newProject() }
+                    .keyboardShortcut("n")
+            } else {
+                Button("New Task") { model.newTask() }
+                    .keyboardShortcut("n")
+                Button("New Project…") { model.newProject() }
+            }
             Button("Open Folder…") { model.isOpenPanelPresented = true }
                 .keyboardShortcut("o")
             Button("Clone Repository…") { model.isClonePresented = true }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
-            Button("New Agent…") { model.isNewAgentPresented = true }
-                .keyboardShortcut("n")
-                .disabled(model.selectedProject == nil)
             Divider()
             Button("Close Project") {
                 if let project = model.selectedProject { model.close(project) }
             }
+            .keyboardShortcut("w", modifiers: [.command, .shift])
             .disabled(model.selectedProject == nil)
         }
 
         CommandGroup(after: .sidebar) {
-            Button("Command Palette…") { model.isPalettePresented.toggle() }
+            Button("Command Palette…") {
+                if model.isPalettePresented { model.isPalettePresented = false } else { model.openPalette() }
+            }
                 .keyboardShortcut("k")
             Divider()
-            ForEach(Array(ProjectTab.allCases.enumerated()), id: \.element) { index, tab in
-                Button(tab.title) {
-                    if let project = model.selectedProject { model.setTab(tab, for: project) }
-                }
-                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
-                .disabled(model.selectedProject == nil)
+            Button("Inbox") { model.goToSection(0) }
+                .keyboardShortcut("1")
+            ForEach(Array(ProjectTab.sidebarOrder.enumerated()), id: \.element) { index, tab in
+                Button(tab.title) { model.goToSection(index + 1) }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 2)")))
+                    .disabled(model.openProjects.isEmpty)
             }
+        }
+
+        CommandMenu("Agent") {
+            Button("Message…") { model.openPalette(.agents) }
+                .keyboardShortcut("j")
+                .disabled(model.openProjects.isEmpty)
+            Button("Spawn…") { model.spawnAgent() }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .disabled(model.currentProject == nil)
+            Divider()
+            Button("Pause All") { model.pauseAllAgentsInSelectedProject() }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .disabled(model.currentProject == nil)
         }
 
         CommandMenu("Debug") {

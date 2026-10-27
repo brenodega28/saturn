@@ -1,4 +1,4 @@
-name: Led squad
-description: Tech Lead specs and assigns to 3 Claude Code agents; checks and gates verify the work
+name: Lead + parallel builders
+description: A lead writes the plan and splits bigger work across agents. Same checks, same approval by you.
 order: 3
 crew: [tech-lead, claude-code, claude-code, claude-code, qa-engineer]

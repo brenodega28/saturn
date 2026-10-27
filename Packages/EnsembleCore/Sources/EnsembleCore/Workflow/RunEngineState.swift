@@ -1,4 +1,5 @@
 import Foundation
+import Yams
 
 public enum HoldReason: String, Sendable, Hashable, Codable, CaseIterable {
     case planApproval = "plan_approval"
@@ -98,4 +99,16 @@ public struct RunEngineState: Sendable, Hashable, Codable {
     }
 
     static func loopKey(from stepId: String, outcome: String) -> String { "\(stepId)->\(outcome)" }
+}
+
+extension Run {
+    public var snapshotWorkflow: WorkflowDefinition? {
+        try? YAMLDecoder().decode(WorkflowDefinition.self, from: workflowSnapshot)
+    }
+}
+
+extension RunHold {
+    public func isChecksExhausted(in workflow: WorkflowDefinition?) -> Bool {
+        reason == .stepFailed && workflow?.step(stepId)?.type == .check
+    }
 }

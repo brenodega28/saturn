@@ -162,9 +162,9 @@ public final class AgentRuntime {
         }
 
         let manager = WorktreeManager(repository: project.url, git: git)
-        let base = try await git.currentBranch(in: project.url)
+        let base = try await git.baseBranch(of: project.url)
         let taskSlug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
-        let worktree = try await manager.create(agent: name, slug: taskSlug.isEmpty ? "task" : taskSlug)
+        let worktree = try await manager.create(agent: name, slug: taskSlug.isEmpty ? "task" : taskSlug, from: base)
 
         let agent = try database.insert(Agent(
             projectId: projectId,
@@ -214,7 +214,7 @@ public final class AgentRuntime {
         guard !Slug.make(base).isEmpty else { throw WorktreeError.invalidName(base) }
         let names = try agentNames(for: base, count: count, inProject: projectId)
         let task = task.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseBranch = try await git.currentBranch(in: project.url)
+        let baseBranch = try await git.baseBranch(of: project.url)
         let manager = WorktreeManager(repository: project.url, git: git)
         let taskSlug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
 
@@ -224,7 +224,7 @@ public final class AgentRuntime {
             var branch: String?
             var base = baseBranch
             if role.editsCode {
-                let worktree = try await manager.create(agent: agentName, slug: taskSlug.isEmpty ? "task" : taskSlug)
+                let worktree = try await manager.create(agent: agentName, slug: taskSlug.isEmpty ? "task" : taskSlug, from: baseBranch)
                 worktreePath = worktree.path.path
                 branch = worktree.branch
                 base = baseBranch ?? worktree.head
@@ -288,7 +288,7 @@ public final class AgentRuntime {
                 if !context.isEmpty { prompt += "\n\n" + context }
             }
             if agent.taskId != nil {
-                prompt += "\n\n" + Self.leadChatGuide(workflows: config.workflows)
+                prompt += "\n\n" + Self.leadChatGuide(workflows: config.workflows, defaultWorkflow: config.preferences.defaultWorkflow)
             } else if agent.runId != nil {
                 prompt += "\n\n" + Self.webToolsGuide
             }
@@ -350,8 +350,11 @@ public final class AgentRuntime {
         return quoted.dropLast().joined(separator: ", ") + " and " + last
     }
 
-    static func leadChatGuide(workflows: [WorkflowDefinition]) -> String {
-        let list = workflows.map { "- `\($0.id)`: \($0.displayName)\($0.description.isEmpty ? "" : " — \($0.description)")" }
+    static func leadChatGuide(workflows: [WorkflowDefinition], defaultWorkflow: String? = nil) -> String {
+        let list = workflows.map { workflow in
+            let marker = workflow.id == defaultWorkflow ? " (the default: propose it unless another fits clearly better)" : ""
+            return "- `\(workflow.id)`: \(workflow.displayName)\(marker)\(workflow.description.isEmpty ? "" : " — \(workflow.description)")"
+        }
         return """
         # Chatting with the user
         You are the lead for one request in Ensemble. The user talks to you in a chat; each of their messages arrives as your next turn, and your final text in a turn is shown to them as your reply. Keep replies short and direct.
@@ -514,7 +517,7 @@ extension AgentRuntime {
         guard let agentName = try agentNames(for: base, count: 1, inProject: projectId).first else {
             throw WorktreeError.invalidName(base)
         }
-        let baseBranch = try await git.currentBranch(in: project.url)
+        let baseBranch = try await git.baseBranch(of: project.url)
         var worktreePath: String?
         var branch: String?
         var resolvedBase = baseBranch
@@ -526,7 +529,7 @@ extension AgentRuntime {
         } else if role.editsCode {
             let taskSlug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
             let worktree = try await WorktreeManager(repository: project.url, git: git)
-                .create(agent: agentName, slug: taskSlug.isEmpty ? "task" : taskSlug)
+                .create(agent: agentName, slug: taskSlug.isEmpty ? "task" : taskSlug, from: baseBranch)
             worktreePath = worktree.path.path
             branch = worktree.branch
             resolvedBase = baseBranch ?? worktree.head
@@ -562,10 +565,10 @@ extension AgentRuntime {
 
     public func openWorktree(for session: AgentSession, in project: Project, git: GitClient) async throws {
         let agent = session.agent
-        let baseBranch = try await git.currentBranch(in: project.url)
+        let baseBranch = try await git.baseBranch(of: project.url)
         let taskSlug = Slug.make((agent.task.nilIfEmpty ?? "lead").split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
         let worktree = try await WorktreeManager(repository: project.url, git: git)
-            .create(agent: agent.name, slug: taskSlug.isEmpty ? "lead" : taskSlug)
+            .create(agent: agent.name, slug: taskSlug.isEmpty ? "lead" : taskSlug, from: baseBranch)
         session.adoptWorktree(worktree, baseBranch: baseBranch, port: try nextPort(forProject: agent.projectId))
         usageDidChange()
         try await prepareWorktree(of: session)
@@ -612,7 +615,7 @@ extension AgentRuntime {
     ) async throws {
         let agent = session.agent
         let manager = WorktreeManager(repository: project.url, git: git)
-        let base = try await git.currentBranch(in: project.url) ?? "HEAD"
+        let base = try await git.baseBranch(of: project.url) ?? "HEAD"
         let slug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " ")).nilIfEmpty ?? "task"
         var branch = try manager.branchName(agent: agent.name, slug: slug)
         if try await git.hasCommit("refs/heads/\(branch)", in: project.url) { branch += "-run-\(runId)" }

@@ -22,14 +22,16 @@ public enum WorktreeError: Error, LocalizedError, Equatable {
 
 public struct WorktreeManager: Sendable {
     public static let directoryName = ".crew"
-    public static let branchPrefix = "crew"
+    public static let branchPrefix = ProjectPreferences.defaultBranchPrefix
 
     public let repository: URL
+    public let branchPrefix: String
     private let git: GitClient
 
-    public init(repository: URL, git: GitClient) {
+    public init(repository: URL, git: GitClient, branchPrefix: String? = nil) {
         self.repository = repository.standardizedFileURL
         self.git = git
+        self.branchPrefix = branchPrefix ?? ProjectPreferences.load(repository: repository).branchPrefix
     }
 
     public var crewDirectory: URL {
@@ -41,7 +43,7 @@ public struct WorktreeManager: Sendable {
     }
 
     public func branchName(agent: String, slug: String) throws -> String {
-        "\(Self.branchPrefix)/\(try validSlug(agent))/\(try validSlug(slug))"
+        "\(branchPrefix)/\(try validSlug(agent))/\(try validSlug(slug))"
     }
 
     @discardableResult

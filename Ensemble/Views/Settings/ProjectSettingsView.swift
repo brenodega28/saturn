@@ -89,12 +89,15 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct ProjectSettingsView: View {
+    @Environment(AppModel.self) private var model
     let project: Project
     let branch: String?
-    @SceneStorage("projectSettings.section") private var section: SettingsSection = .general
 
     var body: some View {
-        SettingsContainer(project: project, branch: branch, section: $section)
+        SettingsContainer(project: project, branch: branch, section: Binding(
+            get: { project.id.flatMap { model.settingsSections[$0] } ?? .general },
+            set: { section in project.id.map { model.settingsSections[$0] = section } }
+        ))
     }
 }
 

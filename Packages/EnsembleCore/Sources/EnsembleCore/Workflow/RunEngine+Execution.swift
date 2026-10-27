@@ -93,7 +93,7 @@ extension RunEngine {
         runStep.outcome = result.outcome
         runStep.output = encode(result.output)
         loaded.run.costUSD += result.costUSD
-        if step.type == .agent, let plan = result.output.plan {
+        if step.type == .agent, let plan = result.output.plan, approvesPlans(projectID: loaded.run.projectId) {
             runStep.status = .waitingOnYou
             try hold(
                 &loaded, .planApproval, stepId: step.id, runStepId: runStepID, outcome: result.outcome,
@@ -410,6 +410,11 @@ extension RunEngine {
     static func authorStep(before step: WorkflowStep, in workflow: WorkflowDefinition) -> String? {
         guard let index = workflow.steps.firstIndex(where: { $0.id == step.id }) else { return nil }
         return workflow.steps[..<index].last { $0.type == .spawn || $0.type == .agent }?.id
+    }
+
+    func approvesPlans(projectID: Int64) -> Bool {
+        guard let project = try? database.project(id: projectID) else { return true }
+        return ProjectPreferences.load(repository: project.url).approvePlans
     }
 
     func reviewerFixRounds(projectID: Int64) -> Int {

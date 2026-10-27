@@ -45,6 +45,9 @@ struct RunDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     RunDetailHeader(snapshot: snapshot, project: project, reload: reload)
+                    if let hold = model.engine.holds[runID], hold.isChecksExhausted(in: snapshot.workflow) {
+                        ChecksExhaustedCard(run: snapshot.run, project: project, rounds: snapshot.run.checkRounds(at: hold.stepId, in: project), reload: reload)
+                    }
                     if isWide {
                         HStack(alignment: .top, spacing: 16) {
                             graphCard(snapshot)

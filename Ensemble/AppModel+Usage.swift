@@ -19,6 +19,22 @@ extension AppModel {
         checkBudgets()
     }
 
+    static let globalWeeklyBudgetKey = "usage.globalWeeklyBudgetUSD"
+
+    var globalWeeklyBudget: Double? {
+        let value = UserDefaults.standard.double(forKey: Self.globalWeeklyBudgetKey)
+        return value > 0 ? value : nil
+    }
+
+    func setGlobalWeeklyBudget(_ budget: Double?) {
+        if let budget, budget > 0 {
+            UserDefaults.standard.set(budget, forKey: Self.globalWeeklyBudgetKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.globalWeeklyBudgetKey)
+        }
+        checkBudgets()
+    }
+
     static let usageResetPointKey = "usage.resetPoint"
 
     var usageResetPoint: Date? {
@@ -55,6 +71,25 @@ extension AppModel {
         return (try? database.projectBudgetStatus(projectId: id)) ?? BudgetStatus(budgetUSD: project.settings.monthlyBudgetUSD, spentUSD: 0)
     }
 
+    func weeklyBudgetStatus(for project: Project) -> BudgetStatus {
+        _ = agents.usageRevision
+        guard let id = project.id else { return BudgetStatus(budgetUSD: nil, spentUSD: 0) }
+        return (try? database.projectWeeklyBudgetStatus(projectId: id)) ?? BudgetStatus(budgetUSD: project.settings.weeklyBudgetUSD, spentUSD: 0)
+    }
+
+    func setWeeklyBudget(_ budget: Double?, for project: Project) {
+        var settings = project.settings
+        settings.weeklyBudgetUSD = budget.flatMap { $0 > 0 ? $0 : nil }
+        updateSettings(settings, for: project)
+        checkBudgets()
+    }
+
+    func allowOverBudgetThisWeek(_ project: Project) {
+        var settings = project.settings
+        settings.budgetOverrideWeek = BudgetWeek.key(for: .now)
+        updateSettings(settings, for: project)
+    }
+
     func setMonthlyBudget(_ budget: Double?, for project: Project) {
         var settings = project.settings
         settings.monthlyBudgetUSD = budget.flatMap { $0 > 0 ? $0 : nil }
@@ -84,7 +119,7 @@ extension AppModel {
 
     func checkBudgets() {
         do {
-            try database.recordBudgetNotices(globalBudgetUSD: globalMonthlyBudget)
+            try database.recordBudgetNotices(globalBudgetUSD: globalMonthlyBudget, globalWeeklyBudgetUSD: globalWeeklyBudget)
         } catch {
             alert = AppAlert(title: "Couldn’t check budgets", message: error.localizedDescription)
         }

@@ -52,9 +52,38 @@ struct BudgetField: View {
     }
 }
 
+enum BudgetPeriodKind: String, CaseIterable, Identifiable {
+    case week
+    case month
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .week: "Weekly"
+        case .month: "Monthly"
+        }
+    }
+
+    var noun: String {
+        switch self {
+        case .week: "weekly"
+        case .month: "monthly"
+        }
+    }
+
+    var current: String {
+        switch self {
+        case .week: "this week"
+        case .month: "this month"
+        }
+    }
+}
+
 struct BudgetMeter: View {
     let spent: Double
     let budget: Double?
+    var period: BudgetPeriodKind = .month
 
     var body: some View {
         let fraction = budget.map { $0 > 0 ? spent / $0 : 0 } ?? 0
@@ -74,7 +103,7 @@ struct BudgetMeter: View {
                             .labelStyle(.titleAndIcon)
                     }
                 } else {
-                    Text("no monthly limit").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+                    Text("no \(period.noun) limit").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
                 }
             }
             if budget != nil {
@@ -136,13 +165,16 @@ struct ProjectBudgetCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Monthly budget").font(.system(size: 13.5, weight: .semibold))
-                Text("Spend this month across every run and agent in \(project.name). You get an Inbox notice at 80% and 100%; at 100% new runs and agent turns are refused until you raise it or allow the rest of the month.")
+                Text("Budgets").font(.system(size: 13.5, weight: .semibold))
+                Text("Spend across every run and agent in \(project.name). You get an Inbox notice at 80% and 100% of either cap; at 100% new runs and agent turns are refused until you raise it or allow the rest of the period.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ProjectBudgetEditor(project: project, showsName: false)
+            ForEach(BudgetPeriodKind.allCases) { period in
+                Text(period.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+                ProjectBudgetEditor(project: project, showsName: false, period: period)
+            }
         }
         .padding(16)
         .card(cornerRadius: 16)
@@ -153,9 +185,10 @@ struct ProjectBudgetEditor: View {
     @Environment(AppModel.self) private var model
     let project: Project
     var showsName = true
+    var period: BudgetPeriodKind = .month
 
     var body: some View {
-        let status = model.budgetStatus(for: project)
+        let status = period == .week ? model.weeklyBudgetStatus(for: project) : model.budgetStatus(for: project)
         VStack(alignment: .leading, spacing: 10) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .center, spacing: 14) {
@@ -170,8 +203,8 @@ struct ProjectBudgetEditor: View {
             }
             if status.isReached {
                 Text(status.allowedOverBudget
-                     ? "Over budget, but you allowed new work for the rest of \(BudgetMonth.title(for: .now))."
-                     : "New runs and agent turns in \(project.name) are refused until you raise the budget or allow this month.")
+                     ? "Over budget, but you allowed new work for the rest of \(period == .week ? BudgetWeek.title(for: .now) : BudgetMonth.title(for: .now))."
+                     : "New runs and agent turns in \(project.name) are refused until you raise the budget or allow \(period.current).")
                     .font(.system(size: 12))
                     .foregroundStyle(status.allowedOverBudget ? Theme.secondaryText : Theme.danger)
                     .fixedSize(horizontal: false, vertical: true)
@@ -184,7 +217,7 @@ struct ProjectBudgetEditor: View {
             if showsName {
                 Text(project.name).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
             }
-            BudgetMeter(spent: status.spentUSD, budget: status.budgetUSD)
+            BudgetMeter(spent: status.spentUSD, budget: status.budgetUSD, period: period)
         }
         .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
     }
@@ -192,13 +225,18 @@ struct ProjectBudgetEditor: View {
     private func controls(_ status: BudgetStatus) -> some View {
         HStack(spacing: 8) {
             if status.blocksNewWork {
-                Button("Allow this month") { model.allowOverBudgetThisMonth(project) }
-                    .buttonStyle(PillButtonStyle(.secondary, height: 30))
-                    .help("Let runs and agent turns in \(project.name) continue until the end of the month")
-                    .fixedSize()
+                Button("Allow \(period.current)") {
+                    if period == .week { model.allowOverBudgetThisWeek(project) } else { model.allowOverBudgetThisMonth(project) }
+                }
+                .buttonStyle(PillButtonStyle(.secondary, height: 30))
+                .help("Let runs and agent turns in \(project.name) continue until the end of the \(period == .week ? "week" : "month")")
+                .fixedSize()
             }
-            BudgetField(budget: project.settings.monthlyBudgetUSD, label: "Monthly budget for \(project.name)") { value in
-                model.setMonthlyBudget(value, for: project)
+            BudgetField(
+                budget: period == .week ? project.settings.weeklyBudgetUSD : project.settings.monthlyBudgetUSD,
+                label: "\(period.title) budget for \(project.name)"
+            ) { value in
+                if period == .week { model.setWeeklyBudget(value, for: project) } else { model.setMonthlyBudget(value, for: project) }
             }
             .fixedSize()
         }

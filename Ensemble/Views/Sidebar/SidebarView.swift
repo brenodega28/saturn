@@ -442,7 +442,14 @@ private struct SpendCard: View {
                 HStack {
                     Text("This week").fontWeight(.semibold)
                     Spacer()
-                    Text(weekly).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.secondaryText)
+                    Text(model.globalWeeklyBudget.map { "\(weekly) / \($0.formatted(.currency(code: "USD").precision(.fractionLength(0))))" } ?? weekly)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(Theme.secondaryText)
+                }
+                if let budget = model.globalWeeklyBudget {
+                    ProgressView(value: min(model.weeklySpend / budget, 1))
+                        .progressViewStyle(.linear)
+                        .tint(model.weeklySpend >= budget ? Theme.danger : Theme.secondaryText)
                 }
                 if let budget = model.globalMonthlyBudget {
                     let monthly = model.monthlySpend

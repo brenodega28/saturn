@@ -6,6 +6,8 @@ struct UsageView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("usage.period") private var period: UsagePeriod = .month
     @AppStorage(AppModel.globalMonthlyBudgetKey) private var globalBudget: Double = 0
+    @AppStorage(AppModel.globalWeeklyBudgetKey) private var globalWeeklyBudget: Double = 0
+    @AppStorage("usage.budgetPeriod") private var budgetPeriod: BudgetPeriodKind = .week
     @AppStorage(AppModel.usageResetPointKey) private var usageResetPoint: Double = 0
     @State private var isConfirmingReset = false
 
@@ -111,6 +113,8 @@ struct UsageView: View {
                     .foregroundStyle(Theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            CapsuleTabs(BudgetPeriodKind.allCases, selection: $budgetPeriod, title: \.title)
+                .fixedSize()
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 14) {
                     overallSummary
@@ -124,7 +128,7 @@ struct UsageView: View {
             }
             ForEach(model.openProjects) { project in
                 Divider().overlay(Color.white.opacity(0.06))
-                ProjectBudgetEditor(project: project)
+                ProjectBudgetEditor(project: project, period: budgetPeriod)
             }
         }
         .padding(16)
@@ -134,16 +138,29 @@ struct UsageView: View {
     private var overallSummary: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("All projects").font(.system(size: 13.5, weight: .semibold))
-            BudgetMeter(spent: model.monthlySpend, budget: globalBudget > 0 ? globalBudget : nil)
+            if budgetPeriod == .week {
+                BudgetMeter(spent: model.weeklySpend, budget: globalWeeklyBudget > 0 ? globalWeeklyBudget : nil, period: .week)
+            } else {
+                BudgetMeter(spent: model.monthlySpend, budget: globalBudget > 0 ? globalBudget : nil)
+            }
             Text("Only alerts; it never blocks work.").font(.system(size: 11.5)).foregroundStyle(Theme.tertiaryText)
         }
         .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
     }
 
     private var overallField: some View {
-        BudgetField(budget: globalBudget > 0 ? globalBudget : nil, label: "Overall monthly budget") { value in
-            model.setGlobalMonthlyBudget(value)
-            globalBudget = value ?? 0
+        Group {
+            if budgetPeriod == .week {
+                BudgetField(budget: globalWeeklyBudget > 0 ? globalWeeklyBudget : nil, label: "Overall weekly budget") { value in
+                    model.setGlobalWeeklyBudget(value)
+                    globalWeeklyBudget = value ?? 0
+                }
+            } else {
+                BudgetField(budget: globalBudget > 0 ? globalBudget : nil, label: "Overall monthly budget") { value in
+                    model.setGlobalMonthlyBudget(value)
+                    globalBudget = value ?? 0
+                }
+            }
         }
         .fixedSize()
     }

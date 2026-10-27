@@ -23,6 +23,8 @@ struct ShellView: View {
             InboxView()
         case .usage:
             UsageView()
+        case .quality:
+            QualityView()
         case .project:
             if let project = model.selectedProject {
                 ProjectView(project: project)

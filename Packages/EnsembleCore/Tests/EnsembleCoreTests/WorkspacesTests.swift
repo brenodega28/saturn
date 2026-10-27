@@ -410,6 +410,8 @@ import Testing
         #expect(files.contains("README.md"))
         #expect(files.contains(".ensemble/roles/tech-lead.yaml"))
         #expect(files.contains(".ensemble/workflows/feature-delivery.yaml"))
+        #expect(files.contains("AGENTS.md") && files.contains("CLAUDE.md"))
+        #expect(AgentInstructions.status(repository: folder).isSetUp)
         let status = try await scratch.git.run(["status", "--porcelain"], in: folder)
         #expect(status.isEmpty)
     }

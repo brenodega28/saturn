@@ -40,7 +40,7 @@ extension AppDatabase {
 
     @discardableResult
     public func updatePin(id: Int64, status: PinStatus, response: String? = nil, now: Date = .now) throws -> Pin? {
-        try writer.write { db in
+        let updated = try writer.write { db -> Pin? in
             guard var pin = try Pin.fetchOne(db, id: id) else { return nil }
             pin.status = status
             pin.response = response
@@ -48,6 +48,10 @@ extension AppDatabase {
             try pin.update(db)
             return pin
         }
+        if let updated, status == .changeRequested, let response {
+            try recordCorrection(runId: updated.runId, pinId: updated.id, file: updated.file, text: response, now: now)
+        }
+        return updated
     }
 
     @discardableResult
@@ -55,7 +59,7 @@ extension AppDatabase {
         runId: Int64, branchAgentId: Int64?, file: String, side: PinSide, startLine: Int, endLine: Int,
         text: String, now: Date = .now
     ) throws -> Pin {
-        try writer.write { db in
+        let pin = try writer.write { db in
             var pin = Pin(
                 runId: runId, agentId: branchAgentId, file: file, startLine: min(startLine, endLine),
                 endLine: max(startLine, endLine), side: side, byUser: true, title: "Your comment",
@@ -64,11 +68,13 @@ extension AppDatabase {
             try pin.insert(db)
             return pin
         }
+        try recordCorrection(runId: runId, pinId: pin.id, file: file, text: text, now: now)
+        return pin
     }
 
     @discardableResult
     public func updateComment(id: Int64, text: String, now: Date = .now) throws -> Pin? {
-        try writer.write { db in
+        let pin = try writer.write { db -> Pin? in
             guard var pin = try Pin.fetchOne(db, id: id) else { return nil }
             pin.explanation = text
             pin.response = text
@@ -76,6 +82,8 @@ extension AppDatabase {
             try pin.update(db)
             return pin
         }
+        if let pin { try recordCorrection(runId: pin.runId, pinId: pin.id, file: pin.file, text: text, now: now) }
+        return pin
     }
 
     @discardableResult

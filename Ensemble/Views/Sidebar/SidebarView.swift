@@ -70,8 +70,11 @@ struct SidebarView: View {
             .padding(.top, 4)
         }
         .safeAreaInset(edge: .bottom) {
-            SpendCard()
-                .padding(10)
+            VStack(spacing: 6) {
+                QualityLink()
+                SpendCard()
+            }
+            .padding(10)
         }
         .background(Theme.sidebarBackground)
     }
@@ -401,6 +404,27 @@ private struct SidebarRequestRows: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Show more requests")
         .accessibilityHint("Opens the list of all requests")
+    }
+}
+
+private struct QualityLink: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let isSelected = model.selection == .quality
+        Button {
+            model.sidebarDestination = .quality
+        } label: {
+            Label("Quality", systemImage: "gauge.with.dots.needle.33percent")
+                .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .background(isSelected ? Theme.accent.opacity(0.28) : Color.white.opacity(0.05), in: .rect(cornerRadius: 10, style: .continuous))
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help("Change size, time to approve, check failures, rework and cost per change")
     }
 }
 

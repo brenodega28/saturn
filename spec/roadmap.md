@@ -256,11 +256,11 @@ Goal: you review small, verified changes, and AI review points you to what matte
 
 Goal: the harness gets better every week, and you can see whether it's working.
 
-- [ ] Lean `AGENTS.md`: create or import on setup, point `CLAUDE.md` to it, warn when it grows past about one page
-- [ ] Encode a correction: from a pin or a "Request change", propose one line for `AGENTS.md`, a hook or a check, and commit it with your approval
-- [ ] Repeated-mistake detection: when the same correction is made twice, Ensemble suggests encoding it
-- [ ] Quality screen: PR size, time to approve, check failure rate and retries, rework and revert rate, duplication and complexity trend, cost per approved change; no "lines generated" or AI-share metrics
-- [ ] Weekly summary in the Inbox: what moved, which rules were added, which checks failed most
+- [x] Lean `AGENTS.md`: create or import on setup, point `CLAUDE.md` to it, warn when it grows past about one page
+- [x] Encode a correction: from a pin or a "Request change", propose one line for `AGENTS.md`, a hook or a check, and commit it with your approval
+- [x] Repeated-mistake detection: when the same correction is made twice, Ensemble suggests encoding it
+- [x] Quality screen: PR size, time to approve, check failure rate and retries, rework and revert rate, duplication and complexity trend, cost per approved change; no "lines generated" or AI-share metrics
+- [x] Weekly summary in the Inbox: what moved, which rules were added, which checks failed most
 
 **Exit check:** a week of real use on one project: no lost runs, no surprise spend, no unverified change reached review, and the quality screen shows PR size and review time holding steady.
 

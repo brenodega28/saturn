@@ -308,7 +308,8 @@ import Testing
         #expect(try h.run(urgent).status == .succeeded)
         #expect(try h.steps(urgent).map(\.stepId) == ["build", "is-urgent", "touches-migrations", "big", "built", "dba", "end"])
         #expect(try h.steps(urgent).compactMap(\.outcome).dropLast() == ["done", "yes", "yes", "yes", "yes", "done"])
-        #expect(h.driver.diffRequests == 2)
+        #expect(h.driver.diffRequests == 3)
+        #expect(try h.run(urgent).linesChanged == 240)
 
         let calm = try await h.start(workflow, labels: ["docs"])
         #expect(try h.steps(calm).map(\.stepId) == ["build", "is-urgent", "end"])

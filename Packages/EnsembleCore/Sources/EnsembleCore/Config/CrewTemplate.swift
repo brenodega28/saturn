@@ -76,6 +76,7 @@ public enum CrewTemplates {
             try "# \(folder.lastPathComponent)\n".write(to: readme, atomically: true, encoding: .utf8)
         }
         try template?.install(in: folder)
+        try AgentInstructions.setUp(repository: folder)
         try await git.run(["add", "-A"], in: folder)
         let identity = try await hasIdentity(in: folder, git: git) ? [] : ["-c", "user.name=Ensemble", "-c", "user.email=ensemble@localhost"]
         try await git.run(identity + ["commit", "-m", "Initial commit"], in: folder)

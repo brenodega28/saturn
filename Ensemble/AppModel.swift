@@ -5,12 +5,14 @@ import Observation
 enum SidebarItem: Hashable, Codable {
     case inbox
     case usage
+    case quality
     case project(Int64)
 }
 
 enum SidebarDestination: Hashable {
     case inbox
     case usage
+    case quality
     case section(project: Int64, tab: ProjectTab)
     case run(project: Int64, run: Int64)
     case request(project: Int64, request: Int64)
@@ -158,6 +160,7 @@ final class AppModel {
             switch selection {
             case .inbox: .inbox
             case .usage: .usage
+            case .quality: .quality
             case .project(let id):
                 if let runID = runDetailIDs[id] {
                     .run(project: id, run: runID)
@@ -177,6 +180,8 @@ final class AppModel {
                 selection = .inbox
             case .usage:
                 selection = .usage
+            case .quality:
+                selection = .quality
             case .section(let id, let tab):
                 runDetailIDs[id] = nil
                 tabs[id] = tab
@@ -223,6 +228,18 @@ final class AppModel {
         gitHub.start()
         idleCleanup.start()
         await refreshAllProjects()
+        startWeeklySummaries()
+    }
+
+    func startWeeklySummaries() {
+        Task { [weak self] in
+            while let self, !Task.isCancelled {
+                for project in self.openProjects {
+                    _ = try? WeeklySummary.postIfDue(for: project, database: self.database)
+                }
+                try? await Task.sleep(for: .seconds(3600))
+            }
+        }
     }
 
     func checkEnvironment() async {

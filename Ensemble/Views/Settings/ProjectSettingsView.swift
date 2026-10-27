@@ -11,6 +11,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case chat
     case workspaces
     case checks
+    case learnedRules
     case claudeAccess
     case tools
     case github
@@ -26,6 +27,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .chat: "Chat"
         case .workspaces: "Workspaces"
         case .checks: "Checks"
+        case .learnedRules: "Learned rules"
         case .claudeAccess: "Claude access"
         case .tools: "Tools"
         case .github: "GitHub"
@@ -41,6 +43,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .chat: "Chat"
         case .workspaces: "Spaces"
         case .checks: "Checks"
+        case .learnedRules: "Rules"
         case .claudeAccess: "Access"
         case .tools: "Tools"
         case .github: "GitHub"
@@ -56,6 +59,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .chat: "bubble.left.and.bubble.right"
         case .workspaces: "square.stack.3d.up"
         case .checks: "checkmark.shield"
+        case .learnedRules: "brain"
         case .claudeAccess: "key"
         case .tools: "wrench.and.screwdriver"
         case .github: "arrow.triangle.pull"
@@ -71,6 +75,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .chat: Color(hex: 0x0A84FF)
         case .workspaces: Color(hex: 0xA0522D)
         case .checks: Color(hex: 0x1E8F55)
+        case .learnedRules: Color(hex: 0xBF5AF2)
         case .claudeAccess: Color(hex: 0xC23A54)
         case .tools: Color(hex: 0x48484A)
         case .github: Color(hex: 0x48484A)
@@ -113,6 +118,7 @@ struct SettingsContainer: View {
                 case .chat: ChatSettingsView()
                 case .workspaces: WorkspacesSettingsView(project: project)
                 case .checks: ChecksSettingsView(project: project)
+                case .learnedRules: LearnedRulesView(project: project)
                 case .claudeAccess: ClaudeAccessSettings()
                 case .tools: ToolsSettings()
                 case .github: GitHubSettingsView(project: project)

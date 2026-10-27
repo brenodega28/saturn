@@ -190,6 +190,7 @@ extension RunEngine {
         let driver = self.driver
         let run = loaded.run
         let end = loaded.workflow.end
+        let size = await driver.diffInfo(run)
         let result = await race(stepId: WorkflowDefinition.endStepID, timeoutMinutes: nil) { try await driver.finish(run, end: end) }
         guard !Task.isCancelled, try isStillRunning(runStepID) else { return false }
         switch result {
@@ -207,6 +208,8 @@ extension RunEngine {
             done.run.deliveryBranch = finished.deliveryBranch ?? done.run.deliveryBranch
             done.run.baseBranch = finished.baseBranch ?? done.run.baseBranch
             done.run.status = .succeeded
+            done.run.linesChanged = size.lines
+            done.run.filesChanged = size.paths.count
             done.run.currentStep = WorkflowDefinition.endStepID
             done.run.lastError = nil
             done.run.endedAt = now

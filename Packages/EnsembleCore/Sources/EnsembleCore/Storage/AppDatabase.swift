@@ -267,6 +267,23 @@ public final class AppDatabase: Sendable {
                 t.column("createdAt", .datetime).notNull()
             }
         }
+        migrator.registerMigration("v15-close-the-loop") { db in
+            try db.alter(table: "run") { t in
+                t.add(column: "linesChanged", .integer)
+                t.add(column: "filesChanged", .integer)
+            }
+            try db.create(table: "correction") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.belongsTo("project", onDelete: .cascade).notNull()
+                t.column("runId", .integer)
+                t.column("pinId", .integer)
+                t.column("file", .text)
+                t.column("text", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("encodedAt", .datetime)
+                t.column("encoding", .text)
+            }
+        }
 
         return migrator
     }

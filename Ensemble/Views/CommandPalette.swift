@@ -102,6 +102,7 @@ struct CommandPalette: View {
             PaletteCommand(id: "clone", title: "Clone Repository…", systemImage: "arrow.triangle.branch") { model.isClonePresented = true },
             PaletteCommand(id: "inbox", title: "Go to Inbox", systemImage: "tray") { model.selection = .inbox },
             PaletteCommand(id: "usage", title: "Go to Usage", systemImage: "chart.bar") { model.selection = .usage },
+            PaletteCommand(id: "quality", title: "Go to Quality", systemImage: "gauge.with.dots.needle.33percent") { model.selection = .quality },
         ]
         if let project = model.selectedProject {
             commands += ProjectTab.allCases.map { tab in

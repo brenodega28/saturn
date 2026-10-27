@@ -344,38 +344,19 @@ struct CommandPalette: View {
     }
 
     private var menuGroups: [PaletteGroup] {
-        let menu = Theme.fillSelected
-        let hasProject = model.currentProject != nil
-        var file = [
-            PaletteCommand(id: "m-new-project", title: "New Project…", meta: "File", glyph: .symbol("chevron.right"), tint: menu, shortcut: hasProject ? "" : "⌘N") { model.newProject() },
-            PaletteCommand(id: "m-open", title: "Open…", meta: "File", glyph: .symbol("chevron.right"), tint: menu, shortcut: "⌘O") { model.isOpenPanelPresented = true },
-            PaletteCommand(id: "m-clone", title: "Clone…", meta: "File", glyph: .symbol("chevron.right"), tint: menu, shortcut: "⇧⌘O") { model.isClonePresented = true },
-        ]
-        var agent: [PaletteCommand] = []
-        var window = [
-            PaletteCommand(id: "m-inbox", title: "Inbox", meta: "Window", glyph: .symbol("chevron.right"), tint: menu) { model.selection = .inbox },
-            PaletteCommand(id: "m-usage", title: "Usage", meta: "Window", glyph: .symbol("chevron.right"), tint: menu) { model.selection = .usage },
-            PaletteCommand(id: "m-quality", title: "Quality", meta: "Window", glyph: .symbol("chevron.right"), tint: menu) { model.selection = .quality },
-        ]
-        if let project = model.currentProject {
-            file.insert(PaletteCommand(id: "m-new-task", title: "New Task", meta: "File", glyph: .symbol("chevron.right"), tint: menu, shortcut: "⌘N") { model.newTask() }, at: 1)
-            file.append(PaletteCommand(id: "m-close", title: "Close Project", meta: "File", glyph: .symbol("chevron.right"), tint: menu, shortcut: "⇧⌘W") { model.close(project) })
-            agent = [
-                PaletteCommand(id: "m-message", title: "Message…", meta: "Agent", glyph: .symbol("chevron.right"), tint: menu, shortcut: "⌘J") {
-                    DispatchQueue.main.async { model.openPalette(.agents) }
-                },
-                PaletteCommand(id: "m-spawn", title: "Spawn…", meta: "Agent", glyph: .symbol("chevron.right"), tint: menu, shortcut: "⇧⌘A") { model.spawnAgent() },
-                PaletteCommand(id: "m-pause-all", title: "Pause All", meta: "Agent", glyph: .symbol("chevron.right"), tint: menu, shortcut: "⇧⌘P") { model.pauseAllAgents(in: project) },
-            ]
+        let context = CommandContext(model: model, workbench: model.activeWorkbench, openWindow: openWindow)
+        return WorkbenchRegistry.menuBar.compactMap { menu in
+            let commands = WorkbenchRegistry.shared.commands(in: menu).flatMap(\.self).filter { $0.isEnabled(context) }
+            guard !commands.isEmpty else { return nil }
+            return PaletteGroup(name: "\(menu) menu", commands: commands.map { command in
+                PaletteCommand(
+                    id: "m-\(command.id)", title: command.title, meta: menu, keywords: command.keywords,
+                    glyph: .symbol("chevron.right"), tint: Theme.fillSelected, shortcut: command.shortcut?.displayString ?? ""
+                ) {
+                    DispatchQueue.main.async { command.perform(context) }
+                }
+            })
         }
-        window.append(PaletteCommand(id: "m-worktrees", title: "Worktrees…", meta: "Debug", glyph: .symbol("chevron.right"), tint: menu, shortcut: "⌥⌘W") {
-            openWindow(id: WindowID.debugWorktrees)
-        })
-        return [
-            PaletteGroup(name: "File menu", commands: file),
-            PaletteGroup(name: "Agent menu", commands: agent),
-            PaletteGroup(name: "Window menu", commands: window),
-        ]
     }
 
     private func runHighlighted(_ flat: [PaletteCommand], newWindow: Bool) {

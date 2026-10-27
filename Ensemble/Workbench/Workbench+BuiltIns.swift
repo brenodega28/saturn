@@ -44,6 +44,7 @@ extension WorkbenchRegistry {
         registerActivitySources()
         registerToolbar()
         registerToolbarItems()
+        registerMenuCommands()
         registerStatusItems()
         registerViewCommands()
         registerNavigatorCommands()
@@ -182,6 +183,9 @@ extension WorkbenchRegistry {
     }
 
     private func registerViewCommands() {
+        register(WorkbenchCommand(id: "view.palette", title: "Command Palette…", menu: "View", section: 0, order: 0, shortcut: KeyboardShortcut("k")) { context in
+            if context.model.isPalettePresented { context.model.isPalettePresented = false } else { context.model.openPalette() }
+        })
         register(WorkbenchCommand(id: "view.navigator", title: "Show Navigator", menu: "View", section: 1, order: 0, shortcut: KeyboardShortcut("0"),
                                   isEnabled: { $0.workbench != nil }, isChecked: { $0.workbench?.isShowing(.navigator) ?? false }) {
             $0.workbench?.toggle(.navigator)

@@ -129,6 +129,7 @@ struct CommandContext {
     let model: AppModel
     let workbench: WorkbenchState?
     let openWindow: OpenWindowAction?
+    var target: CommandTarget?
 }
 
 struct WorkbenchCommand: Identifiable {
@@ -225,11 +226,41 @@ final class WorkbenchRegistry {
             .map { $0.value.sorted { $0.order < $1.order } }
     }
 
+    static let menuBar = ["File", "View", "Navigate", "Agent", "Run", "Review", "Workflow", "Window", "Help"]
+
     func command(_ id: String) -> WorkbenchCommand? {
         commands.first { $0.id == id }
     }
 
     func editorKind(for item: EditorItem) -> EditorKindSpec? {
         editorKinds[item.kind]
+    }
+}
+
+extension KeyboardShortcut {
+    var displayString: String {
+        var text = ""
+        if modifiers.contains(.control) { text += "⌃" }
+        if modifiers.contains(.option) { text += "⌥" }
+        if modifiers.contains(.shift) { text += "⇧" }
+        if modifiers.contains(.command) { text += "⌘" }
+        return text + key.displayString
+    }
+}
+
+extension KeyEquivalent {
+    var displayString: String {
+        switch self {
+        case .return: "↩"
+        case .leftArrow: "←"
+        case .rightArrow: "→"
+        case .upArrow: "↑"
+        case .downArrow: "↓"
+        case .delete: "⌫"
+        case .escape: "⎋"
+        case .tab: "⇥"
+        case .space: "Space"
+        default: String(character).uppercased()
+        }
     }
 }

@@ -15,11 +15,11 @@ extension WorkbenchRegistry {
         register(StatusItemSpec(id: "claude", placement: .trailing, order: 0) { AnyView(ClaudeStatusItem()) })
         register(StatusItemSpec(id: "limits", placement: .trailing, order: 10) { AnyView(LimitsStatusItem()) })
 
-        register(WorkbenchCommand(id: "run.start", title: "Start Task", menu: "Run", section: 0, order: 0, shortcut: KeyboardShortcut("r"),
+        register(WorkbenchCommand(id: "run.start", title: "Start", menu: "Run", section: 0, order: 0, shortcut: KeyboardShortcut("r"),
                                   isEnabled: { $0.model.currentProject != nil }) { context in
             context.model.newTask()
         })
-        register(WorkbenchCommand(id: "run.stop", title: "Stop Run", menu: "Run", section: 0, order: 1, shortcut: KeyboardShortcut("."),
+        register(WorkbenchCommand(id: "run.stop", title: "Stop", menu: "Run", section: 0, order: 1, shortcut: KeyboardShortcut("."),
                                   isEnabled: { $0.model.runToStop(in: $0.workbench) != nil }) { context in
             guard let run = context.model.runToStop(in: context.workbench) else { return }
             Task { await context.model.performRunAction("Couldn’t stop the run") { try await context.model.engine.cancel(run) } }

@@ -105,6 +105,11 @@ final class AppModel {
     var activeClones: [String: Date] = [:]
     var listeningPorts: Set<Int> = []
     var isOffline = false
+    var focusedPinIDs: [Int64: Int64] = [:]
+    var problemCursor = -1
+    var pinPrompt: PinPrompt?
+    var workflowMenuAction: WorkflowMenuAction?
+    @ObservationIgnored weak var activeWorkbench: WorkbenchState?
     @ObservationIgnored var connectivity: ConnectivityMonitor?
     let leadChat: LeadChat
     let directChat: DirectChat

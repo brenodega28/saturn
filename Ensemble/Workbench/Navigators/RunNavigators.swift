@@ -87,7 +87,7 @@ private struct RunNavigatorRow: View {
                 }
             }
         }
-        .contextMenu { RunContextMenu(run: run) }
+        .contextMenu { if let id = run.id { ContextCommands(groups: ContextCommands.run, target: .run(project: run.projectId, run: id)) } }
     }
 
     private var detail: String {
@@ -109,23 +109,6 @@ private struct RunNavigatorRow: View {
     }
 }
 
-struct RunContextMenu: View {
-    @Environment(AppModel.self) private var model
-    @Environment(WorkbenchState.self) private var state
-    @Environment(\.openWindow) private var openWindow
-    let run: Run
-
-    var body: some View {
-        if let id = run.id {
-            Button("Open") { state.open(.run(id, in: run.projectId)) }
-            Button("Open in New Window") { openWindow(id: WindowID.detail, value: DetailDestination.run(project: run.projectId, run: id)) }
-            Button("Open Changes") {
-                model.changesRunSelections[run.projectId] = id
-                state.open(.section(.changes, in: run.projectId))
-            }
-        }
-    }
-}
 
 struct AgentsNavigator: View {
     @Environment(AppModel.self) private var model
@@ -187,7 +170,7 @@ private struct AgentNavigatorRow: View {
                         .offset(x: 2, y: 2)
                 }
         }
-        .contextMenu { AgentContextMenu(project: project, session: session) }
+        .contextMenu { if let id = project.id { ContextCommands(groups: ContextCommands.agent, target: .agent(project: id, agent: session.id)) } }
     }
 
     private var detail: String {
@@ -199,24 +182,6 @@ private struct AgentNavigatorRow: View {
     }
 }
 
-struct AgentContextMenu: View {
-    @Environment(AppModel.self) private var model
-    @Environment(WorkbenchState.self) private var state
-    @Environment(\.openWindow) private var openWindow
-    let project: Project
-    let session: AgentSession
-
-    var body: some View {
-        if let id = project.id {
-            Button("Open Session") { state.open(.agent(session.id, in: id)) }
-            Button("Open in New Window") { openWindow(id: WindowID.detail, value: DetailDestination.agent(project: id, agent: session.id)) }
-            Button("Message…") { model.message(session, in: project) }
-            if session.agent.worktreeURL != nil {
-                Button("Open Worktree in Terminal") { model.takeOver(session) }
-            }
-        }
-    }
-}
 
 struct PinsNavigator: View {
     @Environment(AppModel.self) private var model
@@ -267,12 +232,13 @@ private struct PinNavigatorRow: View {
             Button("Open in Changes", action: open)
             Button("Open File") { state.open(.file(pin.file, in: run.projectId)) }
             Divider()
-            Button("Approve") { _ = try? model.database.updatePin(id: pin.id ?? -1, status: .approved) }
+            if let id = pin.id { ContextCommands(groups: ContextCommands.pin, target: .pin(project: run.projectId, pin: id)) }
         }
     }
 
     private func open() {
         guard let id = run.id else { return }
+        model.focusedPinIDs[run.projectId] = pin.id
         model.changesRunSelections[run.projectId] = id
         state.open(.section(.changes, in: run.projectId))
     }

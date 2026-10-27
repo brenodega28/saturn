@@ -57,6 +57,7 @@ struct WorkflowsView: View {
             takeTestRunRequest(config: config)
         }
         .onChange(of: model.testRunRequest) { takeTestRunRequest(config: model.config(for: project)) }
+        .onChange(of: model.workflowMenuAction, initial: true) { takeMenuAction(config: model.config(for: project)) }
         .onChange(of: project.id) { _, _ in
             editor = nil
             openFirst(in: model.config(for: project))
@@ -308,6 +309,15 @@ struct WorkflowsView: View {
         confirmLeaving {
             open(workflow, isNew: false)
             isTestRunPresented = true
+        }
+    }
+
+    private func takeMenuAction(config: ProjectConfig) {
+        guard let action = model.workflowMenuAction, action.project == project.id else { return }
+        model.workflowMenuAction = nil
+        switch action.kind {
+        case .newWorkflow: newBlank(config: config)
+        case .history: isHistoryPresented = editor != nil
         }
     }
 

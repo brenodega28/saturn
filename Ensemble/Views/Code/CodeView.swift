@@ -192,6 +192,7 @@ private struct FileTree: View {
 }
 
 private struct FileTreeRow: View {
+    @Environment(\.isInWorkbench) private var isInWorkbench
     let browser: CodeBrowser
     let row: CodeTreeRow
 
@@ -247,6 +248,11 @@ private struct FileTreeRow: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if isInWorkbench, !row.isDirectory, let id = browser.project.id {
+                ContextCommands(groups: ContextCommands.file, target: .file(project: id, path: row.path))
+            }
+        }
         .accessibilityLabel(row.isDirectory ? "\(row.name) folder, \(isOpen ? "expanded" : "collapsed")" : row.path)
         .accessibilityAddTraits(isActive ? .isSelected : [])
     }

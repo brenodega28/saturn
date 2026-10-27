@@ -7,7 +7,7 @@ struct AppCommands: Commands {
     @FocusedValue(\.workbench) private var workbench
 
     private var context: CommandContext {
-        CommandContext(model: model, workbench: workbench, openWindow: openWindow)
+        CommandContext(model: model, workbench: workbench ?? model.activeWorkbench, openWindow: openWindow)
     }
 
     var body: some Commands {
@@ -17,65 +17,49 @@ struct AppCommands: Commands {
         }
 
         CommandGroup(replacing: .newItem) {
-            if model.currentProject == nil {
-                Button("New Project…") { model.newProject() }
-                    .keyboardShortcut("n")
-            } else {
-                Button("New Task") { model.newTask() }
-                    .keyboardShortcut("n")
-                Button("New Project…") { model.newProject() }
+            RegistryMenuItems(menu: "File", context: context)
+            Menu("Open Recent") {
+                ForEach(model.recentProjects) { project in
+                    Button(project.name) { Task { await model.openFolder(project.url) } }
+                }
             }
-            Button("Open Folder…") { model.isOpenPanelPresented = true }
-                .keyboardShortcut("o")
-            Button("Clone Repository…") { model.isClonePresented = true }
-                .keyboardShortcut("o", modifiers: [.command, .shift])
-            Divider()
-            Button("Close Project") {
-                if let project = model.selectedProject { model.close(project) }
-            }
-            .keyboardShortcut("w", modifiers: [.command, .shift])
-            .disabled(model.selectedProject == nil)
+            .disabled(model.recentProjects.isEmpty)
         }
 
         CommandGroup(after: .sidebar) {
-            Button("Command Palette…") {
-                if model.isPalettePresented { model.isPalettePresented = false } else { model.openPalette() }
-            }
-                .keyboardShortcut("k")
-            Divider()
             Menu("Navigator") {
                 RegistryMenuItems(menu: "View.Navigator", context: context)
             }
             RegistryMenuItems(menu: "View", context: context)
-            Divider()
-            Button("Inbox") { model.selection = .inbox }
-            ForEach(ProjectTab.sidebarOrder) { tab in
-                Button(tab.title) {
-                    if let index = ProjectTab.sidebarOrder.firstIndex(of: tab) { model.goToSection(index + 1) }
-                }
-                .disabled(model.openProjects.isEmpty)
-            }
         }
 
         CommandMenu("Navigate") {
             RegistryMenuItems(menu: "Navigate", context: context)
         }
 
+        CommandMenu("Agent") {
+            RegistryMenuItems(menu: "Agent", context: context)
+        }
+
         CommandMenu("Run") {
             RegistryMenuItems(menu: "Run", context: context)
         }
 
-        CommandMenu("Agent") {
-            Button("Message…") { model.openPalette(.agents) }
-                .keyboardShortcut("j")
-                .disabled(model.openProjects.isEmpty)
-            Button("Spawn…") { model.spawnAgent() }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
-                .disabled(model.currentProject == nil)
+        CommandMenu("Review") {
+            RegistryMenuItems(menu: "Review", context: context)
+        }
+
+        CommandMenu("Workflow") {
+            RegistryMenuItems(menu: "Workflow", context: context)
+        }
+
+        CommandGroup(before: .windowList) {
+            RegistryMenuItems(menu: "Window", context: context)
             Divider()
-            Button("Pause All") { model.pauseAllAgentsInSelectedProject() }
-                .keyboardShortcut("p", modifiers: [.command, .shift])
-                .disabled(model.currentProject == nil)
+        }
+
+        CommandGroup(replacing: .help) {
+            RegistryMenuItems(menu: "Help", context: context)
         }
 
         CommandMenu("Debug") {

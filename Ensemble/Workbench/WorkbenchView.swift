@@ -52,6 +52,8 @@ struct WorkbenchView: View {
             }
         }
         .onAppear(perform: restore)
+        .onAppear { model.activeWorkbench = state }
+        .sheet(item: $model.pinPrompt) { prompt in PinPromptSheet(prompt: prompt) }
         .onAppear(perform: installKeyMonitor)
         .onDisappear(perform: removeKeyMonitor)
         .onChange(of: model.currentEditorItem, initial: true) { _, item in

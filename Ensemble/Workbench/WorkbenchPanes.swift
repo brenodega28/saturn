@@ -210,7 +210,7 @@ struct BottomPanel: View {
                     let isSelected = tab.id == current?.id
                     Button { state.bottomTab = tab.id } label: {
                         HStack(spacing: 6) {
-                            Text(tab.title)
+                            Text(tab.title).lineLimit(1).fixedSize()
                             if let badge = tab.badge(model), badge > 0 {
                                 Text("\(badge)")
                                     .font(.system(size: 10, design: .monospaced))
@@ -246,7 +246,8 @@ struct BottomPanel: View {
             Divider().overlay(Theme.hairline)
             if let current {
                 current.content()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+                    .clipped()
             } else {
                 Text("No panels")
                     .font(.system(size: 12))

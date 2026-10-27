@@ -47,7 +47,8 @@ struct EditorContent: View {
         }
         .environment(\.showsScreenHeader, false)
         .environment(\.isInWorkbench, true)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
     }
 }
 

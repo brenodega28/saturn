@@ -17,15 +17,19 @@ struct WorkbenchView: View {
                 if state.isShowing(.navigator) {
                     NavigatorPane()
                         .frame(width: state.navigatorWidth)
+                        .frame(minHeight: 0, maxHeight: .infinity)
+                        .clipped()
                     PaneDivider(axis: .vertical, length: $state.navigatorWidth, range: 220...460)
                 }
                 VStack(spacing: 0) {
                     EditorArea()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                        .clipped()
                     if state.isShowing(.bottom) {
                         PaneDivider(axis: .horizontal, length: $state.bottomHeight, range: 120...560, grows: .up)
                         BottomPanel()
                             .frame(height: state.bottomHeight)
+                            .clipped()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -33,11 +37,14 @@ struct WorkbenchView: View {
                     PaneDivider(axis: .vertical, length: $state.inspectorWidth, range: 240...460, grows: .left)
                     InspectorPane()
                         .frame(width: state.inspectorWidth)
+                        .frame(minHeight: 0, maxHeight: .infinity)
+                        .clipped()
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
             StatusBar()
         }
+        .frame(minWidth: 1100, minHeight: 680)
         .background(Theme.windowBackground)
         .overlay(alignment: .top) {
             if state.isLibraryShown {

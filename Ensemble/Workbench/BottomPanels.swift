@@ -62,13 +62,21 @@ struct LogPanel: View {
                 .fixedSize()
                 HStack(spacing: 2) {
                     ForEach(LogEntry.Level.allCases, id: \.self) { level in
-                        Toggle(level.rawValue, isOn: Binding(
-                            get: { filter.levels.contains(level) },
-                            set: { if $0 { filter.levels.insert(level) } else { filter.levels.remove(level) } }
-                        ))
-                        .toggleStyle(.button)
-                        .controlSize(.small)
+                        let isOn = filter.levels.contains(level)
+                        Button {
+                            if isOn { filter.levels.remove(level) } else { filter.levels.insert(level) }
+                        } label: {
+                            Text(level.rawValue)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(isOn ? level.color : Theme.tertiaryText)
+                                .frame(width: 20, height: 20)
+                                .background(isOn ? level.color.opacity(0.18) : Color.white.opacity(0.05), in: .rect(cornerRadius: 5))
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
                         .help(level.title)
+                        .accessibilityLabel(level.title)
+                        .accessibilityValue(isOn ? "Shown" : "Hidden")
                     }
                 }
                 Spacer(minLength: 8)

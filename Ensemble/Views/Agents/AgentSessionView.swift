@@ -41,14 +41,16 @@ struct AgentSessionView: View {
     private func headerRow(compactControls: Bool) -> some View {
         let agent = session.agent
         return HStack(alignment: .center, spacing: 14) {
-            Button {
-                model.select(nil, in: project)
-            } label: {
-                Image(systemName: "chevron.left").frame(width: 28, height: 28).contentShape(.rect)
+            if !isInWorkbench {
+                Button {
+                    model.select(nil, in: project)
+                } label: {
+                    Image(systemName: "chevron.left").frame(width: 28, height: 28).contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help("Back to Agents")
+                .accessibilityLabel("Back to Agents")
             }
-            .buttonStyle(.plain)
-            .help("Back to Agents")
-            .accessibilityLabel("Back to Agents")
 
             AgentAvatar(size: 40, appearance: RoleAppearance(role: model.role(for: agent, in: project)))
             VStack(alignment: .leading, spacing: 4) {

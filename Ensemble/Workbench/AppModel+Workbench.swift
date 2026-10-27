@@ -52,7 +52,9 @@ extension AppModel {
     }
 
     func editorTitle(_ item: EditorItem) -> String {
-        WorkbenchRegistry.shared.editorKind(for: item)?.title(item, self) ?? item.kind.capitalized
+        let title = WorkbenchRegistry.shared.editorKind(for: item)?.title(item, self) ?? item.kind.capitalized
+        guard item.kind == EditorKindID.section, openProjects.count > 1, let project = project(of: item) else { return title }
+        return "\(title) · \(project.name)"
     }
 
     func isAvailable(_ item: EditorItem) -> Bool {

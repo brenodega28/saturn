@@ -4,6 +4,7 @@ import SwiftUI
 
 struct RunDetailHeader: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.isInWorkbench) private var isInWorkbench
     let snapshot: RunDetailSnapshot
     let project: Project
     let reload: () -> Void
@@ -40,18 +41,20 @@ struct RunDetailHeader: View {
 
     private var titleBlock: some View {
         HStack(alignment: .top, spacing: 10) {
-            Button {
-                model.closeRunDetail(in: project)
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 28, height: 28)
-                    .background(Theme.fillRaised, in: Circle())
-                    .contentShape(Circle())
+            if !isInWorkbench {
+                Button {
+                    model.closeRunDetail(in: project)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                        .background(Theme.fillRaised, in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+                .help("Close the run details")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Back")
-            .help("Close the run details")
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(RunDetailFormat.runTitle(run))

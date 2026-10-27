@@ -424,7 +424,7 @@ struct ServersPanel: View {
                         let isListening = model.listeningPorts.contains(port)
                         HStack(spacing: 12) {
                             Circle().fill(isListening ? Theme.success : Theme.neutral).frame(width: 8, height: 8)
-                            Text(":\(port)").font(.system(size: 12, design: .monospaced)).frame(width: 60, alignment: .leading)
+                            Text(verbatim: ":" + String(port)).font(.system(size: 12, design: .monospaced)).frame(width: 60, alignment: .leading)
                             Text(model.displayName(of: session.agent, in: project)).font(.system(size: 12, weight: .semibold)).frame(width: 140, alignment: .leading)
                             Text(session.agent.worktreePath.map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "").font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Theme.secondaryText).lineLimit(1).truncationMode(.middle)
                             Spacer(minLength: 8)

@@ -279,7 +279,7 @@ Goal: the app matches the design canvas and works as one complete toolkit.
 - [x] Workflow step options: reuse pinned agents of the same role in Spawn steps; daily reminder on human approval steps; post a summary back to the task's source at the end
 - [x] Agents: pause all agents in a project; idle unpinned agents are removed after a set time
 - [x] Weekly budgets alongside monthly ones, matching the canvas's weekly cap and sidebar meter
-- [ ] Design QA pass: every screen checked against the canvas, mismatches filed as issues
+- [x] Design QA pass: every screen checked against the canvas, mismatches filed as issues
 
 **Exit check:** a new user goes from Welcome through onboarding to an approved change, and every screen on the way matches the canvas.
 
@@ -287,21 +287,21 @@ Goal: the app matches the design canvas and works as one complete toolkit.
 
 Goal: Ensemble feels like Xcode or Android Studio: one fixed frame of panes around an editor, where new features arrive as tabs in existing panes instead of new screens. The layout comes from the shell redesign in the design canvas; that redesign is done before this phase starts.
 
-- [ ] Extension registries in the app for navigator tabs, inspector tabs per selection type, bottom panel tabs, editor tab types, toolbar items and activity sources, status bar items, and commands; menus, the ⌘K palette and key bindings all read from the command registry
-- [ ] Frame: toolbar, navigator, editor area, inspector, bottom panel and status bar; every pane can be shown, hidden and resized, with state saved per window
-- [ ] Toolbar: scheme selector (project ▸ workflow ▸ base branch), start ▶ (⌘R) and stop ■ (⌘.), activity viewer with a popover of background work, pane toggles
-- [ ] Navigator tabs: Workspace (today's multi-project sidebar), Runs, Agents, Source, Source control, Pins, Checks, Problems, Find; each scoped to one project or all
-- [ ] Editor area: tabs for chats, runs, files, diffs, workflows and reports; split view; open in a new window; jump bar breadcrumbs with a menu per segment; back and forward history
-- [ ] Existing screens moved into the frame as editor tabs, with their per-screen chrome removed
-- [ ] Inspector that follows the selection: agent (details, context, memory, workspace, cost), file (info, history, pins, risk tier), workflow step, run (summary, budget, branches, outcome); the Agent session panel and Workflows inspector move here
-- [ ] Bottom panel: Log (live, filterable by agent, step and level), Terminal in any worktree, Checks output, Problems table, Servers (dev servers and ports), Activity (clones, syncs, setup scripts, polling)
-- [ ] Status bar: branch and worktree, agents working, check state, `claude` CLI version and health, rate-limit and offline warnings, weekly spend; each item opens its pane
-- [ ] Full menu bar (File, Edit, View, Navigate, Agent, Run, Review, Workflow, Window, Help) and context menus on agents, files, pins and runs
-- [ ] App-wide Settings window (⌘,): accounts, engines, key bindings, notifications, locations, updates, editor font
-- [ ] Organizer window (⇧⌘1) across projects: runs, usage, quality, the role and workflow template library, failed runs
-- [ ] Library panel (⇧⌘L): roles, skills, step types and prompt snippets to drag into workflows and chat
-- [ ] Key bindings editor
-- [ ] Problems and Checks navigators wired to the Phase 8–10 data (failed checks, gate findings, config errors, missing skills)
+- [x] Extension registries in the app for navigator tabs, inspector tabs per selection type, bottom panel tabs, editor tab types, toolbar items and activity sources, status bar items, and commands; menus, the ⌘K palette and key bindings all read from the command registry
+- [x] Frame: toolbar, navigator, editor area, inspector, bottom panel and status bar; every pane can be shown, hidden and resized, with state saved per window
+- [x] Toolbar: scheme selector (project ▸ workflow ▸ base branch), start ▶ (⌘R) and stop ■ (⌘.), activity viewer with a popover of background work, pane toggles
+- [x] Navigator tabs: Workspace (today's multi-project sidebar), Runs, Agents, Source, Source control, Pins, Checks, Problems, Find; each scoped to one project or all
+- [x] Editor area: tabs for chats, runs, files, diffs, workflows and reports; split view; open in a new window; jump bar breadcrumbs with a menu per segment; back and forward history
+- [x] Existing screens moved into the frame as editor tabs, with their per-screen chrome removed
+- [x] Inspector that follows the selection: agent (details, context, memory, workspace, cost), file (info, history, pins, risk tier), workflow step, run (summary, budget, branches, outcome); the Agent session panel and Workflows inspector move here
+- [x] Bottom panel: Log (live, filterable by agent, step and level), Terminal in any worktree, Checks output, Problems table, Servers (dev servers and ports), Activity (clones, syncs, setup scripts, polling)
+- [x] Status bar: branch and worktree, agents working, check state, `claude` CLI version and health, rate-limit and offline warnings, weekly spend; each item opens its pane
+- [x] Full menu bar (File, Edit, View, Navigate, Agent, Run, Review, Workflow, Window, Help) and context menus on agents, files, pins and runs
+- [x] App-wide Settings window (⌘,): accounts, engines, key bindings, notifications, locations, updates, editor font
+- [x] Organizer window (⇧⌘1) across projects: runs, usage, quality, the role and workflow template library, failed runs
+- [x] Library panel (⇧⌘L): roles, skills, step types and prompt snippets to drag into workflows and chat
+- [x] Key bindings editor
+- [x] Problems and Checks navigators wired to the Phase 8–10 data (failed checks, gate findings, config errors, missing skills)
 
 **Exit check:** a full Refunds v2 run is started, followed, reviewed and approved without leaving the frame. The Log, Terminal, Checks and Problems panels, the inspector and the menus all work. A new navigator tab can be added by registering it, with no changes to the shell.
 

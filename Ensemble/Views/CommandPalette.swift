@@ -303,11 +303,11 @@ struct CommandPalette: View {
 
     private var goToCommands: [PaletteCommand] {
         var commands = [
-            PaletteCommand(id: "go-inbox", title: "Inbox", meta: model.inboxCount > 0 ? "\(model.inboxCount) waiting" : "", glyph: .symbol("tray"), shortcut: "⌘1") { model.selection = .inbox },
+            PaletteCommand(id: "go-inbox", title: "Inbox", meta: model.inboxCount > 0 ? "\(model.inboxCount) waiting" : "", glyph: .symbol("tray")) { model.selection = .inbox },
         ]
         if let project = model.currentProject {
             commands += ProjectTab.sidebarOrder.enumerated().map { index, tab in
-                PaletteCommand(id: "go-\(tab.rawValue)", title: tab.title, meta: project.name, glyph: .symbol(tab.paletteSymbol), shortcut: index < 8 ? "⌘\(index + 2)" : "") {
+                PaletteCommand(id: "go-\(tab.rawValue)", title: tab.title, meta: project.name, glyph: .symbol(tab.paletteSymbol)) {
                     model.goToSection(index + 1)
                 }
             }
@@ -353,7 +353,7 @@ struct CommandPalette: View {
         ]
         var agent: [PaletteCommand] = []
         var window = [
-            PaletteCommand(id: "m-inbox", title: "Inbox", meta: "Window", glyph: .symbol("chevron.right"), tint: menu, shortcut: "⌘1") { model.selection = .inbox },
+            PaletteCommand(id: "m-inbox", title: "Inbox", meta: "Window", glyph: .symbol("chevron.right"), tint: menu) { model.selection = .inbox },
             PaletteCommand(id: "m-usage", title: "Usage", meta: "Window", glyph: .symbol("chevron.right"), tint: menu) { model.selection = .usage },
             PaletteCommand(id: "m-quality", title: "Quality", meta: "Window", glyph: .symbol("chevron.right"), tint: menu) { model.selection = .quality },
         ]

@@ -42,7 +42,7 @@ struct RootView: View {
             } else if let project = model.onboardingProject {
                 OnboardingView(project: project).id(project.id)
             } else {
-                ShellView()
+                WorkbenchView()
             }
         } else {
             ProgressView("Checking your setup…")

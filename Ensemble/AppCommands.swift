@@ -4,6 +4,11 @@ struct AppCommands: Commands {
     let model: AppModel
     let updater: Updater
     @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.workbench) private var workbench
+
+    private var context: CommandContext {
+        CommandContext(model: model, workbench: workbench, openWindow: openWindow)
+    }
 
     var body: some Commands {
         CommandGroup(after: .appInfo) {
@@ -38,13 +43,22 @@ struct AppCommands: Commands {
             }
                 .keyboardShortcut("k")
             Divider()
-            Button("Inbox") { model.goToSection(0) }
-                .keyboardShortcut("1")
-            ForEach(Array(ProjectTab.sidebarOrder.enumerated()), id: \.element) { index, tab in
-                Button(tab.title) { model.goToSection(index + 1) }
-                    .keyboardShortcut(KeyEquivalent(Character("\(index + 2)")))
-                    .disabled(model.openProjects.isEmpty)
+            Menu("Navigator") {
+                RegistryMenuItems(menu: "View.Navigator", context: context)
             }
+            RegistryMenuItems(menu: "View", context: context)
+            Divider()
+            Button("Inbox") { model.selection = .inbox }
+            ForEach(ProjectTab.sidebarOrder) { tab in
+                Button(tab.title) {
+                    if let index = ProjectTab.sidebarOrder.firstIndex(of: tab) { model.goToSection(index + 1) }
+                }
+                .disabled(model.openProjects.isEmpty)
+            }
+        }
+
+        CommandMenu("Navigate") {
+            RegistryMenuItems(menu: "Navigate", context: context)
         }
 
         CommandMenu("Agent") {
@@ -78,6 +92,38 @@ struct AppCommands: Commands {
             Button("Recover Worktrees") {
                 Task { await model.refreshAllProjects() }
             }
+        }
+    }
+}
+
+struct RegistryMenuItems: View {
+    let menu: String
+    let context: CommandContext
+
+    var body: some View {
+        let groups = WorkbenchRegistry.shared.commands(in: menu)
+        ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+            if index > 0 { Divider() }
+            ForEach(group) { command in
+                RegistryMenuItem(command: command, context: context)
+            }
+        }
+    }
+}
+
+private struct RegistryMenuItem: View {
+    let command: WorkbenchCommand
+    let context: CommandContext
+
+    var body: some View {
+        if let isChecked = command.isChecked {
+            Toggle(command.title, isOn: Binding(get: { isChecked(context) }, set: { _ in command.perform(context) }))
+                .keyboardShortcut(command.shortcut)
+                .disabled(!command.isEnabled(context))
+        } else {
+            Button(command.title) { command.perform(context) }
+                .keyboardShortcut(command.shortcut)
+                .disabled(!command.isEnabled(context))
         }
     }
 }

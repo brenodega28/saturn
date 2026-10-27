@@ -61,6 +61,10 @@ struct AppCommands: Commands {
             RegistryMenuItems(menu: "Navigate", context: context)
         }
 
+        CommandMenu("Run") {
+            RegistryMenuItems(menu: "Run", context: context)
+        }
+
         CommandMenu("Agent") {
             Button("Message…") { model.openPalette(.agents) }
                 .keyboardShortcut("j")

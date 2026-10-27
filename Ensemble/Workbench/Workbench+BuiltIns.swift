@@ -43,6 +43,7 @@ extension WorkbenchRegistry {
         registerBottomPanels()
         registerActivitySources()
         registerToolbar()
+        registerToolbarItems()
         registerStatusItems()
         registerViewCommands()
         registerNavigatorCommands()
@@ -381,11 +382,26 @@ private struct InboxToolbarButton: View {
 
 private struct BranchStatusItem: View {
     @Environment(AppModel.self) private var model
+    @Environment(WorkbenchState.self) private var state
 
     var body: some View {
-        if let project = model.currentProject {
+        if let active = state.active, active.kind == EditorKindID.agent, let session = model.session(for: active), let branch = session.agent.branch {
+            StatusButton(help: "Branch and worktree of \(session.agent.name)", action: {
+                state.navigatorTab = "source-control"
+                state.show(.navigator)
+            }) {
+                Image(systemName: "arrow.triangle.branch").font(.system(size: 10))
+                Text(branch).font(.system(size: 11.5, design: .monospaced))
+                if let worktree = session.agent.worktreeURL {
+                    Text("· .crew/\(worktree.lastPathComponent)").foregroundStyle(Theme.tertiaryText)
+                }
+            }
+        } else if let project = model.currentProject {
             let branch = model.state(for: project).branch
-            StatusButton(help: "Branch of \(project.name)", action: { model.openSettings(.workspaces, in: project) }) {
+            StatusButton(help: "Branch of \(project.name)", action: {
+                state.navigatorTab = "source-control"
+                state.show(.navigator)
+            }) {
                 Image(systemName: "arrow.triangle.branch").font(.system(size: 10))
                 Text(branch ?? "no branch").font(.system(size: 11.5, design: .monospaced))
                 Text("· \(project.name)").foregroundStyle(Theme.tertiaryText)

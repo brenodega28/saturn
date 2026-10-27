@@ -104,6 +104,8 @@ final class AppModel {
     let activityLog = ActivityLog()
     var activeClones: [String: Date] = [:]
     var listeningPorts: Set<Int> = []
+    var isOffline = false
+    @ObservationIgnored var connectivity: ConnectivityMonitor?
     let leadChat: LeadChat
     let directChat: DirectChat
     var chatTargets: [Int64: ChatTarget] = [:]
@@ -246,6 +248,7 @@ final class AppModel {
         await refreshAllProjects()
         startWeeklySummaries()
         startActivityRecorder()
+        connectivity = ConnectivityMonitor { [weak self] offline in self?.isOffline = offline }
     }
 
     func pauseAllAgents(in project: Project) {

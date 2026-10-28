@@ -105,19 +105,59 @@ public struct ReviewIssue: Sendable, Hashable, Codable {
     }
 }
 
+public struct CriterionResult: Sendable, Hashable, Codable {
+    public enum Status: String, Sendable, Hashable, Codable, CaseIterable {
+        case pass
+        case fail
+        case notVerified = "not_verified"
+
+        public init(lenient text: String) {
+            switch text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: " ", with: "_").replacingOccurrences(of: "-", with: "_") {
+            case "pass", "passed", "passes", "ok", "met", "true", "yes": self = .pass
+            case "fail", "failed", "fails", "not_met", "false", "no": self = .fail
+            default: self = .notVerified
+            }
+        }
+    }
+
+    public var criterion: String
+    public var status: Status
+    public var evidence: String
+
+    public init(criterion: String, status: Status, evidence: String = "") {
+        self.criterion = criterion
+        self.status = status
+        self.evidence = evidence
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case criterion, status, evidence
+    }
+
+    init?(lenient value: JSONValue) {
+        let criterion = value["criterion"]?.string ?? value["criterion"]?.int.map(String.init)
+        guard let criterion = criterion?.trimmingCharacters(in: .whitespacesAndNewlines), !criterion.isEmpty else { return nil }
+        self.criterion = criterion
+        self.status = Status(lenient: value["status"]?.string ?? "")
+        self.evidence = value["evidence"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+}
+
 public struct Verdict: Sendable, Hashable, Codable {
     public var outcome: String
     public var summary: String
     public var issues: [ReviewIssue]
+    public var criteria: [CriterionResult]
 
-    public init(outcome: String, summary: String, issues: [ReviewIssue] = []) {
+    public init(outcome: String, summary: String, issues: [ReviewIssue] = [], criteria: [CriterionResult] = []) {
         self.outcome = outcome
         self.summary = summary
         self.issues = issues
+        self.criteria = criteria
     }
 
     enum CodingKeys: String, CodingKey {
-        case outcome, summary, issues
+        case outcome, summary, issues, criteria
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,6 +165,59 @@ public struct Verdict: Sendable, Hashable, Codable {
         self.outcome = try container.decode(String.self, forKey: .outcome)
         self.summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
         self.issues = try container.decodeIfPresent([ReviewIssue].self, forKey: .issues) ?? []
+        let criteria = (try? container.decodeIfPresent(JSONValue.self, forKey: .criteria))?.array ?? []
+        self.criteria = criteria.compactMap(CriterionResult.init(lenient:))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(outcome, forKey: .outcome)
+        try container.encode(summary, forKey: .summary)
+        try container.encode(issues, forKey: .issues)
+        if !criteria.isEmpty { try container.encode(criteria, forKey: .criteria) }
+    }
+}
+
+public struct SpecDraftRequest: Sendable, Hashable, Codable {
+    public var title: String
+    public var owner: String?
+    public var summary: String
+    public var interfaces: [String]
+    public var outOfScope: [String]
+    public var acceptanceCriteria: [String]
+    public var verification: String
+
+    public init(
+        title: String, owner: String? = nil, summary: String = "", interfaces: [String] = [], outOfScope: [String] = [],
+        acceptanceCriteria: [String] = [], verification: String = ""
+    ) {
+        self.title = title
+        self.owner = owner
+        self.summary = summary
+        self.interfaces = interfaces
+        self.outOfScope = outOfScope
+        self.acceptanceCriteria = acceptanceCriteria
+        self.verification = verification
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case title, owner, summary, interfaces, verification
+        case outOfScope = "out_of_scope"
+        case acceptanceCriteria = "acceptance_criteria"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        func clean(_ items: [String]?) -> [String] {
+            (items ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        }
+        self.title = try container.decode(String.self, forKey: .title).trimmingCharacters(in: .whitespacesAndNewlines)
+        self.owner = try container.decodeIfPresent(String.self, forKey: .owner)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.summary = try container.decodeIfPresent(String.self, forKey: .summary)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.interfaces = clean(try container.decodeIfPresent([String].self, forKey: .interfaces))
+        self.outOfScope = clean(try container.decodeIfPresent([String].self, forKey: .outOfScope))
+        self.acceptanceCriteria = clean(try container.decodeIfPresent([String].self, forKey: .acceptanceCriteria))
+        self.verification = try container.decodeIfPresent(String.self, forKey: .verification)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 }
 
@@ -229,6 +322,7 @@ public enum HandoffMessage: Sendable, Hashable {
     case deleteAgent(String, deleteBranch: Bool)
     case openWorktree
     case readChat(ChatReadRequest)
+    case draftSpec(SpecDraftRequest)
 }
 
 public struct ChatReadRequest: Sendable, Hashable {
@@ -305,6 +399,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     case deleteAgent = "delete_agent"
     case openWorktree = "open_worktree"
     case readChat = "read_chat"
+    case draftSpec = "draft_spec"
 
     public static let leadTools: Set<HandoffTool> = [.messageAgent, .listAgents, .spawnAgent, .stopAgent, .deleteAgent]
 
@@ -342,6 +437,8 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             "Ask the user questions you can't answer from the code or docs. Put shared context in question. When you need several decisions, list each one in questions, with options when there are clear choices; the user answers them one at a time. After calling it, end your turn; the answers arrive as your next message, numbered like your questions."
         case .readChat:
             "Read an Ensemble request chat from any project: its messages, runs, run step history and agent transcripts. A link ensemble://chat/<request_id>?message=<message_id> maps to request_id and message_id; call this tool whenever a message contains such a link. Start with the overview section, then page with offset and limit or pull the messages, run or transcript section."
+        case .draftSpec:
+            "Create or replace this request’s spec draft: a Markdown file with a summary, interfaces, out of scope, checkable acceptance criteria and how to verify the whole change. The user can open and edit it from the chat, and that file is the source of truth: when the user edited it, you get the current text, so keep their edits and send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it."
         }
     }
 
@@ -377,6 +474,11 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                     "file": string("File path, if specific"),
                     "agent": string("Name of the agent whose work this is, if specific"),
                 ], required: ["description"])),
+                "criteria": array(object([
+                    "criterion": string("The acceptance criterion's number and text, as listed in your instructions"),
+                    "status": .object(["type": .string("string"), "enum": .array(CriterionResult.Status.allCases.map { JSONValue.string($0.rawValue) })]),
+                    "evidence": string("What shows it: a file and line, a test name, or command output"),
+                ], required: ["criterion", "status", "evidence"])),
             ], required: ["outcome", "summary"])
         case .submitResult:
             return object(["summary": string("What you changed and how you verified it")], required: ["summary"])
@@ -449,6 +551,16 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "offset": .object(["type": .string("integer"), "minimum": .number(0), "description": .string("Index of the first item to show")]),
                 "limit": .object(["type": .string("integer"), "minimum": .number(1), "description": .string("How many items to show; defaults to \(ChatReader.defaultLimit)")]),
             ], required: ["request_id"])
+        case .draftSpec:
+            return object([
+                "title": string("Short title of the spec; it also names the file"),
+                "owner": string("Who owns the spec, if the user said"),
+                "summary": string("One paragraph: what the change does and why"),
+                "interfaces": array(string("A function, endpoint, type, setting or command the work adds or changes, with its signature")),
+                "out_of_scope": array(string("Something this work deliberately doesn't do")),
+                "acceptance_criteria": array(string("A checkable statement that is true when the work is done")),
+                "verification": string("How to verify the whole change end to end"),
+            ], required: ["title", "summary", "acceptance_criteria"])
         }
     }
 
@@ -511,6 +623,10 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 requestID: Int64(requestID), messageID: integer("message_id").map(Int64.init), section: section,
                 runID: runID.map(Int64.init), agent: agent, offset: integer("offset"), limit: integer("limit")
             ))
+        case .draftSpec:
+            let request = try decoder.decode(SpecDraftRequest.self, from: data)
+            guard !request.title.isEmpty else { throw HandoffError.missing("title") }
+            return .draftSpec(request)
         }
     }
 }

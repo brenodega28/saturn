@@ -36,10 +36,16 @@ steps:
     role: pr-reviewer
     instructions: Read every branch against the plan and its acceptance criteria. Pin real findings with your confidence; approve unless something is actually wrong.
     routes:
-      approved: approve
+      approved: criteria
       changes_requested:
         to: build
         max_loops: 1
+  - id: criteria
+    type: gates
+    title: Acceptance criteria
+    routes:
+      passed: approve
+      changes_requested: build
   - id: approve
     type: approval
     title: You approve

@@ -8,6 +8,7 @@ struct RequestChat: View {
     let project: Project
     @State private var data: RequestThreadData?
     @State private var highlightedItemID: String?
+    @State private var spec: SpecFile?
 
     var body: some View {
         let session = model.leadSession(for: task)
@@ -17,6 +18,12 @@ struct RequestChat: View {
             RequestHeader(task: task, project: project)
                 .frame(maxWidth: 820)
                 .frame(maxWidth: .infinity)
+            if let spec {
+                SpecDraftCard(spec: spec, project: project)
+                    .frame(maxWidth: 820)
+                    .frame(maxWidth: .infinity)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             thread(isThinking: isThinking, session: session, background: background)
         }
     }
@@ -115,6 +122,8 @@ struct RequestChat: View {
     }
 
     private func reload() {
+        let latestSpec = model.specDraft(for: task)
+        if latestSpec != spec { withAnimation(.snappy(duration: 0.25)) { spec = latestSpec } }
         guard let latest = model.requestThread(for: task, in: project) else { return }
         if latest.thread != data?.thread { data = latest }
     }
@@ -177,7 +186,7 @@ struct RequestChat: View {
                 ChatText(message.text)
             }
         case .proposal:
-            ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed)
+            ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed, spec: spec)
                 .padding(.leading, 42)
         case .note:
             DirectMessageNote(text: message.text)
@@ -455,10 +464,12 @@ private struct ProposalCard: View {
     let project: Project
     let hasActiveRun: Bool
     let isRequestClosed: Bool
+    var spec: SpecFile?
     @State private var showsBrief = false
 
     var body: some View {
         let workflow = proposal.workflow.flatMap { model.config(for: project).workflow($0) }
+        let attached = attachedSpec
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "point.3.connected.trianglepath.dotted")
@@ -470,6 +481,16 @@ private struct ProposalCard: View {
                 statusLabel
             }
             Text(proposal.title ?? "Run").font(.system(size: 14.5, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+            if let spec, let document = attached {
+                Button { model.openSpec(spec, in: project) } label: {
+                    Label("Spec attached: \(document.title) · \(document.acceptanceCriteria.count) criteria", systemImage: "doc.text")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.link)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .help(proposal.status == .open ? "Starting the run commits this spec on the run branch" : "Open the spec")
+            }
             if showsBrief {
                 ChatText(proposal.text)
                     .foregroundStyle(Theme.secondaryText)
@@ -497,6 +518,12 @@ private struct ProposalCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.accent.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.accent.opacity(0.28)))
+    }
+
+    private var attachedSpec: SpecDocument? {
+        guard let document = spec?.document else { return nil }
+        if proposal.status == .open { return document.status == .done ? nil : document }
+        return proposal.runId.map(document.linkedRuns.contains) == true ? document : nil
     }
 
     private var startHelp: String {

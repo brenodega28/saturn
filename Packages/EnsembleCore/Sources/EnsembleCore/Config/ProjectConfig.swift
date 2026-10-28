@@ -110,15 +110,17 @@ public struct ProjectConfig: Sendable, Hashable {
     public var review: ReviewPolicy
     public var permissions: PermissionsConfig
     public var preferences: ProjectPreferences
+    public var specs: SpecsConfig
     public var issues: [ConfigIssue]
 
     public init(
         roles: [RoleDefinition] = [], workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil,
         review: ReviewPolicy = ReviewPolicy(), permissions: PermissionsConfig = PermissionsConfig(),
-        preferences: ProjectPreferences = ProjectPreferences(), issues: [ConfigIssue] = []
+        preferences: ProjectPreferences = ProjectPreferences(), specs: SpecsConfig = SpecsConfig(), issues: [ConfigIssue] = []
     ) {
         self.permissions = permissions
         self.preferences = preferences
+        self.specs = specs
         self.roles = roles
         self.workflows = workflows
         self.docs = docs
@@ -202,9 +204,10 @@ public enum ProjectConfigLoader {
             ? decode(PermissionsConfig.self, file: permissionsFile, relativeTo: repository, issues: &issues) ?? PermissionsConfig()
             : PermissionsConfig()
 
+        let specs = loadSpecs(repository: repository, issues: &issues)
         var config = ProjectConfig(
             roles: roles, workflows: workflows, docs: docs, checks: checks, review: review, permissions: permissions,
-            preferences: ProjectPreferences.load(repository: repository), issues: issues
+            preferences: ProjectPreferences.load(repository: repository), specs: specs, issues: issues
         )
         config.issues += ConfigValidator.validate(config)
         return config
@@ -232,6 +235,21 @@ public enum ProjectConfigLoader {
 
     public static func write(_ review: ReviewPolicy, repository: URL) throws {
         try writeYAML(review, to: ReviewPolicy.file(in: repository))
+    }
+
+    public static func write(_ specs: SpecsConfig, repository: URL) throws {
+        try writeYAML(specs, to: SpecsConfig.file(in: repository))
+    }
+
+    public static func loadSpecs(repository: URL) -> SpecsConfig {
+        var issues: [ConfigIssue] = []
+        return loadSpecs(repository: repository, issues: &issues)
+    }
+
+    private static func loadSpecs(repository: URL, issues: inout [ConfigIssue]) -> SpecsConfig {
+        let file = SpecsConfig.file(in: repository)
+        guard FileManager.default.fileExists(atPath: file.path) else { return SpecsConfig() }
+        return decode(SpecsConfig.self, file: file, relativeTo: repository, issues: &issues) ?? SpecsConfig()
     }
 
     public static func deleteRole(_ id: String, repository: URL) throws {

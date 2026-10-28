@@ -210,6 +210,7 @@ final class DebugTrace: @unchecked Sendable {
             "runId": JSONValue(request.runID), "agent": JSONValue(request.agent),
             "offset": request.offset.map { JSONValue($0) } ?? .null, "limit": request.limit.map { JSONValue($0) } ?? .null,
         ]))
+        case .draftSpec(let request): (HandoffTool.draftSpec.rawValue, JSONValue(encoding: request) ?? .null)
         }
     }
 

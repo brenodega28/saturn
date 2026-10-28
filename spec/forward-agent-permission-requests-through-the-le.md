@@ -1,6 +1,6 @@
 ---
 title: Forward agent permission requests through the lead chat
-status: in-progress
+status: done
 owner: ""
 linked_runs: [57]
 created: 2026-10-28
@@ -31,17 +31,17 @@ Today, when a builder runs a shell command that isn't on its allow-list (e.g. `j
 
 ## Acceptance criteria
 
-- [ ] A builder in a run with a lead chat runs `java -version` (not on the allow-list). No silent deny happens: a pending PermissionRequest exists, the lead chat shows a `.permission` card, no Inbox item is created, and the hook's deny reason tells the agent it's waiting for the user.
-- [ ] The lead's session receives one message naming the agent and the command and saying it must not answer the request itself.
-- [ ] Allow once: the agent is messaged that the user allowed it. The next `java -version` passes the hook. A second `java -version` after that creates a new request.
-- [ ] Allow for this run: the agent is messaged. Any later `java …` command from any agent in that run passes the hook without a new card. A different run doesn't inherit it.
-- [ ] Deny: the agent is messaged with the deny text, and the same command is denied without a new card for the rest of the run.
-- [ ] The lead gets a short note with each decision.
-- [ ] An agent outside a lead-chat run that runs a command outside its allow-list gets an Inbox `.permission` item (today's behavior extended to unlisted shell commands). Allow/deny there works as before.
-- [ ] Allow-listed commands and `.never` capabilities behave exactly as before. Existing PermissionRequest, RolesAndSpawning, DesignParity and RealClaudeHook tests still pass.
-- [ ] A command containing &&, ;, |, > or $( ) is denied with the existing shell-rules reason and creates no request.
-- [ ] Answering a card that's already answered does nothing, and its buttons are disabled.
-- [ ] No code comments are added (user preference).
+- [x] A builder in a run with a lead chat runs `java -version` (not on the allow-list). No silent deny happens: a pending PermissionRequest exists, the lead chat shows a `.permission` card, no Inbox item is created, and the hook's deny reason tells the agent it's waiting for the user.
+- [x] The lead's session receives one message naming the agent and the command and saying it must not answer the request itself.
+- [x] Allow once: the agent is messaged that the user allowed it. The next `java -version` passes the hook. A second `java -version` after that creates a new request.
+- [x] Allow for this run: the agent is messaged. Any later `java …` command from any agent in that run passes the hook without a new card. A different run doesn't inherit it.
+- [x] Deny: the agent is messaged with the deny text, and the same command is denied without a new card for the rest of the run.
+- [x] The lead gets a short note with each decision.
+- [x] An agent outside a lead-chat run that runs a command outside its allow-list gets an Inbox `.permission` item (today's behavior extended to unlisted shell commands). Allow/deny there works as before.
+- [x] Allow-listed commands and `.never` capabilities behave exactly as before. Existing PermissionRequest, RolesAndSpawning, DesignParity and RealClaudeHook tests still pass.
+- [x] A command containing &&, ;, |, > or $( ) is denied with the existing shell-rules reason and creates no request.
+- [x] Answering a card that's already answered does nothing, and its buttons are disabled.
+- [x] No code comments are added (user preference).
 
 ## Verification
 

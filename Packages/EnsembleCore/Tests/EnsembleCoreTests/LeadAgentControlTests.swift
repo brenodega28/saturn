@@ -23,7 +23,7 @@ import Testing
         let builderRole = try #require(setup.config.role("claude-code"))
         let builder = try #require(try await setup.harness.runtime.spawn(in: setup.project, role: builderRole, count: 1, config: setup.config, git: setup.harness.repo.git).first)
 
-        #expect(setup.driver.tools(for: lead.agent) == HandoffTool.leadTools.union([.openWorktree]))
+        #expect(setup.driver.tools(for: lead.agent) == HandoffTool.leadTools.union([.openWorktree, .readChat]))
         #expect(setup.driver.tools(for: builder.agent).isDisjoint(with: HandoffTool.leadTools.union([.openWorktree])))
         await #expect(throws: HandoffError.notAllowed("Only lead roles can manage agents.")) {
             try await setup.driver.receive(.listAgents, from: builder.id)

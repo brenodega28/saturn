@@ -249,6 +249,7 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
     public var port: Int?
     public var archivedAt: Date?
     public var taskId: Int64?
+    public var spawnedById: Int64?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -259,10 +260,11 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
         costUSD: Double = 0, isPinned: Bool = false, model: String = AgentModel.sonnet.rawValue, task: String = "",
         baseBranch: String? = nil, processID: Int32? = nil, lastError: String? = nil,
         runStepId: Int64? = nil, readOnly: Bool = false, planTaskId: String? = nil,
-        port: Int? = nil, archivedAt: Date? = nil, taskId: Int64? = nil,
+        port: Int? = nil, archivedAt: Date? = nil, taskId: Int64? = nil, spawnedById: Int64? = nil,
         createdAt: Date, updatedAt: Date
     ) {
         self.taskId = taskId
+        self.spawnedById = spawnedById
         self.port = port
         self.archivedAt = archivedAt
         self.runStepId = runStepId

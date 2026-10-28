@@ -75,6 +75,10 @@ public struct ChatReader {
 
         let agents = try database.requestAgents(taskId: taskID)
         if let lead = agents.first(where: { $0.taskId == taskID }) { lines.append("\nLead: \(Self.describe(lead))") }
+        let spawned = try database.spawnedAgents(taskId: taskID)
+        if !spawned.isEmpty {
+            lines.append("Spawned agents: " + spawned.map { Self.describe($0) + Self.spawner(of: $0, among: agents) }.joined(separator: ", "))
+        }
         let runs = try database.runs(taskId: taskID)
         lines.append("\nRuns (\(runs.count)):")
         if runs.isEmpty { lines.append("(none)") }
@@ -220,7 +224,8 @@ public struct ChatReader {
 
     private func transcriptSection(taskID: Int64, request: ChatReadRequest) throws -> String {
         guard let name = request.agent else { throw HandoffError.missing("agent") }
-        var candidates = try database.requestAgents(taskId: taskID)
+        let requestAgents = try database.requestAgents(taskId: taskID)
+        var candidates = requestAgents + (try database.spawnedAgents(taskId: taskID))
         if let runID = request.runID {
             _ = try requireRun(runID, taskID: taskID)
             candidates = candidates.filter { $0.runId == runID || $0.taskId == taskID }
@@ -239,7 +244,13 @@ public struct ChatReader {
         let items = transcript.entries.compactMap(Self.render).enumerated().map { "[entry \($0.offset)] \($0.element)" }
 
         var header = "Transcript of \(Self.describe(agent)) in request \(taskID)"
-        if let runID = agent.runId { header += ", run \(runID)" } else if agent.taskId == taskID { header += ", the request’s lead" }
+        if let runID = agent.runId {
+            header += ", run \(runID)"
+        } else if agent.taskId == taskID {
+            header += ", the request’s lead"
+        } else if agent.spawnedById != nil {
+            header += Self.spawner(of: agent, among: requestAgents)
+        }
         let budget = max(2_000, Self.maxCharacters - header.count - 400)
         let continuation = ", section=transcript, agent=\(agentID)" + (request.runID.map { ", run_id=\($0)" } ?? "")
         let body = items.isEmpty
@@ -319,6 +330,12 @@ public struct ChatReader {
 
     static func describe(_ agent: Agent) -> String {
         "\(agent.name) (\(agent.role), id \(agent.id.map(String.init) ?? "?"))"
+    }
+
+    static func spawner(of agent: Agent, among agents: [Agent]) -> String {
+        guard let spawnerID = agent.spawnedById else { return "" }
+        let name = agents.first { $0.id == spawnerID }?.name ?? "agent \(spawnerID)"
+        return ", spawned by \(name)"
     }
 
     static func timestamp(_ date: Date) -> String {

@@ -327,11 +327,11 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .proposeRun:
             "Propose a workflow run for this request. The user sees it with a Start button; nothing runs until they click it. If they start it, you plan it. Give the workflow id, a short title and a brief with everything the planner needs from this conversation. Then end your turn."
         case .messageAgent:
-            "Send an instruction to another agent in this project, by its name. It arrives as that agent's next message. Use it to pass on the user's instructions or to steer agents you lead."
+            "Send an instruction to another agent in this project, by its name. It arrives as that agent's next message. Use it to pass on the user's instructions or to steer agents you lead. An agent a lead started can message only that lead."
         case .listAgents:
             "List every agent in this project with its role, status, branch, worktree and task."
         case .spawnAgent:
-            "Start new agents of a role with a task. Agents of roles that edit code get their own worktree and branch. They start working on the task right away."
+            "Start new agents of a role with a task. Agents of roles that edit code get their own worktree and branch. They start working on the task right away. When each one ends its turn, its report arrives as your next message, so end your turn after calling this instead of checking on them."
         case .stopAgent:
             "Stop another agent's current turn and drop its queued messages. It keeps its worktree, branch and history and can be messaged again later."
         case .deleteAgent:

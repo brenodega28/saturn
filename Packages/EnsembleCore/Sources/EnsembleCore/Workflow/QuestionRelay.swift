@@ -52,13 +52,7 @@ final class QuestionRelay {
     static func message(for batch: [RelayedQuestion]) -> String {
         var parts = ["Questions from your run’s agents (sent by Ensemble, not the user):"]
         for question in batch {
-            var section = ["## \(question.agentName) asks:", question.body]
-            if !question.questions.isEmpty {
-                section.append(question.questions.enumerated().map { index, item in
-                    "\(index + 1). \(item.question)" + (item.options.isEmpty ? "" : "\n   Options: " + item.options.joined(separator: "; "))
-                }.joined(separator: "\n"))
-            }
-            parts.append(section.filter { !$0.isEmpty }.joined(separator: "\n"))
+            parts.append(section(agentName: question.agentName, body: question.body, questions: question.questions))
         }
         let messageAgent = HandoffTool.messageAgent.qualifiedName
         parts.append("""
@@ -70,5 +64,28 @@ final class QuestionRelay {
             - After the user answers, pass the answers on to each affected agent with `\(messageAgent)`.
             """)
         return parts.joined(separator: "\n\n")
+    }
+
+    static func spawnedAgentMessage(agentName: String, body: String, questions: [HumanQuestion]) -> String {
+        let messageAgent = HandoffTool.messageAgent.qualifiedName
+        return [
+            "A question from \(agentName), an agent you started (sent by Ensemble, not the user):",
+            section(agentName: agentName, body: body, questions: questions),
+            """
+            ## What to do
+            - Answer what you can yourself, and reply to \(agentName) with `\(messageAgent)`.
+            - If only the user can answer, ask them with `\(HandoffTool.askHuman.qualifiedName)`, then pass the answer on with `\(messageAgent)`.
+            """,
+        ].joined(separator: "\n\n")
+    }
+
+    private static func section(agentName: String, body: String, questions: [HumanQuestion]) -> String {
+        var section = ["## \(agentName) asks:", body]
+        if !questions.isEmpty {
+            section.append(questions.enumerated().map { index, item in
+                "\(index + 1). \(item.question)" + (item.options.isEmpty ? "" : "\n   Options: " + item.options.joined(separator: "; "))
+            }.joined(separator: "\n"))
+        }
+        return section.filter { !$0.isEmpty }.joined(separator: "\n")
     }
 }

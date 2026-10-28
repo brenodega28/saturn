@@ -297,6 +297,11 @@ public final class AppDatabase: Sendable {
                 t.column("answeredAt", .datetime)
             }
         }
+        migrator.registerMigration("v17-spawned-agents") { db in
+            try db.alter(table: "agent") { t in
+                t.add(column: "spawnedById", .integer)
+            }
+        }
 
         return migrator
     }

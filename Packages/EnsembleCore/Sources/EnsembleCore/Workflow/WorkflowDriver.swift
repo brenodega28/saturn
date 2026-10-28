@@ -147,7 +147,7 @@ public struct StepContext: Sendable, Hashable {
     public var task: ProjectTask
     public var project: Project
     public var step: WorkflowStep
-    public var roleID: String?
+    public var kind: AgentKind?
     public var iteration: Int
     public var attempt: Int
     public var runStepID: Int64
@@ -157,14 +157,14 @@ public struct StepContext: Sendable, Hashable {
     public var runBudgetRemainingUSD: Double?
 
     public init(
-        run: Run, task: ProjectTask, project: Project, step: WorkflowStep, roleID: String?, iteration: Int, attempt: Int,
+        run: Run, task: ProjectTask, project: Project, step: WorkflowStep, kind: AgentKind?, iteration: Int, attempt: Int,
         runStepID: Int64, start: StepStart, inputs: StepInputs, stepBudgetUSD: Double?, runBudgetRemainingUSD: Double?
     ) {
         self.run = run
         self.task = task
         self.project = project
         self.step = step
-        self.roleID = roleID
+        self.kind = kind
         self.iteration = iteration
         self.attempt = attempt
         self.runStepID = runStepID

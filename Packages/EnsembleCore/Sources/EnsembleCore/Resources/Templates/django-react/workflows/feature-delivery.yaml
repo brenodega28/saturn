@@ -1,6 +1,6 @@
 name: Feature delivery
-version: 2
-description: The lead specs the work for Django and React developers, checks and gates verify it, the PR Reviewer comments, you approve.
+version: 3
+description: The Lead specs the work for builders with the Django and React skills, checks and gates verify it, a checker reviews, you approve.
 trigger:
   sources: [chat, github]
   labels: [feature]
@@ -9,14 +9,16 @@ steps:
   - id: plan
     type: agent
     title: Plan & spec the task
-    role: tech-lead
-    instructions: Plan one task by default, for django-developer or react-developer. Split backend and frontend into separate tasks only when each works and can be tested on its own, with neither needing the other's output. Write a short spec unless the request fits in one sentence. Submit the plan.
+    agent: lead
+    model: opus
+    instructions: Plan one task by default and give its builder the django-developer skill, the react-developer skill or both. Split backend and frontend into separate tasks only when each works and can be tested on its own, with neither needing the other's output. Write a short spec unless the request fits in one sentence. Submit the plan.
     budget: 2
     next: build
   - id: build
     type: spawn
     title: Build the plan
-    role: django-developer
+    agent: builder
+    model: sonnet
     instructions: Build your task from the plan in your own worktree, add tests, run them, and commit.
     max_agents: 3
     next: checks
@@ -33,7 +35,8 @@ steps:
   - id: review
     type: agent
     title: AI review
-    role: pr-reviewer
+    agent: checker
+    model: sonnet
     instructions: Read every branch against the plan and its acceptance criteria. Pin real findings with your confidence; approve unless something is actually wrong.
     routes:
       approved: approve

@@ -22,7 +22,7 @@ import Testing
         return root
     }
 
-    @Test func scanFindsTheStackAndSuggestsMatchingRoles() throws {
+    @Test func scanFindsTheStackAndSuggestsMatchingSkills() throws {
         let root = try djangoReactRepository()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -34,10 +34,9 @@ import Testing
         #expect(names.contains("Vitest"))
         #expect(names.contains("PostgreSQL"))
         #expect(names.contains("AGENTS.md"))
-        #expect(scan.roleReasons["django-developer"] == "backend/")
-        #expect(scan.roleReasons["react-developer"] == "frontend/")
-        #expect(scan.roleReasons["qa-engineer"] == "tests/")
-        #expect(scan.suggestedRoleIDs == ["tech-lead", "django-developer", "react-developer", "claude-code", "pr-reviewer", "qa-engineer"])
+        #expect(scan.skillReasons["django-developer"] == "backend/")
+        #expect(scan.skillReasons["react-developer"] == "frontend/")
+        #expect(scan.suggestedSkills == ["django-developer", "react-developer"])
         #expect(scan.docs == ["AGENTS.md", "docs/ROADMAP.md"])
     }
 
@@ -55,33 +54,38 @@ import Testing
         let config = ProjectConfigLoader.load(repository: root)
 
         #expect(config.issues.isEmpty, "\(config.issues)")
-        #expect(Set(config.roles.map(\.id)) == ["tech-lead", "django-developer", "react-developer", "claude-code", "pr-reviewer", "qa-engineer"])
+        #expect(config.roles.map(\.id) == ["lead", "builder", "checker"])
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".ensemble/roles").path))
+        #expect(SkillLibrary.installedSkills(in: root, home: root).isSuperset(of: ["django-developer", "react-developer"]))
         #expect(config.workflows.map(\.id).sorted() == ["feature-delivery", "hotfix", "small-task"])
         #expect(config.workflows.allSatisfy { $0.end.action == .push && $0.budget == 8 })
-        #expect(config.preferences == ProjectPreferences(baseBranch: "develop", branchPrefix: "agents", defaultLead: "tech-lead", defaultWorkflow: "feature-delivery", approvePlans: false))
+        #expect(config.preferences == ProjectPreferences(baseBranch: "develop", branchPrefix: "agents", defaultWorkflow: "feature-delivery", approvePlans: false))
         #expect(config.permissions.profile("developer")?.level(.network) == .allow)
         #expect(config.permissions.profile("developer")?.level(.installPackages) == .ask)
         #expect(config.checks?.checks.contains { $0.kind == .test } == true)
         #expect(config.docs.docs.compactMap(\.path) == ["AGENTS.md", "docs/ROADMAP.md"])
     }
 
-    @Test func workflowsFollowTheRolesYouKeep() throws {
+    @Test func setupInstallsOnlyTheSkillsYouKeepAndWorkflowsUseKinds() throws {
         let root = try djangoReactRepository()
         defer { try? FileManager.default.removeItem(at: root) }
+        let existing = root.appending(path: ".claude/skills/react-developer")
+        try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
+        try "mine".write(to: existing.appending(path: "notes.md"), atomically: true, encoding: .utf8)
         var plan = ProjectSetupPlan.recommended(for: ProjectScanner.scanFiles(repository: root))
-        let catalog = ProjectSetup.roleCatalog
-        plan.roles = ["project-manager", "django-developer"].compactMap { id in catalog.first { $0.id == id } }
-        plan.leadRole = "project-manager"
+        plan.skills = ["react-developer"]
 
         try plan.apply(to: root)
         let config = ProjectConfigLoader.load(repository: root)
 
         #expect(config.issues.isEmpty, "\(config.issues)")
+        #expect(SkillLibrary.installedSkills(in: root, home: root) == ["react-developer"])
+        #expect(try String(contentsOf: existing.appending(path: "notes.md"), encoding: .utf8) == "mine")
         let feature = try #require(config.workflow("feature-delivery"))
-        #expect(feature.step("plan")?.role == "project-manager")
-        #expect(feature.step("build")?.role == "django-developer")
-        #expect(feature.step("review")?.role == "project-manager")
-        #expect(try #require(config.workflow("small-task")).step("build")?.role == "django-developer")
+        #expect(feature.step("plan")?.agent == .lead)
+        #expect(feature.step("build")?.agent == .builder)
+        #expect(try #require(config.workflow("small-task")).step("review")?.agent == .checker)
+        #expect(try #require(config.workflow("hotfix")).step("build")?.agent == .builder)
     }
 
     @Test func agentsBranchFromThePreferredBaseWithThePrefix() async throws {
@@ -117,20 +121,8 @@ import Testing
     @Test func leadGuideMarksTheDefaultWorkflow() {
         let workflows = ProjectSetup.workflowCatalog
         let guide = AgentRuntime.leadChatGuide(workflows: workflows, defaultWorkflow: "small-task")
-        #expect(guide.contains("- `small-task`: Small task v2 (the default"))
+        #expect(guide.contains("- `small-task`: Small task v3 (the default"))
         #expect(!guide.contains("- `hotfix`: Hotfix v1 (the default"))
-    }
-}
-
-extension ProjectSetupTests {
-    @Test func theChosenLeadAnswersFirst() {
-        let roles = ProjectSetup.roleCatalog.filter(\.canSpawn)
-        var config = ProjectConfig(roles: roles)
-        #expect(config.leadRoles.first?.id == ProjectConfig.defaultLeadID)
-        config.preferences.defaultLead = "project-manager"
-        #expect(config.leadRoles.first?.id == "project-manager")
-        config.preferences.defaultLead = "missing"
-        #expect(config.leadRoles.first?.id == ProjectConfig.defaultLeadID)
     }
 }
 
@@ -139,10 +131,31 @@ extension ProjectSetupTests {
         let root = FileManager.default.temporaryDirectory.appending(path: "ensemble-prefs-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: root) }
         try ProjectConfigLoader.installDefaults(repository: root)
-        try ProjectConfigLoader.write(ProjectPreferences(defaultLead: "claude-code", defaultWorkflow: "nope"), repository: root)
+        try ProjectConfigLoader.write(ProjectPreferences(defaultWorkflow: "nope"), repository: root)
 
         let messages = ProjectConfigLoader.load(repository: root).issues.map(\.message)
-        #expect(messages.contains("default lead “claude-code” isn’t a role that can spawn agents"))
-        #expect(messages.contains("default workflow “nope” doesn’t exist"))
+        #expect(messages == ["default workflow “nope” doesn’t exist"])
+    }
+
+    @Test func templatesShipWorkflowsAndRecommendedSkillsWithoutRoles() throws {
+        let templates = CrewTemplates.bundled
+        #expect(Set(templates.map(\.id)) == ["django-react", "led-squad", "solo-with-review"])
+        let django = try #require(CrewTemplates.template("django-react"))
+        #expect(django.recommendedSkills == ["django-developer", "react-developer"])
+        #expect(django.bundledSkills.map(\.name) == ["django-developer", "react-developer"])
+        #expect(ProjectSetup.skillCatalog.map(\.name) == ["django-developer", "react-developer"])
+
+        for template in templates {
+            let root = FileManager.default.temporaryDirectory.appending(path: "ensemble-template-\(UUID().uuidString)", directoryHint: .isDirectory)
+            defer { try? FileManager.default.removeItem(at: root) }
+            try template.install(in: root)
+            let config = ProjectConfigLoader.load(repository: root)
+            #expect(config.issues.isEmpty, "\(template.id): \(config.issues)")
+            #expect(config.migrationNotices.isEmpty, "\(template.id)")
+            #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".ensemble/roles").path))
+            #expect(config.workflows.map(\.id) == template.workflows)
+            #expect(config.workflows.flatMap(\.steps).filter { $0.type == .agent || $0.type == .spawn }.allSatisfy { $0.agent != nil && $0.model != nil })
+            #expect(SkillLibrary.installedSkills(in: root, home: root) == Set(template.bundledSkills.map(\.name)))
+        }
     }
 }

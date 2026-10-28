@@ -302,6 +302,21 @@ public final class AppDatabase: Sendable {
                 t.add(column: "spawnedById", .integer)
             }
         }
+        migrator.registerMigration("v18-agent-kinds") { db in
+            try db.alter(table: "agent") { t in
+                t.add(column: "skills", .text).notNull().defaults(to: "[]")
+            }
+            let rows = try Row.fetchAll(db, sql: "SELECT id, role, readOnly, taskId FROM agent")
+            for row in rows {
+                let role: String = row["role"]
+                guard AgentKind(rawValue: role) == nil else { continue }
+                let readOnly: Bool = row["readOnly"]
+                let taskId: Int64? = row["taskId"]
+                let guessed = AgentKind.guessing(roleID: role)
+                let kind: AgentKind = taskId != nil || guessed == .lead ? .lead : readOnly ? .checker : .builder
+                try db.execute(sql: "UPDATE agent SET role = ? WHERE id = ?", arguments: [kind.rawValue, row["id"] as Int64])
+            }
+        }
 
         return migrator
     }

@@ -124,13 +124,13 @@ import Testing
         #expect(fixture.calls().isEmpty)
     }
 
-    @Test func pluginSkillsCountAsInstalledForRoles() throws {
+    @Test func pluginSkillsCountAsInstalledForAgents() throws {
         let fixture = try makeFixture()
         defer { fixture.cleanUp() }
-        let role = RoleDefinition(id: "reviewer", name: "Reviewer", skills: ["sentry-skills:code-review", "sentry-skills:nope"])
+        let skills = ["sentry-skills:code-review", "sentry-skills:nope"]
 
-        #expect(SkillLibrary.missingSkills(for: role, in: fixture.repository, pluginSkills: ["sentry-skills:code-review"]) == ["sentry-skills:nope"])
-        let context = RoleContext.build(role: role, config: ProjectConfig(roles: [role]), repository: fixture.repository, pluginSkills: ["sentry-skills:code-review"])
+        #expect(SkillLibrary.unknownSkills(skills, in: fixture.repository, pluginSkills: ["sentry-skills:code-review"]) == ["sentry-skills:nope"])
+        let context = RoleContext.build(kind: .checker, skills: skills, config: ProjectConfig(), repository: fixture.repository, pluginSkills: ["sentry-skills:code-review"])
         #expect(context.warnings == [.missingSkill("sentry-skills:nope")])
     }
 }

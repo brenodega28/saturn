@@ -130,13 +130,9 @@ public struct PermissionsConfig: Sendable, Hashable, Codable {
         profiles.first { $0.id == id }
     }
 
-    public func resolve(for role: RoleDefinition?, readOnly: Bool = false) -> PermissionProfileDefinition {
-        if let role, role.permissionProfile != Self.defaultProfileID, let named = profile(role.permissionProfile) {
-            return named
-        }
-        let editsCode = role?.editsCode ?? !readOnly
-        let fallback = editsCode ? "developer" : role?.canSpawn == true ? "lead" : "reviewer"
-        return profile(fallback) ?? Self.builtIn.first { $0.id == fallback }!
+    public func resolve(for kind: AgentKind?, readOnly: Bool = false) -> PermissionProfileDefinition {
+        let id = kind == .lead && !readOnly ? AgentKind.builder.permissionProfileID : kind?.permissionProfileID ?? (readOnly ? "reviewer" : "developer")
+        return profile(id) ?? Self.builtIn.first { $0.id == id }!
     }
 
     public var knownIDs: [String] { [Self.defaultProfileID] + profiles.map(\.id) }

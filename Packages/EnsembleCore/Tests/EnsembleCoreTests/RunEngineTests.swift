@@ -62,7 +62,7 @@ import Testing
 
         let qa = try #require(h.driver.agentCalls.last)
         #expect(qa.step.id == "qa")
-        #expect(qa.roleID == "qa-engineer")
+        #expect(qa.kind == .checker)
         #expect(qa.inputs.plan == H.plan)
         #expect(qa.inputs.latestVerdict?.outcome == StepOutcome.approved)
         #expect(qa.inputs.feedback == nil)
@@ -76,7 +76,7 @@ import Testing
     @Test func planApprovalUsesTheEditedPlanAndRejectionReplans() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let edited = Plan(summary: "Only the API for now.", tasks: [PlanTask(id: "api", title: "Refund API (cents)", role: "claude-code")])
+        let edited = Plan(summary: "Only the API for now.", tasks: [PlanTask(id: "api", title: "Refund API (cents)")])
         h.driver.script("plan", .result(.plan(H.plan)), .result(.plan(H.plan)))
         h.driver.script("build", .hang)
 
@@ -107,8 +107,8 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "tight", name: "Tight", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "review"),
-            WorkflowStep(id: "review", type: .agent, role: "qa-engineer", routes: [
+            WorkflowStep(id: "build", type: .agent, agent: .builder, next: "review"),
+            WorkflowStep(id: "review", type: .agent, agent: .checker, routes: [
                 StepOutcome.passed: WorkflowRoute(to: "end"),
                 StepOutcome.failed: WorkflowRoute(to: "build", maxLoops: 1),
             ]),
@@ -140,8 +140,8 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "loose", name: "Loose", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "review"),
-            WorkflowStep(id: "review", type: .agent, role: "pr-reviewer", routes: [
+            WorkflowStep(id: "build", type: .agent, agent: .builder, next: "review"),
+            WorkflowStep(id: "review", type: .agent, agent: .checker, routes: [
                 StepOutcome.approved: WorkflowRoute(to: "end"),
                 StepOutcome.changesRequested: WorkflowRoute(to: "build", maxLoops: 5),
             ]),
@@ -169,8 +169,8 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "loose", name: "Loose", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "review"),
-            WorkflowStep(id: "review", type: .agent, role: "pr-reviewer", routes: [
+            WorkflowStep(id: "build", type: .agent, agent: .builder, next: "review"),
+            WorkflowStep(id: "review", type: .agent, agent: .checker, routes: [
                 StepOutcome.approved: WorkflowRoute(to: "end"),
                 StepOutcome.changesRequested: WorkflowRoute(to: "build", maxLoops: 5),
             ]),
@@ -189,8 +189,8 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "tight", name: "Tight", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "review"),
-            WorkflowStep(id: "review", type: .agent, role: "pr-reviewer", routes: [
+            WorkflowStep(id: "build", type: .agent, agent: .builder, next: "review"),
+            WorkflowStep(id: "review", type: .agent, agent: .checker, routes: [
                 StepOutcome.changesRequested: WorkflowRoute(to: "build", maxLoops: 0),
             ]),
         ])
@@ -210,9 +210,9 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "cheap", name: "Cheap", budget: 1, steps: [
-            WorkflowStep(id: "one", type: .agent, role: "claude-code"),
-            WorkflowStep(id: "two", type: .agent, role: "claude-code"),
-            WorkflowStep(id: "three", type: .agent, role: "claude-code"),
+            WorkflowStep(id: "one", type: .agent, agent: .builder),
+            WorkflowStep(id: "two", type: .agent, agent: .builder),
+            WorkflowStep(id: "three", type: .agent, agent: .builder),
         ])
         h.driver.script("one", H.done(cost: 0.6))
         h.driver.script("two", H.done(cost: 0.6))
@@ -241,8 +241,8 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "capped", name: "Capped", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", budget: 1),
-            WorkflowStep(id: "after", type: .agent, role: "claude-code"),
+            WorkflowStep(id: "build", type: .agent, agent: .builder, budget: 1),
+            WorkflowStep(id: "after", type: .agent, agent: .builder),
         ])
         h.driver.script("build", H.done(cost: 3))
 
@@ -286,7 +286,7 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "gated", name: "Gated", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code"),
+            WorkflowStep(id: "build", type: .agent, agent: .builder),
             WorkflowStep(id: "is-urgent", type: .condition, condition: StepCondition(labelsAny: ["Urgent"]), routes: [
                 StepOutcome.yes: WorkflowRoute(to: "touches-migrations"), StepOutcome.no: WorkflowRoute(to: "end"),
             ]),
@@ -340,7 +340,7 @@ import Testing
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "ping", name: "Ping", steps: [
             WorkflowStep(id: "tell", type: .notify, title: "Heads up", message: "Build starting"),
-            WorkflowStep(id: "build", type: .agent, role: "claude-code"),
+            WorkflowStep(id: "build", type: .agent, agent: .builder),
         ], end: WorkflowEnd(action: .leave))
         h.driver.script("build", H.done())
 
@@ -361,7 +361,7 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "flaky", name: "Flaky", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", onFailure: .retry),
+            WorkflowStep(id: "build", type: .agent, agent: .builder, onFailure: .retry),
         ])
         h.driver.script("build", .failure("boom 1"), .failure("boom 2"), H.done())
 
@@ -387,7 +387,7 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "flaky", name: "Flaky", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", onFailure: .retry),
+            WorkflowStep(id: "build", type: .agent, agent: .builder, onFailure: .retry),
         ])
         h.driver.script("build", .failure("transient"), H.done())
 
@@ -402,7 +402,7 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "strict", name: "Strict", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", onFailure: .fail),
+            WorkflowStep(id: "build", type: .agent, agent: .builder, onFailure: .fail),
         ])
         h.driver.script("build", .failure("compiler exploded"), H.done())
 
@@ -422,7 +422,7 @@ import Testing
         let h = try H.make()
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "ask", name: "Ask", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code"),
+            WorkflowStep(id: "build", type: .agent, agent: .builder),
         ])
         h.driver.script("build", .failure("nope"))
 
@@ -439,7 +439,7 @@ import Testing
         let h = try H.make(minute: .milliseconds(20))
         defer { h.cleanUp() }
         let workflow = WorkflowDefinition(id: "slow", name: "Slow", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", timeoutMinutes: 1, onFailure: .fail),
+            WorkflowStep(id: "build", type: .agent, agent: .builder, timeoutMinutes: 1, onFailure: .fail),
         ])
         h.driver.script("build", .hang, H.done())
 
@@ -502,7 +502,7 @@ import Testing
         try await waitUntil { h.driver.agentCalls.count == 1 }
 
         workflow.version = 2
-        workflow.steps = [WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "end")]
+        workflow.steps = [WorkflowStep(id: "build", type: .agent, agent: .builder, next: "end")]
         workflow.end = WorkflowEnd(action: .merge)
         try ProjectConfigLoader.write(workflow, repository: h.repository)
         #expect(try h.workflow("small-task").steps.count == 1)
@@ -529,7 +529,7 @@ import Testing
     @Test func pauseInterruptsAndResumeReattaches() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", .hang, H.done())
         let id = try await startWithoutWaiting(h, workflow)
         try await waitUntil { h.driver.agentCalls.count == 1 }
@@ -586,7 +586,7 @@ import Testing
     @Test func finishFailureAsksAndRetries() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", H.done())
         h.driver.finishReplies = [.failure(ScriptedFailure(message: "gh is not signed in")), .success(FinishResult(pullRequestURL: "https://example.com/pr/1"))]
 
@@ -604,7 +604,7 @@ import Testing
     @Test func aPullRequestFinishRecordsTheDeliveryAndBaseBranches() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", H.done())
         h.driver.finishReplies = [.success(FinishResult(deliveryBranch: "crew/delivery-run-1/refunds", baseBranch: "main"))]
 
@@ -622,7 +622,7 @@ import Testing
     @Test func openingAPullRequestRecordsItsURLOnce() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", H.done())
         h.driver.finishReplies = [.success(FinishResult(deliveryBranch: "crew/delivery", baseBranch: "main"))]
         h.driver.pullRequestReplies = [.success("https://example.com/pr/7")]
@@ -642,7 +642,7 @@ import Testing
     @Test func aFailedPullRequestLeavesTheRunUnchanged() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", H.done())
         h.driver.finishReplies = [.success(FinishResult(deliveryBranch: "crew/delivery", baseBranch: "main"))]
         h.driver.pullRequestReplies = [.failure(ScriptedFailure(message: "Sign in to GitHub"))]
@@ -657,7 +657,7 @@ import Testing
     @Test func onlyUnmergedDeliveredRunsCanOpenAPullRequest() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", H.done(), H.done())
         h.driver.finishReplies = [
             .success(FinishResult(summary: "Left in place")),
@@ -675,7 +675,7 @@ import Testing
     @Test func mergingADeliveredRunRecordsTheMergeOnce() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", H.done())
         h.driver.finishReplies = [.success(FinishResult(deliveryBranch: "crew/delivery", baseBranch: "main"))]
         let id = try await h.start(workflow)
@@ -696,7 +696,7 @@ import Testing
     @Test func aRunWithAPullRequestCanStillBeMerged() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", H.done())
         h.driver.finishReplies = [.success(FinishResult(deliveryBranch: "crew/delivery", baseBranch: "main"))]
         let id = try await h.start(workflow)
@@ -711,7 +711,7 @@ import Testing
     @Test func aFailedMergeLeavesTheRunUnchanged() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", H.done())
         h.driver.finishReplies = [.success(FinishResult(deliveryBranch: "crew/delivery", baseBranch: "main"))]
         h.driver.mergeReplies = [.failure(ScriptedFailure(message: "main is dirty"))]
@@ -727,7 +727,7 @@ import Testing
     @Test func onlyFinishedDeliveredRunsCanBeMerged() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")])
+        let workflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
         h.driver.script("build", H.done())
         h.driver.finishReplies = [.success(FinishResult(summary: "Left in place"))]
         let id = try await h.start(workflow)

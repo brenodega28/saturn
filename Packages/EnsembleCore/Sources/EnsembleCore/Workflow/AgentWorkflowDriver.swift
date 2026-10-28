@@ -4,7 +4,7 @@ import Yams
 
 public enum WorkflowDriverError: Error, LocalizedError, Equatable {
     case notReady(String)
-    case missingRole(String)
+    case missingAgent(String)
     case agentFailed(agent: String, message: String)
     case setupFailed(agent: String, message: String)
     case checksFailed(rounds: Int, details: String)
@@ -17,8 +17,8 @@ public enum WorkflowDriverError: Error, LocalizedError, Equatable {
         switch self {
         case .notReady(let reason):
             reason
-        case .missingRole(let role):
-            "The role “\(role)” doesn’t exist in this project."
+        case .missingAgent(let step):
+            "The step “\(step)” doesn’t say which agent runs it: lead, builder or checker."
         case .agentFailed(let agent, let message):
             "\(agent) failed: \(message)"
         case .checksFailed(let rounds, let details):
@@ -87,8 +87,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     func tools(for agent: Agent) -> Set<HandoffTool> {
-        let config = (try? runtime.database.project(id: agent.projectId)).flatMap { $0 }.map { ProjectConfigLoader.load(repository: $0.url) }
-        let isLead = config?.role(agent.role)?.canSpawn == true
+        let isLead = agent.kind == .lead
         var leadTools: Set<HandoffTool> = isLead ? HandoffTool.leadTools : []
         if isLead, agent.readOnly, agent.worktreePath == nil { leadTools.insert(.openWorktree) }
         let chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .messageAgent, .askHuman]
@@ -111,12 +110,12 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         #endif
         switch message {
         case .plan(let plan):
-            let config = try projectConfig(for: agent)
-            let unknown = plan.tasks.map(\.role).filter { config.role($0) == nil }
-            guard unknown.isEmpty else {
-                let roles = config.roles.filter(\.editsCode).map(\.id).joined(separator: ", ")
-                throw HandoffError.notAllowed("Unknown role ids: \(unknown.joined(separator: ", ")). Use one of: \(roles).")
+            let others = plan.tasks.filter { $0.agent != .builder }
+            guard others.isEmpty else {
+                throw HandoffError.notAllowed("Every plan task is built by a builder, and plan tasks run at the same time, so a checker couldn’t check them. Set agent to builder for: \(others.map(\.title).joined(separator: ", ")). The workflow’s checker steps review and test the work after the build.")
             }
+            let (project, _) = try projectAndConfig(for: agent)
+            try runtime.checkSkills(plan.tasks.flatMap(\.skills), in: project)
             plans[agentID] = plan
             return "Plan received with \(plan.tasks.count) tasks. End your turn now; the user reviews it before anyone builds."
         case .verdict(let verdict):
@@ -229,15 +228,13 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             return zip(agents, labels).map { listing(of: $0, label: $1, isCaller: $0.id == agentID) }.joined(separator: "\n")
         case .spawnAgent(let request):
             try requireLead(agent)
-            let (project, config) = try projectAndConfig(for: agent)
-            guard let role = config.role(request.role) else {
-                throw HandoffError.notAllowed("Unknown role “\(request.role)”. Use one of: \(config.roles.map(\.id).joined(separator: ", ")).")
-            }
+            let (project, _) = try projectAndConfig(for: agent)
             let spawned = try await runtime.spawn(
-                in: project, role: role, count: request.count, config: config, git: try requireGit(),
-                name: request.name, model: request.model, task: request.task, spawnedBy: agent
+                in: project, kind: request.agent, count: request.count, git: try requireGit(),
+                name: request.name, model: request.model, task: request.task, skills: request.skills, spawnedBy: agent
             )
-            return "Started \(spawned.map { AgentNaming.displayName(of: $0.agent, config: config) }.joined(separator: ", ")). Each agent’s report arrives as your next message when it finishes its turn. End your turn now."
+            let skills = request.skills.isEmpty ? "" : " with \(request.skills.joined(separator: ", "))"
+            return "Started \(spawned.map { AgentNaming.displayName(of: $0.agent) }.joined(separator: ", "))\(skills). Each agent’s report arrives as your next message when it finishes its turn. End your turn now."
         case .stopAgent(let name):
             try requireLead(agent)
             let target = try otherAgent(named: name, from: agent)
@@ -275,8 +272,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
               let lead = try runtime.database.leadAgent(taskId: run.taskId), lead.id != agent.id,
               runtime.session(for: lead) != nil,
               let workflow = workflowSnapshot(run) else { return nil }
-        let config = try projectConfig(for: agent)
-        let hasLeadStep = workflow.steps.contains { $0.type == .agent && $0.role.flatMap(config.role)?.canSpawn == true }
+        let hasLeadStep = workflow.steps.contains { $0.type == .agent && $0.agent == .lead }
         return hasLeadStep ? lead : nil
     }
 
@@ -346,11 +342,11 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func isLead(_ agent: Agent) throws -> Bool {
-        try projectConfig(for: agent).role(agent.role)?.canSpawn == true
+        agent.kind == .lead
     }
 
     private func requireLead(_ agent: Agent) throws {
-        guard try isLead(agent) else { throw HandoffError.notAllowed("Only lead roles can manage agents.") }
+        guard try isLead(agent) else { throw HandoffError.notAllowed("Only the Lead can manage agents.") }
     }
 
     func displayName(of agent: Agent) -> String {
@@ -384,7 +380,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func listing(of agent: Agent, label: String, isCaller: Bool) -> String {
-        var fields = ["role \(agent.role)", "status \(agent.status.rawValue)"]
+        var fields = ["\(agent.kind?.rawValue ?? agent.role)", "status \(agent.status.rawValue)"]
+        if !agent.skills.isEmpty { fields.append("skills \(agent.skills.joined(separator: ", "))") }
         if let branch = agent.branch { fields.append("branch \(branch)") }
         fields.append(agent.worktreePath.map { "worktree \($0)" } ?? "read-only")
         if agent.runId != nil { fields.append("in a workflow run") }
@@ -395,14 +392,13 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     public func runAgentStep(_ context: StepContext) async throws -> StepResult {
         try await ensureServer()
         let git = try requireGit()
-        guard let roleID = context.roleID else { throw WorkflowDriverError.missingRole("(none)") }
+        guard let kind = context.kind else { throw WorkflowDriverError.missingAgent(context.step.id) }
         let config = ProjectConfigLoader.load(repository: context.project.url)
-        guard let role = config.role(roleID) else { throw WorkflowDriverError.missingRole(roleID) }
-        let expected = expectedHandoff(for: context, role: role, workflow: workflowSnapshot(context.run))
+        let expected = expectedHandoff(for: context, kind: kind, workflow: workflowSnapshot(context.run))
         let runId = try requireRunID(context.run)
 
         var qaWorktree: (path: URL, branch: String?)?
-        if !role.editsCode, expected == .verdict, isTestingStep(context.step) {
+        if !kind.editsCode, expected == .verdict, isTestingStep(context.step) {
             switch try await prepareIntegrationWorktree(for: context.run, project: context.project, git: git, purpose: "qa") {
             case .ready(let path, let branch):
                 qaWorktree = (path, branch)
@@ -417,7 +413,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
 
         let session = try await reportingSetupFailure(runId: runId, projectId: context.project.id) {
-            try await stepAgent(for: role, context: context, runId: runId, git: git, worktree: qaWorktree, expected: expected)
+            try await stepAgent(for: kind, context: context, runId: runId, git: git, worktree: qaWorktree, expected: expected)
         }
         let startCost = session.agent.costUSD
         clearHandoffs(session.id)
@@ -427,7 +423,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
         let message = resuming
             ? resumeMessage(expected: expected)
-            : stepMessage(context: context, role: role, expected: expected, config: config)
+            : stepMessage(context: context, expected: expected, config: config)
         #if DEBUG
         runtime.debugTrace?.assign(session.agent, toStep: context.step.id, runStepId: context.runStepID, runTitle: context.run.title, message: message)
         #endif
@@ -458,8 +454,6 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let git = try requireGit()
         let runId = try requireRunID(context.step.run)
         let project = context.step.project
-        let config = ProjectConfigLoader.load(repository: project.url)
-        let fallbackRole = context.step.roleID.flatMap(config.role)
 
         var assignments = context.plan.tasks
         if let cap = context.maxAgents, cap > 0, assignments.count > cap {
@@ -475,20 +469,17 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 builders.append((session, task))
                 continue
             }
-            guard let role = config.role(task.role).flatMap({ $0.editsCode ? $0 : nil }) ?? fallbackRole else {
-                throw WorkflowDriverError.missingRole(task.role)
-            }
             if context.step.step.reusePinned, let projectID = project.id,
-               let pinned = try runtime.pinnedAgentToReuse(role: role.id, inProject: projectID, excluding: Set(builders.map(\.session.id)), activeRunIDs: activeRunIDs(projectID: projectID, except: runId)) {
+               let pinned = try runtime.pinnedAgentToReuse(kind: .builder, inProject: projectID, excluding: Set(builders.map(\.session.id)), activeRunIDs: activeRunIDs(projectID: projectID, except: runId)) {
                 try await reportingSetupFailure(runId: runId, projectId: project.id) {
-                    try await runtime.reassign(pinned, toRun: runId, runStepId: context.step.runStepID, planTaskId: key, task: task.title, in: project, git: git)
+                    try await runtime.reassign(pinned, toRun: runId, runStepId: context.step.runStepID, planTaskId: key, task: task.title, skills: task.skills, in: project, git: git)
                 }
                 builders.append((pinned, task))
                 continue
             }
             let session = try await reportingSetupFailure(runId: runId, projectId: project.id) {
                 try await runtime.createRunAgent(
-                    in: project, role: role, runId: runId, runStepId: context.step.runStepID,
+                    in: project, kind: .builder, model: context.step.step.model, skills: task.skills, runId: runId, runStepId: context.step.runStepID,
                     planTaskId: key, task: task.title, git: git
                 )
             }
@@ -697,26 +688,30 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func stepAgent(
-        for role: RoleDefinition, context: StepContext, runId: Int64, git: GitClient, worktree: (path: URL, branch: String?)?, expected: ExpectedHandoff
+        for kind: AgentKind, context: StepContext, runId: Int64, git: GitClient, worktree: (path: URL, branch: String?)?, expected: ExpectedHandoff
     ) async throws -> AgentSession {
         let sessions = try runtime.runSessions(runId: runId, projectId: context.project.id ?? -1)
+        let model = context.step.model
         if let worktree {
-            if let qa = sessions.first(where: { $0.agent.role == role.id && $0.agent.planTaskId == nil && $0.agent.worktreeURL.map(realPath(of:)) == realPath(of: worktree.path) }) {
+            if let qa = sessions.first(where: { $0.agent.kind == kind && $0.agent.planTaskId == nil && $0.agent.worktreeURL.map(realPath(of:)) == realPath(of: worktree.path) }) {
                 return qa
             }
-            return try await runtime.createRunAgent(in: context.project, role: role, runId: runId, runStepId: context.runStepID, task: context.step.displayTitle, readOnlyWorktree: worktree, git: git)
+            return try await runtime.createRunAgent(in: context.project, kind: kind, model: model, runId: runId, runStepId: context.runStepID, task: context.step.displayTitle, readOnlyWorktree: worktree, git: git)
         }
         let reusable = sessions.first { session in
             let agent = session.agent
-            guard agent.role == role.id, agent.planTaskId == nil, expected != .verdict || agent.taskId == nil else { return false }
-            if role.canSpawn { return !agent.readOnly || agent.worktreePath == nil }
-            return role.editsCode ? !agent.readOnly : agent.readOnly && agent.worktreePath == nil
+            guard agent.kind == kind, agent.planTaskId == nil, expected != .verdict || agent.taskId == nil else { return false }
+            switch kind {
+            case .lead: return !agent.readOnly || agent.worktreePath == nil
+            case .builder: return !agent.readOnly
+            case .checker: return agent.readOnly && agent.worktreePath == nil
+            }
         }
         if let reusable {
             try await runtime.repairSetup(of: reusable)
             return reusable
         }
-        return try await runtime.createRunAgent(in: context.project, role: role, runId: runId, runStepId: context.runStepID, task: context.inputs.taskTitle, git: git)
+        return try await runtime.createRunAgent(in: context.project, kind: kind, model: model, runId: runId, runStepId: context.runStepID, task: context.inputs.taskTitle, git: git)
     }
 
     private func reportingSetupFailure<Value>(runId: Int64, projectId: Int64?, _ operation: () async throws -> Value) async throws -> Value {
@@ -728,19 +723,19 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
     }
 
-    func expectedHandoff(for context: StepContext, role: RoleDefinition, workflow: WorkflowDefinition?) -> ExpectedHandoff {
+    func expectedHandoff(for context: StepContext, kind: AgentKind, workflow: WorkflowDefinition?) -> ExpectedHandoff {
         let outcomes = Set(context.step.routes.keys)
         if !outcomes.isDisjoint(with: [StepOutcome.approved, StepOutcome.changesRequested, StepOutcome.passed, StepOutcome.failed]) {
             return .verdict
         }
-        if role.canSpawn, let next = context.step.next, workflow?.step(next)?.type == .spawn {
+        if kind == .lead, let next = context.step.next, workflow?.step(next)?.type == .spawn {
             return .plan
         }
-        if role.canSpawn, outcomes.isEmpty, let workflow, let index = workflow.steps.firstIndex(where: { $0.id == context.step.id }),
+        if kind == .lead, outcomes.isEmpty, let workflow, let index = workflow.steps.firstIndex(where: { $0.id == context.step.id }),
            workflow.steps.indices.contains(index + 1), workflow.steps[index + 1].type == .spawn {
             return .plan
         }
-        return role.editsCode ? .result : .verdict
+        return kind.editsCode ? .result : .verdict
     }
 
     private func isTestingStep(_ step: WorkflowStep) -> Bool {
@@ -751,7 +746,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         try? YAMLWorkflow.decode(run.workflowSnapshot)
     }
 
-    private func stepMessage(context: StepContext, role: RoleDefinition, expected: ExpectedHandoff, config: ProjectConfig) -> String {
+    private func stepMessage(context: StepContext, expected: ExpectedHandoff, config: ProjectConfig) -> String {
         var parts = ["# \(context.step.displayTitle)"]
         if !context.step.instructions.isEmpty { parts.append(context.step.instructions) }
         parts.append("## Request\n\(context.inputs.taskTitle)" + (context.inputs.taskBody.isEmpty ? "" : "\n\n\(context.inputs.taskBody)"))
@@ -759,16 +754,14 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
         switch expected {
         case .plan:
-            let builders = config.roles.filter(\.editsCode).map { "- `\($0.id)`: \($0.name)\($0.description.isEmpty ? "" : " — \($0.description)")" }
-            parts.append("## Roles that can build\n" + builders.joined(separator: "\n"))
             if let feedback = context.inputs.feedback {
                 parts.append("## The user asked for a new plan\n\(feedback.summary)")
             }
             parts.append(Self.planGuide)
-            parts.append("Read the codebase, then call `\(HandoffTool.submitPlan.qualifiedName)` with tasks that don’t touch the same files. Use only the role ids above. Then end your turn.")
+            parts.append("Read the codebase, then call `\(HandoffTool.submitPlan.qualifiedName)` with tasks that don’t touch the same files. Each task gets its own builder; give it the installed skills it should load, if any. Then end your turn.")
         case .verdict:
             if let plan = context.inputs.plan {
-                parts.append("## Plan\n\(plan.summary)\n" + plan.tasks.enumerated().map { "\($0.offset + 1). \($0.element.title) (\($0.element.role))" }.joined(separator: "\n"))
+                parts.append("## Plan\n\(plan.summary)\n" + plan.tasks.enumerated().map { "\($0.offset + 1). \($0.element.title) (\($0.element.label))" }.joined(separator: "\n"))
                 if let spec = plan.spec { parts.append("## Spec to check against\n" + spec.markdown) }
             }
             let builds = context.inputs.previousOutputs.last { !$0.output.taskResults.isEmpty }
@@ -853,7 +846,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         if !task.details.isEmpty { parts.append(task.details) }
         if !task.files.isEmpty { parts.append("You own: \(task.files.joined(separator: ", ")). Don’t change files other tasks own.") }
         parts.append("## Overall request\n\(context.step.inputs.taskTitle)" + (context.step.inputs.taskBody.isEmpty ? "" : "\n\n\(context.step.inputs.taskBody)"))
-        parts.append("## Plan\n\(context.plan.summary)\n" + context.plan.tasks.enumerated().map { "\($0.offset + 1). \($0.element.title) (\($0.element.role))" }.joined(separator: "\n"))
+        parts.append("## Plan\n\(context.plan.summary)\n" + context.plan.tasks.enumerated().map { "\($0.offset + 1). \($0.element.title) (\($0.element.label))" }.joined(separator: "\n"))
         if let spec = context.plan.spec { parts.append("## Spec\n" + spec.markdown) }
         if !context.step.step.instructions.isEmpty { parts.append(context.step.step.instructions) }
         if let guide = testFirstGuide(for: context.step.run) { parts.append(guide) }

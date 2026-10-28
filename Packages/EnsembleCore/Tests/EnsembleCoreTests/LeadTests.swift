@@ -5,9 +5,9 @@ import Testing
 
 struct PlanEditingTests {
     static let plan = Plan(summary: "Export orders", tasks: [
-        PlanTask(id: "a", title: "Endpoint", role: "django"),
-        PlanTask(id: "b", title: "Streaming", role: "django"),
-        PlanTask(id: "c", title: "Button", role: "react"),
+        PlanTask(id: "a", title: "Endpoint", skills: ["django"]),
+        PlanTask(id: "b", title: "Streaming", skills: ["django"]),
+        PlanTask(id: "c", title: "Button", skills: ["react"]),
     ])
 
     @Test func movesTasksUpAndDownWithinBounds() {
@@ -23,10 +23,11 @@ struct PlanEditingTests {
         #expect(plan.tasks.map(\.id) == ["b", "c", "a"])
     }
 
-    @Test func changesRole() {
+    @Test func changesSkills() {
         var plan = Self.plan
-        plan.setRole("claude-code", forTask: "c")
-        #expect(plan.tasks.map(\.role) == ["django", "django", "claude-code"])
+        plan.setSkills(["react", "design-tokens"], forTask: "c")
+        #expect(plan.tasks.map(\.skills) == [["django"], ["django"], ["react", "design-tokens"]])
+        #expect(plan.tasks.allSatisfy { $0.agent == .builder })
     }
 
     @Test func removesTasksAndDescribesSize() {
@@ -41,7 +42,7 @@ struct PlanEditingTests {
     @Test func decodesAnOldPlanThatStillHasACount() throws {
         let json = #"{"summary":"Export orders","tasks":[{"id":"b","title":"Streaming","role":"django","count":3,"files":["api/"]}]}"#
         let plan = try JSONDecoder().decode(Plan.self, from: Data(json.utf8))
-        #expect(plan.tasks == [PlanTask(id: "b", title: "Streaming", role: "django", files: ["api/"])])
+        #expect(plan.tasks == [PlanTask(id: "b", title: "Streaming", agent: .builder, files: ["api/"])])
         let reencoded = try #require(String(data: try JSONEncoder().encode(plan), encoding: .utf8))
         #expect(!reencoded.contains("count"))
     }
@@ -71,7 +72,7 @@ struct LeadRequestTests {
         #expect(task.workflow == "feature-delivery")
     }
 
-    @Test func assigningALeadReplacesLeadRolesOnAgentStepsOnly() throws {
+    @Test func onlyWorkflowsWithALeadStepHaveALead() throws {
         let repository = FileManager.default.temporaryDirectory.appending(path: "ensemble-lead-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: repository) }
@@ -79,13 +80,11 @@ struct LeadRequestTests {
         try LegacyWorkflows.install(repository: repository)
         let config = ProjectConfigLoader.load(repository: repository)
         let workflow = try #require(config.workflow("feature-delivery"))
-        let leads = Set(config.roles.filter(\.canSpawn).map(\.id))
 
-        #expect(workflow.leadRole(among: leads) == "tech-lead")
-        let assigned = workflow.assigningLead("scrum-master", replacing: leads)
-        #expect(assigned.steps.map(\.role) == ["scrum-master", "claude-code", "scrum-master", "qa-engineer", nil])
-        #expect(assigned.leadRole(among: leads.union(["scrum-master"])) == "scrum-master")
-        #expect(try #require(config.workflow("small-task")).leadRole(among: leads) == nil)
+        #expect(config.issues.isEmpty, "\(config.issues)")
+        #expect(workflow.hasLead)
+        #expect(workflow.steps.map(\.agent) == [.lead, .builder, .lead, .checker, nil])
+        #expect(try #require(config.workflow("small-task")).hasLead == false)
     }
 
     @Test func leadOrderingPutsActiveRunsFirstThenNewest() {

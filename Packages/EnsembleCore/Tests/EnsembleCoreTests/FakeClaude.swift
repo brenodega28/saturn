@@ -91,8 +91,8 @@ enum FakeClaude {
         memory_turn "$line" "$@"
         return
       fi
-      if printf '%s' "$1" | grep -q 'Roles that can build'; then
-        call_tool submit_plan '{"summary":"Two parallel tasks","tasks":[{"title":"Add alpha","role":"claude-code","files":["alpha.txt"]},{"title":"Add beta","role":"claude-code","files":["beta.txt"]}]}'
+      if printf '%s' "$1" | grep -q 'Each task gets its own builder'; then
+        call_tool submit_plan '{"summary":"Two parallel tasks","tasks":[{"title":"Add alpha","agent":"builder","files":["alpha.txt"]},{"title":"Add beta","agent":"builder","files":["beta.txt"]}]}'
         return
       fi
       if printf '%s' "$1" | grep -q 'submit_verdict'; then

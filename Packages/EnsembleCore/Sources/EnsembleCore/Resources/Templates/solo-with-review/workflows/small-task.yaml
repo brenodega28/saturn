@@ -1,6 +1,6 @@
 name: Small task
-version: 2
-description: One agent builds, checks and gates verify it, a reviewer comments, you approve. No lead.
+version: 3
+description: One builder builds, checks and gates verify it, a checker reviews from a fresh context, you approve. No lead.
 trigger:
   sources: [chat, github]
   labels: [small]
@@ -9,7 +9,8 @@ steps:
   - id: build
     type: agent
     title: Build
-    role: claude-code
+    agent: builder
+    model: sonnet
     instructions: Build the task, add a test, run the tests, and commit.
     next: checks
   - id: checks
@@ -25,7 +26,8 @@ steps:
   - id: review
     type: agent
     title: AI review
-    role: pr-reviewer
+    agent: checker
+    model: sonnet
     instructions: Review the branch against the task. Pin real findings with your confidence; approve unless something is actually wrong.
     routes:
       approved: approve

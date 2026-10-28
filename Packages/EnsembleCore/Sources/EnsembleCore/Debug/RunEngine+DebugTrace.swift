@@ -27,7 +27,7 @@ extension RunEngine {
         let step = loaded.workflow.step(row.stepId)
         var fields: DebugFields = [
             "kind": JSONValue(step?.type.rawValue ?? "end"),
-            "role": JSONValue(step?.role),
+            "role": JSONValue(step?.agent?.rawValue),
             "iteration": JSONValue(row.iteration),
             "attempt": JSONValue(cursor.attempt),
             "start": JSONValue(Self.describe(cursor.start)),

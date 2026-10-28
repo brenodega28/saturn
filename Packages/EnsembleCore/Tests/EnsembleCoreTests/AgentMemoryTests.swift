@@ -74,18 +74,11 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct MemoryPromptTests {
-    let reviewer = RoleDefinition(id: "pr-reviewer", name: "PR Reviewer", editsCode: false)
-    let builder = RoleDefinition(id: "claude-code", name: "Claude Code")
-
-    func config() -> ProjectConfig {
-        ProjectConfig(roles: [reviewer, builder])
-    }
-
     @Test func pinnedAgentsGetTheirMemoryInTheSystemPrompt() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
-        let pinned = try #require(try await harness.runtime.spawn(in: harness.project, role: builder, count: 1, config: config(), git: harness.repo.git, pinned: true, name: "Keeper").first)
-        let unpinned = try #require(try await harness.runtime.spawn(in: harness.project, role: builder, count: 1, config: config(), git: harness.repo.git, name: "Drifter").first)
+        let pinned = try #require(try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 1, git: harness.repo.git, pinned: true, name: "Keeper").first)
+        let unpinned = try #require(try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 1, git: harness.repo.git, name: "Drifter").first)
         try AgentMemory(repository: harness.repo.root, agentName: "Keeper").write("- Payments live in orders/")
         try AgentMemory(repository: harness.repo.root, agentName: "Drifter").write("- Should never be loaded")
 
@@ -101,7 +94,7 @@ import Testing
     @Test func memoryTurnsMayWriteOnlyTheMemoryFile() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
-        let session = try #require(try await harness.runtime.spawn(in: harness.project, role: builder, count: 1, config: config(), git: harness.repo.git, pinned: true, name: "Keeper").first)
+        let session = try #require(try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 1, git: harness.repo.git, pinned: true, name: "Keeper").first)
         harness.runtime.memoryUpdateAgents.insert(session.id)
 
         let setup = try harness.runtime.turnSetup(for: session.agent)
@@ -174,7 +167,7 @@ import Testing
         defer { setup.harness.cleanUp() }
         let run = try startRun(setup)
         try await waitUntil(timeout: .seconds(30)) { setup.engine.holds[run.id!]?.reason == .planApproval }
-        let lead = try session(setup) { $0.role == "tech-lead" }
+        let lead = try session(setup) { $0.role == "lead" }
         lead.setPinned(true)
 
         let planStep = try setup.harness.database.runSteps(runId: run.id!).first { $0.stepId == "plan" }
@@ -215,7 +208,7 @@ import Testing
         defer { setup.harness.cleanUp() }
         let run = try startRun(setup)
         try await waitUntil(timeout: .seconds(30)) { setup.engine.holds[run.id!]?.reason == .planApproval }
-        let lead = try session(setup) { $0.role == "tech-lead" }
+        let lead = try session(setup) { $0.role == "lead" }
         lead.setPinned(true)
 
         setup.driver.gitProvider = { nil }

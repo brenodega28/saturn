@@ -58,7 +58,7 @@ extension RunEngine {
         let runStep = try beginStep(&loaded, stepId: step.id, cursor: cursor, status: .running, input: encode(inputs))
         guard let runStepID = runStep.id else { throw RunEngineError.runNotFound }
         let context = StepContext(
-            run: loaded.run, task: task, project: project, step: step, roleID: step.role, iteration: cursor.iteration,
+            run: loaded.run, task: task, project: project, step: step, kind: step.agent, iteration: cursor.iteration,
             attempt: cursor.attempt, runStepID: runStepID, start: cursor.start, inputs: inputs, stepBudgetUSD: step.budget,
             runBudgetRemainingUSD: loaded.run.budgetUSD.map { max(0, $0 - loaded.run.costUSD) }
         )
@@ -424,8 +424,7 @@ extension RunEngine {
 
     func buildsCode(_ step: WorkflowStep, project: Project) -> Bool {
         if step.type == .spawn { return true }
-        guard step.type == .agent, let role = step.role else { return false }
-        return ProjectConfigLoader.load(repository: project.url).role(role)?.editsCode == true
+        return step.type == .agent && step.agent == .builder
     }
 
     func changesWaitingOnYou(projectID: Int64, excluding runID: Int64) -> Int {
@@ -454,7 +453,7 @@ extension RunEngine {
     }
 
     static func describe(_ plan: Plan) -> String {
-        let tasks = ([plan.summary] + plan.tasks.map { "• \($0.title) (\($0.role))" }).joined(separator: "\n")
+        let tasks = ([plan.summary] + plan.tasks.map { "• \($0.title) (\($0.label))" }).joined(separator: "\n")
         guard let spec = plan.spec else { return tasks }
         return tasks + "\n\n" + spec.markdown
     }

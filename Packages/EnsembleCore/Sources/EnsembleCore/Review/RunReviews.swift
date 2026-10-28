@@ -64,7 +64,7 @@ public struct RunReviews: Sendable, Hashable {
             if let definition, definition.type != .agent { return nil }
             let stepAgents = agents.filter { $0.runStepId == runStep.id && runStep.id != nil }
             let reviewer = reviewerName(agents: stepAgents, definition: definition, stepId: stepId)
-            let role = stepAgents.first?.role ?? definition?.role
+            let role = stepAgents.first?.role ?? definition?.agent?.rawValue
             if runStep.status == .running {
                 let isReviewing = stepAgents.contains(where: \.readOnly) || hasEverReviewed(stepId, in: steps)
                 return isReviewing ? StepReview(reviewer: reviewer, role: role, stepId: stepId, state: .reviewing, issues: []) : nil
@@ -90,7 +90,7 @@ public struct RunReviews: Sendable, Hashable {
 
     private static func reviewerName(agents: [Agent], definition: WorkflowStep?, stepId: String) -> String {
         if !agents.isEmpty { return agents.map(\.name).joined(separator: ", ") }
-        return definition?.role ?? definition?.title ?? stepId
+        return definition?.agent?.name ?? definition?.title ?? stepId
     }
 
     private static func hasEverReviewed(_ stepId: String, in steps: [RunStep]) -> Bool {

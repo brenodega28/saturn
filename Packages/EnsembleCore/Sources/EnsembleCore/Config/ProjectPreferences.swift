@@ -7,17 +7,15 @@ public struct ProjectPreferences: Sendable, Hashable, Codable {
 
     public var baseBranch: String?
     public var branchPrefix: String
-    public var defaultLead: String?
     public var defaultWorkflow: String?
     public var approvePlans: Bool
 
     public init(
         baseBranch: String? = nil, branchPrefix: String = ProjectPreferences.defaultBranchPrefix,
-        defaultLead: String? = nil, defaultWorkflow: String? = nil, approvePlans: Bool = true
+        defaultWorkflow: String? = nil, approvePlans: Bool = true
     ) {
         self.baseBranch = baseBranch
         self.branchPrefix = branchPrefix
-        self.defaultLead = defaultLead
         self.defaultWorkflow = defaultWorkflow
         self.approvePlans = approvePlans
     }
@@ -25,7 +23,6 @@ public struct ProjectPreferences: Sendable, Hashable, Codable {
     enum CodingKeys: String, CodingKey {
         case baseBranch = "base_branch"
         case branchPrefix = "branch_prefix"
-        case defaultLead = "default_lead"
         case defaultWorkflow = "default_workflow"
         case approvePlans = "approve_plans"
     }
@@ -34,7 +31,6 @@ public struct ProjectPreferences: Sendable, Hashable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.baseBranch = try container.decodeIfPresent(String.self, forKey: .baseBranch)?.nilIfBlank
         self.branchPrefix = Self.cleanPrefix(try container.decodeIfPresent(String.self, forKey: .branchPrefix))
-        self.defaultLead = try container.decodeIfPresent(String.self, forKey: .defaultLead)?.nilIfBlank
         self.defaultWorkflow = try container.decodeIfPresent(String.self, forKey: .defaultWorkflow)?.nilIfBlank
         self.approvePlans = try container.decodeIfPresent(Bool.self, forKey: .approvePlans) ?? true
     }

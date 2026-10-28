@@ -1,4 +1,4 @@
 name: Lead + parallel builders
-description: A lead writes the plan and splits bigger work across agents. Same checks, same approval by you.
+description: The Lead writes the plan and splits bigger work across builders, then a checker tests the merged work. Same checks, same approval by you.
 order: 3
-crew: [tech-lead, claude-code, claude-code, claude-code, qa-engineer]
+recommended_skills: []

@@ -165,8 +165,8 @@ struct WorkflowHarness {
     }
 
     static let plan = Plan(summary: "Add a refund endpoint and a button.", tasks: [
-        PlanTask(id: "api", title: "Refund API", role: "claude-code"),
-        PlanTask(id: "ui", title: "Refund button", role: "claude-code"),
+        PlanTask(id: "api", title: "Refund API"),
+        PlanTask(id: "ui", title: "Refund button"),
     ])
 
     static func verdict(_ outcome: String, _ summary: String = "", issues: [ReviewIssue] = [], cost: Double = 0) -> ScriptedWorkflowDriver.Reply {

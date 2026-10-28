@@ -1,4 +1,4 @@
 name: One agent, checked
-description: One agent per issue in its own worktree. Ensemble runs your checks; an AI reviewer pins comments.
+description: One builder per issue in its own worktree. Ensemble runs your checks; a checker pins comments from a fresh context.
 order: 2
-crew: [claude-code, pr-reviewer]
+recommended_skills: []

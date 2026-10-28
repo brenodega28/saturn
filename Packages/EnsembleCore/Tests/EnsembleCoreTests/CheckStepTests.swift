@@ -14,7 +14,7 @@ import Testing
         try ProjectConfigLoader.write(WorkflowDefinition(
             id: "checked", name: "Checked",
             steps: [
-                WorkflowStep(id: "build", type: .agent, role: "claude-code", instructions: "Build it.", next: checkStep.id),
+                WorkflowStep(id: "build", type: .agent, agent: .builder, instructions: "Build it.", next: checkStep.id),
                 checkStep,
             ],
             end: WorkflowEnd(action: .leave, cleanUpWorktrees: false)
@@ -109,7 +109,7 @@ import Testing
         #expect(correction.contains("previous session was closed"))
         #expect(correction.contains("## Your task"))
         #expect(correction.contains("Fix refunds"))
-        let builderLaunches = setup.harness.launches().filter { $0.contains("You are Claude Code") }
+        let builderLaunches = setup.harness.launches().filter { $0.contains("You are Builder") }
         #expect(builderLaunches.count == 4)
         #expect(builderLaunches[1].contains("--resume"))
         #expect(builderLaunches[2].contains("--resume"))
@@ -156,7 +156,7 @@ import Testing
 
         let run = try start(setup)
         _ = try await waitForEnd(setup, run: run)
-        let launch = try #require(setup.harness.launches().first { $0.contains("You are Claude Code") })
+        let launch = try #require(setup.harness.launches().first { $0.contains("You are Builder") })
         #expect(launch.contains("Ensemble runs these checks on your worktree"))
         #expect(launch.contains("matching `tests/**` are protected"))
         #expect(launch.contains("\"hooks\""))

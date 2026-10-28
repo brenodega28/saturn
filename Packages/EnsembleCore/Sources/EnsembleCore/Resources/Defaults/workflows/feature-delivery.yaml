@@ -1,6 +1,6 @@
 name: Feature delivery
-version: 2
-description: The lead plans and specs the work, developers build it, checks and gates verify it, an AI review comments, you approve.
+version: 3
+description: The Lead plans and specs the work, builders build it, checks and gates verify it, the Lead reviews, you approve.
 trigger:
   sources: [chat, github]
   labels: [feature]
@@ -9,14 +9,16 @@ steps:
   - id: plan
     type: agent
     title: Plan & spec the task
-    role: tech-lead
-    instructions: Plan one task by default. Split into more tasks only when every task works and can be tested on its own, with none needing another's output. Assign a role to each task with the files it owns, and write a short spec unless the request fits in one sentence. Submit the plan.
+    agent: lead
+    model: opus
+    instructions: Plan one task by default. Split into more tasks only when every task works and can be tested on its own, with none needing another's output. Name the files each task owns, choose the installed skills its builder should load, and write a short spec unless the request fits in one sentence. Submit the plan.
     budget: 2
     next: build
   - id: build
     type: spawn
     title: Build the plan
-    role: claude-code
+    agent: builder
+    model: sonnet
     instructions: Build your task from the plan in your own worktree, add tests, run them, and commit.
     max_agents: 4
     next: checks
@@ -33,7 +35,8 @@ steps:
   - id: review
     type: agent
     title: AI review
-    role: tech-lead
+    agent: lead
+    model: opus
     instructions: Read every branch against the plan and its acceptance criteria. Pin real findings with your confidence; approve unless something is actually wrong.
     routes:
       approved: approve

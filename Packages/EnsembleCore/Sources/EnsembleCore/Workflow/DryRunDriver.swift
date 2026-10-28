@@ -84,7 +84,7 @@ public final class DryRunDriver: WorkflowDriver {
     public func runSpawnStep(_ context: SpawnContext) async throws -> StepResult {
         calledSteps.append(context.step.step.id)
         let outcome = script.outcome(for: context.step.step, iteration: context.iteration)
-        let results = context.plan.tasks.map { TaskResult(planTaskId: $0.id, agentName: "Stub \($0.role)", summary: "Dry run: built “\($0.title)”.") }
+        let results = context.plan.tasks.map { TaskResult(planTaskId: $0.id, agentName: "Stub \($0.agent.name)", summary: "Dry run: built “\($0.title)”.") }
         return StepResult(outcome: outcome, output: StepOutput(summary: "Dry run: \(results.count) stubbed agents finished.", taskResults: results))
     }
 
@@ -125,10 +125,10 @@ public final class DryRunDriver: WorkflowDriver {
     }
 
     static func samplePlan(for spawn: WorkflowStep) -> Plan {
-        let role = spawn.role ?? "claude-code"
+        let agent = spawn.agent ?? .builder
         let count = min(max(spawn.maxAgents ?? 2, 1), 2)
         return Plan(summary: "Dry run plan", tasks: (1...count).map {
-            PlanTask(id: "sample-\($0)", title: "Sample task \($0)", role: role)
+            PlanTask(id: "sample-\($0)", title: "Sample task \($0)", agent: agent)
         })
     }
 

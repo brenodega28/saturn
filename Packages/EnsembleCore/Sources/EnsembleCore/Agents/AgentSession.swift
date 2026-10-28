@@ -93,11 +93,12 @@ public final class AgentSession: Identifiable {
         persist()
     }
 
-    func reassign(runId: Int64, runStepId: Int64?, planTaskId: String, task: String, worktree: URL, branch: String, baseBranch: String?) {
+    func reassign(runId: Int64, runStepId: Int64?, planTaskId: String, task: String, skills: [String], worktree: URL, branch: String, baseBranch: String?) {
         agent.runId = runId
         agent.runStepId = runStepId
         agent.planTaskId = planTaskId
         agent.task = task
+        agent.skills = skills
         agent.worktreePath = worktree.path
         agent.branch = branch
         agent.baseBranch = baseBranch

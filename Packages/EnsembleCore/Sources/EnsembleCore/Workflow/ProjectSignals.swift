@@ -120,7 +120,7 @@ public enum ProjectSignals {
 
     public static func problems(
         runs: [Run], steps: [Int64: [RunStep]], holds: [Int64: RunHold] = [:], configIssues: [ConfigIssue] = [],
-        roles: [RoleDefinition] = [], installedSkills: Set<String> = []
+        agents: [Agent] = [], installedSkills: Set<String> = []
     ) -> [ProjectProblem] {
         var problems: [ProjectProblem] = []
         for run in runs where activeStatuses.contains(run.status) {
@@ -150,17 +150,17 @@ public enum ProjectSignals {
             problems.append(ProjectProblem(category: .configErrors, severity: .error, title: issue.message, location: issue.file, file: issue.file))
         }
         var skillOrder: [String] = []
-        var rolesBySkill: [String: [String]] = [:]
-        for role in roles {
-            for skill in role.skills where !installedSkills.contains(skill) {
-                if rolesBySkill[skill] == nil { skillOrder.append(skill) }
-                rolesBySkill[skill, default: []].append(role.name)
+        var agentsBySkill: [String: [String]] = [:]
+        for agent in agents where agent.archivedAt == nil {
+            for skill in agent.skills where !installedSkills.contains(skill) {
+                if agentsBySkill[skill] == nil { skillOrder.append(skill) }
+                agentsBySkill[skill, default: []].append(AgentNaming.displayName(of: agent))
             }
         }
         for skill in skillOrder {
             problems.append(ProjectProblem(
-                category: .missingSkills, severity: .warning, title: "\(skill) is forced by a role but isn’t installed",
-                location: (rolesBySkill[skill] ?? []).joined(separator: ", ")
+                category: .missingSkills, severity: .warning, title: "\(skill) was chosen for an agent but isn’t installed",
+                location: (agentsBySkill[skill] ?? []).joined(separator: ", ")
             ))
         }
         return problems

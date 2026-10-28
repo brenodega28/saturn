@@ -87,7 +87,7 @@ final class RecordingWriteBack: IssueWriteBack {
         let observer = observer(h, writeBack)
         observer.start()
         let workflow = WorkflowDefinition(
-            id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")],
+            id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)],
             end: WorkflowEnd(action: .leave, postSummary: postSummary)
         )
         h.driver.script("build", .result(.done("Built", taskResults: [TaskResult(planTaskId: "api", agentName: "Dev 1", summary: "Added the refund endpoint")])))

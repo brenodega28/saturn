@@ -24,7 +24,7 @@ extension AgentRuntime {
         if checks?.protectedPaths.isEmpty == false { guarded += editingToolMatcher.split(separator: "|").map(String.init) }
         if let policy {
             guarded.append("Bash")
-            if policy.level(.editFiles) == .ask { guarded += AgentPermissions.fileWritingTools }
+            if policy.level(.editFiles) != .allow { guarded += AgentPermissions.fileWritingTools }
             if policy.level(.network) == .ask { guarded += AgentPermissions.webTools }
         }
         let matcher = guarded.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
@@ -64,7 +64,7 @@ extension AgentRuntime {
                 let protected = await protectFiles(input, agent: agent, worktree: worktree, checks: checks)
                 if protected != .object([:]) { return protected }
             }
-            let policy = PermissionPolicy(profile: config.permissions.resolve(for: config.role(agent.role), readOnly: agent.readOnly), readOnly: agent.readOnly)
+            let policy = PermissionPolicy(profile: config.permissions.resolve(for: agent.kind, readOnly: agent.readOnly), readOnly: agent.readOnly)
             return (try? permissionDecision(input, agent: agent, policy: policy)) ?? .object([:])
         }
         guard !agent.readOnly, let worktree = agent.worktreeURL, let checks = config.checks else { return .object([:]) }

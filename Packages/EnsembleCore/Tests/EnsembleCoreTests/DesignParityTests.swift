@@ -81,9 +81,8 @@ import Testing
         let setup = try await WorkflowDriverTests().makeSetup()
         defer { setup.harness.cleanUp() }
         let projectID = try #require(setup.project.id)
-        let role = try #require(setup.config.role("claude-code"))
         let spawned = try await setup.harness.runtime.spawn(
-            in: setup.project, role: role, count: 1, config: setup.config, git: setup.harness.repo.git, pinned: true, name: "Veteran"
+            in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git, pinned: true, name: "Veteran"
         )
         let pinned = try #require(spawned.first)
         var feature = try #require(setup.config.workflow("feature-delivery"))
@@ -113,7 +112,7 @@ import Testing
         let repository = FileManager.default.temporaryDirectory.appending(path: "history-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: repository) }
-        let first = WorkflowDefinition(id: "hotfix", name: "Hotfix", steps: [WorkflowStep(id: "fix", type: .agent, role: "claude-code")])
+        let first = WorkflowDefinition(id: "hotfix", name: "Hotfix", steps: [WorkflowStep(id: "fix", type: .agent, agent: .builder)])
         let v1 = try ProjectConfigLoader.save(first, comparedTo: nil, note: "", repository: repository)
         var changed = v1
         changed.steps.append(WorkflowStep(id: "checks", type: .check))
@@ -158,10 +157,9 @@ import Testing
         let task = try harness.database.insert(ProjectTask(projectId: projectId, title: "Greeting", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
         let taskId = try #require(task.id)
         let run = try harness.database.insert(Run(projectId: projectId, taskId: taskId, workflow: "w", status: .waitingOnYou, startedAt: .now, title: "Greeting"), state: RunEngineState())
-        let role = RoleDefinition(id: "claude-code", name: "Claude Code")
         var sessions: [AgentSession] = []
         for (index, text) in ["hello from A", "hello from B"].enumerated() {
-            let session = try await harness.runtime.createRunAgent(in: harness.project, role: role, name: "Dev \(index + 1)", runId: try #require(run.id), runStepId: nil, planTaskId: "t\(index)", task: "Greeting", git: harness.repo.git)
+            let session = try await harness.runtime.createRunAgent(in: harness.project, kind: .builder, name: "Dev \(index + 1)", runId: try #require(run.id), runStepId: nil, planTaskId: "t\(index)", task: "Greeting", git: harness.repo.git)
             let worktree = try #require(session.agent.worktreeURL)
             try "\(text)\n".write(to: worktree.appending(path: "README.md"), atomically: true, encoding: .utf8)
             try await harness.repo.git.run(["commit", "-qam", "Change greeting"], in: worktree)
@@ -202,7 +200,7 @@ import Testing
     }
 
     @Test func levelsShapeTheCommandsAndTools() {
-        let developer = PermissionPolicy(profile: PermissionsConfig().resolve(for: RoleDefinition(id: "dev", name: "Dev")), readOnly: false)
+        let developer = PermissionPolicy(profile: PermissionsConfig().resolve(for: .builder), readOnly: false)
         #expect(developer.profile.id == "developer")
         #expect(developer.commands.contains("pytest"))
         #expect(!developer.commands.contains("npm install"))

@@ -23,21 +23,51 @@ import Testing
     }
 
     @Test func leadDisplayNameDropsTheNumber() {
-        let lead = RoleDefinition(id: "tech-lead", name: "Tech Lead", canSpawn: true)
-        #expect(AgentNaming.displayName(of: "Tech Lead 17", role: lead) == "Tech Lead")
-        #expect(AgentNaming.displayName(of: "Tech Lead", role: lead) == "Tech Lead")
+        #expect(AgentNaming.displayName(of: "Lead 17", kind: .lead) == "Lead")
+        #expect(AgentNaming.displayName(of: "Lead", kind: .lead) == "Lead")
     }
 
     @Test func nonLeadDisplayNameKeepsTheNumber() {
-        let developer = RoleDefinition(id: "developer", name: "Developer")
-        #expect(AgentNaming.displayName(of: "Developer 2", role: developer) == "Developer 2")
-        #expect(AgentNaming.displayName(of: "Developer 2", role: nil) == "Developer 2")
+        #expect(AgentNaming.displayName(of: "Builder 2", kind: .builder) == "Builder 2")
+        #expect(AgentNaming.displayName(of: "Checker 2", kind: .checker) == "Checker 2")
+        #expect(AgentNaming.displayName(of: "Builder 2", kind: nil) == "Builder 2")
     }
 
     @Test func leadDisplayNameKeepsNamesOutsideThePattern() {
-        let lead = RoleDefinition(id: "tech-lead", name: "Tech Lead", canSpawn: true)
-        #expect(AgentNaming.displayName(of: "Ada", role: lead) == "Ada")
-        #expect(AgentNaming.displayName(of: "Tech Lead Backup", role: lead) == "Tech Lead Backup")
+        #expect(AgentNaming.displayName(of: "Ada", kind: .lead) == "Ada")
+        #expect(AgentNaming.displayName(of: "Lead Backup", kind: .lead) == "Lead Backup")
+    }
+}
+
+@Suite struct AgentKindTests {
+    @Test func builtInKindsHaveFixedCapabilitiesAndModels() {
+        #expect(AgentKind.allCases.map(\.builtInRole.id) == ["lead", "builder", "checker"])
+        #expect(AgentKind.allCases.map(\.builtInRole.name) == ["Lead", "Builder", "Checker"])
+        let lead = AgentKind.lead.builtInRole
+        #expect(!lead.editsCode && lead.canSpawn && lead.model == "opus")
+        #expect(lead.prompt.contains("plan one task by default"))
+        #expect(lead.prompt.contains("Two tasks interfere"))
+        #expect(lead.prompt.contains("ask questions instead of guessing"))
+        #expect(lead.prompt.contains("propose a run"))
+        #expect(lead.prompt.contains("skills"))
+        let builder = AgentKind.builder.builtInRole
+        #expect(builder.editsCode && !builder.canSpawn && builder.model == "sonnet")
+        let checker = AgentKind.checker.builtInRole
+        #expect(!checker.editsCode && !checker.canSpawn && checker.model == "sonnet")
+        #expect(checker.prompt.contains("read-only"))
+        #expect(checker.prompt.contains("start fresh"))
+        #expect(checker.prompt.contains("against the plan"))
+    }
+
+    @Test func legacyRoleIDsAreGuessedByName() {
+        #expect(AgentKind.guessing(roleID: "pr-reviewer") == .checker)
+        #expect(AgentKind.guessing(roleID: "qa-engineer") == .checker)
+        #expect(AgentKind.guessing(roleID: "e2e-tester") == .checker)
+        #expect(AgentKind.guessing(roleID: "tech-lead") == .lead)
+        #expect(AgentKind.guessing(roleID: "project-manager") == .lead)
+        #expect(AgentKind.guessing(roleID: "claude-code") == .builder)
+        #expect(AgentKind.guessing(roleID: "django-developer") == .builder)
+        #expect(AgentKind.guessing(roleID: "checker") == .checker)
     }
 }
 
@@ -48,7 +78,7 @@ import Testing
         return root
     }
 
-    @Test func assemblesPromptDocsAndSkillsWithWarnings() throws {
+    @Test func assemblesPromptDocsAndChosenSkillsWithWarnings() throws {
         let repository = try makeRepository()
         defer { try? FileManager.default.removeItem(at: repository) }
         try "Run make test before committing.".write(to: repository.appending(path: "AGENTS.md"), atomically: true, encoding: .utf8)
@@ -58,20 +88,20 @@ import Testing
         try FileManager.default.createDirectory(at: skill, withIntermediateDirectories: true)
         try "# Django".write(to: skill.appending(path: "SKILL.md"), atomically: true, encoding: .utf8)
 
-        let role = RoleDefinition(id: "django-developer", name: "Django Developer", prompt: "Build Django features.", skills: ["django-developer", "drf-api-design"], docs: ["docs/ARCHITECTURE.md", "docs/MISSING.md"])
-        let reviewer = RoleDefinition(id: "pr-reviewer", name: "PR Reviewer", editsCode: false)
-        let config = ProjectConfig(roles: [role, reviewer], docs: DocsIndex(docs: [
+        let config = ProjectConfig(docs: DocsIndex(docs: [
             DocEntry(title: "AGENTS.md", path: "AGENTS.md", readers: .all),
             DocEntry(title: "Payments rules", prompt: "Never call the gateway outside a transaction.", readers: .coding),
+            DocEntry(title: "Architecture", path: "docs/ARCHITECTURE.md", readers: .coding),
+            DocEntry(title: "Missing", path: "docs/MISSING.md", readers: .coding),
             DocEntry(title: "Review checklist", prompt: "Check tests.", readers: .reviewers),
             DocEntry(title: "Old", prompt: "Ignore me.", readers: .all, enabled: false),
         ]))
 
-        let context = RoleContext.build(role: role, config: config, repository: repository, documentLimit: 100)
+        let context = RoleContext.build(kind: .builder, skills: ["django-developer", "drf-api-design"], config: config, repository: repository, documentLimit: 100)
 
-        #expect(context.sections.map(\.title) == ["Role prompt", "AGENTS.md", "Payments rules", "ARCHITECTURE.md", "Skills"])
+        #expect(context.sections.map(\.title) == ["Role prompt", "AGENTS.md", "Payments rules", "Architecture", "Skills"])
         #expect(context.sections.map(\.kind) == [.prompt, .fileDoc, .promptDoc, .fileDoc, .skills])
-        #expect(context.sections[0].tokens == TokenEstimate.of("Build Django features."))
+        #expect(context.sections[0].tokens == TokenEstimate.of(AgentKind.builderPrompt))
         #expect(TokenEstimate.of("12345678") == 2)
         #expect(context.totalTokens == context.sections.map(\.tokens).reduce(0, +))
         let architecture = context.sections[3]
@@ -84,24 +114,25 @@ import Testing
         ])
 
         let prompt = context.systemPrompt
-        #expect(prompt.hasPrefix("# Role: Django Developer\n\nBuild Django features."))
+        #expect(prompt.hasPrefix("# Role: Builder\n\nYou are a careful software engineer."))
         #expect(prompt.contains("## AGENTS.md (AGENTS.md)\n\nRun make test before committing."))
         #expect(prompt.contains("## Payments rules\n\nNever call the gateway outside a transaction."))
         #expect(prompt.contains("- django-developer\n- drf-api-design"))
         #expect(!prompt.contains("Ignore me."))
         #expect(!prompt.contains("Check tests."))
 
-        let reviewerContext = RoleContext.build(role: reviewer, config: config, repository: repository)
-        #expect(reviewerContext.sections.map(\.title) == ["AGENTS.md", "Review checklist"])
-        #expect(reviewerContext.warnings.isEmpty)
+        let checkerContext = RoleContext.build(kind: .checker, config: config, repository: repository)
+        #expect(checkerContext.sections.map(\.title) == ["Role prompt", "AGENTS.md", "Review checklist"])
+        #expect(checkerContext.warnings.isEmpty)
+        #expect(!checkerContext.systemPrompt.contains("# Skills"))
     }
 
     @Test func docsOutsideTheRepositoryAreTreatedAsMissing() throws {
         let repository = try makeRepository()
         defer { try? FileManager.default.removeItem(at: repository) }
-        let role = RoleDefinition(id: "dev", name: "Dev", docs: ["../../etc/hosts"])
-        let context = RoleContext.build(role: role, config: ProjectConfig(roles: [role]), repository: repository)
-        #expect(context.sections.isEmpty)
+        let config = ProjectConfig(docs: DocsIndex(docs: [DocEntry(title: "Hosts", path: "../../etc/hosts")]))
+        let context = RoleContext.build(kind: .builder, config: config, repository: repository)
+        #expect(context.sections.map(\.kind) == [.prompt])
         #expect(context.warnings == [.missingDoc("../../etc/hosts")])
     }
 
@@ -111,27 +142,31 @@ import Testing
         #expect(!ProjectConfigLoader.hasConfig(repository: repository))
         try ProjectConfigLoader.installDefaults(repository: repository)
         #expect(ProjectConfigLoader.hasConfig(repository: repository))
-        #expect(!ProjectConfigLoader.load(repository: repository).roles.isEmpty)
+        #expect(ProjectConfigLoader.load(repository: repository).roles.map(\.id) == ["lead", "builder", "checker"])
     }
 
-    @Test func skillsManifestListsSkillsPerRole() throws {
+    @Test func installedSkillsComeFromTheProjectPluginsAndTheGlobalFolder() throws {
         let repository = try makeRepository()
-        defer { try? FileManager.default.removeItem(at: repository) }
-        let skill = repository.appending(path: ".claude/skills/react-developer")
-        try FileManager.default.createDirectory(at: skill, withIntermediateDirectories: true)
-        try "# React".write(to: skill.appending(path: "SKILL.md"), atomically: true, encoding: .utf8)
-        let config = ProjectConfig(roles: [
-            RoleDefinition(id: "react-developer", name: "React Developer", skills: ["react-developer", "design-tokens"]),
-            RoleDefinition(id: "qa", name: "QA"),
+        let home = try makeRepository()
+        defer {
+            try? FileManager.default.removeItem(at: repository)
+            try? FileManager.default.removeItem(at: home)
+        }
+        for (root, name, description) in [(repository, "react-developer", "Build React"), (home, "qa-review", "Review like QA"), (home, "react-developer", "Global copy")] {
+            let folder = SkillLibrary.directory(in: root).appending(path: name)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try "---\nname: \(name)\ndescription: \"\(description)\"\n---\n\nBody".write(to: folder.appending(path: "SKILL.md"), atomically: true, encoding: .utf8)
+        }
+        try FileManager.default.createDirectory(at: SkillLibrary.directory(in: repository).appending(path: "not-a-skill"), withIntermediateDirectories: true)
+
+        #expect(SkillLibrary.installedSkills(in: repository, home: home) == ["react-developer", "qa-review"])
+        let skills = SkillLibrary.skills(in: repository, pluginSkills: ["sentry:django"], home: home)
+        #expect(skills == [
+            InstalledSkill(name: "react-developer", source: .project, description: "Build React"),
+            InstalledSkill(name: "sentry:django", source: .plugin),
+            InstalledSkill(name: "qa-review", source: .global, description: "Review like QA"),
         ])
-
-        let file = try SkillLibrary.writeManifest(for: config, repository: repository)
-        let text = try String(contentsOf: file, encoding: .utf8)
-
-        #expect(file.path.hasSuffix("docs/SKILLS.md"))
-        #expect(text.contains("## QA\n\nNo skills."))
-        #expect(text.contains("## React Developer\n\n- react-developer\n- design-tokens (missing from .claude/skills)"))
-        #expect(SkillLibrary.missingSkills(for: config.roles[0], in: repository) == ["design-tokens"])
+        #expect(SkillLibrary.unknownSkills(["qa-review", "sentry:django", "nope"], in: repository, pluginSkills: ["sentry:django"], home: home) == ["nope"])
     }
 }
 
@@ -195,39 +230,34 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct RoleSpawningTests {
-    let django = RoleDefinition(id: "django-developer", name: "Django Dev", model: "haiku", editsCode: true)
-    let reviewer = RoleDefinition(id: "pr-reviewer", name: "PR Reviewer", model: "opus", editsCode: false)
-
-    func config() -> ProjectConfig { ProjectConfig(roles: [django, reviewer]) }
-
-    @Test func spawnsNumberedAgentsFromARole() async throws {
+    @Test func spawnsNumberedBuilders() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
 
-        let first = try await harness.runtime.spawn(in: harness.project, role: django, count: 2, config: config(), git: harness.repo.git)
-        let second = try await harness.runtime.spawn(in: harness.project, role: django, count: 1, config: config(), git: harness.repo.git)
+        let first = try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 2, git: harness.repo.git, name: "Django Dev", model: "haiku")
+        let second = try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 1, git: harness.repo.git, name: "Django Dev", model: "haiku")
 
         let agents = (first + second).map(\.agent)
         #expect(agents.map(\.name) == ["Django Dev 1", "Django Dev 2", "Django Dev 3"])
-        #expect(agents.allSatisfy { $0.role == "django-developer" && $0.model == "haiku" && !$0.readOnly && $0.status == .idle })
+        #expect(agents.allSatisfy { $0.role == "builder" && $0.model == "haiku" && !$0.readOnly && $0.status == .idle })
         #expect(agents.map(\.worktreePath).allSatisfy { $0?.contains("/.crew/django-dev-") == true })
         #expect(agents.map(\.branch) == ["crew/django-dev-1/task", "crew/django-dev-2/task", "crew/django-dev-3/task"])
         #expect(harness.launches().isEmpty)
         #expect(try harness.database.agents(inProject: harness.project.id!).count == 3)
     }
 
-    @Test func chosenModelOverridesTheRoleModel() async throws {
+    @Test func chosenModelOverridesTheKindDefault() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
 
         let sessions = try await harness.runtime.spawn(
-            in: harness.project, role: django, count: 2, config: config(), git: harness.repo.git, model: " claude-opus-5-5 "
+            in: harness.project, kind: .builder, count: 2, git: harness.repo.git, model: " claude-opus-5-5 "
         )
         #expect(sessions.map(\.agent.model) == ["claude-opus-5-5", "claude-opus-5-5"])
         #expect(try harness.database.agents(inProject: harness.project.id!).map(\.model) == ["claude-opus-5-5", "claude-opus-5-5"])
 
-        let fallback = try await harness.runtime.spawn(in: harness.project, role: django, count: 1, config: config(), git: harness.repo.git, model: "  ")
-        #expect(fallback.map(\.agent.model) == ["haiku"])
+        let fallback = try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 1, git: harness.repo.git, model: "  ")
+        #expect(fallback.map(\.agent.model) == ["sonnet"])
     }
 
     @Test func unknownModelIsRejectedBeforeAnythingIsCreated() async throws {
@@ -235,21 +265,43 @@ import Testing
         defer { harness.cleanUp() }
 
         await #expect(throws: AgentError.unknownModel("gpt-5")) {
-            try await harness.runtime.spawn(in: harness.project, role: django, count: 1, config: config(), git: harness.repo.git, model: "gpt-5")
+            try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 1, git: harness.repo.git, model: "gpt-5")
         }
         #expect(try harness.database.agents(inProject: harness.project.id!).isEmpty)
     }
 
-    @Test func readOnlyRoleRunsFromTheProjectRootWithoutWritingTools() async throws {
+    @Test func spawnKeepsValidSkillsAndRejectsUnknownOnes() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        let folder = SkillLibrary.directory(in: harness.repo.root).appending(path: "design-tokens")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try "# Tokens".write(to: folder.appending(path: "SKILL.md"), atomically: true, encoding: .utf8)
+        harness.runtime.pluginSkills = { _ in ["sentry:django"] }
+
+        let session = try #require(try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 1, git: harness.repo.git, skills: ["design-tokens", "sentry:django"]).first)
+        #expect(session.agent.skills == ["design-tokens", "sentry:django"])
+        #expect(try harness.database.agent(id: session.id)?.skills == ["design-tokens", "sentry:django"])
+        let prompt = try harness.runtime.turnSetup(for: session.agent).systemPrompt
+        #expect(prompt.contains("- design-tokens\n- sentry:django"))
+
+        await #expect(throws: AgentError.unknownSkills(["made-up-skill-q"])) {
+            try await harness.runtime.spawn(in: harness.project, kind: .checker, count: 1, git: harness.repo.git, skills: ["design-tokens", "made-up-skill-q"])
+        }
+        #expect(AgentError.unknownSkills(["made-up-skill-q"]).localizedDescription.contains("“made-up-skill-q” isn’t an installed skill"))
+        #expect(try harness.database.agents(inProject: harness.project.id!).count == 1)
+    }
+
+    @Test func readOnlyCheckerRunsFromTheProjectRootWithoutWritingTools() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
 
-        let sessions = try await harness.runtime.spawn(in: harness.project, role: reviewer, count: 1, config: config(), git: harness.repo.git, task: "Review the README")
+        let sessions = try await harness.runtime.spawn(in: harness.project, kind: .checker, count: 1, git: harness.repo.git, model: "opus", task: "Review the README")
         let session = try #require(sessions.first)
         try await waitUntil { session.agent.status == .idle && harness.launches().count == 1 }
 
         let agent = session.agent
-        #expect(agent.name == "PR Reviewer")
+        #expect(agent.name == "Checker")
+        #expect(agent.kind == .checker)
         #expect(agent.readOnly)
         #expect(agent.worktreePath == nil)
         #expect(agent.branch == nil)
@@ -267,28 +319,53 @@ import Testing
         #expect(try await harness.repo.branches() == ["main"])
     }
 
-    @Test func appTestingProfileLetsAgentsBuildLaunchAndScreenshotTheApp() async throws {
+    @Test func extraCommandsFollowTheKindsProfile() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
-        var tester = reviewer
-        tester.id = "qa-engineer"
-        tester.permissionProfile = "app_testing"
-        var builder = django
-        builder.permissionProfile = "app_testing"
-        let roles = [builder, tester, RoleDefinition(id: "plain", name: "Plain", editsCode: false)]
-        for role in roles {
-            try ProjectConfigLoader.write(role, repository: harness.repo.root)
-        }
-        let config = ProjectConfig(roles: roles)
+        var permissions = PermissionsConfig()
+        let developer = try #require(permissions.profiles.firstIndex { $0.id == "developer" })
+        permissions.profiles[developer].extraCommands = ["xcodegen", "open", "screencapture", "pkill", "killall"]
+        try ProjectConfigLoader.write(permissions, repository: harness.repo.root)
 
-        for role in roles {
-            let session = try #require(try await harness.runtime.spawn(in: harness.project, role: role, count: 1, config: config, git: harness.repo.git).first)
+        for kind in [AgentKind.builder, .checker] {
+            let session = try #require(try await harness.runtime.spawn(in: harness.project, kind: kind, count: 1, git: harness.repo.git).first)
             let setup = try harness.runtime.turnSetup(for: session.agent)
-            let opted = role.permissionProfile == "app_testing"
+            let opted = kind == .builder
+            #expect(setup.permissions?.profile.id == kind.permissionProfileID)
             for command in ["xcodegen", "open", "screencapture", "pkill", "killall"] {
-                #expect(setup.permissions?.commands.contains(command) == opted, "\(role.id) \(command)")
-                #expect(setup.systemPrompt.contains("`\(command)`") == opted, "\(role.id) \(command)")
+                #expect(setup.permissions?.commands.contains(command) == opted, "\(kind) \(command)")
+                #expect(setup.systemPrompt.contains("`\(command)`") == opted, "\(kind) \(command)")
             }
+        }
+    }
+
+    @Test func readOnlyCheckersAndLeadsAreDeniedEditsByTheHook() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        let checker = try #require(try await harness.runtime.spawn(in: harness.project, kind: .checker, count: 1, git: harness.repo.git).first)
+        let lead = try #require(try await harness.runtime.spawn(in: harness.project, kind: .lead, count: 1, git: harness.repo.git).first)
+        let builder = try #require(try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 1, git: harness.repo.git).first)
+
+        for tool in ["Edit", "Write", "MultiEdit", "NotebookEdit"] {
+            let input: JSONValue = .object([
+                "hook_event_name": .string("PreToolUse"), "tool_name": .string(tool),
+                "tool_input": .object(["file_path": .string("tests/test_refunds.py"), "notebook_path": .string("n.ipynb")]),
+            ])
+            for session in [checker, lead] {
+                let reply = await harness.runtime.handleHook(input, agentID: session.id)
+                #expect(reply["hookSpecificOutput"]?["permissionDecision"]?.string == "deny", "\(session.agent.name) \(tool)")
+            }
+            #expect(await harness.runtime.handleHook(input, agentID: builder.id) == .object([:]), "\(tool)")
+        }
+
+        let url = URL(string: "http://localhost/hook")!
+        for session in [checker, lead] {
+            let policy = try #require(try harness.runtime.turnSetup(for: session.agent).permissions)
+            #expect(policy.level(.editFiles) == .never)
+            let hooks = try #require(AgentRuntime.hookSettings(checks: nil, policy: policy, url: url))
+            guard case .array(let entries) = hooks["PreToolUse"] else { Issue.record("no PreToolUse hook"); continue }
+            let matcher = entries.first?["matcher"]?.string ?? ""
+            #expect(AgentPermissions.fileWritingTools.allSatisfy(matcher.split(separator: "|").map(String.init).contains))
         }
     }
 
@@ -300,9 +377,9 @@ import Testing
         let run = try harness.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: .running, startedAt: .now, title: "Refunds"), state: RunEngineState())
         let runID = try #require(run.id)
 
-        let lead = try harness.runtime.createLeadAgent(in: harness.project, role: RoleDefinition(id: "lead", name: "Lead", editsCode: false), taskId: try #require(task.id))
-        let builders = try await harness.runtime.spawn(in: harness.project, role: django, count: 2, config: config(), git: harness.repo.git)
-        let reviewers = try await harness.runtime.spawn(in: harness.project, role: reviewer, count: 2, config: config(), git: harness.repo.git)
+        let lead = try harness.runtime.createLeadAgent(in: harness.project, taskId: try #require(task.id))
+        let builders = try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 2, git: harness.repo.git)
+        let reviewers = try await harness.runtime.spawn(in: harness.project, kind: .checker, count: 2, git: harness.repo.git)
         builders[0].attach(toRun: runID)
         reviewers[0].attach(toRun: runID)
         let bound = [lead, builders[0], reviewers[0]]
@@ -336,21 +413,18 @@ import Testing
         }
     }
 
-    @Test func roleContextIsAppendedToTheSystemPrompt() async throws {
+    @Test func kindContextIsAppendedToTheSystemPrompt() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
-        var role = django
-        role.prompt = "Follow Django conventions."
-        try ProjectConfigLoader.write(role, repository: harness.repo.root)
         try ProjectConfigLoader.write(DocsIndex(docs: [DocEntry(title: "Rules", prompt: "Keep views thin.")]), repository: harness.repo.root)
 
-        let sessions = try await harness.runtime.spawn(in: harness.project, role: role, count: 1, config: ProjectConfigLoader.load(repository: harness.repo.root), git: harness.repo.git, task: "Add a view")
+        let sessions = try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 1, git: harness.repo.git, name: "Django Dev", task: "Add a view")
         let session = try #require(sessions.first)
         try await waitUntil { session.agent.status == .idle }
 
         let log = harness.launches().joined(separator: "\n")
-        #expect(log.contains("# Role: Django Dev"))
-        #expect(log.contains("Follow Django conventions."))
+        #expect(log.contains("# Role: Builder"))
+        #expect(log.contains("You are a careful software engineer."))
         #expect(log.contains("## Rules"))
         #expect(log.contains("Keep views thin."))
     }
@@ -362,7 +436,7 @@ import Testing
         try harness.database.updateSettings(ProjectSettings(maxConcurrentAgents: 1), forProject: projectId)
         #expect(harness.runtime.maxConcurrentAgents(inProject: projectId) == 1)
 
-        let sessions = try await harness.runtime.spawn(in: harness.project, role: django, count: 2, config: config(), git: harness.repo.git, task: "Add a world line to the README")
+        let sessions = try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 2, git: harness.repo.git, task: "Add a world line to the README")
         let first = sessions[0]
         let second = sessions[1]
         try await waitUntil { first.transcript.activeTool?.name == "Bash" }
@@ -401,7 +475,7 @@ import Testing
         let projectId = try #require(harness.project.id)
         try harness.database.updateSettings(ProjectSettings(maxConcurrentAgents: 1), forProject: projectId)
 
-        let sessions = try await harness.runtime.spawn(in: harness.project, role: django, count: 3, config: config(), git: harness.repo.git, task: "Add a world line to the README")
+        let sessions = try await harness.runtime.spawn(in: harness.project, kind: .builder, count: 3, git: harness.repo.git, task: "Add a world line to the README")
         try await waitUntil { sessions[0].transcript.activeTool?.name == "Bash" }
         #expect(sessions.dropFirst().allSatisfy { $0.isQueued })
 
@@ -418,7 +492,7 @@ import Testing
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
 
-        let sessions = try await harness.runtime.spawn(in: harness.project, role: reviewer, count: 1, config: config(), git: harness.repo.git, pinned: true)
+        let sessions = try await harness.runtime.spawn(in: harness.project, kind: .checker, count: 1, git: harness.repo.git, pinned: true)
         let session = try #require(sessions.first)
         #expect(try harness.database.agent(id: session.id)?.isPinned == true)
 
@@ -435,7 +509,7 @@ import Testing
     @Test func queuedAgentsAreInterruptedAfterRelaunch() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
-        let sessions = try await harness.runtime.spawn(in: harness.project, role: reviewer, count: 1, config: config(), git: harness.repo.git)
+        let sessions = try await harness.runtime.spawn(in: harness.project, kind: .checker, count: 1, git: harness.repo.git)
         var agent = try #require(sessions.first?.agent)
         agent.status = .waiting
         try harness.database.save(agent)

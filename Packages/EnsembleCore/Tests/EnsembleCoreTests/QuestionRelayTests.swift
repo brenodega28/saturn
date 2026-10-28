@@ -122,12 +122,11 @@ import Testing
         ), state: RunEngineState())
         let runId = try #require(run.id)
 
-        let leadRole = try #require(config.role("tech-lead"))
-        let lead = try harness.runtime.createLeadAgent(in: harness.project, role: leadRole, taskId: taskId)
+        let lead = try harness.runtime.createLeadAgent(in: harness.project, taskId: taskId)
         lead.attach(toRun: runId)
         let builders = try ["Dev 1", "Dev 2"].map { name in
             try harness.database.insert(Agent(
-                projectId: projectId, runId: runId, role: "claude-code", name: name, status: .idle, readOnly: true, createdAt: now, updatedAt: now
+                projectId: projectId, runId: runId, role: "builder", name: name, status: .idle, readOnly: true, createdAt: now, updatedAt: now
             ))
         }
         if !withLead {

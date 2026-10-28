@@ -6,12 +6,28 @@ public enum LeadMessageKind: String, Codable, Sendable, Hashable {
     case lead
     case proposal
     case note
+    case permission
 }
 
 public enum ProposalStatus: String, Codable, Sendable, Hashable {
     case open
     case started
     case dismissed
+}
+
+public enum PermissionCardStatus: String, Codable, Sendable, Hashable {
+    case pending
+    case allowedOnce
+    case allowedForRun
+    case denied
+
+    init(_ decision: PermissionDecision) {
+        switch decision {
+        case .allowOnce: self = .allowedOnce
+        case .allowForRun: self = .allowedForRun
+        case .deny: self = .denied
+        }
+    }
 }
 
 public struct LeadMessage: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
@@ -28,12 +44,19 @@ public struct LeadMessage: Codable, Sendable, Hashable, Identifiable, FetchableR
     public var runId: Int64?
     public var createdAt: Date
     public var attachments: [StoredChatAttachment]?
+    public var permissionRequestId: Int64?
+    public var permissionStatus: PermissionCardStatus?
+    public var capability: PermissionCapability?
 
     public init(
         id: Int64? = nil, projectId: Int64, taskId: Int64, kind: LeadMessageKind, text: String,
         workflow: String? = nil, title: String? = nil, status: ProposalStatus? = nil, runId: Int64? = nil, createdAt: Date,
-        attachments: [StoredChatAttachment]? = nil
+        attachments: [StoredChatAttachment]? = nil, permissionRequestId: Int64? = nil, permissionStatus: PermissionCardStatus? = nil,
+        capability: PermissionCapability? = nil
     ) {
+        self.permissionRequestId = permissionRequestId
+        self.permissionStatus = permissionStatus
+        self.capability = capability
         self.id = id
         self.projectId = projectId
         self.taskId = taskId
@@ -100,6 +123,12 @@ extension AppDatabase {
 
     public func leadMessage(id: Int64) throws -> LeadMessage? {
         try writer.read { db in try LeadMessage.fetchOne(db, key: id) }
+    }
+
+    public func permissionCard(requestId: Int64) throws -> LeadMessage? {
+        try writer.read { db in
+            try LeadMessage.filter(Column("kind") == LeadMessageKind.permission.rawValue && Column("permissionRequestId") == requestId).fetchOne(db)
+        }
     }
 
     public func leadAgent(taskId: Int64) throws -> Agent? {

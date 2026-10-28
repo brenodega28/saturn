@@ -38,6 +38,16 @@ extension AppModel {
         }
     }
 
+    func answerPermission(_ card: LeadMessage, decision: PermissionDecision) {
+        guard let requestID = card.permissionRequestId else { return }
+        do {
+            try agents.answerPermission(requestId: requestID, decision: decision)
+            leadChatRevision += 1
+        } catch {
+            alert = AppAlert(title: "Couldn’t answer the permission request", message: error.localizedDescription)
+        }
+    }
+
     func dismissInboxItem(_ item: InboxItem) {
         guard let id = item.id else { return }
         do {

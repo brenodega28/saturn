@@ -190,11 +190,43 @@ public struct PermissionPolicy: Sendable, Hashable {
         }
     }
 
+    public var hasBash: Bool { level(.runShell) != .never || !commands.isEmpty }
+
     public var askMatcher: String? {
         var tools: [String] = []
         if level(.editFiles) == .ask { tools += AgentPermissions.fileWritingTools }
         if level(.network) == .ask { tools += AgentPermissions.webTools }
-        if [.runShell, .installPackages, .gitPush, .network].contains(where: { level($0) == .ask }) { tools.append("Bash") }
+        if hasBash { tools.append("Bash") }
         return tools.isEmpty ? nil : tools.joined(separator: "|")
+    }
+
+    public static let commandSeparators = ["&&", "||", ";", "|", "\n"]
+    public static let hiddenCommandMarkers = ["<<", "$(", "`"]
+    public static let shellOperators = commandSeparators + hiddenCommandMarkers + [">"]
+
+    public static func isCompound(_ command: String) -> Bool {
+        shellOperators.contains { command.contains($0) }
+    }
+
+    public static func commandName(of command: String) -> String {
+        command.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? command
+    }
+
+    static func parts(of command: String) -> [String] {
+        commandSeparators
+            .reduce([command]) { parts, separator in parts.flatMap { $0.components(separatedBy: separator) } }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    public func covers(_ command: String) -> Bool {
+        let command = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return commands.contains { command == $0 || command.hasPrefix($0 + " ") }
+    }
+
+    public func coversEveryPart(of command: String) -> Bool {
+        guard !Self.hiddenCommandMarkers.contains(where: command.contains) else { return false }
+        let parts = Self.parts(of: command)
+        return !parts.isEmpty && parts.allSatisfy(covers)
     }
 }

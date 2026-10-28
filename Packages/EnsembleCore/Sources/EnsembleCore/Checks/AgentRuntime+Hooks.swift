@@ -23,7 +23,7 @@ extension AgentRuntime {
         var guarded: [String] = []
         if checks?.protectedPaths.isEmpty == false { guarded += editingToolMatcher.split(separator: "|").map(String.init) }
         if let policy {
-            guarded.append("Bash")
+            if policy.hasBash { guarded.append("Bash") }
             if policy.level(.editFiles) != .allow { guarded += AgentPermissions.fileWritingTools }
             if policy.level(.network) == .ask { guarded += AgentPermissions.webTools }
         }

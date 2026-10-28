@@ -115,6 +115,7 @@ final class AppModel {
     let directChat: DirectChat
     var chatTargets: [Int64: ChatTarget] = [:]
     let pendingSends = PendingSends<PendingSendTarget>()
+    var deliveringSends: [HeldSend] = []
 
     var selection: SidebarItem? {
         didSet {

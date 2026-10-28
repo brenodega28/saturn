@@ -12,6 +12,7 @@ struct DirectChatView: View {
         let name = model.displayName(of: session.agent, in: project)
         let messages = model.directMessages(with: session)
         let isWaitingForReply = messages.contains(where: \.awaitingReply) && (session.isRunning || session.isQueued)
+        let held = model.heldSends(for: .direct(session.id))
         VStack(spacing: 14) {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -25,6 +26,10 @@ struct DirectChatView: View {
                         ForEach(messages) { message in
                             bubble(message, role: role, name: name)
                                 .id(message.id)
+                        }
+                        ForEach(held) { send in
+                            RequestBubble(held: send, onCancel: model.cancelHeldSend)
+                                .id(send.id)
                         }
                         if isWaitingForReply {
                             ThinkingRow(role: role, name: name, session: session)
@@ -42,6 +47,10 @@ struct DirectChatView: View {
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .onChange(of: messages.last?.id) { scrollToEnd(proxy, waiting: isWaitingForReply, last: messages.last?.id) }
                 .onChange(of: isWaitingForReply) { scrollToEnd(proxy, waiting: isWaitingForReply, last: messages.last?.id) }
+                .onChange(of: held.map(\.id)) {
+                    guard let last = held.last?.id else { return }
+                    withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(last, anchor: .bottom) }
+                }
             }
             DirectComposer(session: session, project: project)
                 .frame(maxWidth: 820)
@@ -138,12 +147,9 @@ private struct DirectComposer: View {
 
     var body: some View {
         let sendTarget = PendingSendTarget.direct(session.id)
-        VStack(alignment: .leading, spacing: 8) {
-            PendingSendChip(target: sendTarget, onUndo: restore)
-            composer
-        }
-        .animation(.snappy(duration: 0.2), value: model.pendingSends.holds(for: sendTarget).count)
-        .restoresReturnedSends(for: sendTarget, perform: restore)
+        composer
+            .cancelsHeldSendOnEscape(for: sendTarget)
+            .restoresReturnedSends(for: sendTarget, perform: restore)
     }
 
     private var composer: some View {

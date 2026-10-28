@@ -110,6 +110,20 @@ public final class PendingSends<Target: Hashable> {
         holds(for: target).last.flatMap { undo($0.id) }
     }
 
+    @discardableResult
+    public func cancel(_ id: UUID) -> Bool {
+        guard let target = holds.first(where: { $0.id == id })?.target, let message = undo(id) else { return false }
+        returnToComposer(message, for: target)
+        return true
+    }
+
+    @discardableResult
+    public func cancelLatest(for target: Target) -> Bool {
+        guard let message = undoLatest(for: target) else { return false }
+        returnToComposer(message, for: target)
+        return true
+    }
+
     public func returnToComposer(_ message: PendingMessage, for target: Target) {
         returned[target] = returned[target].map { $0.appending(message) } ?? message
     }

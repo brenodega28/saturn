@@ -20,11 +20,14 @@ struct LeadView: View {
     @ViewBuilder
     private var leadChat: some View {
         let selected = model.selectedRequest(in: project)
+        let newRequestHeld = selected == nil ? model.heldSends(for: model.leadSendTarget(for: nil, in: project)) : []
         VStack(spacing: 14) {
             LeadChatHeader(project: project, request: selected)
             if let selected {
                 RequestChat(task: selected, project: project)
                     .id(selected.id)
+            } else if !newRequestHeld.isEmpty {
+                NewRequestHeldSends(held: newRequestHeld)
             } else {
                 NewRequestIntro(project: project)
             }
@@ -102,6 +105,26 @@ extension RequestCloseReason {
         case .done: Theme.successText
         case .dropped: Theme.neutral
         }
+    }
+}
+
+private struct NewRequestHeldSends: View {
+    @Environment(AppModel.self) private var model
+    let held: [HeldSend]
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                ForEach(held) { send in
+                    RequestBubble(held: send, onCancel: model.cancelHeldSend)
+                }
+            }
+            .frame(maxWidth: 820)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 8)
+        }
+        .defaultScrollAnchor(.bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

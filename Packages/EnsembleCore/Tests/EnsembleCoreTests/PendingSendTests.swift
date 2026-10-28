@@ -152,6 +152,41 @@ struct PendingSendTests {
         #expect(sends.takeReturned(for: "lead") == nil)
     }
 
+    @Test func cancelStopsTheHoldAndReturnsItsMessageToTheComposer() async {
+        let first = schedule("first")
+        schedule("second")
+
+        #expect(sends.cancel(first!.id))
+        #expect(sends.holds.map(\.message.text) == ["second"])
+        #expect(sends.returned["agent-a"]?.text == "first")
+        #expect(!sends.cancel(first!.id))
+        await clock.advance(by: 3)
+        #expect(delivered.messages == ["second"])
+        #expect(sends.takeReturned(for: "agent-a")?.text == "first")
+    }
+
+    @Test func cancellingTwoHoldsMergesThemForTheComposer() {
+        let first = schedule("first")
+        let second = schedule("second")
+
+        sends.cancel(second!.id)
+        sends.cancel(first!.id)
+
+        #expect(sends.holds.isEmpty)
+        #expect(sends.takeReturned(for: "agent-a")?.text == "second\n\nfirst")
+    }
+
+    @Test func cancelLatestReturnsTheMostRecentHoldForThatTargetOnly() {
+        schedule("to a", to: "agent-a")
+        schedule("to b", to: "agent-b")
+        schedule("to a again", to: "agent-a")
+
+        #expect(sends.cancelLatest(for: "agent-a"))
+        #expect(sends.holds.map(\.message.text) == ["to a", "to b"])
+        #expect(sends.returned == ["agent-a": PendingMessage(text: "to a again")])
+        #expect(!sends.cancelLatest(for: "nobody"))
+    }
+
     @Test func restoringIntoAnEmptyComposerKeepsTheMessageExactly() {
         let held = PendingMessage(text: "  keep my spacing\n", attachments: [.pastedText(id: UUID(), index: 1, text: "x")])
 

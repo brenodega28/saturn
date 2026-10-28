@@ -5,7 +5,7 @@ enum LegacyWorkflows {
     static let featureDelivery = """
     name: Feature delivery
     version: 1
-    description: The lead plans, developers build in parallel, the lead reviews, QA tests, you approve.
+    description: The lead plans, developers build it, the lead reviews, QA tests, you approve.
     trigger:
       sources: [chat, github]
       labels: [feature]
@@ -15,12 +15,12 @@ enum LegacyWorkflows {
         type: agent
         title: Plan & split the task
         role: tech-lead
-        instructions: Break the request into independent tasks, assign a role to each, and submit the plan.
+        instructions: Plan one task by default. Split into more tasks only when every task works and can be tested on its own, with none needing another's output. Assign a role to each task and submit the plan.
         budget: 2
         next: build
       - id: build
         type: spawn
-        title: Build in parallel
+        title: Build the plan
         role: claude-code
         instructions: Build your task from the plan in your own worktree, run the tests, and commit.
         max_agents: 4

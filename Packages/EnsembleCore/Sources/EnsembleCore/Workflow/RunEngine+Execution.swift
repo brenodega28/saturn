@@ -454,7 +454,7 @@ extension RunEngine {
     }
 
     static func describe(_ plan: Plan) -> String {
-        let tasks = ([plan.summary] + plan.tasks.map { "• \($0.title) (\($0.role)\($0.count > 1 ? " ×\($0.count)" : ""))" }).joined(separator: "\n")
+        let tasks = ([plan.summary] + plan.tasks.map { "• \($0.title) (\($0.role))" }).joined(separator: "\n")
         guard let spec = plan.spec else { return tasks }
         return tasks + "\n\n" + spec.markdown
     }

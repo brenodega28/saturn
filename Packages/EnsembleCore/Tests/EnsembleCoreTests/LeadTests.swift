@@ -6,7 +6,7 @@ import Testing
 struct PlanEditingTests {
     static let plan = Plan(summary: "Export orders", tasks: [
         PlanTask(id: "a", title: "Endpoint", role: "django"),
-        PlanTask(id: "b", title: "Streaming", role: "django", count: 2),
+        PlanTask(id: "b", title: "Streaming", role: "django"),
         PlanTask(id: "c", title: "Button", role: "react"),
     ])
 
@@ -23,23 +23,27 @@ struct PlanEditingTests {
         #expect(plan.tasks.map(\.id) == ["b", "c", "a"])
     }
 
-    @Test func changesRoleAndClampsCount() {
+    @Test func changesRole() {
         var plan = Self.plan
         plan.setRole("claude-code", forTask: "c")
-        plan.setCount(9, forTask: "a")
-        plan.setCount(0, forTask: "b")
         #expect(plan.tasks.map(\.role) == ["django", "django", "claude-code"])
-        #expect(plan.tasks.map(\.count) == [4, 1, 1])
-        #expect(plan.agentCount == 6)
     }
 
     @Test func removesTasksAndDescribesSize() {
         var plan = Self.plan
-        #expect(plan.sizeDescription == "3 tasks · 4 agents")
+        #expect(plan.sizeDescription == "3 tasks")
         plan.removeTask(id: "b")
         plan.removeTask(id: "c")
         #expect(plan.tasks.map(\.id) == ["a"])
-        #expect(plan.sizeDescription == "1 task · 1 agent")
+        #expect(plan.sizeDescription == "1 task")
+    }
+
+    @Test func decodesAnOldPlanThatStillHasACount() throws {
+        let json = #"{"summary":"Export orders","tasks":[{"id":"b","title":"Streaming","role":"django","count":3,"files":["api/"]}]}"#
+        let plan = try JSONDecoder().decode(Plan.self, from: Data(json.utf8))
+        #expect(plan.tasks == [PlanTask(id: "b", title: "Streaming", role: "django", files: ["api/"])])
+        let reencoded = try #require(String(data: try JSONEncoder().encode(plan), encoding: .utf8))
+        #expect(!reencoded.contains("count"))
     }
 }
 

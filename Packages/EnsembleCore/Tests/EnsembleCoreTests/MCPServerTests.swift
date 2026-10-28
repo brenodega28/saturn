@@ -97,7 +97,7 @@ extension JSONValue {
 
         let plan = try await client.callTool("submit_plan", .object([
             "summary": .string("Split it"),
-            "tasks": .array([.object(["title": .string("API"), "role": .string("builder"), "count": .number(2)])]),
+            "tasks": .array([.object(["title": .string("API"), "role": .string("builder")])]),
         ]), id: 3)
         #expect(plan.isToolError == false)
         #expect(plan.toolText == "Recorded for agent 7.")
@@ -121,7 +121,6 @@ extension JSONValue {
         guard case .plan(let receivedPlan) = messages[0] else { Issue.record("expected a plan"); return }
         #expect(receivedPlan.summary == "Split it")
         #expect(receivedPlan.tasks.map(\.role) == ["builder"])
-        #expect(receivedPlan.agentCount == 2)
         #expect(messages[1] == .verdict(Verdict(outcome: "changes_requested", summary: "One bug", issues: [ReviewIssue(description: "Off by one", file: "a.swift")])))
         #expect(messages[2] == .result("hello"))
         #expect(messages[3] == .pin(PinDraft(file: "db.sql", startLine: 3, endLine: 9, title: "Drops a table", tags: ["migration"], explanation: "Data loss")))

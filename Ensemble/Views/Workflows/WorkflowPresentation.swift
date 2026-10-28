@@ -103,7 +103,7 @@ extension StepType {
     var paletteHelp: String {
         switch self {
         case .agent: "One agent works on the task"
-        case .spawn: "Agents build the plan’s tasks in parallel, each in its own worktree"
+        case .spawn: "One agent builds each of the plan’s tasks in its own worktree"
         case .condition: "Route on labels, changed paths, diff size or an earlier outcome"
         case .approval: "Pause until you approve or send the work back"
         case .notify: "Post a message to your Inbox and continue"

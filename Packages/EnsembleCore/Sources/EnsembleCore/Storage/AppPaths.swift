@@ -25,6 +25,18 @@ public struct AppPaths: Sendable {
         root.appending(path: "runs/\(runId)/evidence", directoryHint: .isDirectory)
     }
 
+    public func runSpecLink(runId: Int64) -> URL {
+        root.appending(path: "runs/\(runId)/spec.json")
+    }
+
+    public func specDraftsDirectory(projectId: Int64) -> URL {
+        root.appending(path: "specs/\(projectId)", directoryHint: .isDirectory)
+    }
+
+    public func specDraft(projectId: Int64, taskId: Int64) -> URL {
+        specDraftsDirectory(projectId: projectId).appending(path: "\(taskId).md")
+    }
+
     public var attachmentsDirectory: URL {
         root.appending(path: "attachments", directoryHint: .isDirectory)
     }

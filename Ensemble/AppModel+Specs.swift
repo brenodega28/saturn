@@ -1,0 +1,150 @@
+import EnsembleCore
+import EnsembleUI
+import Foundation
+import SwiftUI
+
+extension EditorKindID {
+    static let spec = "spec"
+}
+
+extension EditorItem {
+    static func spec(_ url: URL, in project: Int64) -> EditorItem {
+        EditorItem(kind: EditorKindID.spec, project: project, ref: url.path)
+    }
+}
+
+extension SpecStatus {
+    var color: Color {
+        switch self {
+        case .draft: Theme.info
+        case .approved: Theme.paused
+        case .inProgress: Theme.warning
+        case .done: Theme.successText
+        }
+    }
+}
+
+extension AppModel {
+    var specStore: SpecStore { SpecStore(paths: agents.paths) }
+
+    func specDraft(for task: ProjectTask) -> SpecFile? {
+        guard let taskID = task.id else { return nil }
+        let url = specStore.draftURL(projectId: task.projectId, taskId: taskID)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let document = (try? String(contentsOf: url, encoding: .utf8)).flatMap { try? SpecDocument(markdown: $0) }
+        return SpecFile(url: url, relativePath: specStore.committedPath(projectId: task.projectId, taskId: taskID), document: document, taskId: taskID)
+    }
+
+    func specFiles(in project: Project) -> [SpecFile] {
+        guard let id = project.id else { return [] }
+        let committed = SpecStore.files(in: project.url, config: ProjectConfigLoader.loadSpecs(repository: project.url))
+        let paths = Set(committed.compactMap(\.relativePath))
+        let drafts = specStore.drafts(projectId: id).filter { draft in draft.relativePath.map { !paths.contains($0) } ?? true }
+        return drafts + committed
+    }
+
+    func openSpec(_ file: SpecFile, in project: Project) {
+        guard let id = project.id else { return }
+        if !file.isDraft, let path = file.relativePath {
+            activeWorkbench?.open(.file(path, in: id))
+        } else {
+            activeWorkbench?.open(.spec(file.url, in: id))
+        }
+    }
+
+    func specTitle(_ item: EditorItem) -> String {
+        guard let path = item.ref else { return "Spec" }
+        let document = (try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)).flatMap { try? SpecDocument(markdown: $0) }
+        return document?.title ?? "Spec"
+    }
+}
+
+struct SpecEditor: View {
+    @Environment(AppModel.self) private var model
+    let item: EditorItem
+    @State private var text = ""
+    @State private var saved = ""
+    @State private var loadedPath: String?
+    @State private var problem: String?
+
+    var body: some View {
+        let document = try? SpecDocument(markdown: text)
+        let isEditable = (document?.status ?? .draft) == .draft
+        VStack(alignment: .leading, spacing: 10) {
+            header(document, isEditable: isEditable)
+            TextEditor(text: $text)
+                .font(.system(size: 13, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(10)
+                .background(Theme.fill, in: .rect(cornerRadius: 10, style: .continuous))
+                .disabled(!isEditable)
+                .accessibilityLabel("Spec draft text")
+        }
+        .padding(EdgeInsets(top: 14, leading: 22, bottom: 20, trailing: 20))
+        .task(id: item.ref) { load() }
+        .task(id: text) {
+            guard text != saved, loadedPath == item.ref else { return }
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            save()
+        }
+        .onDisappear { if text != saved { save() } }
+    }
+
+    private func header(_ document: SpecDocument?, isEditable: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "doc.text").foregroundStyle(Theme.link).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(document?.title ?? "Spec draft").font(.system(size: 15, weight: .semibold))
+                Text(subtitle(document, isEditable: isEditable))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(problem == nil ? Theme.secondaryText : Theme.danger)
+            }
+            Spacer(minLength: 8)
+            if let status = document?.status {
+                Text(status.title)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(status.color)
+                    .padding(.horizontal, 8)
+                    .frame(height: 22)
+                    .background(status.color.opacity(0.14), in: Capsule())
+            }
+            if isEditable {
+                Button("Save", action: save)
+                    .buttonStyle(PillButtonStyle(height: 26))
+                    .keyboardShortcut("s")
+                    .disabled(text == saved)
+                    .help("Save the draft; edits also save as you type")
+            }
+        }
+    }
+
+    private func subtitle(_ document: SpecDocument?, isEditable: Bool) -> String {
+        if let problem { return problem }
+        guard let document else { return "The front matter can’t be read yet. Keep the title: line between the --- lines." }
+        let criteria = "\(document.checkedCount)/\(document.acceptanceCriteria.count) criteria"
+        if !isEditable { return "\(criteria) · Committed on the run branch; this copy is read-only" }
+        return "\(criteria) · \(text == saved ? "Saved" : "Editing…") · The lead reads your edits on its next turn"
+    }
+
+    private func load() {
+        guard let path = item.ref else { return }
+        let contents = (try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)) ?? ""
+        text = contents
+        saved = contents
+        loadedPath = path
+        problem = nil
+    }
+
+    private func save() {
+        guard let path = item.ref, loadedPath == path else { return }
+        do {
+            try text.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+            saved = text
+            problem = nil
+            model.leadChatRevision += 1
+        } catch {
+            problem = "Couldn’t save: \(error.localizedDescription)"
+        }
+    }
+}

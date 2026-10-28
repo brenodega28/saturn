@@ -68,7 +68,7 @@ private struct MarkdownBlocksView: View {
     }
 }
 
-private struct MarkdownBlockView: View {
+struct MarkdownBlockView: View {
     let block: MarkdownBlock
     let fontSize: CGFloat
     let caret: Bool

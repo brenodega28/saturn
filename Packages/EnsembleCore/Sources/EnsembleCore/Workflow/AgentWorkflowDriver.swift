@@ -66,6 +66,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     var failedCorrections: [Int64: Int] = [:]
     public var packageRegistry: any PackageRegistry = PublicPackageRegistry()
     private var serverStart: Task<EnsembleMCPServer, Error>?
+    var specCommits: [Int64: Task<Void, Error>] = [:]
     private(set) lazy var questionRelay = QuestionRelay { [weak self] runId, batch in self?.deliverQuestions(batch, runId: runId) }
 
     public var questionWindow: Duration {
@@ -91,7 +92,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let isLead = config?.role(agent.role)?.canSpawn == true
         var leadTools: Set<HandoffTool> = isLead ? HandoffTool.leadTools : []
         if isLead, agent.readOnly, agent.worktreePath == nil { leadTools.insert(.openWorktree) }
-        let chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .messageAgent, .askHuman]
+        let chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .draftSpec, .messageAgent, .askHuman]
         let spawnedTools: Set<HandoffTool> = agent.spawnedById == nil ? [] : [.messageAgent, .askHuman, .submitResult]
         let requestTools = chatTools.union(leadTools).union(spawnedTools).union([.readChat])
         guard agent.runId != nil else { return requestTools }
@@ -117,7 +118,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 let roles = config.roles.filter(\.editsCode).map(\.id).joined(separator: ", ")
                 throw HandoffError.notAllowed("Unknown role ids: \(unknown.joined(separator: ", ")). Use one of: \(roles).")
             }
-            plans[agentID] = plan
+            plans[agentID] = mergedPlan(plan, runId: agent.runId)
             return "Plan received with \(plan.tasks.count) tasks. End your turn now; the user reviews it before anyone builds."
         case .verdict(let verdict):
             verdicts[agentID] = verdict
@@ -181,7 +182,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 projectId: agent.projectId, taskId: taskId, kind: .proposal, text: proposal.brief,
                 workflow: proposal.workflow, title: proposal.title, status: .open, createdAt: .now
             ))
-            return "The user sees your proposal with a Start button. End your turn now. If they start it, you’ll be asked to plan it."
+            let attached = (try? specStore.draft(projectId: agent.projectId, taskId: taskId)).flatMap { $0 }.flatMap { $0.status == .done ? nil : $0 }
+            let note = attached.map { " The spec draft “\($0.title)” is attached; starting the run commits it and makes its acceptance criteria the run’s." } ?? ""
+            return "The user sees your proposal with a Start button.\(note) End your turn now. If they start it, you’ll be asked to plan it."
         case .agentMessage(let name, let text) where (try? isLead(agent)) == true:
             let target = try otherAgent(named: name, from: agent)
             let targetName = displayName(of: target)
@@ -267,6 +270,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             return "Worktree ready at \(path)\(branch). End your turn now; your next turn runs there with write access."
         case .readChat(let request):
             return try ChatReader(database: runtime.database, paths: runtime.paths).read(request)
+        case .draftSpec(let request):
+            return try draftSpec(request, from: agent)
         }
     }
 
@@ -400,6 +405,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         guard let role = config.role(roleID) else { throw WorkflowDriverError.missingRole(roleID) }
         let expected = expectedHandoff(for: context, role: role, workflow: workflowSnapshot(context.run))
         let runId = try requireRunID(context.run)
+        try await ensureSpecBranch(for: context.run, project: context.project, git: git)
 
         var qaWorktree: (path: URL, branch: String?)?
         if !role.editsCode, expected == .verdict, isTestingStep(context.step) {
@@ -458,6 +464,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let git = try requireGit()
         let runId = try requireRunID(context.step.run)
         let project = context.step.project
+        try await ensureSpecBranch(for: context.step.run, project: project, git: git)
         let config = ProjectConfigLoader.load(repository: project.url)
         let fallbackRole = context.step.roleID.flatMap(config.role)
 
@@ -593,6 +600,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             case .conflict(let branch, let files): throw WorkflowDriverError.mergeConflict(branch: branch, files: files)
             }
             guard let deliveryBranch = integration.branch else { throw WorkflowDriverError.notReady("The integration worktree has no branch.") }
+            try await completeSpec(for: run, in: integration.path, git: git)
 
             switch end.action {
             case .leave:
@@ -764,13 +772,15 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             if let feedback = context.inputs.feedback {
                 parts.append("## The user asked for a new plan\n\(feedback.summary)")
             }
+            if let guide = specGuide(for: context.run) { parts.append(guide) }
             parts.append(Self.planGuide)
             parts.append("Read the codebase, then call `\(HandoffTool.submitPlan.qualifiedName)` with tasks that don’t touch the same files. Use only the role ids above. Then end your turn.")
         case .verdict:
             if let plan = context.inputs.plan {
                 parts.append("## Plan\n\(plan.summary)\n" + plan.tasks.enumerated().map { "\($0.offset + 1). \($0.element.title) (\($0.element.role))" }.joined(separator: "\n"))
-                if let spec = plan.spec { parts.append("## Spec to check against\n" + spec.markdown) }
             }
+            if let spec = effectiveSpec(context.inputs.plan, run: context.run) { parts.append("## Spec to check against\n" + spec.markdown) }
+            if let guide = criteriaGuide(for: context.run) { parts.append(guide) }
             let builds = context.inputs.previousOutputs.last { !$0.output.taskResults.isEmpty }
             if let builds {
                 parts.append("## What the builders report\n" + builds.output.taskResults.map { "- \($0.agentName ?? "Agent"): \($0.summary)" }.joined(separator: "\n"))
@@ -854,7 +864,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         if !task.files.isEmpty { parts.append("You own: \(task.files.joined(separator: ", ")). Don’t change files other tasks own.") }
         parts.append("## Overall request\n\(context.step.inputs.taskTitle)" + (context.step.inputs.taskBody.isEmpty ? "" : "\n\n\(context.step.inputs.taskBody)"))
         parts.append("## Plan\n\(context.plan.summary)\n" + context.plan.tasks.enumerated().map { "\($0.offset + 1). \($0.element.title) (\($0.element.role))" }.joined(separator: "\n"))
-        if let spec = context.plan.spec { parts.append("## Spec\n" + spec.markdown) }
+        if let spec = effectiveSpec(context.plan, run: context.step.run) { parts.append("## Spec\n" + spec.markdown) }
         if !context.step.step.instructions.isEmpty { parts.append(context.step.step.instructions) }
         if let guide = testFirstGuide(for: context.step.run) { parts.append(guide) }
         parts.append("Build it in your worktree, run the tests, commit, then call `\(HandoffTool.submitResult.qualifiedName)` with what you changed and how you verified it. Then end your turn.")
@@ -1016,8 +1026,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
         let branches = try builderBranches(runId: runId, projectId: run.projectId)
         let base = try await baseBranch(runId: runId, project: project, git: git)
+        let specBranch = try await ensureSpecBranch(for: run, project: project, git: git)
         let titleSlug = Slug.make(run.title.split(whereSeparator: \.isWhitespace).prefix(5).joined(separator: " "))
-        let worktree = try await manager.create(agent: agent, slug: titleSlug.isEmpty ? "combined" : titleSlug, from: base)
+        let worktree = try await manager.create(agent: agent, slug: titleSlug.isEmpty ? "combined" : titleSlug, from: specBranch ?? base)
         let identity = ["-c", "user.name=Ensemble", "-c", "user.email=ensemble@localhost"]
         for branch in branches {
             do {
@@ -1219,6 +1230,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         }
         for worktree in worktrees where worktree.agent.hasSuffix("-run-\(runId)") {
             try? await manager.remove(worktree, force: true, deleteBranch: worktree.agent.hasPrefix("qa-"))
+        }
+        if let spec = specStore.link(runId: runId) {
+            _ = try? await git.run(["branch", "-D", spec.branch], in: project.url)
         }
     }
 }

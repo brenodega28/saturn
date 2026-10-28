@@ -8,6 +8,7 @@ public struct GateFinding: Sendable, Hashable, Codable, Identifiable {
         case duplication
         case complexity
         case evidence
+        case criteria
     }
 
     public enum Severity: String, Sendable, Hashable, Codable {
@@ -42,9 +43,32 @@ public struct GateFinding: Sendable, Hashable, Codable, Identifiable {
 
 public struct GateReport: Sendable, Hashable, Codable {
     public var findings: [GateFinding]
+    public var criteria: [CriterionResult]
 
-    public init(findings: [GateFinding] = []) {
+    public init(findings: [GateFinding] = [], criteria: [CriterionResult] = []) {
         self.findings = findings
+        self.criteria = criteria
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case findings, criteria
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.findings = try container.decodeIfPresent([GateFinding].self, forKey: .findings) ?? []
+        self.criteria = (try? container.decodeIfPresent([CriterionResult].self, forKey: .criteria)) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(findings, forKey: .findings)
+        if !criteria.isEmpty { try container.encode(criteria, forKey: .criteria) }
+    }
+
+    public static func undecided(_ findings: [GateFinding], after outputs: [PreviousOutput], stepId: String) -> [GateFinding] {
+        let decided = Set(outputs.filter { $0.stepId != stepId }.flatMap { $0.output.gates?.findings ?? [] }.map(\.id))
+        return findings.filter { $0.kind == .criteria || !decided.contains($0.id) }
     }
 
     public var blocking: [GateFinding] { findings.filter { $0.severity == .blocking } }

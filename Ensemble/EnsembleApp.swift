@@ -16,6 +16,9 @@ struct EnsembleApp: App {
                     RootView()
                         .environment(model)
                         .onAppear { appDelegate.model = model }
+                        .onOpenURL { url in
+                            if let link = ChatLink(url: url) { model.open(link) }
+                        }
                 case .failed(let message):
                     LaunchFailureView(message: message)
                 }
@@ -24,6 +27,7 @@ struct EnsembleApp: App {
             .tint(Theme.accent)
         }
         .defaultSize(width: 1280, height: 820)
+        .handlesExternalEvents(matching: [ChatLink.scheme])
         .commands {
             if case .ready(let model) = launch {
                 AppCommands(model: model, updater: updater)
@@ -34,12 +38,14 @@ struct EnsembleApp: App {
             if case .ready(let model) = launch {
                 DetailWindow(destination: destination)
                     .environment(model)
+                    .modifier(ChatLinkRouting(model: model))
                     .preferredColorScheme(.dark)
                     .tint(Theme.accent)
                     .navigationTitle(destination?.title ?? "Ensemble")
             }
         }
         .defaultSize(width: 900, height: 700)
+        .handlesExternalEvents(matching: [])
 
         Window("Organizer", id: WindowID.organizer) {
             if case .ready(let model) = launch {
@@ -50,6 +56,7 @@ struct EnsembleApp: App {
             }
         }
         .defaultSize(width: 1240, height: 780)
+        .handlesExternalEvents(matching: [])
 
         Settings {
             if case .ready(let model) = launch {
@@ -69,6 +76,7 @@ struct EnsembleApp: App {
             }
         }
         .defaultSize(width: 760, height: 560)
+        .handlesExternalEvents(matching: [])
     }
 }
 
@@ -78,6 +86,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationWillTerminate(_ notification: Notification) {
         model?.agents.terminateAll()
+    }
+}
+
+private struct ChatLinkRouting: ViewModifier {
+    let model: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    func body(content: Content) -> some View {
+        content.environment(\.openURL, OpenURLAction { url in
+            guard let link = ChatLink(url: url) else { return .systemAction }
+            openWindow(id: WindowID.main)
+            model.open(link)
+            return .handled
+        })
     }
 }
 

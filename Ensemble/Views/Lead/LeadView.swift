@@ -73,7 +73,9 @@ struct RequestCloseMenu: View {
     let project: Project
 
     var body: some View {
+        Button("Copy Link") { model.copyLink(to: request) }
         if !request.isClosed {
+            Divider()
             let hasActiveRun = model.requestHasActiveRun(request)
             ForEach(RequestCloseReason.allCases, id: \.self) { reason in
                 Button("Close as \(reason.title)") {

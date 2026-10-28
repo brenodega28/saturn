@@ -366,8 +366,10 @@ private struct PaneToggle: View {
 
     var body: some View {
         Button { state.toggle(pane) } label: {
-            Image(systemName: systemImage)
+            Image(systemName: systemImage).font(.system(size: 14))
         }
+        .buttonStyle(ToolbarChipStyle(width: 30, height: 28, cornerRadius: 7, fill: state.isShowing(pane) ? .white.opacity(0.12) : .clear,
+                                      foreground: Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.85)))
         .help(help)
         .accessibilityLabel(help)
         .accessibilityValue(state.isShowing(pane) ? "Shown" : "Hidden")
@@ -379,13 +381,14 @@ private struct InboxToolbarButton: View {
 
     var body: some View {
         Button { model.selection = .inbox } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "tray")
+            HStack(spacing: 6) {
+                Image(systemName: "tray").font(.system(size: 13))
                 if model.inboxCount > 0 {
-                    Text("\(model.inboxCount)").foregroundStyle(Theme.warning)
+                    Text("\(model.inboxCount)").font(.system(size: 12.5, weight: .bold, design: .monospaced)).foregroundStyle(Color(hex: 0xFF9A5C))
                 }
             }
         }
+        .buttonStyle(ToolbarChipStyle(horizontalPadding: 10))
         .help("Inbox (\(model.inboxCount) waiting)")
         .accessibilityLabel("Inbox, \(model.inboxCount) waiting")
     }

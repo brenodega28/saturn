@@ -302,6 +302,12 @@ public final class AppDatabase: Sendable {
                 t.add(column: "spawnedById", .integer)
             }
         }
+        migrator.registerMigration("v18-session-cost-baseline") { db in
+            try db.alter(table: "agent") { t in
+                t.add(column: "sessionCostUSD", .double).notNull().defaults(to: 0)
+                t.add(column: "sessionOutputTokens", .integer).notNull().defaults(to: 0)
+            }
+        }
 
         return migrator
     }

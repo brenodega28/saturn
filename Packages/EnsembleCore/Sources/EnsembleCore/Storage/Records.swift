@@ -250,6 +250,8 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
     public var archivedAt: Date?
     public var taskId: Int64?
     public var spawnedById: Int64?
+    public var sessionCostUSD: Double
+    public var sessionOutputTokens: Int
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -261,8 +263,11 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
         baseBranch: String? = nil, processID: Int32? = nil, lastError: String? = nil,
         runStepId: Int64? = nil, readOnly: Bool = false, planTaskId: String? = nil,
         port: Int? = nil, archivedAt: Date? = nil, taskId: Int64? = nil, spawnedById: Int64? = nil,
+        sessionCostUSD: Double = 0, sessionOutputTokens: Int = 0,
         createdAt: Date, updatedAt: Date
     ) {
+        self.sessionCostUSD = sessionCostUSD
+        self.sessionOutputTokens = sessionOutputTokens
         self.taskId = taskId
         self.spawnedById = spawnedById
         self.port = port

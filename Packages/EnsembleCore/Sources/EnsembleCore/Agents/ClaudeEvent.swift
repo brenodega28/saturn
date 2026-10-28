@@ -39,6 +39,7 @@ public struct TurnResult: Sendable, Hashable {
     public let durationMS: Int
     public var terminalReason: String? = nil
     public var apiErrorStatus: Int? = nil
+    public var processOutputTokens: Int? = nil
 
     public var wasInterrupted: Bool { subtype == "error_during_execution" }
     public var isAPIError: Bool { isError && terminalReason == "api_error" }
@@ -190,7 +191,10 @@ public enum ClaudeEvent: Sendable, Hashable {
                 permissionDenials: (json["permission_denials"]?.array ?? []).compactMap { $0["tool_name"]?.string },
                 durationMS: json["duration_ms"]?.int ?? 0,
                 terminalReason: json["terminal_reason"]?.string,
-                apiErrorStatus: json["api_error_status"]?.int
+                apiErrorStatus: json["api_error_status"]?.int,
+                processOutputTokens: json["modelUsage"]?.object.map { models in
+                    models.values.reduce(0) { $0 + ($1["outputTokens"]?.int ?? 0) }
+                }
             ))]
         case "ensemble":
             guard let notice = json["event"]?.string.flatMap(EnsembleNotice.init(rawValue:)) else { return [] }

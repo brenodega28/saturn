@@ -45,11 +45,6 @@ extension JSONValue {
               let decoded = try? JSONDecoder().decode(JSONValue.self, from: data) else { return nil }
         self = decoded
     }
-
-    var object: [String: JSONValue]? {
-        if case .object(let object) = self { return object }
-        return nil
-    }
 }
 
 enum DebugText {

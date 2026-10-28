@@ -3,320 +3,313 @@ import EnsembleCore
 import EnsembleUI
 import SwiftUI
 
-struct SidebarView: View {
+struct WorkspaceNavigator: View {
     @Environment(AppModel.self) private var model
-    @State private var expandedProjectID: Int64?
 
     var body: some View {
-        @Bindable var model = model
-        List(selection: $model.sidebarDestination) {
-            InboxSidebarRow()
-                .tag(SidebarDestination.inbox)
-
-            Section {
-                ForEach(model.openProjects) { project in
-                    if let id = project.id {
-                        ProjectSidebarGroup(
-                            project: project,
-                            projectID: id,
-                            isExpanded: Binding(
-                                get: { expandedProjectID == id },
-                                set: { expandedProjectID = $0 ? id : nil }
-                            )
-                        )
-                    }
-                }
-            } header: {
-                HStack {
-                    Text("Projects")
-                    Spacer()
-                    Menu {
-                        Button("Open Folder…") { model.isOpenPanelPresented = true }
-                        Button("Clone Repository…") { model.isClonePresented = true }
-                        Button("New Project…") { model.newProject() }
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .menuStyle(.button)
-                    .buttonStyle(.plain)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .accessibilityLabel("Add project")
-                }
-            }
-        }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .onAppear { expandedProjectID = model.selectedProject?.id }
-        .onChange(of: model.selectedProject?.id) { _, id in
-            if let id { expandedProjectID = id }
-        }
-        .safeAreaInset(edge: .top) {
-            Button {
-                model.isPalettePresented = true
-            } label: {
+        if let project = model.currentProject, let id = project.id {
+            ProjectOutlineTree(project: project, projectID: id)
+        } else {
+            VStack(spacing: 12) {
+                NavigatorEmpty(title: "No project open", message: "Open a folder or start a new project to see its chat, tasks and agents here.")
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 12))
-                    Text("Search or run…").frame(maxWidth: .infinity, alignment: .leading)
-                    Text("⌘K").font(.system(size: 11))
+                    Button("Open…") { model.isOpenPanelPresented = true }
+                        .buttonStyle(PillButtonStyle(.primary, height: 26))
+                    Button("New Project…") { model.newProject() }
+                        .buttonStyle(PillButtonStyle(height: 26))
                 }
-                .foregroundStyle(Theme.secondaryText)
-                .padding(.horizontal, 10)
-                .frame(height: 32)
-                .background(Theme.fillRaised, in: .rect(cornerRadius: 10, style: .continuous))
-                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 10)
-            .padding(.top, 4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 6) {
-                QualityLink()
-                SpendCard()
-            }
-            .padding(10)
-        }
-        .background(Theme.sidebarBackground)
     }
 }
 
-private struct SidebarGroup: Identifiable {
-    let title: String
-    let tabs: [ProjectTab]
-
-    var id: String { title }
-
-    static let all = [
-        SidebarGroup(title: "Work", tabs: [.lead, .tasks]),
-        SidebarGroup(title: "Crew", tabs: [.agents, .roles, .workflows]),
-        SidebarGroup(title: "Review", tabs: [.changes, .code]),
-    ]
-
-    static let lastTab = all.last?.tabs.last
-}
-
-private enum ProjectCardSlice {
-    case top
-    case middle
-    case bottom
-}
-
-private extension View {
-    func projectCard(_ slice: ProjectCardSlice?) -> some View {
-        listRowBackground(
-            Group {
-                if let slice {
-                    let radius: CGFloat = 12
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: slice == .top ? radius : 0,
-                        bottomLeadingRadius: slice == .bottom ? radius : 0,
-                        bottomTrailingRadius: slice == .bottom ? radius : 0,
-                        topTrailingRadius: slice == .top ? radius : 0,
-                        style: .continuous
-                    )
-                    .fill(Theme.fill)
-                    .padding(.horizontal, 10)
-                }
-            }
-        )
+extension AppModel {
+    func agentWorktrees(in project: Project) -> [Worktree] {
+        let root = project.url.standardizedFileURL.path
+        return state(for: project).worktrees.filter { $0.branch != nil && $0.path.standardizedFileURL.path != root }
     }
 }
 
-private struct SidebarBadge {
-    let count: Int
-    let color: Color
+private extension ProjectTab {
+    static let outlineOrder: [ProjectTab] = [.lead, .tasks, .agents, .workflows, .changes, .code, .settings]
+
+    var outlineTitle: String {
+        self == .code ? "Source" : title
+    }
 }
 
-private struct ProjectSidebarGroup: View {
+private struct ProjectOutlineTree: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("workspace.outline.expanded") private var storedExpansion: String?
     let project: Project
     let projectID: Int64
-    @Binding var isExpanded: Bool
 
     var body: some View {
+        let _ = model.engine.runs
         let waiting = model.inbox.items.filter { $0.projectId == projectID }
-        ProjectHeaderRow(project: project, projectID: projectID, attention: attentionColor(waiting), isExpanded: $isExpanded)
-            .projectCard(isExpanded ? .top : nil)
-        if isExpanded {
-            ForEach(SidebarGroup.all) { group in
-                Text(group.title)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(Theme.tertiaryText)
-                    .padding(.top, 4)
-                    .accessibilityAddTraits(.isHeader)
-                    .projectCard(.middle)
-                ForEach(group.tabs) { tab in
-                    SectionRow(tab: tab, badge: badge(for: tab, waiting: waiting), newRequest: newRequestAction(for: tab))
-                        .tag(SidebarDestination.section(project: projectID, tab: tab))
-                        .projectCard(tab == SidebarGroup.lastTab ? .bottom : .middle)
-                    if tab == .lead {
-                        SidebarRequestRows(project: project, projectID: projectID)
-                    }
-                    if tab == .tasks {
-                        SidebarRunRows(project: project, projectID: projectID)
+        let expanded = ProjectOutline.decodeExpanded(storedExpansion)
+        let needsYouTaskIDs = model.needsYouTaskIDs()
+        let requests = LeadRequest.partition(model.leadRequests(in: project)).open
+        ScrollView {
+            VStack(alignment: .leading, spacing: 1) {
+                OutlineProjectHeader(project: project)
+                ForEach(ProjectTab.outlineOrder) { tab in
+                    let isExpanded = expanded.contains(tab.rawValue)
+                    OutlineSectionRow(
+                        title: tab.outlineTitle,
+                        systemImage: tab.systemImage,
+                        badge: badge(for: tab, waiting: waiting, requests: requests, needsYouTaskIDs: needsYouTaskIDs),
+                        isExpanded: isExpanded,
+                        isSelected: isSelected(tab),
+                        toggle: { withAnimation(.snappy(duration: 0.2)) { storedExpansion = ProjectOutline.toggling(tab.rawValue, in: storedExpansion) } },
+                        open: { open(tab) }
+                    )
+                    if isExpanded {
+                        children(of: tab, requests: requests, needsYouTaskIDs: needsYouTaskIDs)
                     }
                 }
             }
+            .padding(EdgeInsets(top: 4, leading: 8, bottom: 10, trailing: 8))
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(project.name)
+    }
+
+    @ViewBuilder
+    private func children(of tab: ProjectTab, requests: [ProjectTask], needsYouTaskIDs: Set<Int64>) -> some View {
+        switch tab {
+        case .lead: OutlineRequestRows(project: project, projectID: projectID, requests: requests, needsYouTaskIDs: needsYouTaskIDs)
+        case .tasks: OutlineRunRows(project: project, projectID: projectID)
+        case .agents: OutlineAgentRows(project: project, projectID: projectID)
+        case .workflows: OutlineWorkflowRows(project: project, projectID: projectID)
+        case .changes: OutlineChangesRows(project: project, projectID: projectID)
+        case .code: OutlineSourceRows(project: project, projectID: projectID)
+        case .settings: OutlineSettingsRows(project: project, projectID: projectID)
+        case .roles: EmptyView()
         }
     }
 
-    private func newRequestAction(for tab: ProjectTab) -> (() -> Void)? {
-        guard tab == .lead else { return nil }
-        return { startNewRequest() }
+    private func open(_ tab: ProjectTab) {
+        if tab == .agents { model.selectedAgents[projectID] = nil }
+        model.sidebarDestination = .section(project: projectID, tab: tab)
     }
 
-    private func startNewRequest() {
-        model.sidebarDestination = .section(project: projectID, tab: .lead)
-        model.startNewLeadRequest(in: project)
-    }
-
-    private func attentionColor(_ waiting: [InboxItem]) -> Color? {
-        if waiting.contains(where: { $0.kind == .failure }) { return Theme.danger }
-        return waiting.isEmpty ? nil : Theme.warning
-    }
-
-    private func badge(for tab: ProjectTab, waiting: [InboxItem]) -> SidebarBadge? {
+    private func isSelected(_ tab: ProjectTab) -> Bool {
+        guard model.sidebarDestination == .section(project: projectID, tab: tab) else { return false }
         switch tab {
-        case .tasks:
-            let items = waiting.filter { $0.kind != .pinReview }
-            guard !items.isEmpty else { return nil }
-            return SidebarBadge(count: items.count, color: attentionColor(items) ?? Theme.warning)
-        case .changes:
-            let pins = waiting.filter { $0.kind == .pinReview }.count
-            return pins > 0 ? SidebarBadge(count: pins, color: Theme.warning) : nil
         case .agents:
-            let agents = model.agentSessions(in: project).count
-            return agents > 0 ? SidebarBadge(count: agents, color: Theme.tertiaryText) : nil
-        case .lead, .roles, .workflows, .settings, .code:
+            return model.selectedAgents[projectID] == nil
+        case .changes:
+            let runs = Set(model.openPins(in: project).compactMap(\.run.id))
+            return model.changesRunSelections[projectID].map { !runs.contains($0) } ?? true
+        case .settings:
+            return !OutlineSettingsRows.childSections.contains(model.settingsSections[projectID] ?? .general)
+        case .lead, .tasks, .workflows, .code, .roles:
+            return true
+        }
+    }
+
+    private func badge(for tab: ProjectTab, waiting: [InboxItem], requests: [ProjectTask], needsYouTaskIDs: Set<Int64>) -> ProjectOutline.Badge? {
+        switch tab {
+        case .lead:
+            let needsYou = requests.contains { model.requestNeedsYou($0, latestRun: model.latestRun(of: $0), needsYouTaskIDs: needsYouTaskIDs) }
+            return ProjectOutline.countBadge(requests.count, tone: needsYou ? .warning : .quiet)
+        case .tasks:
+            return ProjectOutline.tasksBadge(waiting: waiting)
+        case .changes:
+            return ProjectOutline.changesBadge(waiting: waiting)
+        case .agents:
+            return ProjectOutline.countBadge(model.agentSessions(in: project).count)
+        case .workflows:
+            return ProjectOutline.countBadge(model.config(for: project).workflows.count)
+        case .code, .settings, .roles:
             return nil
         }
     }
 }
 
-private struct ProjectHeaderRow: View {
+private struct OutlineProjectHeader: View {
     @Environment(AppModel.self) private var model
     let project: Project
-    let projectID: Int64
-    let attention: Color?
-    @Binding var isExpanded: Bool
 
     var body: some View {
-        HStack(spacing: 4) {
-            Button {
-                withAnimation(.snappy(duration: 0.2)) { isExpanded.toggle() }
-            } label: {
-                HStack(spacing: 8) {
-                    ProjectTile(project: project)
-                    Text(project.name)
-                        .fontWeight(isExpanded ? .bold : .medium)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    if !isExpanded, let attention {
-                        StatusDot(attention, size: 6)
-                    }
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Theme.tertiaryText)
-                        .rotationEffect(isExpanded ? .zero : .degrees(-90))
-                }
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(project.name)
-            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-            .accessibilityHint(attention == nil ? "" : "Has items waiting on you")
-
-            if isExpanded {
-                let isSettingsSelected = model.sidebarDestination == .section(project: projectID, tab: .settings)
-                Button {
-                    model.sidebarDestination = .section(project: projectID, tab: .settings)
-                } label: {
-                    Image(systemName: ProjectTab.settings.systemImage)
-                        .font(.system(size: 12))
-                        .foregroundStyle(isSettingsSelected ? Color.white : Theme.secondaryText)
-                        .frame(width: 24, height: 24)
-                        .background(isSettingsSelected ? Theme.accent.opacity(0.28) : .clear, in: .rect(cornerRadius: 7, style: .continuous))
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .help("Project Settings")
-                .accessibilityLabel("\(project.name) settings")
-                .accessibilityAddTraits(isSettingsSelected ? .isSelected : [])
-            }
+        let branchLine = ProjectOutline.branchLine(branch: model.state(for: project).branch, worktrees: model.agentWorktrees(in: project).count)
+        HStack(spacing: 7) {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(Theme.tertiaryText)
+                .frame(width: 14)
+            ProjectTile(project: project, size: 16)
+            Text(project.name)
+                .fontWeight(.bold)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 6)
+            Text(branchLine)
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(Theme.secondaryText)
+                .lineLimit(1)
         }
-        .padding(.top, 2)
+        .font(.system(size: 12.5))
+        .padding(.leading, 4)
+        .padding(.trailing, 6)
+        .frame(height: 26)
+        .padding(.bottom, 2)
+        .contentShape(.rect)
         .contextMenu {
             Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
             Button("Close Project") { model.close(project) }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(project.name), \(branchLine)")
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
-private struct ProjectTile: View {
-    let project: Project
-
-    private static let palette: [(top: UInt32, bottom: UInt32)] = [
-        (0x4A90FF, 0x1F5FD1),
-        (0xB57BFF, 0x7B3FD9),
-        (0x5AD8C4, 0x1A8F80),
-        (0xFFB547, 0xD9822B),
-        (0xFF7A9A, 0xD13F63),
-    ]
+private struct OutlineSectionRow: View {
+    let title: String
+    let systemImage: String
+    let badge: ProjectOutline.Badge?
+    let isExpanded: Bool
+    let isSelected: Bool
+    let toggle: () -> Void
+    let open: () -> Void
 
     var body: some View {
-        let colors = Self.palette[Int(abs(project.id ?? 0) % Int64(Self.palette.count))]
-        Text(project.name.first.map { String($0).uppercased() } ?? "?")
-            .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: 20, height: 20)
-            .background(
-                LinearGradient(colors: [Color(hex: colors.top), Color(hex: colors.bottom)], startPoint: .top, endPoint: .bottom),
-                in: .rect(cornerRadius: 6, style: .continuous)
-            )
-            .accessibilityHidden(true)
-    }
-}
-
-private struct SectionRow: View {
-    let tab: ProjectTab
-    let badge: SidebarBadge?
-    var newRequest: (() -> Void)?
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Label {
-                HStack {
-                    Text(tab.title)
+        HStack(spacing: 0) {
+            Button(action: toggle) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Theme.tertiaryText)
+                    .rotationEffect(isExpanded ? .zero : .degrees(-90))
+                    .frame(width: 14, height: 22)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(isExpanded ? "Collapse" : "Expand") \(title)")
+            Button(action: open) {
+                HStack(spacing: 7) {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(isSelected ? Color.white : Theme.link)
+                        .frame(width: 16)
+                    Text(title)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
                     Spacer(minLength: 4)
                     if let badge {
                         Text("\(badge.count)")
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(badge.color)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(badge.tone.color)
                     }
                 }
-            } icon: {
-                Image(systemName: tab.systemImage)
+                .padding(.leading, 3)
+                .padding(.trailing, 6)
+                .frame(height: 22)
+                .contentShape(.rect)
             }
-            .accessibilityLabel(badge.map { "\(tab.title), \($0.count)" } ?? tab.title)
-            if let newRequest {
-                Button(action: newRequest) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Theme.secondaryText)
-                        .frame(width: 20, height: 20)
-                        .contentShape(.rect)
+            .buttonStyle(.plain)
+            .accessibilityLabel(badge.map { "\(title), \($0.count)" } ?? title)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityAddTraits(isSelected ? [.isHeader, .isSelected] : .isHeader)
+        }
+        .font(.system(size: 12.5))
+        .background(isSelected ? Theme.accent.opacity(0.28) : .clear, in: .rect(cornerRadius: 5, style: .continuous))
+    }
+}
+
+private struct OutlineChildRow<Leading: View>: View {
+    let title: String
+    var meta: String = ""
+    var metaColor: Color = Theme.tertiaryText
+    var isSelected = false
+    let action: () -> Void
+    @ViewBuilder let leading: Leading
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                leading
+                    .frame(width: 14)
+                Text(title)
+                    .fontWeight(isSelected ? .semibold : .regular)
+                    .foregroundStyle(isSelected ? Color.white : Theme.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 4)
+                if !meta.isEmpty {
+                    Text(meta)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(metaColor)
+                        .lineLimit(1)
                 }
-                .buttonStyle(.plain)
-                .help("New request")
-                .accessibilityLabel("New request")
             }
+            .font(.system(size: 12.5))
+            .padding(.leading, 18 + 14 + 3)
+            .padding(.trailing, 6)
+            .frame(height: 22)
+            .background(isSelected ? Theme.accent.opacity(0.28) : .clear, in: .rect(cornerRadius: 5, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private extension OutlineChildRow where Leading == StatusDot {
+    init(title: String, meta: String = "", metaColor: Color = Theme.tertiaryText, dot: Color, isSelected: Bool = false, action: @escaping () -> Void) {
+        self.init(title: title, meta: meta, metaColor: metaColor, isSelected: isSelected, action: action) {
+            StatusDot(dot, size: 6)
         }
     }
 }
 
-private struct SidebarRunRows: View {
+private func metaColor(for dot: Color) -> Color {
+    dot == Theme.warning || dot == Theme.danger ? dot : Theme.tertiaryText
+}
+
+private struct OutlineRequestRows: View {
+    @Environment(AppModel.self) private var model
+    let project: Project
+    let projectID: Int64
+    let requests: [ProjectTask]
+    let needsYouTaskIDs: Set<Int64>
+
+    var body: some View {
+        ForEach(requests) { request in
+            if let requestID = request.id {
+                let run = model.latestRun(of: request)
+                let title = request.title.isEmpty ? "Request #\(requestID)" : request.title
+                let status = model.requestStatusLabel(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs)
+                let dot = model.statusColor(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs)
+                let destination = SidebarDestination.request(project: projectID, request: requestID)
+                OutlineChildRow(title: title, meta: status, metaColor: metaColor(for: dot), dot: dot, isSelected: model.sidebarDestination == destination) {
+                    model.sidebarDestination = destination
+                }
+                .contextMenu { RequestCloseMenu(request: request, project: project) }
+                .help("\(title) — \(status)")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Request \(title), \(status)")
+                .accessibilityHint("Opens the request in chat")
+            }
+        }
+        let showMore = SidebarDestination.requests(project: projectID)
+        OutlineChildRow(title: "Show more", isSelected: model.sidebarDestination == showMore) {
+            model.sidebarDestination = showMore
+        } leading: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.tertiaryText)
+        }
+        .help("Show all open and closed requests")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Show more requests")
+        .accessibilityHint("Opens the list of all requests")
+    }
+}
+
+private struct OutlineRunRows: View {
     @Environment(AppModel.self) private var model
     let project: Project
     let projectID: Int64
@@ -326,21 +319,11 @@ private struct SidebarRunRows: View {
             if let runID = run.id {
                 let status = model.statusLabel(of: run)
                 let step = model.currentStepTitle(of: run) ?? status
-                HStack(spacing: 8) {
-                    StatusDot(model.statusColor(of: run), size: 6)
-                    Text(run.title.isEmpty ? "Run #\(runID)" : run.title)
-                        .font(.system(size: 12.5))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    Text(step)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
+                let dot = model.statusColor(of: run)
+                let destination = SidebarDestination.run(project: projectID, run: runID)
+                OutlineChildRow(title: run.title.isEmpty ? "Run #\(runID)" : run.title, meta: step, metaColor: metaColor(for: dot), dot: dot, isSelected: model.sidebarDestination == destination) {
+                    model.sidebarDestination = destination
                 }
-                .padding(.leading, 24)
-                .tag(SidebarDestination.run(project: projectID, run: runID))
-                .projectCard(.middle)
                 .contextMenu {
                     Button("Show Run Details") { model.openRunDetail(run) }
                     Button("Open in Chat") { model.openRunInLead(run) }
@@ -354,130 +337,149 @@ private struct SidebarRunRows: View {
     }
 }
 
-private struct SidebarRequestRows: View {
+private struct OutlineAgentRows: View {
+    @Environment(AppModel.self) private var model
+    @Environment(WorkbenchState.self) private var state
+    let project: Project
+    let projectID: Int64
+
+    var body: some View {
+        ForEach(model.agentSessions(in: project), id: \.id) { session in
+            let status = model.displayStatus(of: session.agent)
+            let name = model.displayName(of: session.agent, in: project)
+            let label = session.isQueued ? "Queued" : status.label
+            let isSelected = model.sidebarDestination == .section(project: projectID, tab: .agents) && model.selectedAgents[projectID] == session.id
+            OutlineChildRow(title: name, meta: label, metaColor: metaColor(for: status.color), dot: status.color, isSelected: isSelected) {
+                state.open(.agent(session.id, in: projectID))
+            }
+            .contextMenu { ContextCommands(groups: ContextCommands.agent, target: .agent(project: projectID, agent: session.id)) }
+            .help("\(name) — \(label)")
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Agent \(name), \(label)")
+            .accessibilityHint("Opens the agent’s session")
+        }
+    }
+}
+
+private struct OutlineWorkflowRows: View {
     @Environment(AppModel.self) private var model
     let project: Project
     let projectID: Int64
 
     var body: some View {
-        let needsYouTaskIDs = model.needsYouTaskIDs()
-        ForEach(LeadRequest.partition(model.leadRequests(in: project)).open) { request in
-            if let requestID = request.id {
-                let run = model.latestRun(of: request)
-                let title = request.title.isEmpty ? "Request #\(requestID)" : request.title
-                let status = model.requestStatusLabel(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs)
-                HStack(spacing: 8) {
-                    StatusDot(model.statusColor(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs), size: 6)
-                    Text(title)
-                        .font(.system(size: 12.5))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    Text(status)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
+        let config = model.config(for: project)
+        let defaultID = config.workflow(config.preferences.defaultWorkflow ?? "")?.id ?? config.workflows.first?.id
+        ForEach(config.workflows) { workflow in
+            let title = "\(workflow.name) v\(workflow.version)"
+            let isDefault = workflow.id == defaultID
+            OutlineChildRow(title: title, meta: isDefault ? "default" : "", dot: Theme.neutral) {
+                model.sidebarDestination = .section(project: projectID, tab: .workflows)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Workflow \(title)\(isDefault ? ", default" : "")")
+            .accessibilityHint("Opens Workflows")
+        }
+    }
+}
+
+private struct OutlineChangesRows: View {
+    @Environment(AppModel.self) private var model
+    let project: Project
+    let projectID: Int64
+
+    var body: some View {
+        let pins = model.openPins(in: project)
+        let runs = pins.reduce(into: [Run]()) { runs, entry in
+            if !runs.contains(where: { $0.id == entry.run.id }) { runs.append(entry.run) }
+        }
+        ForEach(runs) { run in
+            if let runID = run.id {
+                let count = pins.filter { $0.run.id == runID }.count
+                let pinsLabel = ProjectOutline.pinsLabel(count)
+                let isSelected = model.sidebarDestination == .section(project: projectID, tab: .changes) && model.changesRunSelections[projectID] == runID
+                OutlineChildRow(title: run.displayTitle, meta: pinsLabel, dot: Theme.paused, isSelected: isSelected) {
+                    model.changesRunSelections[projectID] = runID
+                    model.sidebarDestination = .section(project: projectID, tab: .changes)
                 }
-                .padding(.leading, 24)
-                .tag(SidebarDestination.request(project: projectID, request: requestID))
-                .projectCard(.middle)
-                .contextMenu { RequestCloseMenu(request: request, project: project) }
-                .help("\(title) — \(status)")
+                .help("\(run.displayTitle) — \(pinsLabel) to review")
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Request \(title), \(status)")
-                .accessibilityHint("Opens the request in chat")
+                .accessibilityLabel("\(run.displayTitle), \(pinsLabel) to review")
+                .accessibilityHint("Opens the run in Changes")
             }
         }
-        HStack(spacing: 8) {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Theme.tertiaryText)
-                .frame(width: 6)
-            Text("Show more")
-                .font(.system(size: 12.5))
-                .foregroundStyle(Theme.secondaryText)
-            Spacer(minLength: 4)
+    }
+}
+
+private struct OutlineSourceRows: View {
+    @Environment(AppModel.self) private var model
+    let project: Project
+    let projectID: Int64
+    @State private var ahead: [String: Int] = [:]
+
+    var body: some View {
+        let base = model.config(for: project).preferences.baseBranch ?? model.state(for: project).branch ?? "main"
+        let worktrees = model.agentWorktrees(in: project)
+        OutlineChildRow(title: base, meta: "base", dot: Theme.neutral, action: openSource)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Base branch \(base)")
+            .accessibilityHint("Opens Source")
+            .task(id: worktrees.map(\.id) + [base]) { await loadAhead(of: worktrees, base: base) }
+        ForEach(worktrees) { worktree in
+            let branch = worktree.branch ?? ""
+            let title = "\(worktree.agent) · \(branch.split(separator: "/").last.map(String.init) ?? branch)"
+            let count = ahead[worktree.id] ?? 0
+            OutlineChildRow(title: title, meta: count > 0 ? "↑\(count)" : "", dot: Theme.success, action: openSource)
+                .help(branch)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Branch \(branch)\(count > 0 ? ", \(count) commits ahead" : "")")
+                .accessibilityHint("Opens Source")
         }
-        .padding(.leading, 24)
-        .tag(SidebarDestination.requests(project: projectID))
-        .projectCard(.middle)
-        .help("Show all open and closed requests")
+    }
+
+    private func openSource() {
+        model.sidebarDestination = .section(project: projectID, tab: .code)
+    }
+
+    private func loadAhead(of worktrees: [Worktree], base: String) async {
+        guard let git = model.git else { return }
+        var counts: [String: Int] = [:]
+        for worktree in worktrees {
+            guard let branch = worktree.branch,
+                  let output = try? await git.run(["rev-list", "--count", "\(base)..\(branch)"], in: project.url),
+                  let count = Int(output.trimmingCharacters(in: .whitespacesAndNewlines)) else { continue }
+            counts[worktree.id] = count
+        }
+        ahead = counts
+    }
+}
+
+private struct OutlineSettingsRows: View {
+    @Environment(AppModel.self) private var model
+    let project: Project
+    let projectID: Int64
+
+    static let childSections: Set<SettingsSection> = [.checks, .agents]
+
+    var body: some View {
+        let config = model.config(for: project)
+        let roles = SidebarDestination.section(project: projectID, tab: .roles)
+        OutlineChildRow(title: "Roles", meta: config.roles.isEmpty ? "" : "\(config.roles.count)", dot: Theme.neutral, isSelected: model.sidebarDestination == roles) {
+            model.sidebarDestination = roles
+        }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Show more requests")
-        .accessibilityHint("Opens the list of all requests")
+        .accessibilityLabel("Roles, \(config.roles.count)")
+        settingsRow("Checks", section: .checks, count: config.checks?.checks.count ?? 0)
+        settingsRow("Budgets", section: .agents, count: 0)
     }
-}
 
-private struct QualityLink: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        let isSelected = model.selection == .quality
-        Button {
-            model.sidebarDestination = .quality
-        } label: {
-            Label("Quality", systemImage: "gauge.with.dots.needle.33percent")
-                .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .background(isSelected ? Theme.accent.opacity(0.28) : Color.white.opacity(0.05), in: .rect(cornerRadius: 10, style: .continuous))
-                .contentShape(.rect)
+    private func settingsRow(_ title: String, section: SettingsSection, count: Int) -> some View {
+        let isSelected = model.sidebarDestination == .section(project: projectID, tab: .settings) && model.settingsSections[projectID] == section
+        return OutlineChildRow(title: title, meta: count > 0 ? "\(count)" : "", dot: Theme.neutral, isSelected: isSelected) {
+            model.settingsSections[projectID] = section
+            model.sidebarDestination = .section(project: projectID, tab: .settings)
         }
-        .buttonStyle(.plain)
-        .help("Change size, time to approve, check failures, rework and cost per change")
-    }
-}
-
-private struct SpendCard: View {
-    @Environment(AppModel.self) private var model
-    @AppStorage(AppModel.usageResetPointKey) private var usageResetPoint: Double = 0
-
-    var body: some View {
-        let weekly = model.weeklySpend.formatted(.currency(code: "USD"))
-        let isSelected = model.selection == .usage
-        Button {
-            model.sidebarDestination = .usage
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("This week").fontWeight(.semibold)
-                    Spacer()
-                    Text(model.globalWeeklyBudget.map { "\(weekly) / \($0.formatted(.currency(code: "USD").precision(.fractionLength(0))))" } ?? weekly)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(Theme.secondaryText)
-                }
-                if let budget = model.globalWeeklyBudget {
-                    ProgressView(value: min(model.weeklySpend / budget, 1))
-                        .progressViewStyle(.linear)
-                        .tint(model.weeklySpend >= budget ? Theme.danger : Theme.secondaryText)
-                }
-                if let budget = model.globalMonthlyBudget {
-                    let monthly = model.monthlySpend
-                    HStack {
-                        Text("This month").foregroundStyle(Theme.secondaryText)
-                        Spacer()
-                        Text("\(model.displayedUsageTotals.monthUSD.formatted(.currency(code: "USD"))) / \(budget.formatted(.currency(code: "USD")))")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-                    ProgressView(value: min(monthly / budget, 1))
-                        .progressViewStyle(.linear)
-                        .tint(monthly >= budget ? Theme.danger : Theme.secondaryText)
-                }
-            }
-            .font(.system(size: 12))
-            .padding(12)
-            .background(isSelected ? Theme.accent.opacity(0.28) : Color.white.opacity(0.05), in: .rect(cornerRadius: 12, style: .continuous))
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel(weekly: weekly))
-    }
-
-    private func accessibilityLabel(weekly: String) -> String {
-        guard let budget = model.globalMonthlyBudget else { return "Usage, this week \(weekly)" }
-        let monthly = model.displayedUsageTotals.monthUSD.formatted(.currency(code: "USD"))
-        return "Usage, this week \(weekly), this month \(monthly) of \(budget.formatted(.currency(code: "USD")))"
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(count > 0 ? "\(title), \(count)" : title)
+        .accessibilityHint("Opens \(title) settings")
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import EnsembleCore
 import EnsembleUI
 import Network
@@ -5,6 +6,7 @@ import SwiftUI
 
 extension WorkbenchRegistry {
     func registerToolbarItems() {
+        register(ToolbarItemSpec(id: "project", placement: .leading, order: 5) { AnyView(ProjectSwitcher()) })
         register(ToolbarItemSpec(id: "scheme", placement: .leading, order: 10) { AnyView(SchemeSelector()) })
         register(ToolbarItemSpec(id: "start", placement: .leading, order: 20) { AnyView(StartStopButtons()) })
         register(ToolbarItemSpec(id: "activity", placement: .center, order: 0) { AnyView(ActivityViewer()) })
@@ -40,6 +42,167 @@ extension AppModel {
     var activeRunsInScope: [Run] {
         engine.runs.values.filter { run in openProjects.contains { $0.id == run.projectId } }.sorted { $0.startedAt > $1.startedAt }
     }
+
+    func statusSummary(of project: Project) -> ProjectOutline.Summary {
+        let waiting = inbox.items.filter { $0.projectId == project.id }
+        let activeRuns = engine.runs.values.filter { $0.projectId == project.id && ProjectSignals.activeStatuses.contains($0.status) }.count
+        return ProjectOutline.statusSummary(
+            activeRuns: activeRuns,
+            needsYou: waiting.filter { Self.needsYouKinds.contains($0.kind) }.count,
+            failing: waiting.filter { $0.kind == .failure }.count
+        )
+    }
+}
+
+private struct ProjectSwitcher: View {
+    @Environment(AppModel.self) private var model
+    @State private var isShowingPopover = false
+
+    var body: some View {
+        let project = model.currentProject
+        Button { isShowingPopover.toggle() } label: {
+            HStack(spacing: 7) {
+                if let project {
+                    ProjectTile(project: project)
+                    Text(project.name).fontWeight(.semibold).lineLimit(1)
+                    Image(systemName: "desktopcomputer")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondaryText)
+                } else {
+                    Image(systemName: "folder")
+                    Text("No project").fontWeight(.semibold)
+                }
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+            }
+            .font(.system(size: 12.5))
+        }
+        .help("Switch project")
+        .accessibilityLabel(project.map { "Project: \($0.name), local. Switch project" } ?? "No project open. Open a project")
+        .popover(isPresented: $isShowingPopover, arrowEdge: .bottom) {
+            ProjectSwitcherMenu { isShowingPopover = false }
+        }
+    }
+}
+
+private struct ProjectSwitcherMenu: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Open projects")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.secondaryText)
+                .padding(EdgeInsets(top: 6, leading: 10, bottom: 4, trailing: 10))
+                .accessibilityAddTraits(.isHeader)
+            if model.openProjects.isEmpty {
+                Text("No projects are open.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.secondaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+            }
+            ForEach(model.openProjects) { project in
+                ProjectSwitcherRow(project: project, isCurrent: project.id == model.currentProject?.id, summary: model.statusSummary(of: project)) {
+                    if let id = project.id { model.selection = .project(id) }
+                    dismiss()
+                } close: {
+                    dismiss()
+                    model.close(project)
+                }
+            }
+            Divider()
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+            SwitcherActionRow(title: "Open…", shortcut: "⌘O") { perform { model.isOpenPanelPresented = true } }
+            SwitcherActionRow(title: "Clone…") { perform { model.isClonePresented = true } }
+            SwitcherActionRow(title: "New Project…") { perform { model.newProject() } }
+            SwitcherActionRow(title: "All projects in Organizer", shortcut: "⇧⌘1") { perform { openWindow(id: WindowID.organizer) } }
+        }
+        .padding(6)
+        .frame(width: 340)
+    }
+
+    private func perform(_ action: () -> Void) {
+        dismiss()
+        action()
+    }
+}
+
+private struct ProjectSwitcherRow: View {
+    let project: Project
+    let isCurrent: Bool
+    let summary: ProjectOutline.Summary
+    let choose: () -> Void
+    let close: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        let location = "Local · \(ProjectOutline.abbreviatedPath(project.path))"
+        Button(action: choose) {
+            HStack(spacing: 10) {
+                ProjectTile(project: project, size: 26)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(project.name).fontWeight(.semibold).lineLimit(1)
+                    HStack(spacing: 5) {
+                        Image(systemName: "desktopcomputer").font(.system(size: 9.5))
+                        Text(location).lineLimit(1).truncationMode(.middle)
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText)
+                }
+                Spacer(minLength: 6)
+                Text(summary.text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(summary.tone == .quiet ? Theme.secondaryText : summary.tone.color)
+                    .lineLimit(1)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Theme.link)
+                    .opacity(isCurrent ? 1 : 0)
+            }
+            .font(.system(size: 12.5))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(isCurrent ? Theme.accent.opacity(0.2) : isHovered ? Theme.fillRaised : .clear, in: .rect(cornerRadius: 8, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
+            Button("Close Project", action: close)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(project.name), \(location), \(summary.text)")
+        .accessibilityHint("Switches to this project. More actions in the context menu")
+        .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+private struct SwitcherActionRow: View {
+    let title: String
+    var shortcut = ""
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                Spacer(minLength: 8)
+                Text(shortcut).foregroundStyle(Theme.secondaryText)
+            }
+            .font(.system(size: 12.5))
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(isHovered ? Theme.fillRaised : .clear, in: .rect(cornerRadius: 6, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
 }
 
 private struct SchemeSelector: View {
@@ -53,13 +216,6 @@ private struct SchemeSelector: View {
             let workflow = config.workflow(preferences.defaultWorkflow ?? "") ?? config.workflows.first
             let base = preferences.baseBranch ?? model.state(for: project).branch ?? "main"
             Menu {
-                Section("Project") {
-                    ForEach(model.openProjects) { other in
-                        Toggle(other.name, isOn: Binding(get: { other.id == project.id }, set: { _ in
-                            if let id = other.id { model.selection = .project(id) }
-                        }))
-                    }
-                }
                 Section("Workflow for new tasks") {
                     ForEach(config.workflows) { candidate in
                         Toggle("\(candidate.name) v\(candidate.version)", isOn: Binding(get: { candidate.id == workflow?.id }, set: { _ in
@@ -75,13 +231,10 @@ private struct SchemeSelector: View {
                     }
                 }
             } label: {
-                HStack(spacing: 6) {
-                    Text(String(project.name.prefix(1)).uppercased())
-                        .font(.system(size: 11, weight: .bold))
-                        .frame(width: 20, height: 20)
-                        .background(LinearGradient(colors: [Color(hex: 0x4A90FF), Color(hex: 0x1F5FD1)], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6, style: .continuous))
-                    Text(project.name).fontWeight(.semibold)
-                    Text("▸").foregroundStyle(Theme.secondaryText)
+                HStack(spacing: 7) {
+                    Image(systemName: ProjectTab.workflows.systemImage)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondaryText)
                     Text(workflow.map { "\($0.name) v\($0.version)" } ?? "No workflow")
                     Text("▸").foregroundStyle(Theme.secondaryText)
                     Text(base).font(.system(size: 11.5, design: .monospaced))
@@ -90,8 +243,8 @@ private struct SchemeSelector: View {
             }
             .menuIndicator(.visible)
             .fixedSize()
-            .help("Project, workflow for new tasks, and base branch")
-            .accessibilityLabel("Scheme: \(project.name), \(workflow?.name ?? "no workflow"), base \(base). Change")
+            .help("Workflow for new tasks, and base branch")
+            .accessibilityLabel("Scheme: \(workflow?.name ?? "no workflow"), base \(base). Change")
             .task(id: project.id) { await loadBranches(project) }
         }
     }

@@ -356,7 +356,8 @@ struct StubRegistry: PackageRegistry {
         try await waitUntil(timeout: .seconds(60)) { engine.holds[run.id!]?.reason == .approval }
 
         let steps = try harness.database.runSteps(runId: run.id!)
-        #expect(steps.map(\.stepId) == ["plan", "build", "checks", "gates", "review", "approve"])
+        #expect(steps.map(\.stepId) == ["plan", "build", "checks", "gates", "review", "criteria", "approve"])
+        #expect(steps[5].outcome == StepOutcome.passed)
         let outputs = steps.map { $0.output.flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) } }
         #expect(outputs[2]?.checks.count == 2)
         #expect(outputs[3]?.gates?.passed == true)

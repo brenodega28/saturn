@@ -66,6 +66,11 @@ public struct GateReport: Sendable, Hashable, Codable {
         if !criteria.isEmpty { try container.encode(criteria, forKey: .criteria) }
     }
 
+    public static func undecided(_ findings: [GateFinding], after outputs: [PreviousOutput], stepId: String) -> [GateFinding] {
+        let decided = Set(outputs.filter { $0.stepId != stepId }.flatMap { $0.output.gates?.findings ?? [] }.map(\.id))
+        return findings.filter { $0.kind == .criteria || !decided.contains($0.id) }
+    }
+
     public var blocking: [GateFinding] { findings.filter { $0.severity == .blocking } }
     public var warnings: [GateFinding] { findings.filter { $0.severity == .warning } }
     public var passed: Bool { blocking.isEmpty }

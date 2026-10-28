@@ -16,7 +16,8 @@ extension AgentWorkflowDriver {
             findings += await gateFindings(for: session.agent, policy: policy, labels: context.inputs.labels, evidence: evidence, git: git)
         }
         let criteria = criteriaGate(context)
-        let report = GateReport(findings: findings + criteria.findings, criteria: criteria.results)
+        let fresh = GateReport.undecided(findings, after: context.inputs.previousOutputs, stepId: context.step.id)
+        let report = GateReport(findings: fresh + criteria.findings, criteria: criteria.results)
         let outcome = report.passed ? StepOutcome.passed : Self.needsDecision
         return StepResult(outcome: outcome, output: StepOutput(summary: report.summary, gates: report))
     }

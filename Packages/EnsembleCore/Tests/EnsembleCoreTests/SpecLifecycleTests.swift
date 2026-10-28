@@ -4,6 +4,26 @@ import Testing
 @testable import EnsembleCore
 
 @MainActor
+final class SpecGateDriver: WorkflowDriver {
+    let scripted = ScriptedWorkflowDriver()
+    let real: AgentWorkflowDriver
+
+    init(real: AgentWorkflowDriver) {
+        self.real = real
+    }
+
+    func runAgentStep(_ context: StepContext) async throws -> StepResult { try await scripted.runAgentStep(context) }
+    func runSpawnStep(_ context: SpawnContext) async throws -> StepResult { try await scripted.runSpawnStep(context) }
+    func runCheckStep(_ context: StepContext) async throws -> StepResult { try await scripted.runCheckStep(context) }
+    func runGateStep(_ context: StepContext) async throws -> StepResult { try await real.runGateStep(context) }
+    func diffInfo(_ run: Run) async -> DiffInfo { await scripted.diffInfo(run) }
+    func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult { try await scripted.finish(run, end: end) }
+    func cancel(_ run: Run) async { await scripted.cancel(run) }
+    func mergeDelivery(_ run: Run, method: MergeMethod) async throws -> String { try await scripted.mergeDelivery(run, method: method) }
+    func openPullRequest(_ run: Run) async throws -> String { try await scripted.openPullRequest(run) }
+}
+
+@MainActor
 @Suite(.serialized) struct SpecLifecycleTests {
     typealias Setup = WorkflowDriverTests.Setup
 
@@ -281,6 +301,70 @@ import Testing
         #expect(subjects.contains("Add spec: Alpha and beta files"))
         #expect(try SpecDocument(markdown: String(contentsOf: draftURL(setup, task), encoding: .utf8)).status == .done)
         #expect(!(try await git.run(["branch", "--list", RunSpecLink.branch(runId: runID)], in: root)).contains("spec-run"))
+    }
+
+    @Test func thePostReviewGateOnlyRaisesFindingsNotDecidedAtAnEarlierGate() {
+        let size = GateFinding(kind: .size, severity: .blocking, title: "Large change: 900 lines in 3 files", detail: "Split it.", agentName: "Dev 1")
+        let secret = GateFinding(kind: .secret, severity: .blocking, title: "Possible secret: a Stripe live key", detail: "Remove it.", file: "a.py", line: 3, agentName: "Dev 1")
+        let newSecret = GateFinding(kind: .secret, severity: .blocking, title: "Possible secret: a private key", detail: "Remove it.", file: "b.pem", line: 1, agentName: "Dev 1")
+        let criterion = GateFinding(kind: .criteria, severity: .blocking, title: "Criterion 1 failed: alpha.txt exists", detail: "missing")
+        let earlier = PreviousOutput(stepId: "gates", iteration: 1, outcome: StepOutcome.passed, output: StepOutput(gates: GateReport(findings: [size, secret, criterion])))
+
+        #expect(GateReport.undecided([size, secret, newSecret, criterion], after: [earlier], stepId: "criteria") == [newSecret, criterion])
+        #expect(GateReport.undecided([size, secret], after: [earlier], stepId: "gates") == [size, secret])
+        #expect(GateReport.undecided([size], after: [], stepId: "criteria") == [size])
+    }
+
+    @Test func aReviewersFailedCriterionBlocksAtThePostReviewGateOnTheDefaultWorkflow() async throws {
+        let setup = try await WorkflowDriverTests().makeSetup()
+        defer { setup.harness.cleanUp() }
+        let root = setup.harness.repo.root
+        try FileManager.default.removeItem(at: ProjectConfig.directory(in: root).appending(path: "workflows/feature-delivery.yaml"))
+        try ProjectConfigLoader.installDefaults(repository: root)
+        let workflow = try #require(ProjectConfigLoader.load(repository: root).workflow("feature-delivery"))
+        #expect(workflow.steps.map(\.id) == ["plan", "build", "checks", "gates", "review", "criteria", "approve"])
+        #expect(workflow.step("review")?.routes[StepOutcome.approved]?.to == "criteria")
+
+        let driver = SpecGateDriver(real: setup.driver)
+        let engine = RunEngine(database: setup.harness.database, driver: driver)
+        driver.scripted.script("plan", .result(.plan(WorkflowHarness.plan)))
+        driver.scripted.script("build", WorkflowHarness.done())
+        driver.scripted.script("checks", WorkflowHarness.done())
+        driver.scripted.script("review", .result(.verdict(Verdict(outcome: StepOutcome.approved, summary: "Looks fine", criteria: [
+            CriterionResult(criterion: "1. alpha.txt exists", status: .fail, evidence: "ls shows no alpha.txt"),
+            CriterionResult(criterion: "2. beta.txt exists", status: .pass, evidence: "beta.txt:1"),
+        ]))))
+
+        let task = try setup.harness.database.insert(ProjectTask(
+            projectId: setup.project.id!, title: "Alpha and beta", body: "", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now
+        ))
+        let run = try engine.start(task: task, workflow: workflow, project: setup.project)
+        let runID = try #require(run.id)
+        let store = SpecStore(paths: setup.harness.runtime.paths)
+        let spec = SpecDocument(title: "Alpha and beta", status: .inProgress, linkedRuns: [runID], acceptanceCriteria: [SpecCriterion(text: "alpha.txt exists"), SpecCriterion(text: "beta.txt exists")])
+        try store.write(spec, to: store.draftURL(projectId: setup.project.id!, taskId: task.id!))
+        try store.save(RunSpecLink(projectId: setup.project.id!, taskId: task.id!, path: "spec/alpha-and-beta.md", branch: RunSpecLink.branch(runId: runID)), runId: runID)
+
+        try await waitUntil(timeout: .seconds(30)) { engine.holds[runID]?.reason == .planApproval }
+        try engine.approvePlan(run, plan: WorkflowHarness.plan)
+        try await waitUntil(timeout: .seconds(30)) { engine.holds[runID]?.reason == .gates }
+
+        let hold = try #require(engine.holds[runID])
+        #expect(hold.stepId == "criteria")
+        let steps = try setup.harness.database.runSteps(runId: runID)
+        #expect(steps.map(\.stepId) == ["plan", "build", "checks", "gates", "review", "criteria"])
+        #expect(steps.first { $0.stepId == "gates" }?.outcome == StepOutcome.passed)
+        let item = try #require(try setup.harness.database.inboxItems(runId: runID).last)
+        #expect(item.body.contains("Decide: Criterion 1 failed: alpha.txt exists"))
+        #expect(!item.body.contains("beta.txt exists"))
+
+        try engine.resolveGates(try #require(try setup.harness.database.run(id: runID)), proceed: true, note: "Accept it for now")
+        try await waitUntil(timeout: .seconds(30)) { engine.holds[runID]?.reason == .approval }
+        let decided = try #require(try setup.harness.database.runSteps(runId: runID).last { $0.stepId == "criteria" })
+        #expect(decided.outcome == StepOutcome.passed)
+        #expect(decided.output?.contains("You continued past them.") == true)
+        #expect(try setup.harness.database.inboxItems(runId: runID).first { $0.id == item.id }?.response == "Accept it for now")
+        try await engine.cancel(try #require(engine.runs[runID]))
     }
 
     @Test func requestsWithoutASpecStartExactlyAsBefore() async throws {

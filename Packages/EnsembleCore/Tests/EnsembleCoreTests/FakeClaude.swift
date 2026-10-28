@@ -4,11 +4,16 @@ import Foundation
 enum FakeClaude {
     static let script = #"""
     session=""
+    resumed=no
+    model=default
     prev=""
     for arg in "$@"; do
       if [ "$prev" = "--session-id" ] || [ "$prev" = "--resume" ]; then session="$arg"; fi
+      if [ "$prev" = "--resume" ]; then resumed=yes; fi
+      if [ "$prev" = "--model" ]; then model="$arg"; fi
       prev="$arg"
     done
+    [ -f "$FAKE_DIR/report-model" ] && model="$(cat "$FAKE_DIR/report-model")"
     printf '%s\n' "$(printf '%s' "$*" | tr '\n' ' ')" >> "$FAKE_DIR/args.log"
     echo "key=${ANTHROPIC_API_KEY:-} token=${ANTHROPIC_AUTH_TOKEN:-}" >> "$FAKE_DIR/env.log"
     mode="${FAKE_MODE:-normal}"
@@ -159,10 +164,42 @@ enum FakeClaude {
       printf '{"type":"system","subtype":"init","session_id":"%s","model":"claude-fake-1","cwd":"%s","claude_code_version":"9.9.9","apiKeySource":"%s"}\n' "$session" "$PWD" "$source"
       if [ "$mode" = "wrongsource" ]; then sleep 5; fi
     }
+    ledger_open() {
+      live="$FAKE_DIR/live-$$"
+      [ -d "$live" ] && return
+      mkdir -p "$live"
+      echo 0 > "$live/cents"
+      if [ "$resumed" = yes ] && [ "$(cat "$FAKE_DIR/ledger")" = restore ] && [ -d "$FAKE_DIR/saved-$session" ]; then
+        cp "$FAKE_DIR/saved-$session"/* "$live"/
+      fi
+    }
+    ledger_totals() {
+      cents="$(cat "$live/cents")"
+      models=""
+      for f in "$live"/model-*; do
+        [ -f "$f" ] && models="$models${models:+,}\"${f##*/model-}\":{\"outputTokens\":$(cat "$f")}"
+      done
+      printf '"total_cost_usd":%d.%02d,"modelUsage":{%s}' $((cents / 100)) $((cents % 100)) "$models"
+    }
+    ledger_result() {
+      ledger_open
+      turn=25
+      [ -f "$FAKE_DIR/turn-cents" ] && turn="$(cat "$FAKE_DIR/turn-cents")"
+      echo $(( $(cat "$live/cents") + turn )) > "$live/cents"
+      used=0
+      [ -f "$live/model-$model" ] && used="$(cat "$live/model-$model")"
+      echo $((used + turn)) > "$live/model-$model"
+      rm -rf "$FAKE_DIR/saved-$session"
+      cp -R "$live" "$FAKE_DIR/saved-$session"
+      echo "$turn" >> "$FAKE_DIR/spent.log"
+      printf '{"type":"result","subtype":"%s","is_error":%s,"result":"ok",%s,"duration_ms":5,"usage":{"input_tokens":10,"output_tokens":%s,"cache_read_input_tokens":100,"cache_creation_input_tokens":20},"permission_denials":[]}\n' "$1" "$2" "$(ledger_totals)" "$turn"
+    }
     api_failure() {
       printf '{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"retry_delay_ms":500,"error_status":%s,"error":"%s"}\n' "$1" "$2"
       printf '{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"API Error: %s fake %s"}]},"error":"%s","is_api_error_message":true}\n' "$1" "$2" "$2"
-      printf '{"type":"result","subtype":"success","is_error":true,"result":"API Error: %s fake %s","terminal_reason":"api_error","api_error_status":%s,"total_cost_usd":0,"duration_ms":1,"usage":{"input_tokens":0,"output_tokens":0},"permission_denials":[]}\n' "$1" "$2" "$1"
+      totals='"total_cost_usd":0'
+      if [ -f "$FAKE_DIR/ledger" ]; then ledger_open; totals="$(ledger_totals)"; fi
+      printf '{"type":"result","subtype":"success","is_error":true,"result":"API Error: %s fake %s","terminal_reason":"api_error","api_error_status":%s,%s,"duration_ms":1,"usage":{"input_tokens":0,"output_tokens":0},"permission_denials":[]}\n' "$1" "$2" "$1" "$totals"
     }
     failing() {
       remaining=1
@@ -172,6 +209,7 @@ enum FakeClaude {
     }
     result() {
       cost=$((cost + 1))
+      if [ -f "$FAKE_DIR/ledger" ]; then ledger_result "$1" "$2"; return; fi
       printf '{"type":"result","subtype":"%s","is_error":%s,"result":"ok","total_cost_usd":0.0%s,"duration_ms":5,"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":100,"cache_creation_input_tokens":20},"permission_denials":[]}\n' "$1" "$2" "$cost"
     }
     while IFS= read -r line; do

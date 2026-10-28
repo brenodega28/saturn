@@ -48,7 +48,6 @@ public final class AgentSession: Identifiable {
     @ObservationIgnored private var restartAfterStop = false
     @ObservationIgnored private var pendingFailure: String?
     @ObservationIgnored private var launchedMode: ProviderMode?
-    @ObservationIgnored private var costInProcess: Double = 0
     @ObservationIgnored private var turnCompletedInProcess = false
     @ObservationIgnored private var latestReply: String?
 
@@ -313,6 +312,7 @@ public final class AgentSession: Identifiable {
         } else {
             let sessionID = agent.sessionId ?? UUID().uuidString.lowercased()
             agent.sessionId = sessionID
+            agent.startSessionTotals()
             session = .new(sessionID)
         }
 
@@ -345,7 +345,6 @@ public final class AgentSession: Identifiable {
             self.handle = handle
             launchedMode = runtime.providerMode
             pendingFailure = nil
-            costInProcess = 0
             turnCompletedInProcess = false
             apiErrorInProcess = nil
             sessionStartedInProcess = false
@@ -427,9 +426,8 @@ public final class AgentSession: Identifiable {
     }
 
     private func account(_ result: TurnResult) {
+        let cost = agent.addTurnCost(of: result, continuingProcess: turnCompletedInProcess)
         turnCompletedInProcess = true
-        let cost = max(0, result.totalCostUSD - costInProcess)
-        costInProcess = result.totalCostUSD
         #if DEBUG
         runtime.debugTrace?.turnCompleted(result, costUSD: cost, agent: agent)
         #endif
@@ -437,7 +435,6 @@ public final class AgentSession: Identifiable {
         agent.outputTokens += result.usage.output
         agent.cacheReadTokens += result.usage.cacheRead
         agent.cacheWriteTokens += result.usage.cacheWrite
-        agent.costUSD += cost
         persist()
         do {
             try runtime.database.record(UsageEntry(

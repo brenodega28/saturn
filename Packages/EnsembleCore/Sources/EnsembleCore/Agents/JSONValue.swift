@@ -68,6 +68,11 @@ public enum JSONValue: Sendable, Hashable, Codable {
         return nil
     }
 
+    public var object: [String: JSONValue]? {
+        if case .object(let value) = self { return value }
+        return nil
+    }
+
     public var compactJSON: String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]

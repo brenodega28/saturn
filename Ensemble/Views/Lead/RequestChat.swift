@@ -20,15 +20,20 @@ struct RequestChat: View {
     }
 
     private func thread(isThinking: Bool, session: AgentSession?) -> some View {
-        ScrollViewReader { proxy in
+        let held = model.heldSends(for: model.leadSendTarget(for: task, in: project))
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     if let data {
                         ForEach(data.thread.items) { item in
                             row(item, data: data)
                                 .id(item.id)
-                                .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
+                                .transition(.asymmetric(insertion: insertion(of: item), removal: .opacity))
                         }
+                    }
+                    ForEach(held) { send in
+                        RequestBubble(held: send, onCancel: model.cancelHeldSend)
+                            .id(send.id.uuidString)
                     }
                     if isThinking {
                         ThinkingRow(role: data?.leadRole, name: data?.leadName ?? "Lead", session: session)
@@ -44,6 +49,7 @@ struct RequestChat: View {
             .followsBottom(of: isThinking ? (session?.transcript.liveEntry ?? session?.transcript.entries.last) : nil)
             .onChange(of: data?.thread.items.last?.id) { scrollToEnd(proxy) }
             .onChange(of: isThinking) { scrollToEnd(proxy) }
+            .onChange(of: held.map(\.id)) { scrollToEnd(proxy) }
         }
         .task(id: task.id) {
             while !Task.isCancelled {
@@ -58,9 +64,15 @@ struct RequestChat: View {
 
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
         let isThinking = model.leadSession(for: task).map { $0.isRunning || $0.isQueued } ?? false
-        let target = isThinking ? Self.thinkingID : data?.thread.items.last?.id
+        let lastHeld = model.heldSends(for: model.leadSendTarget(for: task, in: project)).last?.id.uuidString
+        let target = isThinking ? Self.thinkingID : lastHeld ?? data?.thread.items.last?.id
         guard let target else { return }
         withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(target, anchor: .bottom) }
+    }
+
+    private func insertion(of item: RequestThread.Item) -> AnyTransition {
+        if case .message(let message) = item, message.kind == .user { return .identity }
+        return .move(edge: .bottom).combined(with: .opacity)
     }
 
     private func reload() {
@@ -366,7 +378,22 @@ private struct AnsweredQuestion: View {
 struct RequestBubble: View {
     let text: String
     let date: Date
-    var attachments: [StoredChatAttachment] = []
+    private let attachments: [SentAttachment]
+    private let onCancel: (() -> Void)?
+
+    init(text: String, date: Date, attachments: [StoredChatAttachment] = []) {
+        self.text = text
+        self.date = date
+        self.attachments = attachments.map(SentAttachment.init)
+        onCancel = nil
+    }
+
+    init(held: HeldSend, onCancel: @escaping (HeldSend) -> Void) {
+        text = held.message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        date = held.date
+        attachments = held.message.attachments.map(SentAttachment.init)
+        self.onCancel = held.isCancellable ? { onCancel(held) } : nil
+    }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
@@ -384,24 +411,63 @@ struct RequestBubble: View {
                     .background(Theme.accent.opacity(0.85), in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 6, topTrailingRadius: 20, style: .continuous))
                     .accessibilityLabel("You: \(text)")
             }
-            Text(date.formatted(.relative(presentation: .named))).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+            HStack(spacing: 10) {
+                if let onCancel {
+                    Button("Cancel", action: onCancel)
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Theme.link)
+                        .help("Stop this message and put it back in the composer (Esc)")
+                        .accessibilityLabel("Cancel send")
+                }
+                Text(date.formatted(.relative(presentation: .named))).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+            }
         }
         .frame(maxWidth: 640, alignment: .trailing)
         .frame(maxWidth: .infinity, alignment: .trailing)
-        .accessibilityElement(children: attachments.isEmpty ? .combine : .contain)
+        .accessibilityElement(children: attachments.isEmpty && onCancel == nil ? .combine : .contain)
+    }
+}
+
+private struct SentAttachment {
+    enum Content {
+        case imageFile(URL)
+        case imageData(Data)
+        case pastedText(String)
+    }
+
+    let label: String
+    let content: Content
+
+    init(_ stored: StoredChatAttachment) {
+        label = stored.label
+        switch stored {
+        case .image(_, _, _, let path): content = .imageFile(URL(fileURLWithPath: path))
+        case .pastedText(_, _, let text): content = .pastedText(text)
+        }
+    }
+
+    init(_ attachment: ChatAttachment) {
+        label = attachment.label
+        switch attachment {
+        case .image(_, _, _, let data): content = .imageData(data)
+        case .pastedText(_, _, let text): content = .pastedText(text)
+        }
     }
 }
 
 private struct SentAttachments: View {
-    let attachments: [StoredChatAttachment]
+    let attachments: [SentAttachment]
 
     var body: some View {
         HStack(spacing: 8) {
             ForEach(Array(attachments.enumerated()), id: \.offset) { _, attachment in
-                switch attachment {
-                case .image(_, _, let fileName, let path):
-                    SentImage(url: URL(fileURLWithPath: path), name: fileName)
-                case .pastedText(_, _, let text):
+                switch attachment.content {
+                case .imageFile(let url):
+                    SentImage(source: .imageFile(url), name: attachment.label)
+                case .imageData(let data):
+                    SentImage(source: .imageData(data), name: attachment.label)
+                case .pastedText(let text):
                     PastedTextChip(label: attachment.label, text: text)
                 }
             }
@@ -412,13 +478,23 @@ private struct SentAttachments: View {
 }
 
 private struct SentImage: View {
-    let url: URL
+    enum Source: Hashable {
+        case imageFile(URL)
+        case imageData(Data)
+    }
+
+    let source: Source
     let name: String
     @State private var image: NSImage?
 
     var body: some View {
         ImageAttachmentThumbnail(image: image, name: name, size: 120)
-            .task(id: url) { image = NSImage(contentsOf: url) }
+            .task(id: source) {
+                switch source {
+                case .imageFile(let url): image = NSImage(contentsOf: url)
+                case .imageData(let data): image = NSImage(data: data)
+                }
+            }
     }
 }
 

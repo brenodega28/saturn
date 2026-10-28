@@ -14,12 +14,9 @@ struct LeadComposer: View {
         let lead = model.chatLeadRole(in: project)
         let leadName = request.flatMap { model.leadSession(for: $0).map { model.displayName(of: $0.agent, in: project) } } ?? lead?.name ?? "the lead"
         let sendTarget = model.leadSendTarget(for: request, in: project)
-        VStack(alignment: .leading, spacing: 8) {
-            PendingSendChip(target: sendTarget, onUndo: restore)
-            composer(lead: lead, leadName: leadName)
-        }
-        .animation(.snappy(duration: 0.2), value: sendTarget.map(model.pendingSends.holds(for:))?.count)
-        .restoresReturnedSends(for: sendTarget, perform: restore)
+        composer(lead: lead, leadName: leadName)
+            .cancelsHeldSendOnEscape(for: sendTarget)
+            .restoresReturnedSends(for: sendTarget, perform: restore)
     }
 
     private func composer(lead: RoleDefinition?, leadName: String) -> some View {

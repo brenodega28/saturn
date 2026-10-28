@@ -27,13 +27,7 @@ struct TranscriptEntryView: View {
     var body: some View {
         switch entry.content {
         case .user(let text):
-            VStack(alignment: .leading, spacing: 4) {
-                Text("You").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.secondaryText)
-                Text(text).font(.system(size: 13.5)).textSelection(.enabled)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.accent.opacity(0.14), in: .rect(cornerRadius: 14, style: .continuous))
+            TranscriptUserMessage(text: text)
         case .assistant(let text):
             MarkdownText(text: text, isStreaming: entry.isStreaming)
         case .thinking(let block):
@@ -79,6 +73,32 @@ struct TranscriptEntryView: View {
         let tokens = result.usage.total.formatted(.number.notation(.compactName))
         let status = result.wasInterrupted ? "Turn interrupted" : (result.isError ? "Turn failed" : "Turn finished")
         return "\(status) · \(tokens) tokens · \(seconds.formatted(.number.precision(.fractionLength(1))))s"
+    }
+}
+
+struct TranscriptUserMessage: View {
+    let text: String
+    var onCancel: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text("You").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+                Spacer(minLength: 0)
+                if let onCancel {
+                    Button("Cancel", action: onCancel)
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.link)
+                        .help("Stop this message and put it back in the composer (Esc)")
+                        .accessibilityLabel("Cancel send")
+                }
+            }
+            Text(text).font(.system(size: 13.5)).textSelection(.enabled)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.accent.opacity(0.14), in: .rect(cornerRadius: 14, style: .continuous))
     }
 }
 

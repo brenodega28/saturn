@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Yams
 
 public struct MigrationNotice: Sendable, Hashable, Identifiable {
@@ -16,6 +17,19 @@ public struct MigrationNotice: Sendable, Hashable, Identifiable {
 public enum RoleMigration {
     public static let rolesFolderName = "roles"
     public static let legacyFolderName = "legacy-roles"
+
+    private static let pending = Mutex<[String: [MigrationNotice]]>([:])
+
+    static func keep(_ notices: [MigrationNotice], for repository: URL) {
+        guard !notices.isEmpty else { return }
+        let key = realPath(of: repository)
+        pending.withLock { $0[key, default: []] += notices }
+    }
+
+    public static func takeNotices(for repository: URL) -> [MigrationNotice] {
+        let key = realPath(of: repository)
+        return pending.withLock { $0.removeValue(forKey: key) ?? [] }
+    }
 
     public static func rolesDirectory(in repository: URL) -> URL {
         ProjectConfig.directory(in: repository).appending(path: rolesFolderName, directoryHint: .isDirectory)

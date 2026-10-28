@@ -161,6 +161,7 @@ public enum ProjectConfigLoader {
         if hasConfig(repository: repository) {
             do {
                 notices = try RoleMigration.migrate(repository: repository)
+                RoleMigration.keep(notices, for: repository)
             } catch {
                 issues.append(ConfigIssue(file: ProjectConfig.directoryName, message: "Couldn’t migrate roles to agent kinds: \(error.localizedDescription)"))
             }

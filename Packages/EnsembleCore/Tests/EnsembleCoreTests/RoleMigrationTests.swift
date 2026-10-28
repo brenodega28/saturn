@@ -168,6 +168,24 @@ import Yams
         #expect(ProjectConfigLoader.load(repository: root).migrationNotices.isEmpty)
     }
 
+    @Test func noticesFromAnEarlierLoadWaitForTheCallerThatPostsThem() throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let early = ProjectConfigLoader.load(repository: root)
+        #expect(!early.migrationNotices.isEmpty)
+        let later = ProjectConfigLoader.load(repository: root)
+        #expect(later.migrationNotices.isEmpty)
+
+        let posted = RoleMigration.takeNotices(for: root)
+        #expect(posted == early.migrationNotices)
+        #expect(posted.contains { $0.file == ".claude/skills/payments/SKILL.md" })
+        #expect(RoleMigration.takeNotices(for: root).isEmpty)
+        let symlinked = URL(fileURLWithPath: realPath(of: root))
+        _ = ProjectConfigLoader.load(repository: symlinked)
+        #expect(RoleMigration.takeNotices(for: root).isEmpty)
+    }
+
     @Test func existingSkillFilesAreNeverOverwritten() throws {
         let root = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }

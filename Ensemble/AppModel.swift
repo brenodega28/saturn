@@ -329,7 +329,7 @@ final class AppModel {
         guard let id = project.id else { return }
         let config = ProjectConfigLoader.load(repository: project.url)
         configs[id] = config
-        reportMigration(config.migrationNotices, in: project)
+        reportMigration(RoleMigration.takeNotices(for: project.url), in: project)
     }
 
     private func reportMigration(_ notices: [MigrationNotice], in project: Project) {

@@ -289,9 +289,10 @@ public final class AgentRuntime {
         let tools = handoffTools(agent)
         let config = repository.map { ProjectConfigLoader.load(repository: $0) }
         let policy = PermissionPolicy(profile: (config?.permissions ?? PermissionsConfig()).resolve(for: config?.role(agent.role), readOnly: agent.readOnly), readOnly: agent.readOnly)
+        let name = AgentNaming.displayName(of: agent, config: config)
         var prompt = agent.readOnly
-            ? ClaudeLaunch.readOnlySystemPrompt(agentName: agent.name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree), commands: policy.commands)
-            : ClaudeLaunch.systemPrompt(agentName: agent.name, worktree: directory, branch: agent.branch, commands: policy.commands)
+            ? ClaudeLaunch.readOnlySystemPrompt(agentName: name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree), commands: policy.commands)
+            : ClaudeLaunch.systemPrompt(agentName: name, worktree: directory, branch: agent.branch, commands: policy.commands)
         if let guide = ClaudeLaunch.askGuide(policy), mcpServer != nil { prompt += "\n\n" + guide }
         var isLead = false
         if let repository, let config {
@@ -309,7 +310,7 @@ public final class AgentRuntime {
             if !agent.readOnly, let checks = config.checks, let guide = Self.checksGuide(checks) { prompt += "\n\n" + guide }
         }
         if mcpServer != nil, agent.taskId == nil, let spawnerID = agent.spawnedById, let spawner = try database.agent(id: spawnerID) {
-            prompt += "\n\n" + Self.spawnedAgentGuide(spawner: spawner.name)
+            prompt += "\n\n" + Self.spawnedAgentGuide(spawner: AgentNaming.displayName(of: spawner, config: config))
         }
         if let port = agent.port {
             prompt += "\n\n" + Self.portGuide(port)

@@ -70,7 +70,7 @@ extension AgentRuntime {
             case nil:
                 let item = try database.createInboxItem(InboxItem(
                     projectId: agent.projectId, runId: agent.runId, agentId: id, kind: .permission,
-                    title: "\(agent.name) asks to \(capability.describe(request))",
+                    title: "\(database.displayName(of: agent)) asks to \(capability.describe(request))",
                     body: "\(policy.profile.name) agents need your OK to \(capability.title.lowercased()). Allow it once for this request, or say no.",
                     createdAt: .now
                 ))

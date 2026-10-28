@@ -57,7 +57,7 @@ extension AgentWorkflowDriver {
            !mine.contains(where: { [.screenshot, .recording].contains($0.kind) }) {
             findings.append(GateFinding(
                 kind: .evidence, severity: .warning, title: "UI change without a screenshot",
-                detail: "\(ui.path) changes what people see, but \(agent.name) attached no screenshot or recording. Ask for one, or check the UI yourself.",
+                detail: "\(ui.path) changes what people see, but \(displayName(of: agent)) attached no screenshot or recording. Ask for one, or check the UI yourself.",
                 file: ui.path, agentName: agent.name
             ))
         }
@@ -65,7 +65,7 @@ extension AgentWorkflowDriver {
         if policy.evidence.performanceLabels.contains(where: { lowered.contains($0.lowercased()) }), !mine.contains(where: { $0.kind == .benchmark }) {
             findings.append(GateFinding(
                 kind: .evidence, severity: .warning, title: "Performance work without a benchmark",
-                detail: "The task is labelled as performance work, but \(agent.name) attached no benchmark showing the before and after.",
+                detail: "The task is labelled as performance work, but \(displayName(of: agent)) attached no benchmark showing the before and after.",
                 agentName: agent.name
             ))
         }
@@ -85,7 +85,7 @@ extension AgentWorkflowDriver {
                 case nil:
                     ("New dependency: \(dependency.name)", "Ensemble couldn’t reach \(dependency.ecosystem.registryName) to confirm \(dependency.name) exists. Check it before approving.")
                 case true?:
-                    ("New dependency: \(dependency.name)", "\(agent.name) added \(dependency.name) from \(dependency.ecosystem.registryName). Approve it, or send it back to do without.")
+                    ("New dependency: \(dependency.name)", "\(displayName(of: agent)) added \(dependency.name) from \(dependency.ecosystem.registryName). Approve it, or send it back to do without.")
                 }
                 findings.append(GateFinding(kind: .dependency, severity: .blocking, title: title, detail: detail, file: path, agentName: agent.name))
             }

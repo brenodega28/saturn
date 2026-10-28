@@ -148,7 +148,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 runtime.debugTrace?.questionAsked(by: agent, routedTo: "lead", body: question, questions: questions)
                 #endif
                 questionRelay.enqueue(RelayedQuestion(
-                    projectId: agent.projectId, runId: runId, agentId: agentID, agentName: agent.name, body: question, questions: questions
+                    projectId: agent.projectId, runId: runId, agentId: agentID, agentName: displayName(of: agent), body: question, questions: questions
                 ))
                 return "Your question was sent to your lead, who will answer it or ask the user. End your turn now; the answer arrives as your next message."
             }
@@ -157,12 +157,12 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 #if DEBUG
                 runtime.debugTrace?.questionAsked(by: agent, routedTo: "spawner", body: question, questions: questions)
                 #endif
-                session.send(QuestionRelay.spawnedAgentMessage(agentName: agent.name, body: question, questions: questions))
-                return "Your question was sent to \(spawner.name), who started you and will answer it or ask the user. End your turn now; the answer arrives as your next message."
+                session.send(QuestionRelay.spawnedAgentMessage(agentName: displayName(of: agent), body: question, questions: questions))
+                return "Your question was sent to \(displayName(of: spawner)), who started you and will answer it or ask the user. End your turn now; the answer arrives as your next message."
             }
             _ = try runtime.database.createInboxItem(InboxItem(
                 projectId: agent.projectId, runId: agent.runId, agentId: agentID, kind: .question,
-                title: "\(agent.name) asks", body: question, questions: questions.isEmpty ? nil : questions, createdAt: .now
+                title: "\(displayName(of: agent)) asks", body: question, questions: questions.isEmpty ? nil : questions, createdAt: .now
             ))
             #if DEBUG
             runtime.debugTrace?.questionAsked(by: agent, routedTo: "user", body: question, questions: questions)
@@ -184,45 +184,49 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             return "The user sees your proposal with a Start button. End your turn now. If they start it, you’ll be asked to plan it."
         case .agentMessage(let name, let text) where (try? isLead(agent)) == true:
             let target = try otherAgent(named: name, from: agent)
-            guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(target.name) can’t receive messages.") }
+            let targetName = displayName(of: target)
+            guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(targetName) can’t receive messages.") }
             let sender = agent.taskId == nil || target.spawnedById == agent.id
-                ? "Message from \(agent.name):"
-                : "Message from \(agent.name), passing on the user’s instruction:"
+                ? "Message from \(displayName(of: agent)):"
+                : "Message from \(displayName(of: agent)), passing on the user’s instruction:"
             #if DEBUG
             if awaitingLead.contains(session.id) { runtime.debugTrace?.questionAnswered(for: target, answer: text, via: "lead") }
             #endif
             awaitingLead.remove(session.id)
             session.send("\(sender)\n\n\(text)")
-            return "Sent to \(target.name)."
+            return "Sent to \(targetName)."
         case .agentMessage(let name, let text) where agent.taskId == nil && agent.spawnedById != nil:
             guard let spawner = try spawner(of: agent), let session = runtime.session(for: spawner) else {
                 throw HandoffError.notAllowed("The agent that started you no longer exists, so there’s no one to message.")
             }
-            guard spawner.name.caseInsensitiveCompare(name.trimmingCharacters(in: .whitespaces)) == .orderedSame else {
-                throw HandoffError.notAllowed("You can only message \(spawner.name), the agent that started you.")
+            let spawnerName = displayName(of: spawner)
+            let requested = name.trimmingCharacters(in: .whitespaces)
+            guard [spawner.name, spawnerName].contains(where: { $0.caseInsensitiveCompare(requested) == .orderedSame }) else {
+                throw HandoffError.notAllowed("You can only message \(spawnerName), the agent that started you.")
             }
-            session.send("Message from \(agent.name), an agent you started:\n\n\(text)")
-            return "Sent to \(spawner.name)."
+            session.send("Message from \(displayName(of: agent)), an agent you started:\n\n\(text)")
+            return "Sent to \(spawnerName)."
         case .agentMessage(let name, let text):
             guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can message run agents.") }
             let activeRuns = Set(try runtime.database.runs(taskId: taskId).filter(\.isActive).compactMap(\.id))
             guard !activeRuns.isEmpty else { throw HandoffError.notAllowed("No run is going for this request, so there’s no one to message.") }
             let candidates = try runtime.database.agents(inProject: agent.projectId)
                 .filter { $0.id != agentID && $0.archivedAt == nil && $0.runId.map(activeRuns.contains) == true }
-            guard let target = candidates.first(where: { $0.name.caseInsensitiveCompare(name.trimmingCharacters(in: .whitespaces)) == .orderedSame }),
-                  let session = runtime.session(for: target) else {
-                throw HandoffError.notAllowed("No agent named “\(name)” in this request’s run. Agents: \(candidates.map(\.name).joined(separator: ", ")).")
+            let target = try resolveAgent(named: name, among: candidates, config: try projectConfig(for: agent), missing: "No agent named “\(name)” in this request’s run.")
+            guard let session = runtime.session(for: target) else {
+                throw HandoffError.notAllowed("\(displayName(of: target)) can’t receive messages.")
             }
             #if DEBUG
             if awaitingLead.contains(session.id) { runtime.debugTrace?.questionAnswered(for: target, answer: text, via: "lead") }
             #endif
             awaitingLead.remove(session.id)
-            session.send("Message from \(agent.name), passing on the user’s instruction:\n\n\(text)")
-            return "Sent to \(target.name)."
+            session.send("Message from \(displayName(of: agent)), passing on the user’s instruction:\n\n\(text)")
+            return "Sent to \(displayName(of: target))."
         case .listAgents:
             try requireLead(agent)
             let agents = try runtime.database.agents(inProject: agent.projectId).filter { $0.archivedAt == nil }
-            return agents.map { listing(of: $0, isCaller: $0.id == agentID) }.joined(separator: "\n")
+            let labels = distinctNames(of: agents, config: try projectConfig(for: agent))
+            return zip(agents, labels).map { listing(of: $0, label: $1, isCaller: $0.id == agentID) }.joined(separator: "\n")
         case .spawnAgent(let request):
             try requireLead(agent)
             let (project, config) = try projectAndConfig(for: agent)
@@ -233,23 +237,24 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 in: project, role: role, count: request.count, config: config, git: try requireGit(),
                 name: request.name, model: request.model, task: request.task, spawnedBy: agent
             )
-            return "Started \(spawned.map(\.agent.name).joined(separator: ", ")). Each agent’s report arrives as your next message when it finishes its turn. End your turn now."
+            return "Started \(spawned.map { AgentNaming.displayName(of: $0.agent, config: config) }.joined(separator: ", ")). Each agent’s report arrives as your next message when it finishes its turn. End your turn now."
         case .stopAgent(let name):
             try requireLead(agent)
             let target = try otherAgent(named: name, from: agent)
-            guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(target.name) can’t be stopped.") }
+            guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(displayName(of: target)) can’t be stopped.") }
             session.stop()
-            return "Stopping \(target.name)."
+            return "Stopping \(displayName(of: target))."
         case .deleteAgent(let name, let deleteBranch):
             try requireLead(agent)
             let target = try otherAgent(named: name, from: agent)
+            let targetName = displayName(of: target)
             if let runId = target.runId, try runtime.database.run(id: runId)?.isActive == true {
-                throw HandoffError.notAllowed("\(target.name) is part of a running workflow. Stop it with stop_agent instead.")
+                throw HandoffError.notAllowed("\(targetName) is part of a running workflow. Stop it with stop_agent instead.")
             }
             let (project, _) = try projectAndConfig(for: agent)
-            guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(target.name) can’t be deleted.") }
+            guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(targetName) can’t be deleted.") }
             try await runtime.delete(session, in: project, git: try requireGit(), deleteBranch: deleteBranch)
-            return "Deleted \(target.name)\(deleteBranch && target.branch != nil ? " and its branch" : "")."
+            return "Deleted \(targetName)\(deleteBranch && target.branch != nil ? " and its branch" : "")."
         case .openWorktree:
             try requireLead(agent)
             guard agent.worktreePath == nil else { throw HandoffError.notAllowed("You already work in \(agent.worktreePath ?? "a worktree").") }
@@ -308,16 +313,17 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let failed = agent.status == .failed
         guard failed || (try? hasOpenQuestion(session)) == false else { return }
         let submitted = results.removeValue(forKey: agentID)
+        let name = displayName(of: agent)
         let report = failed
-            ? "\(agent.name) failed: \(agent.lastError ?? "unknown error")"
-            : submitted ?? currentTurnReply(session).nilIfEmpty ?? "\(agent.name) ended its turn without a reply."
+            ? "\(name) failed: \(agent.lastError ?? "unknown error")"
+            : submitted ?? currentTurnReply(session).nilIfEmpty ?? "\(name) ended its turn without a reply."
         if let spawner = try? spawner(of: agent), let spawnerSession = runtime.session(for: spawner) {
-            spawnerSession.send("Report from \(agent.name):\n\n\(report)")
+            spawnerSession.send("Report from \(name):\n\n\(report)")
             return
         }
         _ = try? runtime.database.createInboxItem(InboxItem(
             projectId: agent.projectId, agentId: agentID, kind: .notice,
-            title: "Report from \(agent.name)", body: report, createdAt: .now
+            title: "Report from \(name)", body: report, createdAt: .now
         ))
     }
 
@@ -347,21 +353,43 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         guard try isLead(agent) else { throw HandoffError.notAllowed("Only lead roles can manage agents.") }
     }
 
-    private func otherAgent(named name: String, from agent: Agent) throws -> Agent {
-        let candidates = try runtime.database.agents(inProject: agent.projectId).filter { $0.id != agent.id && $0.archivedAt == nil }
-        guard let target = candidates.first(where: { $0.name.caseInsensitiveCompare(name.trimmingCharacters(in: .whitespaces)) == .orderedSame }) else {
-            throw HandoffError.notAllowed("No other agent named “\(name)” in this project. Agents: \(candidates.map(\.name).joined(separator: ", ")).")
-        }
-        return target
+    func displayName(of agent: Agent) -> String {
+        runtime.database.displayName(of: agent)
     }
 
-    private func listing(of agent: Agent, isCaller: Bool) -> String {
+    private func otherAgent(named name: String, from agent: Agent) throws -> Agent {
+        let candidates = try runtime.database.agents(inProject: agent.projectId).filter { $0.id != agent.id && $0.archivedAt == nil }
+        return try resolveAgent(named: name, among: candidates, config: try projectConfig(for: agent), missing: "No other agent named “\(name)” in this project.")
+    }
+
+    private func resolveAgent(named name: String, among candidates: [Agent], config: ProjectConfig, missing: String) throws -> Agent {
+        let requested = name.trimmingCharacters(in: .whitespaces)
+        if let exact = candidates.first(where: { $0.name.caseInsensitiveCompare(requested) == .orderedSame }) {
+            return exact
+        }
+        let matches = candidates.filter { AgentNaming.displayName(of: $0, config: config).caseInsensitiveCompare(requested) == .orderedSame }
+        if matches.count == 1, let match = matches.first { return match }
+        if let first = matches.first {
+            throw HandoffError.notAllowed("Several agents are called “\(AgentNaming.displayName(of: first, config: config))”: \(matches.map(\.name).joined(separator: ", ")). Use one of those exact names.")
+        }
+        throw HandoffError.notAllowed("\(missing) Agents: \(distinctNames(of: candidates, config: config).joined(separator: ", ")).")
+    }
+
+    private func distinctNames(of agents: [Agent], config: ProjectConfig) -> [String] {
+        let names = agents.map { AgentNaming.displayName(of: $0, config: config) }
+        let counts = Dictionary(names.map { ($0.lowercased(), 1) }, uniquingKeysWith: +)
+        return zip(agents, names).map { agent, name in
+            counts[name.lowercased(), default: 0] > 1 && name != agent.name ? "\(name) (\(agent.name))" : name
+        }
+    }
+
+    private func listing(of agent: Agent, label: String, isCaller: Bool) -> String {
         var fields = ["role \(agent.role)", "status \(agent.status.rawValue)"]
         if let branch = agent.branch { fields.append("branch \(branch)") }
         fields.append(agent.worktreePath.map { "worktree \($0)" } ?? "read-only")
         if agent.runId != nil { fields.append("in a workflow run") }
         if !agent.task.isEmpty { fields.append("task: \(agent.task)") }
-        return "- \(agent.name)\(isCaller ? " (you)" : ""): " + fields.joined(separator: "; ")
+        return "- \(label)\(isCaller ? " (you)" : ""): " + fields.joined(separator: "; ")
     }
 
     public func runAgentStep(_ context: StepContext) async throws -> StepResult {
@@ -414,10 +442,10 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
         switch expected {
         case .plan:
-            guard let plan = plans[session.id] else { throw WorkflowDriverError.missingHandoff(agent: session.agent.name, tool: expected.tool.qualifiedName) }
+            guard let plan = plans[session.id] else { throw WorkflowDriverError.missingHandoff(agent: displayName(of: session.agent), tool: expected.tool.qualifiedName) }
             return .plan(plan, costUSD: cost)
         case .verdict:
-            guard let verdict = verdicts[session.id] else { throw WorkflowDriverError.missingHandoff(agent: session.agent.name, tool: expected.tool.qualifiedName) }
+            guard let verdict = verdicts[session.id] else { throw WorkflowDriverError.missingHandoff(agent: displayName(of: session.agent), tool: expected.tool.qualifiedName) }
             return .verdict(verdict, costUSD: cost)
         case .result:
             let heads = await branchHeads(of: [session], in: context.project, git: git)
@@ -612,7 +640,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         while true {
             try await waitForTurnEnd(session)
             if session.agent.status == .failed {
-                throw WorkflowDriverError.agentFailed(agent: session.agent.name, message: session.agent.lastError ?? "unknown error")
+                throw WorkflowDriverError.agentFailed(agent: displayName(of: session.agent), message: session.agent.lastError ?? "unknown error")
             }
             if hasHandoff(session.id, expected: expected) { return }
             if try hasOpenQuestion(session) {
@@ -626,7 +654,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
             if expected == .result, nudged || results[session.id] != nil { return }
             guard !nudged else {
-                throw WorkflowDriverError.missingHandoff(agent: session.agent.name, tool: expected.tool.qualifiedName)
+                throw WorkflowDriverError.missingHandoff(agent: displayName(of: session.agent), tool: expected.tool.qualifiedName)
             }
             nudged = true
             session.send("You ended your turn without calling `\(expected.tool.qualifiedName)`. Call it now with your \(expected == .plan ? "plan" : expected == .verdict ? "verdict" : "summary"), then end your turn.")
@@ -696,7 +724,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             return try await operation()
         } catch let error as SetupScriptError {
             let failed = (try? runtime.runSessions(runId: runId, projectId: projectId ?? -1))?.last { runtime.setupFailed($0) }
-            throw WorkflowDriverError.setupFailed(agent: failed?.agent.name ?? "a new agent", message: error.localizedDescription)
+            throw WorkflowDriverError.setupFailed(agent: failed.map { displayName(of: $0.agent) } ?? "a new agent", message: error.localizedDescription)
         }
     }
 

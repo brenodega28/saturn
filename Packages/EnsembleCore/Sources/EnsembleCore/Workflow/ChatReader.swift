@@ -192,7 +192,7 @@ public struct ChatReader {
         }
         if let plan = entry.handoff.plan {
             lines.append("Plan: \(plan.summary)")
-            lines += plan.tasks.map { "  - \($0.title) (\($0.role)\($0.count > 1 ? " ×\($0.count)" : ""))" }
+            lines += plan.tasks.map { "  - \($0.title) (\($0.role))" }
             if let spec = plan.spec { lines.append("Spec:\n" + spec.markdown) }
         }
         if let verdict = entry.handoff.verdict {

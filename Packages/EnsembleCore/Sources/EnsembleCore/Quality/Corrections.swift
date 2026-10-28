@@ -42,11 +42,17 @@ public struct Correction: Codable, Sendable, Hashable, Identifiable, FetchableRe
     ]
 
     public var keywords: Set<String> {
-        Set(text.lowercased()
-            .split { !$0.isLetter && !$0.isNumber && $0 != "_" && $0 != "'" }
-            .map(String.init)
-            .filter { $0.count >= 3 && !Self.stopWords.contains($0) }
-            .map { $0.hasSuffix("s") && $0.count > 4 ? String($0.dropLast()) : $0 })
+        let words: [String] = text.lowercased().split(whereSeparator: Self.isWordSeparator).map(String.init)
+        let meaningful: [String] = words.filter { (word: String) -> Bool in word.count >= 3 && !Self.stopWords.contains(word) }
+        return Set(meaningful.map(Self.singular))
+    }
+
+    private static func isWordSeparator(_ character: Character) -> Bool {
+        !character.isLetter && !character.isNumber && character != "_" && character != "'"
+    }
+
+    private static func singular(_ word: String) -> String {
+        word.hasSuffix("s") && word.count > 4 ? String(word.dropLast()) : word
     }
 
     public func resembles(_ other: Correction, threshold: Double = 0.5) -> Bool {

@@ -9,7 +9,17 @@ struct LeadView: View {
     var body: some View {
         if model.isShowingRequestPage(in: project) {
             RequestListView(project: project)
-        } else if let session = model.directChatSession(in: project) {
+        } else {
+            HStack(alignment: .top, spacing: 20) {
+                ChatPeoplePanel(project: project)
+                conversation
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var conversation: some View {
+        if let session = model.directChatSession(in: project) {
             DirectChatView(session: session, project: project)
                 .id(session.id)
         } else {

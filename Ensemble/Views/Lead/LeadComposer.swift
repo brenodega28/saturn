@@ -30,7 +30,7 @@ struct LeadComposer: View {
                 onSubmit: { send(lead: lead) }
             )
             HStack(spacing: 8) {
-                ChatTargetPicker(project: project, style: .chip)
+                ChatRecipientChip(name: lead?.name ?? leadName, appearance: RoleAppearance(role: lead))
                 Spacer()
                 Button(action: { send(lead: lead) }) {
                     Image(systemName: "arrow.up")

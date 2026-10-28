@@ -46,16 +46,11 @@ struct ProjectScreen: View {
 }
 
 struct ProjectScreenAccessory: View {
-    @Environment(AppModel.self) private var model
     let project: Project
     let tab: ProjectTab
 
     var body: some View {
-        if tab == .lead {
-            if !model.isShowingRequestPage(in: project) {
-                ChatTargetPicker(project: project)
-            }
-        } else {
+        if tab != .lead {
             NewAgentButton()
         }
     }

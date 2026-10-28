@@ -76,7 +76,7 @@ import Testing
     @Test func planApprovalUsesTheEditedPlanAndRejectionReplans() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let edited = Plan(summary: "Only the API for now.", tasks: [PlanTask(id: "api", title: "Refund API (cents)", role: "claude-code", count: 2)])
+        let edited = Plan(summary: "Only the API for now.", tasks: [PlanTask(id: "api", title: "Refund API (cents)", role: "claude-code")])
         h.driver.script("plan", .result(.plan(H.plan)), .result(.plan(H.plan)))
         h.driver.script("build", .hang)
 

@@ -5,20 +5,18 @@ public struct PlanTask: Sendable, Hashable, Codable, Identifiable {
     public var title: String
     public var details: String
     public var role: String
-    public var count: Int
     public var files: [String]
 
-    public init(id: String = UUID().uuidString, title: String, details: String = "", role: String, count: Int = 1, files: [String] = []) {
+    public init(id: String = UUID().uuidString, title: String, details: String = "", role: String, files: [String] = []) {
         self.id = id
         self.title = title
         self.details = details
         self.role = role
-        self.count = count
         self.files = files
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, details, role, count, files
+        case id, title, details, role, files
     }
 
     public init(from decoder: Decoder) throws {
@@ -27,7 +25,6 @@ public struct PlanTask: Sendable, Hashable, Codable, Identifiable {
         self.title = try container.decode(String.self, forKey: .title)
         self.details = try container.decodeIfPresent(String.self, forKey: .details) ?? ""
         self.role = try container.decode(String.self, forKey: .role)
-        self.count = max(1, try container.decodeIfPresent(Int.self, forKey: .count) ?? 1)
         self.files = try container.decodeIfPresent([String].self, forKey: .files) ?? []
     }
 }
@@ -94,8 +91,6 @@ public struct Plan: Sendable, Hashable, Codable {
         self.tasks = try container.decode([PlanTask].self, forKey: .tasks)
         self.spec = try container.decodeIfPresent(PlanSpec.self, forKey: .spec).flatMap { $0.isEmpty ? nil : $0 }
     }
-
-    public var agentCount: Int { tasks.reduce(0) { $0 + $1.count } }
 }
 
 public struct ReviewIssue: Sendable, Hashable, Codable {
@@ -364,7 +359,6 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                     "title": string("Short imperative task title"),
                     "details": string("What to build, constraints, and how to verify it"),
                     "role": string("Role id that should build this task"),
-                    "count": .object(["type": .string("integer"), "minimum": .number(1)]),
                     "files": array(string("A file or folder this task owns")),
                 ], required: ["title", "role"])),
                 "spec": object([

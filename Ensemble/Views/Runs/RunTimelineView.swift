@@ -212,7 +212,7 @@ private struct TimelineDetails: View {
                 detailBlock("Plan · \(plan.tasks.count) task\(plan.tasks.count == 1 ? "" : "s")") {
                     Text(plan.summary)
                     ForEach(plan.tasks) { task in
-                        Text("• \(task.title) — \(task.role)\(task.count > 1 ? " ×\(task.count)" : "")")
+                        Text("• \(task.title) — \(task.role)")
                     }
                 }
             }

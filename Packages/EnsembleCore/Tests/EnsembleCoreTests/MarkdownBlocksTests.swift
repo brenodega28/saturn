@@ -42,6 +42,63 @@ import Testing
         ])
     }
 
+    @Test func readsTaskBoxesInOrderedAndNestedLists() {
+        let blocks = MarkdownParser.blocks("1. [X] shipped\n   - [ ] follow up\n2. plain")
+
+        #expect(blocks == [
+            .list(ordered: true, items: [
+                MarkdownListItem(text: "shipped", number: 1, isChecked: true),
+                MarkdownListItem(text: "follow up", depth: 1, isChecked: false),
+                MarkdownListItem(text: "plain", number: 2),
+            ]),
+        ])
+    }
+
+    @Test func plainListItemsAndLookalikesAreNotTasks() {
+        let blocks = MarkdownParser.blocks("- item\n- [link](https://example.com)\n- [x]\n- []  empty")
+
+        #expect(blocks == [
+            .list(ordered: false, items: [
+                MarkdownListItem(text: "item"),
+                MarkdownListItem(text: "[link](https://example.com)"),
+                MarkdownListItem(text: "[x]"),
+                MarkdownListItem(text: "[]  empty"),
+            ]),
+        ])
+    }
+
+    @Test func splitsFrontMatterScalarsAndLists() {
+        let split = MarkdownFrontMatter.split("---\ntitle: \"Spec: viewer\"\nstatus: draft\nlinked_runs:\n  - 12\n  - '14'\ntags: [ui, markdown]\nempty:\n---\n\n# Body\ntext")
+
+        #expect(split.fields.map(\.key) == ["title", "status", "linked_runs", "tags", "empty"])
+        #expect(split.fields.map(\.value) == ["Spec: viewer", "draft", "12, 14", "ui, markdown", ""])
+        #expect(split.body == "# Body\ntext")
+    }
+
+    @Test func textWithoutFrontMatterIsUnchanged() {
+        let text = "# Title\n\n---\nkey: value\n---"
+        let split = MarkdownFrontMatter.split(text)
+
+        #expect(split.fields.isEmpty)
+        #expect(split.body == text)
+    }
+
+    @Test func unterminatedFrontMatterIsLeftAsBody() {
+        let text = "---\ntitle: Draft\nstatus: draft\n\n# Body"
+        let split = MarkdownFrontMatter.split(text)
+
+        #expect(split.fields.isEmpty)
+        #expect(split.body == text)
+    }
+
+    @Test func leadingRuleAroundProseIsNotFrontMatter() {
+        let text = "---\nJust a paragraph between rules.\n---\nMore"
+        let split = MarkdownFrontMatter.split(text)
+
+        #expect(split.fields.isEmpty)
+        #expect(split.body == text)
+    }
+
     @Test func boldLineIsNotAListItem() {
         #expect(MarkdownParser.blocks("**Bold** start") == [.paragraph("**Bold** start")])
     }

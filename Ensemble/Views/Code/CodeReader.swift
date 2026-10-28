@@ -6,6 +6,7 @@ struct CodeReader: View {
     @Environment(AppModel.self) private var model
     let browser: CodeBrowser
     let project: Project
+    @State private var sourceModePaths: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,12 +14,17 @@ struct CodeReader: View {
             if let path = browser.activePath {
                 let lines = browser.lines(path)
                 let language = CodeLanguage(path: path)
+                let markdownMode = markdownMode(for: path, language: language)
                 let symbols = CodeOutline.symbols(lines, language: language)
                 let current = symbols.last { $0.line <= browser.focusLine }
-                FileBar(browser: browser, path: path, symbol: current) { model.setTab(.changes, for: project) }
+                FileBar(browser: browser, path: path, symbol: markdownMode == .rendered ? nil : current, markdownMode: markdownModeBinding(for: path, mode: markdownMode)) {
+                    model.setTab(.changes, for: project)
+                }
                 GeometryReader { proxy in
                     HStack(spacing: 0) {
                         switch browser.document(path) {
+                        case .text(let lines) where markdownMode == .rendered:
+                            MarkdownDocumentView(text: lines.joined(separator: "\n"))
                         case .text(let lines):
                             CodeLines(browser: browser, path: path, lines: lines, language: language) {
                                 model.setTab(.changes, for: project)
@@ -30,7 +36,7 @@ struct CodeReader: View {
                         case .missing:
                             unreadable("File not found", "It may have been deleted or moved since the list was loaded.")
                         }
-                        if proxy.size.width >= 640, !symbols.isEmpty {
+                        if proxy.size.width >= 640, !symbols.isEmpty, markdownMode != .rendered {
                             Divider().overlay(Color.white.opacity(0.05))
                             CodeOutlineList(browser: browser, symbols: symbols, current: current)
                                 .frame(width: 200)
@@ -51,6 +57,18 @@ struct CodeReader: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func markdownMode(for path: String, language: CodeLanguage) -> MarkdownReaderMode? {
+        guard language == .markdown else { return nil }
+        return sourceModePaths.contains(path) ? .source : .rendered
+    }
+
+    private func markdownModeBinding(for path: String, mode: MarkdownReaderMode?) -> Binding<MarkdownReaderMode>? {
+        guard let mode else { return nil }
+        return Binding(get: { mode }, set: { newMode in
+            if newMode == .source { sourceModePaths.insert(path) } else { sourceModePaths.remove(path) }
+        })
     }
 
     private func unreadable(_ title: String, _ detail: String) -> some View {
@@ -119,6 +137,7 @@ private struct FileBar: View {
     let browser: CodeBrowser
     let path: String
     let symbol: CodeSymbol?
+    let markdownMode: Binding<MarkdownReaderMode>?
     let openChanges: () -> Void
 
     var body: some View {
@@ -157,6 +176,16 @@ private struct FileBar: View {
 
     private func actions(compact: Bool) -> some View {
         HStack(spacing: 8) {
+            if let markdownMode {
+                Picker("Markdown view", selection: markdownMode) {
+                    ForEach(MarkdownReaderMode.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+                .help("Show this Markdown file rendered or as source")
+            }
             if let change = browser.change(for: path) {
                 Button(action: openChanges) {
                     HStack(spacing: 6) {

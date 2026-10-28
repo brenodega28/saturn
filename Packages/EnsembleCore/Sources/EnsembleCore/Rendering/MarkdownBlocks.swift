@@ -77,6 +77,64 @@ public enum MarkdownParser {
     }
 }
 
+public enum MarkdownFrontMatter {
+    public static func split(_ text: String) -> (fields: [(key: String, value: String)], body: String) {
+        let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        guard let first = lines.first, Self.isDelimiter(first, opening: true),
+              let closing = lines.indices.dropFirst().first(where: { Self.isDelimiter(lines[$0], opening: false) }),
+              let fields = Self.fields(lines[1..<closing]) else { return ([], text) }
+        let body = lines[(closing + 1)...].drop { $0.trimmingCharacters(in: .whitespaces).isEmpty }
+        return (fields, body.joined(separator: "\n"))
+    }
+
+    private static func isDelimiter(_ line: String, opening: Bool) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\u{FEFF}", with: "")
+        return trimmed == "---" || (!opening && trimmed == "...")
+    }
+
+    private static func fields(_ lines: ArraySlice<String>) -> [(key: String, value: String)]? {
+        var fields: [(key: String, value: String)] = []
+        var items: [String] = []
+        func finishList() {
+            guard !items.isEmpty, !fields.isEmpty else { return }
+            fields[fields.count - 1].value = items.joined(separator: ", ")
+            items = []
+        }
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+            if let item = trimmed.wholeMatch(of: /-(?:[ \t]+(.*))?/) {
+                guard let last = fields.last, last.value.isEmpty || !items.isEmpty else { return nil }
+                items.append(unquoted(item.1.map(String.init) ?? ""))
+            } else if let pair = trimmed.wholeMatch(of: /([A-Za-z0-9_][A-Za-z0-9_ .-]*?)[ \t]*:(?:[ \t]+(.*))?[ \t]*/) {
+                finishList()
+                fields.append((String(pair.1), scalar(pair.2.map(String.init) ?? "")))
+            } else {
+                return nil
+            }
+        }
+        finishList()
+        return fields.isEmpty ? nil : fields
+    }
+
+    private static func scalar(_ raw: String) -> String {
+        let value = raw.trimmingCharacters(in: .whitespaces)
+        if value.hasPrefix("["), value.hasSuffix("]") {
+            return value.dropFirst().dropLast().split(separator: ",")
+                .map { unquoted($0.trimmingCharacters(in: .whitespaces)) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ", ")
+        }
+        return unquoted(value)
+    }
+
+    private static func unquoted(_ raw: String) -> String {
+        let value = raw.trimmingCharacters(in: .whitespaces)
+        guard value.count >= 2, let quote = value.first, quote == "\"" || quote == "'", value.last == quote else { return value }
+        return String(value.dropFirst().dropLast())
+    }
+}
+
 private struct Fence {
     let marker: Character
     let length: Int

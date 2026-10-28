@@ -256,6 +256,39 @@ struct PlanUsagePollerTests {
         #expect(poller.usage == sample)
     }
 
+    @Test func activationDoesNotReadTheKeychainWhileSignInIsNeeded() async {
+        let credentials = CountingCredentials("token-a")
+        let poller = makePoller(credentials)
+        fetcher.enqueue(.failure(.unauthorized))
+        await poller.poll()
+        #expect(poller.needsSignIn)
+        #expect(credentials.reads == 1)
+
+        for _ in 0..<5 {
+            clock.advance(minutes: 1)
+            await poller.refreshOnActivation()
+        }
+        #expect(credentials.reads == 1)
+        #expect(fetcher.tokens.count == 1)
+        #expect(poller.needsSignIn)
+    }
+
+    @Test func activationRefreshesAreThrottled() async {
+        let credentials = CountingCredentials("token-a")
+        let poller = makePoller(credentials)
+        fetcher.enqueue(.success(sample), .success(sample), .success(sample))
+
+        await poller.refreshOnActivation()
+        clock.now = clock.now.addingTimeInterval(10)
+        await poller.refreshOnActivation()
+        #expect(fetcher.tokens.count == 1)
+
+        clock.now = clock.now.addingTimeInterval(PlanUsagePoller.activationInterval)
+        await poller.refreshOnActivation()
+        #expect(fetcher.tokens.count == 2)
+        #expect(credentials.reads == 1)
+    }
+
     @Test func retriesOnceWithARotatedToken() async {
         let credentials = CountingCredentials("token-a", "token-b")
         let poller = makePoller(credentials)

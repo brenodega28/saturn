@@ -84,7 +84,6 @@ final class AppModel {
     let idleCleanup: IdleCleanupScheduler
     let planUsage = PlanUsagePoller()
     @ObservationIgnored private var planUsageActivationObserver: NSObjectProtocol?
-    @ObservationIgnored private var lastPlanUsageActivationRefresh: Date?
 
     private(set) var environment: EnvironmentReport?
     private(set) var providerMode: ProviderMode?
@@ -305,14 +304,11 @@ final class AppModel {
         await checkEnvironment()
     }
 
-    private static let planUsageActivationInterval: TimeInterval = 30
-
     private func updatePlanUsagePolling() {
         guard providerMode == .claudeSignIn else {
             planUsage.stop()
             return
         }
-        lastPlanUsageActivationRefresh = .now
         if planUsage.isRunning {
             Task { await planUsage.refresh() }
         } else {
@@ -322,10 +318,7 @@ final class AppModel {
 
     private func refreshPlanUsageOnActivation() {
         guard providerMode == .claudeSignIn, planUsage.isRunning else { return }
-        let now = Date.now
-        if let last = lastPlanUsageActivationRefresh, now.timeIntervalSince(last) < Self.planUsageActivationInterval { return }
-        lastPlanUsageActivationRefresh = now
-        Task { await planUsage.refresh() }
+        Task { await planUsage.refreshOnActivation() }
     }
 
     var weeklySpend: Double {

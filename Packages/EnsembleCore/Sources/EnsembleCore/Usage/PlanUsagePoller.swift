@@ -8,6 +8,7 @@ public final class PlanUsagePoller {
 
     public static let baseBackoff: TimeInterval = 60
     public static let maximumBackoff: TimeInterval = 30 * 60
+    public static let activationInterval: TimeInterval = 30
 
     public private(set) var usage: PlanUsage?
     public private(set) var lastUpdated: Date?
@@ -23,6 +24,7 @@ public final class PlanUsagePoller {
     @ObservationIgnored private var consecutiveFailures = 0
     @ObservationIgnored private var isPolling = false
     @ObservationIgnored private var loop: Task<Void, Never>?
+    @ObservationIgnored private var lastActivationRefresh: Date?
 
     public init(
         credentials: any PlanUsageCredentialSource = ClaudeCodeKeychainCredentials(),
@@ -41,6 +43,7 @@ public final class PlanUsagePoller {
     public func start() {
         guard loop == nil else { return }
         needsSignIn = false
+        lastActivationRefresh = clock()
         loop = Task { [weak self, tick] in
             while !Task.isCancelled {
                 await self?.poll()
@@ -62,6 +65,14 @@ public final class PlanUsagePoller {
         await poll(explicitly: false)
     }
 
+    public func refreshOnActivation(minimumInterval: TimeInterval = PlanUsagePoller.activationInterval) async {
+        guard !needsSignIn else { return }
+        let now = clock()
+        if let lastActivationRefresh, now.timeIntervalSince(lastActivationRefresh) < minimumInterval { return }
+        lastActivationRefresh = now
+        await poll()
+    }
+
     public func isBackingOff(at now: Date) -> Bool {
         backoffUntil.map { now < $0 } ?? false
     }
@@ -72,12 +83,12 @@ public final class PlanUsagePoller {
         defer { isPolling = false }
 
         let cachedToken = token
-        guard let token = readToken() else { return }
+        guard let token = await readToken() else { return }
         do {
             record(try await fetch(token))
         } catch PlanUsageError.unauthorized where cachedToken != nil {
             self.token = nil
-            guard let fresh = readToken(), fresh != token else {
+            guard let fresh = await readToken(), fresh != token else {
                 requireSignIn()
                 return
             }
@@ -91,10 +102,11 @@ public final class PlanUsagePoller {
         }
     }
 
-    private func readToken() -> String? {
+    private func readToken() async -> String? {
         if let token { return token }
+        let credentials = credentials
         do {
-            guard let stored = try credentials.accessToken() else {
+            guard let stored = try await Task.detached(operation: { try credentials.accessToken() }).value else {
                 requireSignIn()
                 return nil
             }

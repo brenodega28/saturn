@@ -164,7 +164,7 @@ private struct DirectComposer: View {
                 onSubmit: send
             )
             HStack(spacing: 8) {
-                ChatTargetPicker(project: project, style: .chip)
+                ChatRecipientChip(name: name, appearance: RoleAppearance(role: model.role(for: session.agent, in: project)))
                 Text("Direct message · no new run")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)

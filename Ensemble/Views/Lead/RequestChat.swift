@@ -7,6 +7,7 @@ struct RequestChat: View {
     let task: ProjectTask
     let project: Project
     @State private var data: RequestThreadData?
+    @State private var highlightedItemID: String?
 
     var body: some View {
         let session = model.leadSession(for: task)
@@ -27,6 +28,11 @@ struct RequestChat: View {
                     if let data {
                         ForEach(data.thread.items) { item in
                             row(item, data: data)
+                                .background {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(Theme.accent.opacity(highlightedItemID == item.id ? 0.2 : 0))
+                                        .padding(-8)
+                                }
                                 .id(item.id)
                                 .transition(.asymmetric(insertion: insertion(of: item), removal: .opacity))
                         }
@@ -47,9 +53,12 @@ struct RequestChat: View {
             }
             .defaultScrollAnchor(.bottom)
             .followsBottom(of: isThinking ? (session?.transcript.liveEntry ?? session?.transcript.entries.last) : nil)
-            .onChange(of: data?.thread.items.last?.id) { scrollToEnd(proxy) }
+            .onChange(of: data?.thread.items.last?.id) {
+                if !revealHighlight(proxy) { scrollToEnd(proxy) }
+            }
             .onChange(of: isThinking) { scrollToEnd(proxy) }
             .onChange(of: held.map(\.id)) { scrollToEnd(proxy) }
+            .onChange(of: model.chatHighlight) { revealHighlight(proxy) }
         }
         .task(id: task.id) {
             while !Task.isCancelled {
@@ -61,6 +70,24 @@ struct RequestChat: View {
     }
 
     private static let thinkingID = "thinking"
+
+    @discardableResult
+    private func revealHighlight(_ proxy: ScrollViewProxy) -> Bool {
+        guard let link = model.chatHighlight, link.requestID == task.id, let data else { return false }
+        model.chatHighlight = nil
+        guard let messageID = link.messageID,
+              let target = data.thread.items.first(where: { if case .message(let message) = $0 { message.id == messageID } else { false } })?.id
+        else { return false }
+        Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(target, anchor: .center) }
+            withAnimation(.easeIn(duration: 0.2)) { highlightedItemID = target }
+            try? await Task.sleep(for: .seconds(1.6))
+            guard highlightedItemID == target else { return }
+            withAnimation(.easeOut(duration: 1.2)) { highlightedItemID = nil }
+        }
+        return true
+    }
 
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
         let isThinking = model.leadSession(for: task).map { $0.isRunning || $0.isQueued } ?? false
@@ -94,19 +121,13 @@ struct RequestChat: View {
                 }
             )
         case .message(let message):
-            switch message.kind {
-            case .user:
-                RequestBubble(text: message.text, date: message.createdAt, attachments: message.storedAttachments)
-            case .lead:
-                LeadBubble(role: data.leadRole, name: data.leadName, date: message.createdAt) {
-                    ChatText(message.text)
-                }
-            case .proposal:
-                ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed)
-                    .padding(.leading, 42)
-            case .note:
-                DirectMessageNote(text: message.text)
-                    .padding(.leading, 42)
+            if message.id != nil {
+                messageRow(message, data: data)
+                    .contextMenu {
+                        Button("Copy Link to Message") { model.copyLink(to: task, message: message) }
+                    }
+            } else {
+                messageRow(message, data: data)
             }
         case .runStarted(let run):
             LeadBubble(role: data.leadRole, name: data.leadName, date: run.startedAt) {
@@ -131,6 +152,24 @@ struct RequestChat: View {
                     HoldCard(run: current, project: project, hold: hold, timeline: timeline, reload: reload)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func messageRow(_ message: LeadMessage, data: RequestThreadData) -> some View {
+        switch message.kind {
+        case .user:
+            RequestBubble(text: message.text, date: message.createdAt, attachments: message.storedAttachments)
+        case .lead:
+            LeadBubble(role: data.leadRole, name: data.leadName, date: message.createdAt) {
+                ChatText(message.text)
+            }
+        case .proposal:
+            ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed)
+                .padding(.leading, 42)
+        case .note:
+            DirectMessageNote(text: message.text)
+                .padding(.leading, 42)
         }
     }
 
@@ -174,6 +213,13 @@ private struct RequestHeader: View {
                 .foregroundStyle(Theme.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: 8)
+            Button { model.copyLink(to: task) } label: {
+                Label("Copy Link", systemImage: "link")
+            }
+            .buttonStyle(PillButtonStyle(height: 26))
+            .font(.system(size: 12))
+            .fixedSize()
+            .help("Copy an ensemble:// link to this chat to paste in another chat or app")
             if let reason = task.closeReason {
                 closedBanner(reason)
             } else {
@@ -401,7 +447,7 @@ struct RequestBubble: View {
                 SentAttachments(attachments: attachments)
             }
             if !text.isEmpty {
-                Text(text)
+                Text(Self.linked(text))
                     .font(.system(size: 14))
                     .lineSpacing(3)
                     .foregroundStyle(.white)
@@ -426,6 +472,15 @@ struct RequestBubble: View {
         .frame(maxWidth: 640, alignment: .trailing)
         .frame(maxWidth: .infinity, alignment: .trailing)
         .accessibilityElement(children: attachments.isEmpty && onCancel == nil ? .combine : .contain)
+    }
+
+    private static func linked(_ text: String) -> AttributedString {
+        var linked = MarkdownText.linkingChatLinks(AttributedString(text))
+        for run in linked.runs where run.link != nil {
+            linked[run.range].foregroundColor = .white
+            linked[run.range].underlineStyle = .single
+        }
+        return linked
     }
 }
 

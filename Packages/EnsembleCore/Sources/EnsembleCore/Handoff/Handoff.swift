@@ -233,6 +233,37 @@ public enum HandoffMessage: Sendable, Hashable {
     case stopAgent(String)
     case deleteAgent(String, deleteBranch: Bool)
     case openWorktree
+    case readChat(ChatReadRequest)
+}
+
+public struct ChatReadRequest: Sendable, Hashable {
+    public enum Section: String, Sendable, Hashable, CaseIterable {
+        case overview
+        case messages
+        case run
+        case transcript
+    }
+
+    public var requestID: Int64
+    public var messageID: Int64?
+    public var section: Section
+    public var runID: Int64?
+    public var agent: String?
+    public var offset: Int?
+    public var limit: Int?
+
+    public init(
+        requestID: Int64, messageID: Int64? = nil, section: Section = .overview, runID: Int64? = nil,
+        agent: String? = nil, offset: Int? = nil, limit: Int? = nil
+    ) {
+        self.requestID = requestID
+        self.messageID = messageID
+        self.section = section
+        self.runID = runID
+        self.agent = agent
+        self.offset = offset
+        self.limit = limit
+    }
 }
 
 public struct AgentSpawnRequest: Sendable, Hashable, Codable {
@@ -278,6 +309,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     case stopAgent = "stop_agent"
     case deleteAgent = "delete_agent"
     case openWorktree = "open_worktree"
+    case readChat = "read_chat"
 
     public static let leadTools: Set<HandoffTool> = [.messageAgent, .listAgents, .spawnAgent, .stopAgent, .deleteAgent]
 
@@ -313,6 +345,8 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             "Get your own git worktree and branch so you can change code yourself. Call it only when you must edit files, then end your turn; your next turn runs inside the worktree with write access."
         case .askHuman:
             "Ask the user questions you can't answer from the code or docs. Put shared context in question. When you need several decisions, list each one in questions, with options when there are clear choices; the user answers them one at a time. After calling it, end your turn; the answers arrive as your next message, numbered like your questions."
+        case .readChat:
+            "Read an Ensemble request chat from any project: its messages, runs, run step history and agent transcripts. A link ensemble://chat/<request_id>?message=<message_id> maps to request_id and message_id; call this tool whenever a message contains such a link. Start with the overview section, then page with offset and limit or pull the messages, run or transcript section."
         }
     }
 
@@ -406,6 +440,21 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                     "options": array(string("A short answer the user can pick")),
                 ], required: ["question"])),
             ], required: ["question"])
+        case .readChat:
+            func integer(_ description: String) -> JSONValue { .object(["type": .string("integer"), "description": .string(description)]) }
+            return object([
+                "request_id": integer("The request id, the number after ensemble://chat/ in a link"),
+                "message_id": integer("A message id from ?message= in a link; that message is marked in the output"),
+                "section": .object([
+                    "type": .string("string"),
+                    "enum": .array(ChatReadRequest.Section.allCases.map { JSONValue.string($0.rawValue) }),
+                    "description": .string("overview (default): request, runs and the first messages; messages: every message; run: one run's step history; transcript: one agent's transcript"),
+                ]),
+                "run_id": integer("The run to read; required for the run section, optional for transcript"),
+                "agent": string("Agent name or id; required for the transcript section"),
+                "offset": .object(["type": .string("integer"), "minimum": .number(0), "description": .string("Index of the first item to show")]),
+                "limit": .object(["type": .string("integer"), "minimum": .number(1), "description": .string("How many items to show; defaults to \(ChatReader.defaultLimit)")]),
+            ], required: ["request_id"])
         }
     }
 
@@ -452,6 +501,22 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             return .deleteAgent(agent, deleteBranch: arguments["delete_branch"]?.bool ?? false)
         case .openWorktree:
             return .openWorktree
+        case .readChat:
+            func integer(_ key: String) -> Int? { arguments[key]?.int ?? arguments[key]?.string.flatMap { Int($0.trimmingCharacters(in: .whitespaces)) } }
+            guard let requestID = integer("request_id") else { throw HandoffError.missing("request_id") }
+            let sectionName = arguments["section"]?.string?.trimmingCharacters(in: .whitespaces).lowercased()
+            guard let section = sectionName.map(ChatReadRequest.Section.init(rawValue:)) ?? .overview else {
+                let names = ChatReadRequest.Section.allCases.map(\.rawValue).joined(separator: ", ")
+                throw HandoffError.notAllowed("Unknown section “\(sectionName ?? "")”. Use one of: \(names).")
+            }
+            let runID = integer("run_id")
+            let agent = arguments["agent"]?.string?.trimmingCharacters(in: .whitespaces).nilIfEmpty ?? integer("agent").map(String.init)
+            if section == .run, runID == nil { throw HandoffError.missing("run_id") }
+            if section == .transcript, agent == nil { throw HandoffError.missing("agent") }
+            return .readChat(ChatReadRequest(
+                requestID: Int64(requestID), messageID: integer("message_id").map(Int64.init), section: section,
+                runID: runID.map(Int64.init), agent: agent, offset: integer("offset"), limit: integer("limit")
+            ))
         }
     }
 }

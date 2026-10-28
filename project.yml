@@ -46,6 +46,11 @@ targets:
         SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
         SUEnableAutomaticChecks: true
         GitHubClientID: $(GITHUB_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.monoliti.Ensemble.chat-link
+            CFBundleTypeRole: Viewer
+            CFBundleURLSchemes:
+              - ensemble
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.monoliti.Ensemble

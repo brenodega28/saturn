@@ -27,8 +27,24 @@ struct MarkdownText: View {
     }
 
     static func inline(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        linkingChatLinks((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text))
     }
+
+    static func linkingChatLinks(_ text: AttributedString) -> AttributedString {
+        let plain = String(text.characters)
+        guard plain.localizedCaseInsensitiveContains(ChatLink.scheme + "://") else { return text }
+        var linked = text
+        for match in plain.matches(of: chatLinkPattern) {
+            guard let link = ChatLink(string: String(plain[match.range])) else { continue }
+            let start = linked.characters.index(linked.startIndex, offsetBy: plain.distance(from: plain.startIndex, to: match.range.lowerBound))
+            let end = linked.characters.index(start, offsetBy: plain.distance(from: match.range.lowerBound, to: match.range.upperBound))
+            guard linked[start..<end].runs.allSatisfy({ $0.link == nil }) else { continue }
+            linked[start..<end].link = link.url
+        }
+        return linked
+    }
+
+    private static var chatLinkPattern: Regex<Substring> { /(?i)ensemble:\/\/chat\/\d+(?:\?message=\d+)?/ }
 
     static func caret(size: CGFloat) -> AttributedString {
         var caret = AttributedString(" ▍")

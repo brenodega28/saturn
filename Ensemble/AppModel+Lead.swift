@@ -145,10 +145,15 @@ extension AppModel {
     func holdLeadMessage(_ message: PendingMessage, lead: RoleDefinition?, to request: ProjectTask?, in project: Project) {
         guard let target = leadSendTarget(for: request, in: project) else { return }
         holdSend(message, to: target) { [weak self] held in
+            guard let self else { return }
+            let delivery = HeldSend(id: UUID(), target: target, message: held, date: .now, isCancellable: false)
+            deliveringSends.append(delivery)
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let current = request?.id.flatMap { try? self.database.task(id: $0) } ?? request
-                if await !sendLeadMessage(held.text, attachments: held.attachments, lead: lead, to: current, in: project) {
+                let sent = await sendLeadMessage(held.text, attachments: held.attachments, lead: lead, to: current, in: project)
+                deliveringSends.removeAll { $0.id == delivery.id }
+                if !sent {
                     pendingSends.returnToComposer(held, for: target)
                 }
             }

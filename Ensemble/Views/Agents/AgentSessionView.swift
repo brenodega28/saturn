@@ -163,7 +163,6 @@ private struct Composer: View {
     var body: some View {
         let sendTarget = PendingSendTarget.session(session.id)
         VStack(alignment: .leading, spacing: 8) {
-            PendingSendChip(target: sendTarget, onUndo: restore)
             if !session.queuedMessages.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "clock").font(.system(size: 11))
@@ -203,7 +202,8 @@ private struct Composer: View {
             .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
         }
-        .animation(.snappy(duration: 0.2), value: model.pendingSends.holds(for: sendTarget).count)
+        .cancelsHeldSendOnEscape(for: sendTarget)
+        .restoresReturnedSends(for: sendTarget, perform: restore)
     }
 
     private func send() {

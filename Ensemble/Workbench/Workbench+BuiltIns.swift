@@ -6,7 +6,7 @@ extension WorkbenchRegistry {
     func registerBuiltIns() {
         registerEditorKinds()
         register(NavigatorTabSpec(id: NavigatorTabID.workspace, title: "Workspace", systemImage: "folder", order: 0) {
-            AnyView(SidebarView())
+            AnyView(WorkspaceNavigator())
         })
         register(NavigatorTabSpec(id: "runs", title: "Runs", systemImage: "play.circle", order: 10, showsScope: true) {
             AnyView(RunsNavigator())
@@ -378,16 +378,19 @@ private struct InboxToolbarButton: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        let count = model.inbox.items.count
         Button { model.selection = .inbox } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: "tray")
-                if model.inboxCount > 0 {
-                    Text("\(model.inboxCount)").foregroundStyle(Theme.warning)
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Theme.warning)
                 }
             }
         }
-        .help("Inbox (\(model.inboxCount) waiting)")
-        .accessibilityLabel("Inbox, \(model.inboxCount) waiting")
+        .help("Inbox (\(count) waiting)")
+        .accessibilityLabel("Inbox, \(count) waiting")
     }
 }
 

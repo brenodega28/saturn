@@ -27,6 +27,10 @@ extension AppModel {
             newProject()
             return
         }
+        newChat(in: project)
+    }
+
+    func newChat(in project: Project) {
         showChat(in: project)
         startNewLeadRequest(in: project)
         if let lead = leadRoles(in: project).first { chooseChatTarget(.lead(lead.id), in: project) }

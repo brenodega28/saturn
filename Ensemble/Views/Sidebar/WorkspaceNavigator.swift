@@ -91,6 +91,10 @@ private struct ProjectOutlineTree: View {
     }
 
     private func open(_ tab: ProjectTab) {
+        if tab == .lead {
+            model.newChat(in: project)
+            return
+        }
         if tab == .agents { model.selectedAgents[projectID] = nil }
         model.sidebarDestination = .section(project: projectID, tab: tab)
     }

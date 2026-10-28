@@ -323,6 +323,18 @@ public final class AppDatabase: Sendable {
                 try db.execute(sql: "UPDATE agent SET role = ? WHERE id = ?", arguments: [kind.rawValue, row["id"] as Int64])
             }
         }
+        migrator.registerMigration("v20-permission-scopes") { db in
+            try db.alter(table: "permissionRequest") { t in
+                t.add(column: "scope", .text).notNull().defaults(to: PermissionScope.once.rawValue)
+                t.add(column: "runId", .integer)
+                t.add(column: "consumedAt", .datetime)
+            }
+            try db.alter(table: "leadMessage") { t in
+                t.add(column: "permissionRequestId", .integer)
+                t.add(column: "permissionStatus", .text)
+                t.add(column: "capability", .text)
+            }
+        }
 
         return migrator
     }

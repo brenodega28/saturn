@@ -191,6 +191,9 @@ struct RequestChat: View {
         case .note:
             DirectMessageNote(text: message.text)
                 .padding(.leading, 42)
+        case .permission:
+            PermissionCard(card: message)
+                .padding(.leading, 42)
         }
     }
 
@@ -537,6 +540,59 @@ private struct ProposalCard: View {
         case .started: Text("Started").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.successText)
         case .dismissed: Text("Dismissed").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.tertiaryText)
         default: EmptyView()
+        }
+    }
+}
+
+private struct PermissionCard: View {
+    @Environment(AppModel.self) private var model
+    let card: LeadMessage
+
+    var body: some View {
+        let isPending = card.permissionStatus == .pending
+        let action = card.capability?.describe(card.text) ?? card.text
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield")
+                    .foregroundStyle(Theme.warning)
+                    .accessibilityHidden(true)
+                Text("Permission request").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+                Text(card.title ?? "Agent").font(.system(size: 12)).foregroundStyle(Color(hex: 0x9CC6FF))
+                Spacer(minLength: 0)
+                statusLabel
+            }
+            ChatText("\(card.title ?? "An agent") asks to \(action).")
+            if let capability = card.capability {
+                Text("This needs your OK to \(capability.title.lowercased()).")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            HStack(spacing: 8) {
+                Button("Allow once") { model.answerPermission(card, decision: .allowOnce) }
+                    .buttonStyle(PillButtonStyle(.primary, height: 30))
+                    .help("Let the agent run this exact command one more time")
+                Button("Allow for this run") { model.answerPermission(card, decision: .allowForRun) }
+                    .buttonStyle(PillButtonStyle(height: 30))
+                    .help("Let every agent in this run use `\(PermissionPolicy.commandName(of: card.text))` until the run ends")
+                Button("Deny") { model.answerPermission(card, decision: .deny) }
+                    .buttonStyle(PillButtonStyle(height: 30))
+                    .help("Tell the agent to find another way")
+            }
+            .disabled(!isPending)
+        }
+        .padding(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.accent.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.accent.opacity(0.28)))
+    }
+
+    @ViewBuilder
+    private var statusLabel: some View {
+        switch card.permissionStatus {
+        case .allowedOnce: Text("Allowed once").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.successText)
+        case .allowedForRun: Text("Allowed for this run").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.successText)
+        case .denied: Text("Denied").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.danger)
+        case .pending, nil: Text("Waiting for you").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.warning)
         }
     }
 }

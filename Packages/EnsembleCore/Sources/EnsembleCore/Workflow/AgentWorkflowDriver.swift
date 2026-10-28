@@ -273,12 +273,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func relayLead(for agent: Agent, runId: Int64) throws -> Agent? {
-        guard let run = try runtime.database.run(id: runId),
-              let lead = try runtime.database.leadAgent(taskId: run.taskId), lead.id != agent.id,
-              runtime.session(for: lead) != nil,
-              let workflow = workflowSnapshot(run) else { return nil }
-        let hasLeadStep = workflow.steps.contains { $0.type == .agent && $0.agent == .lead }
-        return hasLeadStep ? lead : nil
+        try runtime.relayLead(for: agent, runId: runId)
     }
 
     private func deliverQuestions(_ batch: [RelayedQuestion], runId: Int64) {

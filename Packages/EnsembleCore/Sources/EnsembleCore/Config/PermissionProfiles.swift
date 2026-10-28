@@ -190,11 +190,91 @@ public struct PermissionPolicy: Sendable, Hashable {
         }
     }
 
+    public var hasBash: Bool { level(.runShell) != .never || !commands.isEmpty }
+
     public var askMatcher: String? {
         var tools: [String] = []
         if level(.editFiles) == .ask { tools += AgentPermissions.fileWritingTools }
         if level(.network) == .ask { tools += AgentPermissions.webTools }
-        if [.runShell, .installPackages, .gitPush, .network].contains(where: { level($0) == .ask }) { tools.append("Bash") }
+        if hasBash { tools.append("Bash") }
         return tools.isEmpty ? nil : tools.joined(separator: "|")
+    }
+
+    public static func isCompound(_ command: String) -> Bool {
+        ShellCommandScan(command).isCompound
+    }
+
+    public static func commandName(of command: String) -> String {
+        command.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? command
+    }
+
+    public func covers(_ command: String) -> Bool {
+        let command = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return commands.contains { command == $0 || command.hasPrefix($0 + " ") }
+    }
+
+    public func coversEveryPart(of command: String) -> Bool {
+        let scan = ShellCommandScan(command)
+        return !scan.hasHiddenCommand && !scan.parts.isEmpty && scan.parts.allSatisfy(covers)
+    }
+}
+
+struct ShellCommandScan {
+    private(set) var parts: [String] = []
+    private(set) var hasSeparator = false
+    private(set) var hasRedirect = false
+    private(set) var hasHiddenCommand = false
+
+    var isCompound: Bool { hasSeparator || hasRedirect || hasHiddenCommand }
+
+    init(_ command: String) {
+        let characters = Array(command)
+        var current = ""
+        var quote: Character?
+        var index = 0
+        func endPart() {
+            let part = current.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !part.isEmpty { parts.append(part) }
+            current = ""
+            hasSeparator = true
+        }
+        while index < characters.count {
+            let character = characters[index]
+            let next = index + 1 < characters.count ? characters[index + 1] : nil
+            if character == "\\", quote != "'", let next {
+                current.append(character)
+                current.append(next)
+                index += 2
+                continue
+            }
+            if let open = quote {
+                if character == open { quote = nil }
+                current.append(character)
+                index += 1
+                continue
+            }
+            switch (character, next) {
+            case ("'", _), ("\"", _):
+                quote = character
+            case ("&", "&"), ("|", "|"):
+                endPart()
+                index += 2
+                continue
+            case (";", _), ("|", _), ("\n", _):
+                endPart()
+                index += 1
+                continue
+            case ("`", _), ("$", "("), ("<", "<"):
+                hasHiddenCommand = true
+            case (">", _):
+                hasRedirect = true
+            default:
+                break
+            }
+            current.append(character)
+            index += 1
+        }
+        let last = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !last.isEmpty { parts.append(last) }
     }
 }

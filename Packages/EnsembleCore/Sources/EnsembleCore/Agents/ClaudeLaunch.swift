@@ -191,7 +191,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
 
     var tools: [String] {
         var tools = AgentPermissions.builtInTools(readOnly: !writes, extraAllowedTools: extraAllowedTools)
-        if let permissions, permissions.commands.isEmpty, permissions.level(.runShell) == .never {
+        if let permissions, !permissions.hasBash {
             tools.removeAll { $0 == "Bash" }
         }
         for tool in askTools.map(AgentPermissions.toolName) where !tools.contains(tool) { tools.append(tool) }
@@ -221,13 +221,15 @@ public struct ClaudeLaunch: Sendable, Equatable {
         """
     }
 
+    public static let oneCommandRule = "Run one command per Bash call; chains with &&, ;, |, subshells, heredocs and output redirection (>) are denied."
+
     public static func shellRules(writing: Bool, extraCommands: [String] = [], commands override: [String]? = nil) -> String {
         let commands = (override ?? ((writing ? AgentPermissions.commands : AgentPermissions.readOnlyCommands) + extraCommands))
             .map { "`\($0)`" }
             .joined(separator: ", ")
         return """
             Shell rules: only these commands are allowed, each with any arguments: \(commands). \
-            Run one command per Bash call; chains with &&, ;, |, subshells, heredocs and output redirection (>) are denied. \
+            \(oneCommandRule) \
             \(writing ? "Create and change files with the Edit and Write tools, never through the shell. " : "")\
             If a command is denied, try the allowed equivalent on its own before giving up, and tell the user exactly what you couldn't run.
             """
@@ -247,6 +249,6 @@ public struct ClaudeLaunch: Sendable, Equatable {
         let asks = PermissionCapability.allCases.filter { policy.level($0) == .ask }
         guard !asks.isEmpty else { return nil }
         return "Some actions need the user’s OK first: " + asks.map { $0.title.lowercased() }.joined(separator: ", ")
-            + ". Just try the action; Ensemble holds it, asks the user in their Inbox and messages you with the answer. Carry on with other work or end your turn meanwhile."
+            + ". Just try the action; Ensemble holds it, asks the user in their Inbox or through your run’s lead chat and messages you with the answer. Carry on with other work or end your turn meanwhile."
     }
 }

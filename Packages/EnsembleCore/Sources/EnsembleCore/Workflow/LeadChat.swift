@@ -169,7 +169,7 @@ public final class LeadChat {
         if run.isActive {
             let agents = try database.agents(inProject: run.projectId).filter { $0.runId == runID && $0.taskId != taskId && $0.archivedAt == nil }
             if !agents.isEmpty {
-                lines.append("Agents: " + agents.map { "\($0.name) (\($0.role), \(Self.describe($0.status)))" }.joined(separator: "; ") + ".")
+                lines.append("Agents: " + agents.map { "\(database.displayName(of: $0)) (\($0.role), \(Self.describe($0.status)))" }.joined(separator: "; ") + ".")
             }
             if let hold = engine.holds[runID] {
                 lines.append("It is waiting for the user: \(Self.describe(hold.reason)).")

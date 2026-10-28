@@ -251,7 +251,7 @@ private struct CodeLines: View {
                         .background(focused ? Theme.accent.opacity(0.14) : pinned ? CodeStyle.pin.opacity(0.06) : changed ? Theme.success.opacity(0.05) : .clear)
                         .id(number)
                         ForEach(pins.filter { max($0.startLine, $0.endLine) == number }) { pin in
-                            PinBanner(pin: pin, author: browser.source?.agent?.name, open: openChanges)
+                            PinBanner(pin: pin, author: browser.source.flatMap { $0.agent == nil ? nil : $0.changeAuthor }, open: openChanges)
                                 .frame(width: viewport.size.width, alignment: .leading)
                         }
                     }

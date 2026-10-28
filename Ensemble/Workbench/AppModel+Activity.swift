@@ -44,7 +44,7 @@ extension AppModel {
                     session.agent.runId.flatMap(run(withID:)).flatMap(runWorkflow).map { RunTimeline.title(ofStep: step, in: $0) } ?? step
                 }
                 agentStates[session.id] = ActivitySnapshot.AgentState(
-                    projectId: projectID, name: session.agent.name, status: displayStatus(of: session.agent),
+                    projectId: projectID, name: displayName(of: session.agent, in: project), status: displayStatus(of: session.agent),
                     runId: session.agent.runId, step: stepTitle, finishedTools: tools, error: session.agent.lastError
                 )
             }

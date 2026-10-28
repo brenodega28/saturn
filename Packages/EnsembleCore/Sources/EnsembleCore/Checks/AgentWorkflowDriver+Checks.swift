@@ -95,7 +95,7 @@ extension AgentWorkflowDriver {
         guard let worktree = session.agent.worktreeURL, let base = session.agent.baseBranch else { return }
         let changes = await ProtectedChanges.find(in: worktree, base: base, protectedPaths: protectedPaths, git: git)
         guard !changes.isEmpty else { return }
-        let agentName = session.agent.name
+        let agentName = displayName(of: session.agent)
         let agentID = session.id
         let now = Date()
         try? await runtime.database.writer.write { db in

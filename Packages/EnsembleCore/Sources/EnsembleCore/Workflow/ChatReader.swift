@@ -50,16 +50,17 @@ public struct ChatReader {
         if let messageID = request.messageID, !messages.contains(where: { $0.id == messageID }) {
             throw ChatReaderError.unknownMessage(messageID, requestID: taskID)
         }
+        let config = try database.project(id: task.projectId).map { ProjectConfigLoader.load(repository: $0.url) }
         let text = switch request.section {
-        case .overview: try overview(task, taskID: taskID, messages: messages, request: request)
+        case .overview: try overview(task, taskID: taskID, messages: messages, request: request, config: config)
         case .messages: messagesSection(taskID: taskID, messages: messages, request: request)
-        case .run: try runSection(taskID: taskID, request: request)
-        case .transcript: try transcriptSection(taskID: taskID, request: request)
+        case .run: try runSection(taskID: taskID, request: request, config: config)
+        case .transcript: try transcriptSection(taskID: taskID, request: request, config: config)
         }
         return Self.capped(text)
     }
 
-    private func overview(_ task: ProjectTask, taskID: Int64, messages: [LeadMessage], request: ChatReadRequest) throws -> String {
+    private func overview(_ task: ProjectTask, taskID: Int64, messages: [LeadMessage], request: ChatReadRequest, config: ProjectConfig?) throws -> String {
         var lines = ["Request chat \(taskID): \(task.title)"]
         if let project = try database.project(id: task.projectId) {
             lines.append("Project: \(project.name) (\(project.path))")
@@ -74,16 +75,16 @@ public struct ChatReader {
         if !task.body.isEmpty { lines.append("\nRequest:\n" + Self.truncated(task.body, to: Self.headerTextLimit)) }
 
         let agents = try database.requestAgents(taskId: taskID)
-        if let lead = agents.first(where: { $0.taskId == taskID }) { lines.append("\nLead: \(Self.describe(lead))") }
+        if let lead = agents.first(where: { $0.taskId == taskID }) { lines.append("\nLead: \(Self.describe(lead, config: config))") }
         let spawned = try database.spawnedAgents(taskId: taskID)
         if !spawned.isEmpty {
-            lines.append("Spawned agents: " + spawned.map { Self.describe($0) + Self.spawner(of: $0, among: agents) }.joined(separator: ", "))
+            lines.append("Spawned agents: " + spawned.map { Self.describe($0, config: config) + Self.spawner(of: $0, among: agents, config: config) }.joined(separator: ", "))
         }
         let runs = try database.runs(taskId: taskID)
         lines.append("\nRuns (\(runs.count)):")
         if runs.isEmpty { lines.append("(none)") }
         for run in runs {
-            lines.append(runLine(run, agents: agents.filter { $0.runId == run.id && run.id != nil }))
+            lines.append(runLine(run, agents: agents.filter { $0.runId == run.id && run.id != nil }, config: config))
         }
 
         let header = lines.joined(separator: "\n")
@@ -130,7 +131,7 @@ public struct ChatReader {
         return lines.joined(separator: "\n")
     }
 
-    private func runLine(_ run: Run, agents: [Agent]) -> String {
+    private func runLine(_ run: Run, agents: [Agent], config: ProjectConfig?) -> String {
         var fields = ["- run \(run.id.map(String.init) ?? "?")", "workflow \(run.workflow)", "status \(run.status.rawValue)"]
         fields.append("step \(run.currentStep ?? "none")")
         fields.append("started \(Self.timestamp(run.startedAt))")
@@ -138,7 +139,7 @@ public struct ChatReader {
         if let url = run.pullRequestURL { fields.append("PR \(url)") }
         var lines = [fields.joined(separator: " · ")]
         if !run.title.isEmpty { lines.append("  Title: \(run.title)") }
-        lines.append("  Agents: " + (agents.isEmpty ? "none" : agents.map(Self.describe).joined(separator: ", ")))
+        lines.append("  Agents: " + (agents.isEmpty ? "none" : agents.map { Self.describe($0, config: config) }.joined(separator: ", ")))
         return lines.joined(separator: "\n")
     }
 
@@ -149,13 +150,13 @@ public struct ChatReader {
         return run
     }
 
-    private func runSection(taskID: Int64, request: ChatReadRequest) throws -> String {
+    private func runSection(taskID: Int64, request: ChatReadRequest, config: ProjectConfig?) throws -> String {
         guard let runID = request.runID else { throw HandoffError.missing("run_id") }
         let run = try requireRun(runID, taskID: taskID)
         let workflow = (try? YAMLWorkflow.decode(run.workflowSnapshot)) ?? WorkflowDefinition(id: run.workflow, name: run.workflow, steps: [])
         let agents = try database.agents(inRun: runID)
         let history = RunHistory(workflow: workflow, steps: try database.runSteps(runId: runID), agents: agents)
-        let names = Dictionary(agents.compactMap { agent in agent.id.map { ($0, agent.name) } }, uniquingKeysWith: { first, _ in first })
+        let names = Dictionary(agents.compactMap { agent in agent.id.map { ($0, AgentNaming.displayName(of: agent, config: config)) } }, uniquingKeysWith: { first, _ in first })
 
         var lines = ["Run \(runID) of request \(taskID)" + (run.title.isEmpty ? "" : ": \(run.title)")]
         var summary = ["Workflow \(run.workflow)\(run.workflowVersion.map { " v\($0)" } ?? "")", "status \(run.status.rawValue)"]
@@ -167,7 +168,7 @@ public struct ChatReader {
         if let url = run.pullRequestURL { lines.append("PR: \(url)") }
         if let branch = run.deliveryBranch { lines.append("Delivery branch: \(branch)" + (run.baseBranch.map { " into \($0)" } ?? "")) }
         if let error = run.lastError { lines.append("Last error: \(error)") }
-        lines.append("Agents: " + (agents.isEmpty ? "none" : agents.map(Self.describe).joined(separator: ", ")))
+        lines.append("Agents: " + (agents.isEmpty ? "none" : agents.map { Self.describe($0, config: config) }.joined(separator: ", ")))
         if let brief = run.brief, !brief.isEmpty { lines.append("Brief:\n" + Self.truncated(brief, to: Self.headerTextLimit)) }
         let header = lines.joined(separator: "\n")
 
@@ -222,7 +223,7 @@ public struct ChatReader {
         return lines.joined(separator: "\n")
     }
 
-    private func transcriptSection(taskID: Int64, request: ChatReadRequest) throws -> String {
+    private func transcriptSection(taskID: Int64, request: ChatReadRequest, config: ProjectConfig?) throws -> String {
         guard let name = request.agent else { throw HandoffError.missing("agent") }
         let requestAgents = try database.requestAgents(taskId: taskID)
         var candidates = requestAgents + (try database.spawnedAgents(taskId: taskID))
@@ -231,25 +232,27 @@ public struct ChatReader {
             candidates = candidates.filter { $0.runId == runID || $0.taskId == taskID }
         }
         let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let displayMatches = candidates.filter { AgentNaming.displayName(of: $0, config: config).caseInsensitiveCompare(trimmed) == .orderedSame }
         guard let agent = candidates.first(where: { $0.id.map(String.init) == trimmed })
-            ?? candidates.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }),
+            ?? candidates.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame })
+            ?? (displayMatches.count == 1 ? displayMatches.first : nil),
             let agentID = agent.id else {
-            throw ChatReaderError.unknownAgent(name, requestID: taskID, agents: candidates.map(Self.describe))
+            throw ChatReaderError.unknownAgent(name, requestID: taskID, agents: candidates.map { Self.describe($0, config: config) })
         }
         let url = paths.transcript(agentID)
         guard let contents = try? String(contentsOf: url, encoding: .utf8) else {
-            throw ChatReaderError.missingTranscript(agent: agent.name, id: agentID)
+            throw ChatReaderError.missingTranscript(agent: AgentNaming.displayName(of: agent, config: config), id: agentID)
         }
         let transcript = Transcript(lines: contents.split(separator: "\n").map(String.init))
         let items = transcript.entries.compactMap(Self.render).enumerated().map { "[entry \($0.offset)] \($0.element)" }
 
-        var header = "Transcript of \(Self.describe(agent)) in request \(taskID)"
+        var header = "Transcript of \(Self.describe(agent, config: config)) in request \(taskID)"
         if let runID = agent.runId {
             header += ", run \(runID)"
         } else if agent.taskId == taskID {
             header += ", the request’s lead"
         } else if agent.spawnedById != nil {
-            header += Self.spawner(of: agent, among: requestAgents)
+            header += Self.spawner(of: agent, among: requestAgents, config: config)
         }
         let budget = max(2_000, Self.maxCharacters - header.count - 400)
         let continuation = ", section=transcript, agent=\(agentID)" + (request.runID.map { ", run_id=\($0)" } ?? "")
@@ -328,13 +331,13 @@ public struct ChatReader {
         return (shown + [footer.joined(separator: " ")]).joined(separator: "\n\n")
     }
 
-    static func describe(_ agent: Agent) -> String {
-        "\(agent.name) (\(agent.role), id \(agent.id.map(String.init) ?? "?"))"
+    static func describe(_ agent: Agent, config: ProjectConfig? = nil) -> String {
+        "\(AgentNaming.displayName(of: agent, config: config)) (\(agent.role), id \(agent.id.map(String.init) ?? "?"))"
     }
 
-    static func spawner(of agent: Agent, among agents: [Agent]) -> String {
+    static func spawner(of agent: Agent, among agents: [Agent], config: ProjectConfig? = nil) -> String {
         guard let spawnerID = agent.spawnedById else { return "" }
-        let name = agents.first { $0.id == spawnerID }?.name ?? "agent \(spawnerID)"
+        let name = agents.first { $0.id == spawnerID }.map { AgentNaming.displayName(of: $0, config: config) } ?? "agent \(spawnerID)"
         return ", spawned by \(name)"
     }
 

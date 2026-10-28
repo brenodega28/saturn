@@ -153,7 +153,8 @@ public final class DirectChat {
     private func noteForLead(questions: [DirectMessage], reply: String, from agent: Agent, now: Date) throws {
         guard let runId = agent.runId, let run = try database.run(id: runId) else { return }
         let asked = questions.map { $0.text.isEmpty ? $0.storedAttachments.map(\.label).joined(separator: ", ") : $0.text }.joined(separator: " ")
-        let text = "You asked \(agent.name) directly: “\(Self.excerpt(asked))” \(agent.name) replied: “\(Self.excerpt(reply))”"
+        let name = database.displayName(of: agent)
+        let text = "You asked \(name) directly: “\(Self.excerpt(asked))” \(name) replied: “\(Self.excerpt(reply))”"
         try database.insert(LeadMessage(projectId: run.projectId, taskId: run.taskId, kind: .note, text: text, runId: runId, createdAt: now))
     }
 

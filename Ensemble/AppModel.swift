@@ -132,6 +132,7 @@ final class AppModel {
     var isClonePresented = false
     var isOpenPanelPresented = false
     var alert: AppAlert?
+    var chatHighlight: ChatLink?
 
     init(database: AppDatabase, paths: AppPaths, secrets: any SecretStore, locator: ToolLocator = ToolLocator()) {
         self.database = database
@@ -155,6 +156,7 @@ final class AppModel {
         driver.gitHubProvider = { try? GitHubAuth(secrets: secrets).client() }
         restoreNavigation()
         connectGitHub()
+        WorkbenchRegistry.shared.registerChatLinkCommands()
     }
 
     var git: GitClient? {
@@ -527,7 +529,7 @@ final class AppModel {
         return git
     }
 
-    private func reloadProjects() {
+    func reloadProjects() {
         perform("Couldn’t load projects") {
             openProjects = try database.openProjects()
             recentProjects = try database.recentProjects()

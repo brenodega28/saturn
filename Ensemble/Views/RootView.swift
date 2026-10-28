@@ -10,6 +10,7 @@ struct RootView: View {
         @Bindable var model = model
         content
             .frame(minWidth: 960, minHeight: 620)
+            .environment(\.openURL, model.chatLinkOpenURLAction)
             .task { await model.launch() }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 model.reloadAllConfigs()

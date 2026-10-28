@@ -12,15 +12,16 @@ struct RequestChat: View {
     var body: some View {
         let session = model.leadSession(for: task)
         let isThinking = session.map { $0.isRunning || $0.isQueued } ?? false
+        let background = model.backgroundSessions(for: task)
         VStack(spacing: 10) {
             RequestHeader(task: task, project: project)
                 .frame(maxWidth: 820)
                 .frame(maxWidth: .infinity)
-            thread(isThinking: isThinking, session: session)
+            thread(isThinking: isThinking, session: session, background: background)
         }
     }
 
-    private func thread(isThinking: Bool, session: AgentSession?) -> some View {
+    private func thread(isThinking: Bool, session: AgentSession?, background: [AgentSession]) -> some View {
         let held = model.heldSends(for: model.leadSendTarget(for: task, in: project))
         return ScrollViewReader { proxy in
             ScrollView {
@@ -41,6 +42,10 @@ struct RequestChat: View {
                         RequestBubble(held: send, onCancel: model.cancelHeldSend)
                             .id(send.id.uuidString)
                     }
+                    if !background.isEmpty {
+                        BackgroundAgentsRow(sessions: background, project: project)
+                            .id(Self.backgroundID)
+                    }
                     if isThinking {
                         ThinkingRow(role: data?.leadRole, name: data?.leadName ?? "Lead", session: session)
                             .id(Self.thinkingID)
@@ -52,11 +57,12 @@ struct RequestChat: View {
                 .padding(.bottom, 8)
             }
             .defaultScrollAnchor(.bottom)
-            .followsBottom(of: isThinking ? (session?.transcript.liveEntry ?? session?.transcript.entries.last) : nil)
+            .followsBottom(of: [isThinking ? session.flatMap(Self.latestEntry) : nil] + background.map(Self.latestEntry))
             .onChange(of: data?.thread.items.last?.id) {
                 if !revealHighlight(proxy) { scrollToEnd(proxy) }
             }
             .onChange(of: isThinking) { scrollToEnd(proxy) }
+            .onChange(of: background.map(\.id)) { scrollToEnd(proxy) }
             .onChange(of: held.map(\.id)) { scrollToEnd(proxy) }
             .onChange(of: model.chatHighlight) { revealHighlight(proxy) }
         }
@@ -70,6 +76,11 @@ struct RequestChat: View {
     }
 
     private static let thinkingID = "thinking"
+    private static let backgroundID = "background-agents"
+
+    private static func latestEntry(of session: AgentSession) -> TranscriptEntry? {
+        session.transcript.liveEntry ?? session.transcript.entries.last
+    }
 
     @discardableResult
     private func revealHighlight(_ proxy: ScrollViewProxy) -> Bool {
@@ -92,7 +103,8 @@ struct RequestChat: View {
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
         let isThinking = model.leadSession(for: task).map { $0.isRunning || $0.isQueued } ?? false
         let lastHeld = model.heldSends(for: model.leadSendTarget(for: task, in: project)).last?.id.uuidString
-        let target = isThinking ? Self.thinkingID : lastHeld ?? data?.thread.items.last?.id
+        let backgroundID = model.backgroundSessions(for: task).isEmpty ? nil : Self.backgroundID
+        let target = isThinking ? Self.thinkingID : backgroundID ?? lastHeld ?? data?.thread.items.last?.id
         guard let target else { return }
         withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(target, anchor: .bottom) }
     }
@@ -293,7 +305,135 @@ struct ThinkingRow: View {
     }
 }
 
+private struct BackgroundAgentsRow: View {
+    @Environment(AppModel.self) private var model
+    let sessions: [AgentSession]
+    let project: Project
+
+    var body: some View {
+        if sessions.count == 1, let session = sessions.first {
+            Button { model.openAgentSession(session.agent, in: project) } label: {
+                BackgroundAgentRow(session: session, role: model.role(for: session.agent, in: project), name: model.displayName(of: session.agent, in: project))
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .help("Open \(model.displayName(of: session.agent, in: project))’s session")
+        } else {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.secondaryText)
+                    .frame(width: 30, height: 30)
+                    .background(Color.white.opacity(0.06), in: Circle())
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(sessions.count) agents working in the background")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.secondaryText)
+                        .frame(minHeight: 30)
+                        .accessibilityAddTraits(.isHeader)
+                    ForEach(sessions) { session in
+                        let name = model.displayName(of: session.agent, in: project)
+                        Button { model.openAgentSession(session.agent, in: project) } label: {
+                            BackgroundAgentLine(session: session, role: model.role(for: session.agent, in: project), name: name)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open \(name)’s session")
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityElement(children: .contain)
+        }
+    }
+}
+
+private struct BackgroundAgentRow: View {
+    let session: AgentSession
+    let role: RoleDefinition?
+    let name: String
+
+    var body: some View {
+        let activity = TranscriptLayout.activity(session.transcript.entries, live: session.transcript.liveEntry)
+        let root = session.transcript.session?.cwd ?? session.agent.worktreePath
+        HStack(alignment: .top, spacing: 12) {
+            RoleBadge(role: role, size: 30)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Text(name).fontWeight(.semibold).foregroundStyle(.white)
+                    Text("· working in the background").foregroundStyle(Theme.secondaryText)
+                }
+                .font(.system(size: 12))
+                SessionActivityView(activity: activity, name: name, root: root)
+                    .animation(.snappy(duration: 0.2), value: activity.phase)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: activity.isReply ? .contain : .combine)
+    }
+}
+
+private struct BackgroundAgentLine: View {
+    let session: AgentSession
+    let role: RoleDefinition?
+    let name: String
+
+    var body: some View {
+        let activity = TranscriptLayout.activity(session.transcript.entries, live: session.transcript.liveEntry)
+        let root = session.transcript.session?.cwd ?? session.agent.worktreePath
+        HStack(spacing: 8) {
+            RoleBadge(role: role, size: 18)
+            Text(name)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(.white)
+                .fixedSize()
+            compactActivity(activity, root: root)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .animation(.snappy(duration: 0.2), value: activity.phase)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(name): \(activity.summary(relativeTo: root))")
+    }
+
+    @ViewBuilder
+    private func compactActivity(_ activity: SessionActivity, root: String?) -> some View {
+        HStack(spacing: 6) {
+            ProgressView().controlSize(.mini)
+            switch activity {
+            case .tool(let tool):
+                Text(tool.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.link)
+                Text(tool.target(relativeTo: root))
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let start = tool.startedAt { ElapsedLabel(start: start) }
+            case .replying(let text):
+                Text(text.split(whereSeparator: \.isNewline).last.map(String.init) ?? text)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            case .thinking:
+                Text("Thinking…").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+            case .working:
+                Text("Working…").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+            }
+        }
+    }
+}
+
 private extension SessionActivity {
+    func summary(relativeTo root: String?) -> String {
+        switch self {
+        case .working: "working"
+        case .replying: "writing a reply"
+        case .thinking: "thinking"
+        case .tool(let tool): "\(tool.name) \(tool.target(relativeTo: root))"
+        }
+    }
+
     var isReply: Bool {
         if case .replying = self { return true }
         return false

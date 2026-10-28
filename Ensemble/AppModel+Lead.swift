@@ -138,6 +138,11 @@ extension AppModel {
         leadChat.leadSession(for: task)
     }
 
+    func backgroundSessions(for task: ProjectTask) -> [AgentSession] {
+        _ = agents.usageRevision
+        return leadChat.backgroundSessions(for: task)
+    }
+
     func leadSendTarget(for request: ProjectTask?, in project: Project) -> PendingSendTarget? {
         project.id.map { .lead(project: $0, request: request?.id) }
     }

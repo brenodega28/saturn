@@ -202,6 +202,41 @@ import Testing
         #expect(transcript.contains("The repo only has a README."))
     }
 
+    @Test func backgroundSessionsAreTheWorkingAgentsTheLeadSpawnedOutsideARun() async throws {
+        let setup = try await WorkflowDriverTests().makeSetup()
+        defer { setup.harness.cleanUp() }
+        let database = setup.harness.database
+        let now = Date()
+        let task = try database.insert(ProjectTask(
+            projectId: setup.project.id!, title: "Run the tests", body: "Please.", source: .chat, status: .incoming, createdAt: now, updatedAt: now
+        ))
+        let lead = try setup.harness.runtime.createLeadAgent(in: setup.project, role: try #require(setup.config.role("tech-lead")), taskId: task.id!)
+        let chat = LeadChat(runtime: setup.harness.runtime, engine: setup.engine, driver: setup.driver)
+        try setup.harness.setMode("slow")
+        #expect(chat.backgroundSessions(for: task).isEmpty)
+
+        let runner = try await spawnRunner(setup, from: lead)
+        let builderRole = try #require(setup.config.role("claude-code"))
+        let bystander = try #require(try await setup.harness.runtime.spawn(in: setup.project, role: builderRole, count: 1, config: setup.config, git: setup.harness.repo.git, name: "Bystander").first)
+        bystander.send("CHAT look around")
+        try await waitUntil { runner.isRunning && bystander.isRunning }
+        #expect(chat.backgroundSessions(for: task).map(\.id) == [runner.id])
+
+        var inRun = try #require(try database.agent(id: runner.id))
+        let run = try database.insert(Run(projectId: setup.project.id!, taskId: task.id!, workflow: "feature-delivery", status: .running, startedAt: now), state: RunEngineState())
+        inRun.runId = run.id
+        try database.save(inRun)
+        #expect(chat.backgroundSessions(for: task).isEmpty)
+        inRun.runId = nil
+        try database.save(inRun)
+        #expect(chat.backgroundSessions(for: task).map(\.id) == [runner.id])
+
+        runner.stop()
+        bystander.stop()
+        try await waitUntil { !runner.isRunning && !runner.isQueued }
+        #expect(chat.backgroundSessions(for: task).isEmpty)
+    }
+
     @Test func theSpawnedAgentsMigrationAddsTheSpawnerColumn() throws {
         let database = try AppDatabase.inMemory()
         let columns = try database.writer.read { db in try db.columns(in: "agent").map(\.name) }

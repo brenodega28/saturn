@@ -109,6 +109,15 @@ public final class LeadChat {
         return runtime.session(for: agent)
     }
 
+    public func backgroundSessions(for task: ProjectTask) -> [AgentSession] {
+        guard let taskId = task.id, let leadId = (try? database.leadAgent(taskId: taskId))??.id,
+              let spawned = try? database.spawnedAgents(taskId: taskId) else { return [] }
+        return spawned
+            .filter { $0.spawnedById == leadId && $0.runId == nil }
+            .compactMap { runtime.session(for: $0) }
+            .filter { $0.isRunning || $0.isQueued }
+    }
+
     @discardableResult
     public func start(_ proposal: LeadMessage, in project: Project) throws -> Run {
         let proposal = try openProposal(proposal)

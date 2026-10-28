@@ -8,7 +8,7 @@ enum OrganizerSection: String, Hashable, CaseIterable {
     case failedRuns
     case usage
     case quality
-    case roles
+    case skills
     case workflows
 
     var title: String {
@@ -17,7 +17,7 @@ enum OrganizerSection: String, Hashable, CaseIterable {
         case .failedRuns: "Failed runs"
         case .usage: "Usage"
         case .quality: "Quality"
-        case .roles: "Roles"
+        case .skills: "Skills"
         case .workflows: "Workflows"
         }
     }
@@ -28,7 +28,7 @@ enum OrganizerSection: String, Hashable, CaseIterable {
         case .failedRuns: "exclamationmark.triangle"
         case .usage: "dollarsign"
         case .quality: "chart.bar"
-        case .roles: "person"
+        case .skills: "sparkles"
         case .workflows: "flowchart"
         }
     }
@@ -62,7 +62,7 @@ struct OrganizerView: View {
                     row(.quality)
                 }
                 Section("Templates") {
-                    row(.roles, count: ProjectSetup.roleCatalog.count)
+                    row(.skills, count: ProjectSetup.skillCatalog.count)
                     row(.workflows, count: ProjectSetup.workflowCatalog.count)
                 }
             }
@@ -73,7 +73,7 @@ struct OrganizerView: View {
                 case .allRuns, .failedRuns: runsTable
                 case .usage: UsageView()
                 case .quality: QualityView()
-                case .roles: RoleTemplates()
+                case .skills: SkillTemplates()
                 case .workflows: WorkflowTemplates()
                 }
             }
@@ -203,36 +203,33 @@ struct OrganizerView: View {
     }
 }
 
-private struct RoleTemplates: View {
+private struct SkillTemplates: View {
     @Environment(AppModel.self) private var model
+    @State private var revision = 0
 
     var body: some View {
-        List(ProjectSetup.roleCatalog) { role in
+        List(ProjectSetup.skillCatalog) { skill in
             HStack(alignment: .top, spacing: 12) {
-                AgentAvatar(size: 30, appearance: RoleAppearance(role: role))
+                Image(systemName: "sparkles").foregroundStyle(Theme.link).frame(width: 30).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(role.name).font(.system(size: 13, weight: .semibold))
-                    Text(role.description).font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
-                    Text([AgentModel(rawValue: role.model)?.title ?? role.model, role.editsCode ? "edits code" : "read-only", role.canSpawn ? "can spawn" : nil, role.skills.isEmpty ? nil : role.skills.joined(separator: ", ")]
-                        .compactMap(\.self).joined(separator: " · "))
-                        .font(.system(size: 11.5)).foregroundStyle(Theme.tertiaryText)
+                    Text(skill.name).font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    Text(skill.description).font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
                 }
                 Spacer()
                 if let project = model.currentProject {
-                    let installed = model.config(for: project).role(role.id) != nil
+                    let installed = revision >= 0 && SkillLibrary.installedSkills(in: project.url).contains(skill.name)
                     Button(installed ? "In \(project.name)" : "Add to \(project.name)") {
                         do {
-                            try ProjectConfigLoader.write(role, repository: project.url)
-                            model.reloadConfig(for: project)
+                            _ = try skill.install(in: project.url)
+                            revision += 1
                         } catch {
-                            model.alert = AppAlert(title: "Couldn’t add \(role.name)", message: error.localizedDescription)
+                            model.alert = AppAlert(title: "Couldn’t add \(skill.name)", message: error.localizedDescription)
                         }
                     }
                     .disabled(installed)
                 }
             }
             .padding(.vertical, 4)
-            .draggable(PaletteItem.role(role.id).payload)
         }
     }
 }

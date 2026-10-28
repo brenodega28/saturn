@@ -148,7 +148,7 @@ struct RunGraphView: View {
             .accessibilityHidden(true)
             ForEach(graph.nodes) { node in
                 if let center = geometry.centers[node.id] {
-                    RunGraphNode(node: node, role: node.role.flatMap { id in roles.first { $0.id == id } })
+                    RunGraphNode(node: node, role: node.agent?.builtInRole)
                         .frame(width: RunGraphGeometry.nodeSize.width, height: RunGraphGeometry.nodeSize.height)
                         .position(center)
                 }

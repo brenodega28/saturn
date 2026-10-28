@@ -27,7 +27,6 @@ enum ProjectTab: String, CaseIterable, Identifiable, Codable {
     case workflows
     case settings
     case code
-    case roles
 
     var id: Self { self }
 
@@ -40,7 +39,6 @@ enum ProjectTab: String, CaseIterable, Identifiable, Codable {
         case .workflows: "Workflows"
         case .settings: "Settings"
         case .code: "Code"
-        case .roles: "Roles"
         }
     }
 
@@ -53,7 +51,6 @@ enum ProjectTab: String, CaseIterable, Identifiable, Codable {
         case .workflows: "flowchart"
         case .settings: "gearshape"
         case .code: "chevron.left.forwardslash.chevron.right"
-        case .roles: "person.text.rectangle"
         }
     }
 }
@@ -330,7 +327,18 @@ final class AppModel {
 
     func reloadConfig(for project: Project) {
         guard let id = project.id else { return }
-        configs[id] = ProjectConfigLoader.load(repository: project.url)
+        let config = ProjectConfigLoader.load(repository: project.url)
+        configs[id] = config
+        reportMigration(config.migrationNotices, in: project)
+    }
+
+    private func reportMigration(_ notices: [MigrationNotice], in project: Project) {
+        guard let id = project.id, !notices.isEmpty else { return }
+        let body = "Roles are now built-in Lead, Builder and Checker agents. Ensemble updated this project:\n\n"
+            + notices.map { "- \($0.file): \($0.message)" }.joined(separator: "\n")
+        _ = try? database.createInboxItem(InboxItem(
+            projectId: id, kind: .notice, title: "\(project.name) moved from roles to agent kinds", body: body, createdAt: .now
+        ))
     }
 
     func reloadAllConfigs() {
@@ -340,7 +348,7 @@ final class AppModel {
     }
 
     func installDefaultConfig(in project: Project) {
-        perform("Couldn’t add the default roles and workflows") {
+        perform("Couldn’t add the default workflows") {
             try ProjectConfigLoader.installDefaults(repository: project.url)
         }
         reloadConfig(for: project)
@@ -351,7 +359,7 @@ final class AppModel {
     }
 
     func displayName(of agent: Agent, in project: Project) -> String {
-        AgentNaming.displayName(of: agent.name, role: role(for: agent, in: project))
+        AgentNaming.displayName(of: agent)
     }
 
     func displayName(of agent: Agent) -> String {
@@ -365,18 +373,18 @@ final class AppModel {
         return (try? agents.agentNames(for: base, count: count, inProject: id)) ?? []
     }
 
-    func spawnAgents(in project: Project, role: RoleDefinition, count: Int, name: String, model: String, pinned: Bool, task: String) async throws {
+    func spawnAgents(in project: Project, kind: AgentKind, count: Int, name: String, model: String, skills: [String], pinned: Bool, task: String) async throws {
         guard let git = requireGit() else { return }
         let sessions = try await agents.spawn(
             in: project,
-            role: role,
+            kind: kind,
             count: count,
-            config: config(for: project),
             git: git,
             pinned: pinned,
             name: name,
             model: model,
-            task: task
+            task: task,
+            skills: skills
         )
         if sessions.count == 1 {
             select(sessions.first, in: project)

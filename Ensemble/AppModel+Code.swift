@@ -12,7 +12,7 @@ struct CodeSource: Identifiable, Hashable {
     let agent: Agent?
     let role: RoleDefinition?
 
-    var changeAuthor: String { agent.map { AgentNaming.displayName(of: $0.name, role: role) } ?? "you" }
+    var changeAuthor: String { agent.map { AgentNaming.displayName(of: $0) } ?? "you" }
 }
 
 extension AppModel {

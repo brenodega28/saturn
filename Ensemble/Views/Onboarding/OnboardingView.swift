@@ -4,7 +4,7 @@ import SwiftUI
 
 enum OnboardingStep: Int, CaseIterable, Identifiable {
     case project
-    case roles
+    case skills
     case workflow
     case rails
     case review
@@ -14,7 +14,7 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
     var name: String {
         switch self {
         case .project: "Project"
-        case .roles: "Roles"
+        case .skills: "Agents & skills"
         case .workflow: "Workflow"
         case .rails: "Rails"
         case .review: "Review"
@@ -68,7 +68,7 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     switch step {
                     case .project: OnboardingProjectStep(draft: draft) { await scan() }
-                    case .roles: OnboardingRolesStep(project: project, draft: draft)
+                    case .skills: OnboardingSkillsStep(draft: draft)
                     case .workflow: OnboardingWorkflowStep(draft: draft)
                     case .rails: OnboardingRailsStep(draft: draft)
                     case .review: OnboardingReviewStep(draft: draft.wrappedValue) { step = $0 }
@@ -107,7 +107,7 @@ struct OnboardingView: View {
                     Text(isFinishing ? "Setting up…" : "Finish and open Chat").padding(.horizontal, 8)
                 }
                 .buttonStyle(PillButtonStyle(.primary, height: 34))
-                .disabled(isFinishing || draft.enabledRoles.isEmpty)
+                .disabled(isFinishing)
                 .keyboardShortcut(.return, modifiers: .command)
             } else {
                 Button(step == .rails ? "Review" : "Continue") { move(by: 1) }
@@ -122,7 +122,7 @@ struct OnboardingView: View {
     private func title(_ draft: OnboardingDraft) -> String {
         switch step {
         case .project: "Set up \(draft.name)"
-        case .roles: "Who is on the crew?"
+        case .skills: "Who does the work?"
         case .workflow: "How work flows"
         case .rails: "Rails"
         case .review: "Ready to start"
@@ -132,8 +132,8 @@ struct OnboardingView: View {
     private var lede: String {
         switch step {
         case .project: "Ensemble scanned the folder. Check the basics and pick where tasks come from."
-        case .roles: "Roles are templates. Agents are spawned from them when a run needs them, each in its own worktree."
-        case .workflow: "Every workflow ends the same way: checks, gates and an AI review that only comments, then your approval. Pick the default path and who writes plans."
+        case .skills: "One Lead chats, plans and reviews. Builders write code in their own worktrees; checkers review and test from a fresh context. Expertise comes from skills the Lead gives each agent."
+        case .workflow: "Every workflow ends the same way: checks, gates and an AI review that only comments, then your approval. Pick the default path."
         case .rails: "Ensemble runs these itself, outside the agent. Nothing reaches you until they pass. Limits and permissions apply to every agent."
         case .review: "Agents propose, the rails below verify, you approve. Finish to open Chat and scope the first change."
         }
@@ -157,7 +157,7 @@ struct OnboardingView: View {
 
     private func skip() {
         guard let draft else { return }
-        var recommended = OnboardingDraft(project: project, scan: draft.scan, pluginSkills: draft.skillChoices)
+        var recommended = OnboardingDraft(project: project, scan: draft.scan, pluginSkills: draft.installedSkills.filter { $0.source == .plugin }.map(\.name))
         recommended.name = draft.name
         finish(recommended)
     }
@@ -209,7 +209,7 @@ private struct OnboardingNavigator: View {
                     .buttonStyle(.plain)
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(Theme.link)
-                    .help("Use the roles, workflow, checks and limits Ensemble suggests for this folder")
+                    .help("Use the workflows, skills, checks and limits Ensemble suggests for this folder")
             }
         }
         .padding(EdgeInsets(top: 14, leading: 12, bottom: 16, trailing: 12))

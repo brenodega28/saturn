@@ -256,7 +256,7 @@ struct CommandPalette: View {
         guard let project = model.currentProject else {
             return [PaletteCommand(id: "new-project", title: "New Project…", glyph: .symbol("plus"), tint: action, shortcut: "⌘N") { model.newProject() }]
         }
-        let lead = model.leadRoles(in: project).first
+        let lead: RoleDefinition? = model.leadRole(in: project)
         let config = model.config(for: project)
         var commands = [
             PaletteCommand(id: "new-task", title: "New task in Chat", meta: lead.map { "to \($0.name)" } ?? "", glyph: .symbol("plus"), tint: action, shortcut: "⌘N") { model.newTask() },
@@ -394,7 +394,6 @@ extension ProjectTab {
         case .workflows: "flowchart"
         case .settings: "gearshape"
         case .code: "chevron.left.forwardslash.chevron.right"
-        case .roles: "person.crop.rectangle.stack"
         }
     }
 }

@@ -30,14 +30,14 @@ struct CrewTemplatesSection: View {
             Button("Use Existing Repository…") { chooseExistingFolder(for: template) }
             Button("Cancel", role: .cancel) {}
         } message: { template in
-            Text("Adds \(template.roles.count) roles and the \(template.workflows.joined(separator: ", ")) workflow to .ensemble/, then opens the project. A new folder gets git init and a first commit.")
+            Text("Adds the \(template.workflows.joined(separator: ", ")) workflow to .ensemble/\(template.bundledSkills.isEmpty ? "" : " and the \(template.bundledSkills.map(\.name).joined(separator: ", ")) skills to .claude/skills"), then opens the project. A new folder gets git init and a first commit.")
         }
     }
 
     @ViewBuilder
     private var heading: some View {
         SectionLabel("Start with a crew template")
-        Text("Adds roles, checks and a workflow. Agents are only created when a task needs them")
+        Text("Adds workflows and recommended skills. Agents are only created when a task needs them")
             .font(.system(size: 12))
             .foregroundStyle(Theme.tertiaryText)
     }
@@ -77,7 +77,7 @@ private struct TemplateCard: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 12) {
-                CrewStack(palettes: template.crewRoles.map(\.palette), size: 26, border: Color(hex: 0x232327))
+                CrewStack(palettes: AgentKind.allCases.map(\.builtInRole.palette), size: 26, border: Color(hex: 0x232327))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(template.name).font(.system(size: 13.5, weight: .semibold))
                     Text(template.description)
@@ -90,6 +90,12 @@ private struct TemplateCard: View {
                 Text(template.workflows.map { $0.replacingOccurrences(of: "-", with: " ").capitalizedFirst }.joined(separator: " + "))
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(Theme.link)
+                if !template.recommendedSkills.isEmpty {
+                    Text("Skills: \(template.recommendedSkills.joined(separator: ", "))")
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(Theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -99,7 +105,7 @@ private struct TemplateCard: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .help("Set up a project with the \(template.name) roles and workflow")
+        .help("Set up a project with the \(template.name) workflow and skills")
         .accessibilityLabel("\(template.name) crew template")
         .accessibilityHint(template.description)
     }

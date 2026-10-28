@@ -14,8 +14,8 @@ struct RequestThreadData {
 }
 
 extension AppModel {
-    func leadRoles(in project: Project) -> [RoleDefinition] {
-        config(for: project).leadRoles
+    func leadRole(in project: Project) -> RoleDefinition {
+        config(for: project).lead
     }
 
     func activeLeadRuns(in project: Project) -> [Run] {
@@ -169,10 +169,9 @@ extension AppModel {
     func sendLeadMessage(_ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, to request: ProjectTask?, in project: Project) async -> Bool {
         do {
             if let request {
-                let role = lead ?? leadSession(for: request).flatMap { config(for: project).role($0.agent.role) } ?? leadRoles(in: project).first
-                try await leadChat.send(text, attachments: attachments, to: request, lead: role, in: project)
+                try await leadChat.send(text, attachments: attachments, to: request, in: project)
             } else {
-                let request = try await leadChat.createRequest(text, attachments: attachments, lead: lead ?? leadRoles(in: project).first, in: project)
+                let request = try await leadChat.createRequest(text, attachments: attachments, in: project)
                 if selectedRequest(in: project) == nil, directChatSession(in: project) == nil {
                     showRequest(request)
                 }
@@ -216,7 +215,7 @@ extension AppModel {
             if let id = run.id, let timeline = timeline(for: run) { timelines[id] = timeline }
         }
         let lead = try? database.leadAgent(taskId: taskID)
-        let leadRole = lead.flatMap { config(for: project).role($0.role) } ?? runs.last.flatMap { leadRole(for: $0, in: project) }
+        let leadRole = lead.flatMap { config(for: project).role($0.role) } ?? runs.last.flatMap { leadRole(for: $0, in: project) } ?? leadRole(in: project)
         let thread = RequestThread(
             task: task,
             messages: (try? database.leadMessages(taskId: taskID)) ?? [],
@@ -225,7 +224,7 @@ extension AppModel {
             questions: (try? database.requestQuestions(taskId: taskID)) ?? [],
             heldRunIDs: Set(runs.compactMap(\.id).filter { engine.holds[$0] != nil })
         )
-        return RequestThreadData(thread: thread, timelines: timelines, leadRole: leadRole, leadName: lead.map { AgentNaming.displayName(of: $0.name, role: leadRole) } ?? leadRole?.name ?? "Lead")
+        return RequestThreadData(thread: thread, timelines: timelines, leadRole: leadRole, leadName: lead.map { AgentNaming.displayName(of: $0) } ?? leadRole.name)
     }
 
     func runWorkflow(_ run: Run) -> WorkflowDefinition? {
@@ -245,9 +244,7 @@ extension AppModel {
     }
 
     func leadRole(for run: Run, in project: Project) -> RoleDefinition? {
-        let leads = leadRoles(in: project)
-        guard let id = runWorkflow(run)?.leadRole(among: Set(leads.map(\.id))) else { return nil }
-        return leads.first { $0.id == id }
+        runWorkflow(run)?.hasLead == true ? leadRole(in: project) : nil
     }
 
     func requestTask(for run: Run) -> ProjectTask? {

@@ -8,6 +8,7 @@ extension AppModel {
             try await agents?.runSetupScript(preparation)
         }
         agents.gitProvider = { [weak self] in self?.git }
+        agents.pluginSkills = { [weak self] project in self?.pluginSkills(for: project) ?? [] }
         idleCleanup.gitProvider = { [weak self] in self?.git }
     }
 

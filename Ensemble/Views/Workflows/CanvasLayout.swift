@@ -41,7 +41,7 @@ struct CanvasLayout {
         }
         for step in workflow.steps {
             guard let position = positions[step.id] else { continue }
-            let role = step.role.flatMap { id in roles.first { $0.id == id } }
+            let role = step.agent.flatMap { kind in roles.first { $0.id == kind.rawValue } }
             let style = NodeStyle.step(step, role: role)
             let (title, subtitle) = Self.titles(for: step, role: role)
             modelNodes.append((step.id, CGPoint(x: position.x, y: position.y), style, title, subtitle, .step(step.id)))
@@ -158,7 +158,8 @@ struct CanvasLayout {
     private static func titles(for step: WorkflowStep, role: RoleDefinition?) -> (String, String?) {
         switch step.type {
         case .agent, .spawn:
-            return (role?.name ?? step.role ?? "Choose a role", step.displayTitle)
+            let name = role.map { role in step.model.map { "\(role.name) · \($0.modelTitle)" } ?? role.name }
+            return (name ?? "Choose an agent", step.displayTitle)
         case .condition:
             return (step.displayTitle, nil)
         case .approval:

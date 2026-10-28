@@ -26,25 +26,19 @@ extension AppModel {
         switch chatTargets[id] {
         case .agent(let agentID) where directChatSessions(in: project).contains(where: { $0.id == agentID }):
             return .agent(agentID)
-        case .lead(let roleID) where leadRoles(in: project).contains(where: { $0.id == roleID }):
-            return .lead(roleID)
         default:
-            return defaultLeadRole(in: project).map { .lead($0.id) }
+            return .lead(leadRole(in: project).id)
         }
     }
 
     func chooseChatTarget(_ target: ChatTarget, in project: Project) {
         guard let id = project.id else { return }
-        if case .lead(let roleID) = target, let request = selectedRequest(in: project),
-           let lead = leadSession(for: request), lead.agent.role != roleID {
-            leadSelections[id] = .newRequest
-        }
         chatTargets[id] = target
     }
 
     func chatLeadRole(in project: Project) -> RoleDefinition? {
-        guard case .lead(let roleID) = chatTarget(in: project) else { return nil }
-        return leadRoles(in: project).first { $0.id == roleID }
+        guard case .lead = chatTarget(in: project) else { return nil }
+        return leadRole(in: project)
     }
 
     func directChatSession(in project: Project) -> AgentSession? {
@@ -109,11 +103,5 @@ extension AppModel {
             guard let self, !sendDirectMessage(held.text, attachments: held.attachments, to: session) else { return }
             pendingSends.returnToComposer(held, for: target)
         }
-    }
-
-    private func defaultLeadRole(in project: Project) -> RoleDefinition? {
-        let leads = leadRoles(in: project)
-        let current = selectedRequest(in: project).flatMap(leadSession(for:))?.agent.role
-        return leads.first { $0.id == current } ?? leads.first
     }
 }

@@ -29,9 +29,6 @@ struct AddStepMenu: View {
     var body: some View {
         Menu {
             Section("Agent step done by") {
-                if roles.isEmpty {
-                    Text("No roles in .ensemble/roles yet")
-                }
                 ForEach(StepAddition.roleItems(roles)) { item in
                     Button(item.title) { item.add(to: editor) }
                 }
@@ -51,7 +48,7 @@ struct AddStepMenu: View {
         }
         .menuStyle(.button)
         .fixedSize()
-        .help("Add a step done by a role, or a parallel build, condition, approval or notify step")
+        .help("Add a step done by the Lead, a builder or a checker, or a parallel build, condition, approval or notify step")
     }
 }
 
@@ -106,7 +103,7 @@ struct WorkflowListMenu: View {
             }
             if !hasConfig {
                 Section {
-                    Text("No .ensemble/ folder yet. Add the defaults in Crew › Roles.")
+                    Text("No .ensemble/ folder yet. Add the default workflows.")
                 }
             }
         } label: {

@@ -116,7 +116,7 @@ struct ChatPeoplePanel: View {
     private var leadRows: [PersonRow.Model] {
         let requests = LeadRequest.partition(model.leadRequests(in: project)).open
         let needsYouTaskIDs = model.needsYouTaskIDs()
-        return model.leadRoles(in: project).filter { matches($0.name) }.map { role in
+        return [model.leadRole(in: project)].filter { matches($0.name) }.map { role in
             let led = requests.compactMap { request in
                 model.leadSession(for: request).flatMap { $0.agent.role == role.id ? (request, $0) : nil }
             }

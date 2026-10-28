@@ -118,7 +118,7 @@ struct AgentsNavigator: View {
         let projects = model.navigatorProjects(state.navigatorScope)
         let entries = projects.flatMap { project in model.agentSessions(in: project).map { (project, $0) } }
         if entries.isEmpty {
-            NavigatorEmpty(title: "No agents yet", message: "Agents are created from roles when a run needs them, or with Spawn (⇧⌘A).")
+            NavigatorEmpty(title: "No agents yet", message: "Workflows start agents when a run needs them, or spawn a builder or checker with ⇧⌘A.")
         } else {
             let runIDs = Array(Set(entries.compactMap { $0.1.agent.runId }))
             let runs = Dictionary(uniqueKeysWithValues: ((try? model.database.runs(withIDs: runIDs)) ?? []).compactMap { run in run.id.map { ($0, run) } })
@@ -422,7 +422,7 @@ extension AppModel {
             let installed = SkillLibrary.installedSkills(in: project.url).union((skillPlugins[project.id ?? -1] ?? []).flatMap(\.skills))
             return ProjectSignals.problems(
                 runs: runs, steps: steps(of: runs.filter { ProjectSignals.activeStatuses.contains($0.status) }), holds: holds,
-                configIssues: ConfigValidator.validate(config), roles: config.roles, installedSkills: installed
+                configIssues: ConfigValidator.validate(config), agents: agentSessions(in: project).map(\.agent), installedSkills: installed
             ).map { (project, $0) }
         }
     }

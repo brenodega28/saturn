@@ -2,31 +2,37 @@ name: Small task
 version: 1
 description: One agent builds, a reviewer checks, you approve. No lead.
 trigger:
-  sources: [chat, github]
-  labels: [small]
+  sources:
+  - chat
+  - github
+  labels:
+  - small
 budget: 5
 steps:
-  - id: build
-    type: agent
-    title: Build
-    role: claude-code
-    instructions: Build the task, run the tests, and commit.
-    next: review
-  - id: review
-    type: agent
-    title: Review
-    role: pr-reviewer
-    instructions: Review the branch against the task.
-    routes:
-      approved: approve
-      changes_requested:
-        to: build
-        max_loops: 2
-  - id: approve
-    type: approval
-    title: You approve
-    routes:
-      approved: end
-      changes_requested: build
+- id: build
+  type: agent
+  title: Build
+  agent: builder
+  model: opus
+  instructions: Build the task, run the tests, and commit.
+  next: review
+- id: review
+  type: agent
+  title: Review
+  agent: checker
+  model: opus
+  instructions: Review the branch against the task.
+  routes:
+    approved: approve
+    changes_requested:
+      to: build
+      max_loops: 2
+- id: approve
+  type: approval
+  title: You approve
+  routes:
+    changes_requested: build
+    approved: end
 end:
   action: pull_request
+  clean_up_worktrees: true

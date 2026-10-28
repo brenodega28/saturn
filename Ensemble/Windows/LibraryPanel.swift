@@ -16,7 +16,7 @@ struct PromptSnippet: Codable, Hashable, Identifiable {
 }
 
 enum LibraryTab: String, CaseIterable {
-    case roles = "Roles"
+    case roles = "Agents"
     case skills = "Skills"
     case stepTypes = "Step types"
     case snippets = "Snippets"
@@ -49,8 +49,8 @@ extension StepType {
 
     var libraryDetail: String {
         switch self {
-        case .agent: "Run a role on the task"
-        case .spawn: "One agent per task in the plan"
+        case .agent: "Run the Lead, a builder or a checker"
+        case .spawn: "One builder per task in the plan"
         case .condition: "Branch on an outcome or a fact"
         case .approval: "You own the change"
         case .notify: "Tell you something without stopping"
@@ -61,8 +61,8 @@ extension StepType {
 
     var libraryExplanation: String {
         switch self {
-        case .agent: "Runs one role on the task in its own worktree. Its outcome decides where the run goes next."
-        case .spawn: "Starts one agent per task in the approved plan, each on its own branch, and waits for them all."
+        case .agent: "Runs one agent on the task: the Lead plans or reviews, a builder writes code in its own worktree, a checker reviews or tests from a fresh context. Its outcome decides where the run goes next."
+        case .spawn: "Starts one builder per task in the approved plan, each on its own branch with the skills the Lead chose, and waits for them all."
         case .condition: "Routes the run by an outcome, a label or a fact about the change, without running an agent."
         case .approval: "Stops the run until you approve or send it back. Nothing merges without this."
         case .notify: "Posts a note to your Inbox and keeps going."
@@ -146,7 +146,7 @@ struct LibraryPanel: View {
             Divider().overlay(Theme.hairline)
             VStack(alignment: .leading, spacing: 6) {
                 Text(selected?.title ?? "Library").font(.system(size: 13, weight: .semibold))
-                Text(selected?.explanation ?? "Roles, skills, step types and prompt snippets.")
+                Text(selected?.explanation ?? "Agents, skills, step types and prompt snippets.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -173,7 +173,7 @@ struct LibraryPanel: View {
 
     private var emptyMessage: String {
         switch tab {
-        case .roles: "No roles match."
+        case .roles: "No agents match."
         case .skills: "No skills installed. Add them under .claude/skills or install a plugin."
         case .stepTypes: "No step types match."
         case .snippets: "No snippets. Copy some text and press + to save it."
@@ -247,20 +247,18 @@ struct LibraryPanel: View {
                 let appearance = RoleAppearance(role: role)
                 return LibraryEntry(
                     id: "role-\(role.id)", title: role.name, detail: role.description,
-                    explanation: role.skills.isEmpty ? role.description : "\(role.description) Forced skills: \(role.skills.joined(separator: ", ")).",
+                    explanation: role.description,
                     symbol: appearance.symbol, fill: AnyShapeStyle(appearance.palette.gradient),
                     payload: PaletteItem.role(role.id).payload, roleID: role.id
                 )
             }
         case .skills:
             guard let project = model.currentProject else { return [] }
-            let installed = SkillLibrary.installedSkills(in: project.url)
-            let plugins = model.pluginSkills(for: project)
-            return installed.union(plugins).sorted().map { skill in
+            return SkillLibrary.skills(in: project.url, pluginSkills: model.pluginSkills(for: project)).map { skill in
                 LibraryEntry(
-                    id: "skill-\(skill)", title: skill, detail: installed.contains(skill) ? ".claude/skills/\(skill)" : "From a plugin",
-                    explanation: "Ask an agent to use the \(skill) skill, or force it on a role in Settings › Roles.",
-                    symbol: "sparkle", fill: AnyShapeStyle(Theme.memory.gradient), payload: "Use the \(skill) skill."
+                    id: "skill-\(skill.name)", title: skill.name, detail: skill.description.isEmpty ? "From \(skill.source.location)" : skill.description,
+                    explanation: "Ask the Lead to give the \(skill.name) skill to a builder or checker.",
+                    symbol: "sparkle", fill: AnyShapeStyle(Theme.memory.gradient), payload: "Use the \(skill.name) skill."
                 )
             }
         case .stepTypes:

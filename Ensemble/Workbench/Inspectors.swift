@@ -141,9 +141,8 @@ private struct AgentInspectorHost: View {
 
     private func context(_ session: AgentSession, project: Project) -> some View {
         let agent = session.agent
-        let role = model.role(for: agent, in: project)
         let memoryTokens = agent.isPinned ? TokenEstimate.of((try? String(contentsOf: AgentMemory(repository: project.url, agentName: agent.name).url, encoding: .utf8)) ?? "") : 0
-        let context = role.map { RoleContext.build(role: $0, config: model.config(for: project), repository: project.url, pluginSkills: model.pluginSkills(for: project)) }
+        let context = agent.kind.map { RoleContext.build(kind: $0, skills: agent.skills, config: model.config(for: project), repository: project.url, pluginSkills: model.pluginSkills(for: project)) }
         let rows = (context?.sections ?? []).map { ($0.source ?? $0.title, $0.tokens) } + (memoryTokens > 0 ? [("Memory", memoryTokens)] : [])
         let total = rows.reduce(0) { $0 + $1.1 }
         let maximum = rows.map(\.1).max() ?? 0
@@ -154,7 +153,7 @@ private struct AgentInspectorHost: View {
                 Text("\(total.formatted(.number.notation(.compactName))) tokens").font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Theme.secondaryText)
             }
             if rows.isEmpty {
-                Text("This role loads no prompt, documents or skills.").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+                Text("This agent loads no prompt, documents or skills.").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 TokenBarRow(title: row.0, value: row.1, maximum: maximum)
@@ -169,14 +168,13 @@ private struct AgentInspectorHost: View {
 
     private func cost(_ session: AgentSession, project: Project) -> some View {
         let agent = session.agent
-        let role = model.role(for: agent, in: project)
         let run = agent.runId.flatMap(model.run(withID:))
         return InspectorFacts(rows: [
             ("Spent", agent.costUSD.formatted(.currency(code: "USD").precision(.fractionLength(2)))),
             ("Input tokens", agent.inputTokens.formatted()),
             ("Output tokens", agent.outputTokens.formatted()),
             ("Cache reads", agent.cacheReadTokens.formatted()),
-            ("Role budget per run", role?.budgetPerRun.map { $0.formatted(.currency(code: "USD")) } ?? "None"),
+            ("Skills", agent.skills.joined(separator: ", ").nonEmpty ?? "None"),
             ("Run total", run.map { $0.costUSD.formatted(.currency(code: "USD").precision(.fractionLength(2))) } ?? "Not in a run"),
         ])
     }
@@ -438,7 +436,7 @@ extension AppModel {
         if editor.isNew {
             draft.id = ProjectConfigLoader.newWorkflowID(for: draft.name, existing: config.workflows)
         }
-        var issues = ConfigValidator.validate(ProjectConfig(roles: config.roles, workflows: [draft]))
+        var issues = ConfigValidator.validate(ProjectConfig(workflows: [draft], checks: config.checks))
         if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
             issues.append(ConfigIssue(file: "", message: "a workflow needs a name"))
         }

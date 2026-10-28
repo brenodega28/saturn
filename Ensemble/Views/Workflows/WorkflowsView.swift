@@ -381,7 +381,7 @@ private struct WorkflowSidebar: View {
             VStack(alignment: .leading, spacing: 18) {
                 workflows
                 if !hasConfig {
-                    Text("This project has no .ensemble/ folder yet. Add the defaults in Crew › Roles, or start a new workflow.")
+                    Text("This project has no .ensemble/ folder yet. Add the default workflows, or start a new one.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -492,20 +492,14 @@ private struct RolePaletteList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Roles").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.secondaryText).padding(.horizontal, 10)
+            Text("Agents").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.secondaryText).padding(.horizontal, 10)
             Text("Click to add, or drag onto the canvas")
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.tertiaryText)
                 .padding(.horizontal, 10)
                 .padding(.bottom, 4)
-            if roles.isEmpty {
-                Text("No roles in .ensemble/roles yet.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.secondaryText)
-                    .padding(.horizontal, 10)
-            }
             ForEach(roles) { role in
-                let uses = editor.draft.steps.filter { $0.role == role.id }.count
+                let uses = editor.draft.steps.filter { $0.agent?.rawValue == role.id }.count
                 PaletteRow(payload: PaletteItem.role(role.id).payload, help: "Add an agent step done by \(role.name)") {
                     editor.addStep(.agent, role: role, at: nil)
                 } icon: {

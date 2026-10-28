@@ -298,16 +298,23 @@ struct WorkbenchToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         let registry = WorkbenchRegistry.shared
-        ToolbarItemGroup(placement: .navigation) {
-            ForEach(registry.toolbarItems(.leading)) { $0.content() }
+        ToolbarItem(placement: .navigation) {
+            HStack(spacing: 10) {
+                ForEach(registry.toolbarItems(.leading)) { $0.content() }
+            }
         }
+        .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .principal) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ForEach(registry.toolbarItems(.center)) { $0.content() }
             }
         }
-        ToolbarItemGroup(placement: .primaryAction) {
-            ForEach(registry.toolbarItems(.trailing)) { $0.content() }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarItem(placement: .primaryAction) {
+            HStack(spacing: 10) {
+                ForEach(registry.toolbarItems(.trailing)) { $0.content() }
+            }
         }
+        .sharedBackgroundVisibility(.hidden)
     }
 }

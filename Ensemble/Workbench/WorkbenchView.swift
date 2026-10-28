@@ -47,6 +47,11 @@ struct WorkbenchView: View {
         .frame(minWidth: 1100, minHeight: 680)
         .background(Theme.windowBackground)
         .overlay(alignment: .top) {
+            if !state.isToolbarHidden {
+                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1).allowsHitTesting(false)
+            }
+        }
+        .overlay(alignment: .top) {
             if state.isLibraryShown {
                 LibraryPanel { state.isLibraryShown = false }
                     .padding(.top, 50)

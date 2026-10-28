@@ -75,7 +75,7 @@ private struct SchemeSelector: View {
                     }
                 }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     Text(String(project.name.prefix(1)).uppercased())
                         .font(.system(size: 11, weight: .bold))
                         .frame(width: 20, height: 20)
@@ -85,10 +85,20 @@ private struct SchemeSelector: View {
                     Text(workflow.map { "\($0.name) v\($0.version)" } ?? "No workflow")
                     Text("▸").foregroundStyle(Theme.secondaryText)
                     Text(base).font(.system(size: 11.5, design: .monospaced))
+                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
                 }
                 .font(.system(size: 12.5))
+                .foregroundStyle(.white)
+                .padding(.leading, 5)
+                .padding(.trailing, 10)
+                .frame(height: 30)
+                .background(Color.white.opacity(0.06), in: .rect(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+                .contentShape(.rect(cornerRadius: 8, style: .continuous))
             }
-            .menuIndicator(.visible)
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
             .fixedSize()
             .help("Project, workflow for new tasks, and base branch")
             .accessibilityLabel("Scheme: \(project.name), \(workflow?.name ?? "no workflow"), base \(base). Change")
@@ -121,18 +131,54 @@ private struct StartStopButtons: View {
 
     var body: some View {
         let run = model.runToStop(in: state)
-        HStack(spacing: 6) {
-            Button { model.newTask() } label: { Image(systemName: "play.fill") }
+        HStack(spacing: 10) {
+            Button { model.newTask() } label: { Image(systemName: "play.fill").font(.system(size: 13)) }
                 .help("Start a task with this workflow (⌘R)")
                 .accessibilityLabel("Start a task")
                 .disabled(model.currentProject == nil)
             Button {
                 guard let run else { return }
                 Task { await model.performRunAction("Couldn’t stop the run") { try await model.engine.cancel(run) } }
-            } label: { Image(systemName: "stop.fill") }
+            } label: { Image(systemName: "stop.fill").font(.system(size: 11)) }
                 .help(run.map { "Stop \($0.displayTitle) (⌘.)" } ?? "No run to stop")
                 .accessibilityLabel("Stop the current run")
                 .disabled(run == nil)
+        }
+        .buttonStyle(ToolbarChipStyle(width: 34, fill: .white.opacity(0.08)))
+    }
+}
+
+struct ToolbarChipStyle: ButtonStyle {
+    var width: CGFloat?
+    var height: CGFloat = 30
+    var horizontalPadding: CGFloat = 0
+    var cornerRadius: CGFloat = 8
+    var fill: Color = .white.opacity(0.06)
+    var foreground: Color = .white
+
+    func makeBody(configuration: Configuration) -> some View {
+        ToolbarChip(configuration: configuration, style: self)
+    }
+
+    private struct ToolbarChip: View {
+        let configuration: Configuration
+        let style: ToolbarChipStyle
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 12.5))
+                .foregroundStyle(style.foreground)
+                .padding(.horizontal, style.horizontalPadding)
+                .frame(width: style.width, height: style.height)
+                .background(style.fill, in: .rect(cornerRadius: style.cornerRadius, style: .continuous))
+                .overlay {
+                    if configuration.isPressed {
+                        RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous).fill(Color.white.opacity(0.08))
+                    }
+                }
+                .opacity(isEnabled ? 1 : 0.45)
+                .contentShape(.rect(cornerRadius: style.cornerRadius, style: .continuous))
         }
     }
 }
@@ -147,10 +193,12 @@ private struct ActivityViewer: View {
         let cost = runs.reduce(0) { $0 + $1.costUSD }
         let lead = runs.first
         Button { isShowingPopover.toggle() } label: {
+            let dotColor = lead.map { model.statusColor(of: $0) } ?? Theme.neutral
             HStack(spacing: 10) {
                 Circle()
-                    .fill(lead.map { model.statusColor(of: $0) } ?? Theme.neutral)
+                    .fill(dotColor)
                     .frame(width: 8, height: 8)
+                    .background(Circle().fill(dotColor.opacity(0.25)).frame(width: 14, height: 14))
                 if let lead {
                     Text(lead.displayTitle).fontWeight(.semibold).lineLimit(1)
                     Text(model.currentStepTitle(of: lead) ?? model.statusLabel(of: lead)).foregroundStyle(Theme.secondaryText).lineLimit(1)
@@ -168,7 +216,7 @@ private struct ActivityViewer: View {
             }
             .font(.system(size: 12.5))
             .padding(.horizontal, 12)
-            .frame(minWidth: 320, idealWidth: 520, maxWidth: 560, minHeight: 28)
+            .frame(minWidth: 320, idealWidth: 520, maxWidth: 560, minHeight: 32, maxHeight: 32)
             .background(Color.black.opacity(0.28), in: .rect(cornerRadius: 9, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.white.opacity(0.08)))
             .contentShape(.rect)

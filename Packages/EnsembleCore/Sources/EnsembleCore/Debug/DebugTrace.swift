@@ -205,6 +205,11 @@ final class DebugTrace: @unchecked Sendable {
         case .stopAgent(let name): (HandoffTool.stopAgent.rawValue, .object(["agent": JSONValue(name)]))
         case .deleteAgent(let name, let deleteBranch): (HandoffTool.deleteAgent.rawValue, .object(["agent": JSONValue(name), "deleteBranch": JSONValue(deleteBranch)]))
         case .openWorktree: (HandoffTool.openWorktree.rawValue, .null)
+        case .readChat(let request): (HandoffTool.readChat.rawValue, .object([
+            "requestId": JSONValue(request.requestID), "messageId": JSONValue(request.messageID), "section": JSONValue(request.section.rawValue),
+            "runId": JSONValue(request.runID), "agent": JSONValue(request.agent),
+            "offset": request.offset.map { JSONValue($0) } ?? .null, "limit": request.limit.map { JSONValue($0) } ?? .null,
+        ]))
         }
     }
 

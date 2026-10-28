@@ -91,7 +91,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         var leadTools: Set<HandoffTool> = isLead ? HandoffTool.leadTools : []
         if isLead, agent.readOnly, agent.worktreePath == nil { leadTools.insert(.openWorktree) }
         let chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .messageAgent, .askHuman]
-        let requestTools = chatTools.union(leadTools)
+        let requestTools = chatTools.union(leadTools).union([.readChat])
         guard agent.runId != nil else { return requestTools }
         var tools: Set<HandoffTool> = requestTools.union([.askHuman, .createPin, .attachEvidence])
         if isLead { tools.formUnion([.submitPlan, .submitVerdict]) }
@@ -239,6 +239,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             let branch = session.agent.branch.map { " on branch \($0)" } ?? ""
             session.send("Your worktree at \(path)\(branch) is ready and you can now edit files there. Continue with the change you were about to make.")
             return "Worktree ready at \(path)\(branch). End your turn now; your next turn runs there with write access."
+        case .readChat(let request):
+            return try ChatReader(database: runtime.database, paths: runtime.paths).read(request)
         }
     }
 

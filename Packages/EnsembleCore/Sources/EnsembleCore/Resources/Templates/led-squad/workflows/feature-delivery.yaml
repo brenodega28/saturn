@@ -1,6 +1,6 @@
 name: Feature delivery
 version: 2
-description: The lead plans and specs the work, developers build in parallel, checks and gates verify it, an AI review comments, you approve.
+description: The lead plans and specs the work, developers build it, checks and gates verify it, an AI review comments, you approve.
 trigger:
   sources: [chat, github]
   labels: [feature]
@@ -10,12 +10,12 @@ steps:
     type: agent
     title: Plan & spec the task
     role: tech-lead
-    instructions: Break the request into independent tasks, assign a role to each with the files it owns, and write a short spec unless the request fits in one sentence. Submit the plan.
+    instructions: Plan one task by default. Split into more tasks only when every task works and can be tested on its own, with none needing another's output. Assign a role to each task with the files it owns, and write a short spec unless the request fits in one sentence. Submit the plan.
     budget: 2
     next: build
   - id: build
     type: spawn
-    title: Build in parallel
+    title: Build the plan
     role: claude-code
     instructions: Build your task from the plan in your own worktree, add tests, run them, and commit.
     max_agents: 4

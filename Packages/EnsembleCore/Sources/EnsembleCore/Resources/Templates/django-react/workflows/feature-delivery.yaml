@@ -10,12 +10,12 @@ steps:
     type: agent
     title: Plan & spec the task
     role: tech-lead
-    instructions: Break the request into backend tasks for django-developer and frontend tasks for react-developer that don't touch the same files, with a short spec unless the request fits in one sentence. Submit the plan.
+    instructions: Plan one task by default, for django-developer or react-developer. Split backend and frontend into separate tasks only when each works and can be tested on its own, with neither needing the other's output. Write a short spec unless the request fits in one sentence. Submit the plan.
     budget: 2
     next: build
   - id: build
     type: spawn
-    title: Build in parallel
+    title: Build the plan
     role: django-developer
     instructions: Build your task from the plan in your own worktree, add tests, run them, and commit.
     max_agents: 3

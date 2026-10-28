@@ -375,18 +375,15 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         let config = ProjectConfigLoader.load(repository: project.url)
         let fallbackRole = context.step.roleID.flatMap(config.role)
 
-        var assignments: [(PlanTask, Int)] = []
-        for task in context.plan.tasks {
-            for copy in 0..<max(1, task.count) { assignments.append((task, copy)) }
-        }
+        var assignments = context.plan.tasks
         if let cap = context.maxAgents, cap > 0, assignments.count > cap {
             assignments = Array(assignments.prefix(cap))
         }
 
         let existing = try runtime.runSessions(runId: runId, projectId: project.id ?? -1).filter { !$0.agent.readOnly && $0.agent.planTaskId != nil }
         var builders: [(session: AgentSession, task: PlanTask)] = []
-        for (task, copy) in assignments {
-            let key = copy == 0 ? task.id : "\(task.id)#\(copy + 1)"
+        for task in assignments {
+            let key = task.id
             if let session = existing.first(where: { $0.agent.planTaskId == key }) {
                 try await reportingSetupFailure(runId: runId, projectId: project.id) { try await runtime.repairSetup(of: session) }
                 builders.append((session, task))

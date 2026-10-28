@@ -114,7 +114,6 @@ import Testing
             "tasks": .array([.object(["title": .string("API"), "role": .string("claude-code"), "files": .array([.string("api/")])])]),
         ]))
         guard case .plan(let decoded) = plan else { Issue.record("expected plan"); return }
-        #expect(decoded.tasks.first?.count == 1)
         #expect(decoded.tasks.first?.files == ["api/"])
 
         let pin = try HandoffTool.createPin.decode(.object([

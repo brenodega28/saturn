@@ -138,7 +138,6 @@ private struct PlanTaskRow: View {
                 arrow("chevron.down", label: "Move down", disabled: isLast) { plan.moveTask(id: task.id, by: 1) }
                 Spacer(minLength: 8)
                 roleMenu(selected: role)
-            stepper
             Button {
                 plan.removeTask(id: task.id)
             } label: {
@@ -197,38 +196,6 @@ private struct PlanTaskRow: View {
         .accessibilityLabel("Role: \(selected?.name ?? task.role)")
     }
 
-    private var stepper: some View {
-        HStack(spacing: 0) {
-            countButton("minus", label: "Fewer agents", disabled: task.count <= Plan.agentsPerTask.lowerBound) {
-                plan.setCount(task.count - 1, forTask: task.id)
-            }
-            Text("×\(task.count)")
-                .font(.system(size: 12.5, weight: .semibold))
-                .frame(minWidth: 24)
-            countButton("plus", label: "More agents", disabled: task.count >= Plan.agentsPerTask.upperBound) {
-                plan.setCount(task.count + 1, forTask: task.id)
-            }
-        }
-        .padding(.horizontal, 2)
-        .frame(height: 28)
-        .background(Color.white.opacity(0.07), in: Capsule())
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("How many agents for task \(number)")
-    }
-
-    private func countButton(_ symbol: String, label: String, disabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 10, weight: .bold))
-                .frame(width: 24, height: 24)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.35 : 1)
-        .help(label)
-        .accessibilityLabel(label)
-    }
 }
 
 struct PlanSpecView: View {

@@ -70,7 +70,7 @@ final class WorkflowEditor {
     func addStep(_ type: StepType, role: RoleDefinition?, at position: CanvasPosition?) {
         let title: String? = switch type {
         case .agent: role.map { $0.name }
-        case .spawn: "Build in parallel"
+        case .spawn: "Build"
         case .condition: "Check"
         case .approval: "You approve"
         case .notify: "Notify me"

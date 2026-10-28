@@ -77,6 +77,31 @@ struct SessionCostTests {
         #expect(zip(costs, [0.01, 0.02, 0.01]).allSatisfy { abs($0 - $1) < 0.000_001 })
     }
 
+    @Test func theBaselineIsSeededFromTheCurrentSessionsLastResult() throws {
+        var agent = agent()
+        agent.sessionId = "s-2"
+        let init1 = #"{"type":"system","subtype":"init","session_id":"s-1","model":"opus","cwd":"/r"}"#
+        let init2 = #"{"type":"system","subtype":"init","session_id":"s-2","model":"opus","cwd":"/r"}"#
+        let notice = ClaudeEvent.noticeLine(.restarted, detail: nil)
+
+        agent.seedSessionTotals(fromTranscript: [init1, Self.run50Results[4], notice, init2, Self.run50Results[0], init2, Self.run50Results[3], notice])
+
+        #expect(abs(agent.sessionCostUSD - 36.4568208) < 0.000_001)
+        #expect(agent.sessionOutputTokens == 249784)
+        let cost = agent.addTurnCost(of: try Self.result(Self.run50Results[4]), continuingProcess: false)
+        #expect(abs(cost - 1.4169468) < 0.000_001)
+    }
+
+    @Test func aSessionWithoutResultsSeedsNothing() throws {
+        var agent = agent()
+        agent.sessionId = "s-2"
+        let init1 = #"{"type":"system","subtype":"init","session_id":"s-1","model":"opus","cwd":"/r"}"#
+
+        agent.seedSessionTotals(fromTranscript: [init1, Self.run50Results[3]])
+
+        #expect(!agent.hasSessionTotals)
+    }
+
     @Test func aNewSessionStartsFromZero() throws {
         var agent = agent()
         _ = agent.addTurnCost(of: try Self.result(total: 2.00, turnOutput: 100, models: ["opus": 100]), continuingProcess: false)
@@ -275,6 +300,35 @@ extension WorkflowDriverTests {
         #expect(harness.launches()[1].contains("--resume"))
         #expect(Self.close(session.agent.costUSD, 0.65))
         #expect(Self.close(try await Self.usage(harness).reduce(0) { $0 + $1.costUSD }, 0.65))
+    }
+
+    @Test func aSessionOpenBeforeTheUpgradeSeedsItsBaselineFromTheTranscript() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        try Self.ledger(harness)
+        try Self.turnCents(harness, 60)
+        let first = try await harness.spawn()
+        try await waitUntil { first.agent.status == .idle }
+        try await runTurn(first, harness, cents: 30, launches: 2)
+
+        var upgraded = try #require(try harness.database.agent(id: first.id))
+        upgraded.sessionCostUSD = 0
+        upgraded.sessionOutputTokens = 0
+        try harness.database.save(upgraded)
+        let relaunched = AgentHarness.makeRuntime(database: harness.database, data: harness.data, bin: harness.bin)
+        let stored = try #require(try harness.database.agent(id: first.id))
+        let session = try #require(relaunched.session(for: stored))
+        #expect(!session.agent.hasSessionTotals)
+
+        try Self.turnCents(harness, 5)
+        session.send("Keep going")
+        try await waitUntil { session.agent.status == .idle && harness.launches().count == 3 }
+
+        #expect(harness.launches()[2].contains("--resume"))
+        #expect(Self.close(Self.trueSpend(harness), 0.95))
+        #expect(Self.close(session.agent.costUSD, 0.95))
+        #expect(Self.close(try await Self.usage(harness).reduce(0) { $0 + $1.costUSD }, 0.95))
+        #expect(Self.close(session.agent.sessionCostUSD, 0.95))
     }
 
     @Test func aFreshSessionAfterRestartStartsItsTotalsOver() async throws {

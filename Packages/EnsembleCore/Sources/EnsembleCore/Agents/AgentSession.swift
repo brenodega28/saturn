@@ -308,6 +308,9 @@ public final class AgentSession: Identifiable {
 
         let session: ClaudeLaunch.Session
         if let sessionID = agent.sessionId, transcript.session?.sessionID == sessionID {
+            if !agent.hasSessionTotals {
+                agent.seedSessionTotals(fromTranscript: log.readLines())
+            }
             session = .resume(sessionID)
         } else {
             let sessionID = agent.sessionId ?? UUID().uuidString.lowercased()

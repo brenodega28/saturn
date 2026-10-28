@@ -200,6 +200,23 @@ public enum AgentStatus: String, Codable, Sendable, CaseIterable {
     case failed
 
     public var hasLiveProcess: Bool { self == .working }
+
+    public var isActive: Bool { busyness <= AgentStatus.waiting.busyness }
+
+    public var busyness: Int {
+        switch self {
+        case .needsInput: 0
+        case .working: 1
+        case .reviewing: 2
+        case .takenOver: 3
+        case .waiting: 4
+        case .paused: 5
+        case .interrupted: 6
+        case .failed: 7
+        case .stopped: 8
+        case .idle: 9
+        }
+    }
 }
 
 public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {

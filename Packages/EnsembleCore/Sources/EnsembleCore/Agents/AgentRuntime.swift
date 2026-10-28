@@ -85,6 +85,7 @@ public final class AgentRuntime {
     @ObservationIgnored let stopGracePeriod: Duration
     @ObservationIgnored private var sessions: [Int64: AgentSession] = [:]
     @ObservationIgnored private var replyObservers: [@MainActor (Agent, String) -> Void] = []
+    @ObservationIgnored private var turnEndObservers: [@MainActor (AgentSession) -> Void] = []
     private var turnQueue: [Int64: [Int64]] = [:]
     @ObservationIgnored public internal(set) var memoryUpdateAgents: Set<Int64> = []
     @ObservationIgnored var reservedPorts: [String: Int] = [:]
@@ -122,6 +123,16 @@ public final class AgentRuntime {
     func turnReplied(_ agent: Agent, _ reply: String) {
         for observer in replyObservers {
             observer(agent, reply)
+        }
+    }
+
+    public func observeTurnEnds(_ observer: @escaping @MainActor (AgentSession) -> Void) {
+        turnEndObservers.append(observer)
+    }
+
+    func turnEnded(_ session: AgentSession) {
+        for observer in turnEndObservers {
+            observer(session)
         }
     }
 
@@ -203,6 +214,7 @@ public final class AgentRuntime {
         name: String? = nil,
         model: String? = nil,
         task: String = "",
+        spawnedBy spawner: Agent? = nil,
         now: Date = .now
     ) async throws -> [AgentSession] {
         guard providerMode != nil else { throw AgentError.providerNotChosen }
@@ -242,6 +254,7 @@ public final class AgentRuntime {
                 baseBranch: base,
                 readOnly: !role.editsCode,
                 port: worktreePath == nil ? nil : try nextPort(forProject: projectId),
+                spawnedById: spawner?.id,
                 createdAt: now,
                 updatedAt: now
             ))
@@ -294,6 +307,9 @@ public final class AgentRuntime {
             }
             if let memory = memoryPromptSection(for: agent, repository: repository) { prompt += "\n\n" + memory }
             if !agent.readOnly, let checks = config.checks, let guide = Self.checksGuide(checks) { prompt += "\n\n" + guide }
+        }
+        if mcpServer != nil, agent.taskId == nil, let spawnerID = agent.spawnedById, let spawner = try database.agent(id: spawnerID) {
+            prompt += "\n\n" + Self.spawnedAgentGuide(spawner: spawner.name)
         }
         if let port = agent.port {
             prompt += "\n\n" + Self.portGuide(port)
@@ -363,6 +379,13 @@ public final class AgentRuntime {
         During a run, questions the run's agents ask with `\(HandoffTool.askHuman.qualifiedName)` come to you, not the user, batched in one message from Ensemble. Answer what you can from the code, the conversation and the brief, and fix environment problems yourself where your tools allow (for example `\(HandoffTool.openWorktree.qualifiedName)` and allowed commands), replying to each agent with `\(HandoffTool.messageAgent.qualifiedName)`. Bring everything you can't resolve to the user as ONE merged `\(HandoffTool.askHuman.qualifiedName)` that names the agents each point affects, and once they answer, pass the answers back to each agent with `\(HandoffTool.messageAgent.qualifiedName)`.
         Workflows you can propose:
         \(list.isEmpty ? "(none; tell the user to add one in Settings › Workflows)" : list.joined(separator: "\n"))
+        """
+    }
+
+    static func spawnedAgentGuide(spawner: String) -> String {
+        """
+        # Reporting back
+        \(spawner) started you. When you end a turn, Ensemble sends \(spawner) your report: the summary you pass to `\(HandoffTool.submitResult.qualifiedName)`, or else your final reply. Questions you ask with `\(HandoffTool.askHuman.qualifiedName)` go to \(spawner), `\(HandoffTool.messageAgent.qualifiedName)` reaches only \(spawner), and \(spawner)'s messages arrive as your next message.
         """
     }
 

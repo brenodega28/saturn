@@ -496,6 +496,8 @@ public final class AgentSession: Identifiable {
                 let next = AgentTurn.joining(queuedTurns)
                 queuedTurns.removeAll()
                 beginTurn(with: next)
+            } else {
+                runtime.turnEnded(self)
             }
             return
         }
@@ -561,6 +563,7 @@ public final class AgentSession: Identifiable {
         queuedTurns.removeAll()
         record(notice: .failed, detail: message)
         persist()
+        runtime.turnEnded(self)
     }
 
     private func notice(for status: AgentStatus) -> EnsembleNotice {

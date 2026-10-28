@@ -119,6 +119,20 @@ extension AppDatabase {
         }
     }
 
+    public func spawnedAgents(taskId: Int64) throws -> [Agent] {
+        try writer.read { db in
+            try Agent.fetchAll(db, sql: """
+                SELECT agent.* FROM agent
+                WHERE agent.spawnedById IN (
+                    SELECT spawner.id FROM agent AS spawner
+                    WHERE spawner.taskId = ?
+                       OR spawner.runId IN (SELECT id FROM run WHERE run.taskId = ?)
+                )
+                ORDER BY agent.id
+                """, arguments: [taskId, taskId])
+        }
+    }
+
     public func closedTasks(projectId: Int64) throws -> [ProjectTask] {
         try writer.read { db in
             try ProjectTask.fetchAll(db, sql: """

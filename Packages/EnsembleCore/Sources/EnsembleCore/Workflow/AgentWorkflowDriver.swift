@@ -76,6 +76,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     public init(runtime: AgentRuntime) {
         self.runtime = runtime
         runtime.handoffTools = { [weak self] agent in self?.tools(for: agent) ?? [] }
+        runtime.observeTurnEnds { [weak self] session in self?.reportToSpawner(session) }
     }
 
     public func ensureServer() async throws {
@@ -91,7 +92,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         var leadTools: Set<HandoffTool> = isLead ? HandoffTool.leadTools : []
         if isLead, agent.readOnly, agent.worktreePath == nil { leadTools.insert(.openWorktree) }
         let chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .messageAgent, .askHuman]
-        let requestTools = chatTools.union(leadTools).union([.readChat])
+        let spawnedTools: Set<HandoffTool> = agent.spawnedById == nil ? [] : [.messageAgent, .askHuman, .submitResult]
+        let requestTools = chatTools.union(leadTools).union(spawnedTools).union([.readChat])
         guard agent.runId != nil else { return requestTools }
         var tools: Set<HandoffTool> = requestTools.union([.askHuman, .createPin, .attachEvidence])
         if isLead { tools.formUnion([.submitPlan, .submitVerdict]) }
@@ -150,6 +152,14 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 ))
                 return "Your question was sent to your lead, who will answer it or ask the user. End your turn now; the answer arrives as your next message."
             }
+            if agent.runId == nil, let spawner = try spawner(of: agent), let session = runtime.session(for: spawner) {
+                awaitingLead.insert(agentID)
+                #if DEBUG
+                runtime.debugTrace?.questionAsked(by: agent, routedTo: "spawner", body: question, questions: questions)
+                #endif
+                session.send(QuestionRelay.spawnedAgentMessage(agentName: agent.name, body: question, questions: questions))
+                return "Your question was sent to \(spawner.name), who started you and will answer it or ask the user. End your turn now; the answer arrives as your next message."
+            }
             _ = try runtime.database.createInboxItem(InboxItem(
                 projectId: agent.projectId, runId: agent.runId, agentId: agentID, kind: .question,
                 title: "\(agent.name) asks", body: question, questions: questions.isEmpty ? nil : questions, createdAt: .now
@@ -175,13 +185,24 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         case .agentMessage(let name, let text) where (try? isLead(agent)) == true:
             let target = try otherAgent(named: name, from: agent)
             guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(target.name) can’t receive messages.") }
-            let sender = agent.taskId == nil ? "Message from \(agent.name):" : "Message from \(agent.name), passing on the user’s instruction:"
+            let sender = agent.taskId == nil || target.spawnedById == agent.id
+                ? "Message from \(agent.name):"
+                : "Message from \(agent.name), passing on the user’s instruction:"
             #if DEBUG
             if awaitingLead.contains(session.id) { runtime.debugTrace?.questionAnswered(for: target, answer: text, via: "lead") }
             #endif
             awaitingLead.remove(session.id)
             session.send("\(sender)\n\n\(text)")
             return "Sent to \(target.name)."
+        case .agentMessage(let name, let text) where agent.taskId == nil && agent.spawnedById != nil:
+            guard let spawner = try spawner(of: agent), let session = runtime.session(for: spawner) else {
+                throw HandoffError.notAllowed("The agent that started you no longer exists, so there’s no one to message.")
+            }
+            guard spawner.name.caseInsensitiveCompare(name.trimmingCharacters(in: .whitespaces)) == .orderedSame else {
+                throw HandoffError.notAllowed("You can only message \(spawner.name), the agent that started you.")
+            }
+            session.send("Message from \(agent.name), an agent you started:\n\n\(text)")
+            return "Sent to \(spawner.name)."
         case .agentMessage(let name, let text):
             guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can message run agents.") }
             let activeRuns = Set(try runtime.database.runs(taskId: taskId).filter(\.isActive).compactMap(\.id))
@@ -210,9 +231,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
             let spawned = try await runtime.spawn(
                 in: project, role: role, count: request.count, config: config, git: try requireGit(),
-                name: request.name, model: request.model, task: request.task
+                name: request.name, model: request.model, task: request.task, spawnedBy: agent
             )
-            return "Started \(spawned.map(\.agent.name).joined(separator: ", ")). Check on them with list_agents."
+            return "Started \(spawned.map(\.agent.name).joined(separator: ", ")). Each agent’s report arrives as your next message when it finishes its turn. End your turn now."
         case .stopAgent(let name):
             try requireLead(agent)
             let target = try otherAgent(named: name, from: agent)
@@ -274,6 +295,41 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 title: "\(question.agentName) asks", body: question.body, questions: question.questions.isEmpty ? nil : question.questions, createdAt: .now
             ))
         }
+    }
+
+    private func spawner(of agent: Agent) throws -> Agent? {
+        guard let spawnerID = agent.spawnedById else { return nil }
+        return try runtime.database.agent(id: spawnerID)
+    }
+
+    func reportToSpawner(_ session: AgentSession) {
+        let agent = session.agent
+        guard agent.spawnedById != nil, agent.runId == nil, let agentID = agent.id else { return }
+        let failed = agent.status == .failed
+        guard failed || (try? hasOpenQuestion(session)) == false else { return }
+        let submitted = results.removeValue(forKey: agentID)
+        let report = failed
+            ? "\(agent.name) failed: \(agent.lastError ?? "unknown error")"
+            : submitted ?? currentTurnReply(session).nilIfEmpty ?? "\(agent.name) ended its turn without a reply."
+        if let spawner = try? spawner(of: agent), let spawnerSession = runtime.session(for: spawner) {
+            spawnerSession.send("Report from \(agent.name):\n\n\(report)")
+            return
+        }
+        _ = try? runtime.database.createInboxItem(InboxItem(
+            projectId: agent.projectId, agentId: agentID, kind: .notice,
+            title: "Report from \(agent.name)", body: report, createdAt: .now
+        ))
+    }
+
+    private func currentTurnReply(_ session: AgentSession) -> String {
+        for entry in session.transcript.entries.reversed() {
+            switch entry.content {
+            case .assistant(let text): return text
+            case .user: return ""
+            default: continue
+            }
+        }
+        return ""
     }
 
     private func endRelay(for run: Run) {

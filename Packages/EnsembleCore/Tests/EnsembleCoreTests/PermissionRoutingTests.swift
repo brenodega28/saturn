@@ -254,6 +254,27 @@ import Testing
         #expect(try setup.permissionItems().isEmpty)
     }
 
+    @Test func operatorsInsideQuotesDontMakeAnAllowListedCommandChained() async throws {
+        let setup = try await makeRun()
+        defer { setup.harness.cleanUp() }
+
+        for command in [
+            #"rg "foo|bar" src"#,
+            "grep -E 'a|b' notes.txt",
+            #"git commit -m "Fix A; B""#,
+            "git commit -m \"Fix the parser\n\nIt now handles && and > in arguments.\"",
+            #"git commit -m "Add \"quoted\" | piped text""#,
+            "swift test 2>&1",
+        ] {
+            #expect(await setup.hook(command, from: setup.builders[0]) == .object([:]), "\(command)")
+        }
+        let quotedUnlisted = await setup.hook(#"java -cp "a;b" Main"#, from: setup.builders[0])
+        #expect(Self.reason(quotedUnlisted) == AgentRuntime.leadChatReason)
+        #expect(try setup.cards().count == 1)
+        #expect(Self.reason(await setup.hook(#"rg "foo" src | java -version"#, from: setup.builders[0])) == AgentRuntime.chainedCommandReason)
+        #expect(Self.reason(await setup.hook("echo 'quoted' && java -version", from: setup.builders[0])) == AgentRuntime.chainedCommandReason)
+    }
+
     @Test func answeringAnAnsweredCardDoesNothing() async throws {
         let setup = try await makeRun()
         defer { setup.harness.cleanUp() }

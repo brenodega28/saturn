@@ -7,6 +7,7 @@ public enum AgentError: Error, LocalizedError, Equatable {
     case emptyTask
     case providerNotChosen
     case unknownModel(String)
+    case unknownSkills([String])
 
     public var errorDescription: String? {
         switch self {
@@ -14,6 +15,8 @@ public enum AgentError: Error, LocalizedError, Equatable {
         case .emptyTask: "Describe a task for the agent."
         case .providerNotChosen: "Choose whether agents use an Anthropic API key or your Claude sign-in before starting one."
         case .unknownModel(let model): "“\(model)” isn’t a model Claude Code knows. Use an alias like sonnet or a full name starting with claude-."
+        case .unknownSkills(let skills):
+            "\(skills.map { "“\($0)”" }.joined(separator: ", ")) \(skills.count == 1 ? "isn’t an installed skill" : "aren’t installed skills"). Use skills from .claude/skills, ~/.claude/skills or an installed plugin."
         }
     }
 }
@@ -72,6 +75,7 @@ public final class AgentRuntime {
     public var handoffTools: @MainActor (Agent) -> Set<HandoffTool> = { _ in [] }
     public var worktreePrepared: (@MainActor (WorktreePreparation) async throws -> Void)?
     public var gitProvider: @MainActor () -> GitClient? = { nil }
+    public var pluginSkills: @MainActor (Project) -> Set<String> = { _ in [] }
     public var apiRetryDelays: [Duration] = [.seconds(60), .seconds(300), .seconds(900), .seconds(1800), .seconds(3600)]
     public var crashRestartLimit = 1
     public internal(set) var settingUp: Set<Int64> = []
@@ -179,7 +183,7 @@ public final class AgentRuntime {
 
         let agent = try database.insert(Agent(
             projectId: projectId,
-            role: "claude-code",
+            role: AgentKind.builder.rawValue,
             name: name,
             worktreePath: worktree.path.path,
             branch: worktree.branch,
@@ -203,24 +207,31 @@ public final class AgentRuntime {
         AgentNaming.names(base: base, count: count, existing: try database.agents(inProject: projectId).map(\.name))
     }
 
+    public func checkSkills(_ skills: [String], in project: Project) throws {
+        let unknown = SkillLibrary.unknownSkills(skills, in: project.url, pluginSkills: pluginSkills(project))
+        guard unknown.isEmpty else { throw AgentError.unknownSkills(unknown) }
+    }
+
     @discardableResult
     public func spawn(
         in project: Project,
-        role: RoleDefinition,
+        kind: AgentKind,
         count: Int,
-        config: ProjectConfig,
         git: GitClient,
         pinned: Bool = false,
         name: String? = nil,
         model: String? = nil,
         task: String = "",
+        skills: [String] = [],
         spawnedBy spawner: Agent? = nil,
         now: Date = .now
     ) async throws -> [AgentSession] {
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
+        let role = kind.builtInRole
         let model = model?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? role.model
         guard ModelCatalog.isValid(model) else { throw AgentError.unknownModel(model) }
+        try checkSkills(skills, in: project)
         let count = min(max(count, 1), Self.maxSpawnCount)
         let base = name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? role.name
         guard !Slug.make(base).isEmpty else { throw WorktreeError.invalidName(base) }
@@ -255,6 +266,7 @@ public final class AgentRuntime {
                 readOnly: !role.editsCode,
                 port: worktreePath == nil ? nil : try nextPort(forProject: projectId),
                 spawnedById: spawner?.id,
+                skills: skills,
                 createdAt: now,
                 updatedAt: now
             ))
@@ -288,18 +300,22 @@ public final class AgentRuntime {
 
         let tools = handoffTools(agent)
         let config = repository.map { ProjectConfigLoader.load(repository: $0) }
-        let policy = PermissionPolicy(profile: (config?.permissions ?? PermissionsConfig()).resolve(for: config?.role(agent.role), readOnly: agent.readOnly), readOnly: agent.readOnly)
+        let policy = PermissionPolicy(profile: (config?.permissions ?? PermissionsConfig()).resolve(for: agent.kind, readOnly: agent.readOnly), readOnly: agent.readOnly)
         let name = AgentNaming.displayName(of: agent, config: config)
         var prompt = agent.readOnly
             ? ClaudeLaunch.readOnlySystemPrompt(agentName: name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree), commands: policy.commands)
             : ClaudeLaunch.systemPrompt(agentName: name, worktree: directory, branch: agent.branch, commands: policy.commands)
         if let guide = ClaudeLaunch.askGuide(policy), mcpServer != nil { prompt += "\n\n" + guide }
-        var isLead = false
-        if let repository, let config {
-            if let role = config.role(agent.role) {
-                isLead = role.canSpawn
-                let context = RoleContext.build(role: role, config: config, repository: repository).systemPrompt
+        let isLead = agent.kind == .lead
+        if let repository, let config, let project {
+            if let kind = agent.kind {
+                let context = RoleContext.build(
+                    kind: kind, skills: agent.skills, config: config, repository: repository, pluginSkills: pluginSkills(project)
+                ).systemPrompt
                 if !context.isEmpty { prompt += "\n\n" + context }
+            }
+            if isLead {
+                prompt += "\n\n" + Self.skillsGuide(SkillLibrary.skills(in: repository, pluginSkills: pluginSkills(project)))
             }
             if agent.taskId != nil {
                 prompt += "\n\n" + Self.leadChatGuide(workflows: config.workflows, defaultWorkflow: config.preferences.defaultWorkflow)
@@ -380,6 +396,18 @@ public final class AgentRuntime {
         During a run, questions the run's agents ask with `\(HandoffTool.askHuman.qualifiedName)` come to you, not the user, batched in one message from Ensemble. Answer what you can from the code, the conversation and the brief, and fix environment problems yourself where your tools allow (for example `\(HandoffTool.openWorktree.qualifiedName)` and allowed commands), replying to each agent with `\(HandoffTool.messageAgent.qualifiedName)`. Bring everything you can't resolve to the user as ONE merged `\(HandoffTool.askHuman.qualifiedName)` that names the agents each point affects, and once they answer, pass the answers back to each agent with `\(HandoffTool.messageAgent.qualifiedName)`.
         Workflows you can propose:
         \(list.isEmpty ? "(none; tell the user to add one in Settings › Workflows)" : list.joined(separator: "\n"))
+        """
+    }
+
+    static func skillsGuide(_ skills: [InstalledSkill]) -> String {
+        guard !skills.isEmpty else {
+            return "# Skills for your agents\nNo skills are installed yet, so builders and checkers start with their own knowledge only."
+        }
+        let list = skills.map { "- `\($0.name)` (\($0.source.title.lowercased()))\($0.description.isEmpty ? "" : ": \($0.description)")" }
+        return """
+        # Skills for your agents
+        Each builder and checker loads only the skills you choose for it, in a plan task's `skills` or in `\(HandoffTool.spawnAgent.qualifiedName)`. Pick the ones that match the work; skip skills that don't apply. Installed skills:
+        \(list.joined(separator: "\n"))
         """
     }
 
@@ -525,7 +553,9 @@ public final class AgentRuntime {
 extension AgentRuntime {
     public func createRunAgent(
         in project: Project,
-        role: RoleDefinition,
+        kind: AgentKind,
+        model: String? = nil,
+        skills: [String] = [],
         name: String? = nil,
         runId: Int64,
         runStepId: Int64?,
@@ -537,6 +567,9 @@ extension AgentRuntime {
     ) async throws -> AgentSession {
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
+        let role = kind.builtInRole
+        let model = model?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? role.model
+        guard ModelCatalog.isValid(model) else { throw AgentError.unknownModel(model) }
         let base = name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? role.name
         guard let agentName = try agentNames(for: base, count: 1, inProject: projectId).first else {
             throw WorktreeError.invalidName(base)
@@ -567,13 +600,14 @@ extension AgentRuntime {
             worktreePath: worktreePath,
             branch: branch,
             status: .idle,
-            model: role.model,
+            model: model,
             task: task,
             baseBranch: resolvedBase,
             runStepId: runStepId,
             readOnly: !role.editsCode,
             planTaskId: planTaskId,
             port: port,
+            skills: skills,
             createdAt: now,
             updatedAt: now
         ))
@@ -598,9 +632,10 @@ extension AgentRuntime {
         try await prepareWorktree(of: session)
     }
 
-    public func createLeadAgent(in project: Project, role: RoleDefinition, taskId: Int64, now: Date = .now) throws -> AgentSession {
+    public func createLeadAgent(in project: Project, taskId: Int64, now: Date = .now) throws -> AgentSession {
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
+        let role = AgentKind.lead.builtInRole
         guard let name = try agentNames(for: role.name, count: 1, inProject: projectId).first else {
             throw WorktreeError.invalidName(role.name)
         }
@@ -622,10 +657,10 @@ extension AgentRuntime {
         return paused
     }
 
-    public func pinnedAgentToReuse(role: String, inProject projectId: Int64, excluding: Set<Int64>, activeRunIDs: Set<Int64>) throws -> AgentSession? {
+    public func pinnedAgentToReuse(kind: AgentKind, inProject projectId: Int64, excluding: Set<Int64>, activeRunIDs: Set<Int64>) throws -> AgentSession? {
         try database.agents(inProject: projectId)
             .filter { agent in
-                guard let id = agent.id, agent.isPinned, agent.role == role, !agent.readOnly, agent.archivedAt == nil, agent.taskId == nil,
+                guard let id = agent.id, agent.isPinned, agent.kind == kind, !agent.readOnly, agent.archivedAt == nil, agent.taskId == nil,
                       !excluding.contains(id), !(agent.runId.map(activeRunIDs.contains) ?? false) else { return false }
                 return [.idle, .stopped, .interrupted].contains(agent.status)
             }
@@ -635,7 +670,7 @@ extension AgentRuntime {
     }
 
     public func reassign(
-        _ session: AgentSession, toRun runId: Int64, runStepId: Int64?, planTaskId: String, task: String, in project: Project, git: GitClient
+        _ session: AgentSession, toRun runId: Int64, runStepId: Int64?, planTaskId: String, task: String, skills: [String] = [], in project: Project, git: GitClient
     ) async throws {
         let agent = session.agent
         let manager = WorktreeManager(repository: project.url, git: git)
@@ -656,7 +691,7 @@ extension AgentRuntime {
             worktree = created.path
             branch = created.branch ?? branch
         }
-        session.reassign(runId: runId, runStepId: runStepId, planTaskId: planTaskId, task: task, worktree: worktree, branch: branch, baseBranch: base)
+        session.reassign(runId: runId, runStepId: runStepId, planTaskId: planTaskId, task: task, skills: skills, worktree: worktree, branch: branch, baseBranch: base)
         usageDidChange()
         try await prepareWorktree(of: session)
     }

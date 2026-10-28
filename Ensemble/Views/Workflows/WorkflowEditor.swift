@@ -77,13 +77,17 @@ final class WorkflowEditor {
         case .check: "Run checks"
         case .gates: "Gates"
         }
-        let step = draft.addStep(type, role: role?.id, title: title, position: position ?? nextFreePosition())
+        let step = draft.addStep(type, agent: role.flatMap { AgentKind(rawValue: $0.id) }, title: title, position: position ?? nextFreePosition())
         selection = .step(step.id)
     }
 
     func assignRole(_ role: RoleDefinition, to stepID: String) {
-        guard let index = draft.index(of: stepID), [.agent, .spawn].contains(draft.steps[index].type) else { return }
-        draft.steps[index].role = role.id
+        guard let index = draft.index(of: stepID), let kind = AgentKind(rawValue: role.id) else { return }
+        switch draft.steps[index].type {
+        case .agent: draft.steps[index].agent = kind
+        case .spawn where kind == .builder: draft.steps[index].agent = kind
+        default: return
+        }
         selection = .step(stepID)
     }
 

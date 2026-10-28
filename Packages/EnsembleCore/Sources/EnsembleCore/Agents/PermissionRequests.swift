@@ -56,7 +56,7 @@ extension AgentRuntime {
         case .allow:
             return .object([:])
         case .never:
-            guard tool == "Bash", capability != .runShell else { return .object([:]) }
+            guard capability == .editFiles || (tool == "Bash" && capability != .runShell) else { return .object([:]) }
             return Self.decision("deny", reason: "\(policy.profile.name) agents may never \(capability.describe(request)). Find another way, or explain in your summary why it’s needed.")
         case .ask:
             let latest = try database.latestPermissionRequest(agentId: id, capability: capability, request: request)

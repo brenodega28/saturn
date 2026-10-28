@@ -59,7 +59,7 @@ struct WorkflowInspector: View {
     private var tip: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Tip").font(.system(size: 12, weight: .semibold))
-            Text("Drag a role onto an agent step to change who does it. Drag from the dot under a step to another step to connect them. A dashed line loops work back and stops after its loop limit.")
+            Text("Drag an agent onto an agent step to change who does it. Drag from the dot under a step to another step to connect them. A dashed line loops work back and stops after its loop limit.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.secondaryText)
                 .lineSpacing(2)
@@ -259,7 +259,7 @@ private struct StepSection: View {
     @State private var idError: String?
 
     var body: some View {
-        let role = step.role.flatMap { id in roles.first { $0.id == id } }
+        let role = step.agent?.builtInRole
         let style = NodeStyle.step(step, role: role)
         VStack(alignment: .leading, spacing: 16) {
             InspectorHeader(kind: style.kind, title: step.displayTitle, symbol: style.symbol, fill: style.fill)
@@ -316,28 +316,40 @@ private struct StepSection: View {
         .onChange(of: step.id) { _, newValue in idText = newValue }
     }
 
+    private var modelChoices: [String] {
+        let base = AgentModel.allCases.map(\.rawValue)
+        guard let current = step.model, !base.contains(current) else { return base }
+        return base + [current]
+    }
+
     @ViewBuilder
     private func who(role: RoleDefinition?) -> some View {
         InspectorField("Who does it") {
             switch step.type {
             case .agent, .spawn:
-                VStack(alignment: .leading, spacing: 4) {
-                    Picker("Who does it", selection: $step.role) {
-                        Text("Choose a role").tag(String?.none)
-                        ForEach(roles) { role in
-                            Text(role.name).tag(String?.some(role.id))
-                        }
-                        if let current = step.role, !roles.contains(where: { $0.id == current }) {
-                            Text("\(current) (missing)").tag(String?.some(current))
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker("Who does it", selection: $step.agent) {
+                        Text("Choose an agent").tag(AgentKind?.none)
+                        ForEach(step.type == .spawn ? [AgentKind.builder] : AgentKind.allCases) { kind in
+                            Text(kind.name).tag(AgentKind?.some(kind))
                         }
                     }
                     .labelsHidden()
-                    .help("The role whose agents do this step")
-                    if step.type == .spawn {
-                        Text("Each task in the plan gets its own agent and worktree.")
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.secondaryText)
+                    .help("Lead plans and reviews, a builder writes code, a checker reviews or tests from a fresh context")
+                    Text(step.type == .spawn ? "Each task in the plan gets its own builder and worktree." : (step.agent?.summary ?? "Pick who runs this step."))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Picker("Model", selection: Binding(
+                        get: { step.model ?? "" },
+                        set: { step.model = $0.isEmpty ? nil : $0 }
+                    )) {
+                        Text("Default (\((step.agent ?? .builder).defaultModel.modelTitle))").tag("")
+                        ForEach(modelChoices, id: \.self) { model in
+                            Text(model.modelTitle).tag(model)
+                        }
                     }
+                    .help("The model this step’s agents use")
                 }
             case .approval:
                 Text("You").font(.system(size: 13, weight: .medium))
@@ -391,7 +403,7 @@ private struct StepSection: View {
                             }
                         }
                         .help("The most agents this step runs at once")
-                        Toggle("Reuse pinned agents of the same role", isOn: $step.reusePinned)
+                        Toggle("Reuse pinned builders", isOn: $step.reusePinned)
                             .help("Give tasks to idle pinned agents first, so their memory carries over, before spawning new ones")
                     }
                 }

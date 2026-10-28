@@ -60,7 +60,7 @@ struct AgentSessionView: View {
                 }
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
-                        Text("\(model.role(for: agent, in: project)?.name ?? "Claude Code") · \(session.transcript.session?.model ?? agent.model.modelTitle)")
+                        Text("\(model.role(for: agent, in: project)?.name ?? "Builder")\(agent.skills.isEmpty ? "" : " · \(agent.skills.joined(separator: ", "))") ·\(session.transcript.session?.model ?? agent.model.modelTitle)")
                         Text(agent.tokensAndCost).font(.system(size: 12, design: .monospaced))
                         Text("started \(Text(agent.createdAt, style: .relative)) ago")
                     }

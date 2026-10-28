@@ -8,8 +8,7 @@ import Testing
 
     func makeLead() async throws -> (Setup, AgentSession) {
         let setup = try await WorkflowDriverTests().makeSetup()
-        let role = try #require(setup.config.role("tech-lead"))
-        let lead = try #require(try await setup.harness.runtime.spawn(in: setup.project, role: role, count: 1, config: setup.config, git: setup.harness.repo.git).first)
+        let lead = try #require(try await setup.harness.runtime.spawn(in: setup.project, kind: .lead, count: 1, git: setup.harness.repo.git).first)
         return (setup, lead)
     }
 
@@ -20,12 +19,11 @@ import Testing
     @Test func leadsGetAgentControlAndAWorktreeOnDemandWhileBuildersDoNot() async throws {
         let (setup, lead) = try await makeLead()
         defer { setup.harness.cleanUp() }
-        let builderRole = try #require(setup.config.role("claude-code"))
-        let builder = try #require(try await setup.harness.runtime.spawn(in: setup.project, role: builderRole, count: 1, config: setup.config, git: setup.harness.repo.git).first)
+        let builder = try #require(try await setup.harness.runtime.spawn(in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git).first)
 
         #expect(setup.driver.tools(for: lead.agent) == HandoffTool.leadTools.union([.openWorktree, .readChat]))
         #expect(setup.driver.tools(for: builder.agent).isDisjoint(with: HandoffTool.leadTools.union([.openWorktree])))
-        await #expect(throws: HandoffError.notAllowed("Only lead roles can manage agents.")) {
+        await #expect(throws: HandoffError.notAllowed("Only the Lead can manage agents.")) {
             try await setup.driver.receive(.listAgents, from: builder.id)
         }
     }
@@ -34,18 +32,15 @@ import Testing
         let (setup, lead) = try await makeLead()
         defer { setup.harness.cleanUp() }
 
-        let reply = try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(role: "claude-code", task: "Add alpha", name: "Helper", count: 2)), from: lead.id)
-        let helpers = try agents(setup).filter { $0.role == "claude-code" }
+        let reply = try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(agent: .builder, task: "Add alpha", name: "Helper", count: 2)), from: lead.id)
+        let helpers = try agents(setup).filter { $0.kind == .builder }
         #expect(helpers.map(\.name) == ["Helper 1", "Helper 2"])
         #expect(helpers.allSatisfy { !$0.readOnly && $0.branch != nil && $0.worktreeURL.map { FileManager.default.fileExists(atPath: $0.path) } == true })
         #expect(reply == "Started Helper 1, Helper 2. Each agent’s report arrives as your next message when it finishes its turn. End your turn now.")
-        await #expect(throws: HandoffError.self) {
-            try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(role: "nobody", task: "x")), from: lead.id)
-        }
 
         let listing = try await setup.driver.receive(.listAgents, from: lead.id)
-        #expect(listing.contains("- \(lead.agent.name) (you): role tech-lead"))
-        #expect(listing.contains("- Helper 1: role claude-code"))
+        #expect(listing.contains("- \(lead.agent.name) (you): lead"))
+        #expect(listing.contains("- Helper 1: builder"))
         #expect(listing.contains("task: Add alpha"))
 
         let first = try #require(helpers.first)
@@ -77,6 +72,39 @@ import Testing
         }
     }
 
+    @Test func aLeadSpawnsAgentsWithInstalledSkillsAndUnknownSkillsAreRejected() async throws {
+        let (setup, lead) = try await makeLead()
+        defer { setup.harness.cleanUp() }
+        let skill = setup.harness.repo.root.appending(path: ".claude/skills/qa-review")
+        try FileManager.default.createDirectory(at: skill, withIntermediateDirectories: true)
+        try "---\nname: qa-review\ndescription: Review like QA\n---\n\nCheck everything.".write(to: skill.appending(path: "SKILL.md"), atomically: true, encoding: .utf8)
+
+        let reply = try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(agent: .checker, task: "CHAT look around", name: "Reviewer", skills: ["qa-review"])), from: lead.id)
+        #expect(reply.hasPrefix("Started Reviewer with qa-review."))
+        let reviewer = try #require(try agents(setup).first { $0.name == "Reviewer" })
+        #expect(reviewer.kind == .checker)
+        #expect(reviewer.readOnly && reviewer.worktreePath == nil)
+        #expect(reviewer.skills == ["qa-review"])
+        #expect(try setup.harness.database.agent(id: reviewer.id!)?.skills == ["qa-review"])
+        let prompt = try setup.harness.runtime.turnSetup(for: reviewer).systemPrompt
+        #expect(prompt.contains("# Role: Checker"))
+        #expect(prompt.contains("# Skills\n\nYour lead chose these skills"))
+        #expect(prompt.contains("- qa-review"))
+        #expect(try setup.harness.runtime.turnSetup(for: lead.agent).systemPrompt.contains("- `qa-review` (project): Review like QA"))
+
+        await #expect(throws: AgentError.unknownSkills(["no-such-skill-zz"])) {
+            try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(agent: .builder, task: "x", name: "Ghost", skills: ["no-such-skill-zz"])), from: lead.id)
+        }
+        #expect(try agents(setup).contains { $0.name == "Ghost" } == false)
+        await #expect(throws: AgentError.unknownSkills(["no-such-skill-zz"])) {
+            try await setup.driver.receive(.plan(Plan(summary: "s", tasks: [PlanTask(title: "t", skills: ["no-such-skill-zz"])])), from: lead.id)
+        }
+        await #expect(throws: HandoffError.self) {
+            try await setup.driver.receive(.plan(Plan(summary: "s", tasks: [PlanTask(title: "t", agent: .checker)])), from: lead.id)
+        }
+        #expect(try await setup.driver.receive(.plan(Plan(summary: "s", tasks: [PlanTask(title: "t", skills: ["qa-review"])])), from: lead.id).hasPrefix("Plan received"))
+    }
+
     func userMessages(_ session: AgentSession) -> [String] {
         session.transcript.entries.compactMap { entry -> String? in
             if case .user(let text) = entry.content { return text }
@@ -85,7 +113,7 @@ import Testing
     }
 
     func spawnRunner(_ setup: Setup, from lead: AgentSession, task: String = "CHAT look around") async throws -> AgentSession {
-        _ = try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(role: "claude-code", task: task, name: "Runner")), from: lead.id)
+        _ = try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(agent: .builder, task: task, name: "Runner")), from: lead.id)
         let runner = try #require(try agents(setup).first { $0.name == "Runner" })
         return try #require(setup.harness.runtime.session(for: runner))
     }
@@ -137,8 +165,7 @@ import Testing
     @Test func aSpawnedAgentCanMessageAndAskOnlyItsSpawner() async throws {
         let (setup, lead) = try await makeLead()
         defer { setup.harness.cleanUp() }
-        let builderRole = try #require(setup.config.role("claude-code"))
-        _ = try await setup.harness.runtime.spawn(in: setup.project, role: builderRole, count: 1, config: setup.config, git: setup.harness.repo.git, name: "Bystander")
+        _ = try await setup.harness.runtime.spawn(in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git, name: "Bystander")
 
         let runner = try await spawnRunner(setup, from: lead)
         let tools = setup.driver.tools(for: runner.agent)
@@ -181,7 +208,7 @@ import Testing
             projectId: setup.project.id!, title: "Run the tests", body: "Please.", source: .chat, status: .incoming, createdAt: now, updatedAt: now
         ))
         let taskId = try #require(task.id)
-        let lead = try setup.harness.runtime.createLeadAgent(in: setup.project, role: try #require(setup.config.role("tech-lead")), taskId: taskId)
+        let lead = try setup.harness.runtime.createLeadAgent(in: setup.project, taskId: taskId)
 
         let runner = try await spawnRunner(setup, from: lead)
         #expect(runner.agent.taskId == nil)
@@ -210,14 +237,13 @@ import Testing
         let task = try database.insert(ProjectTask(
             projectId: setup.project.id!, title: "Run the tests", body: "Please.", source: .chat, status: .incoming, createdAt: now, updatedAt: now
         ))
-        let lead = try setup.harness.runtime.createLeadAgent(in: setup.project, role: try #require(setup.config.role("tech-lead")), taskId: task.id!)
+        let lead = try setup.harness.runtime.createLeadAgent(in: setup.project, taskId: task.id!)
         let chat = LeadChat(runtime: setup.harness.runtime, engine: setup.engine, driver: setup.driver)
         try setup.harness.setMode("slow")
         #expect(chat.backgroundSessions(for: task).isEmpty)
 
         let runner = try await spawnRunner(setup, from: lead)
-        let builderRole = try #require(setup.config.role("claude-code"))
-        let bystander = try #require(try await setup.harness.runtime.spawn(in: setup.project, role: builderRole, count: 1, config: setup.config, git: setup.harness.repo.git, name: "Bystander").first)
+        let bystander = try #require(try await setup.harness.runtime.spawn(in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git, name: "Bystander").first)
         bystander.send("CHAT look around")
         try await waitUntil { runner.isRunning && bystander.isRunning }
         #expect(chat.backgroundSessions(for: task).map(\.id) == [runner.id])
@@ -273,72 +299,61 @@ import Testing
 
     func makeNumberedLeads(_ count: Int) async throws -> (Setup, [AgentSession]) {
         let setup = try await WorkflowDriverTests().makeSetup()
-        let role = try #require(setup.config.role("tech-lead"))
-        let leads = try await setup.harness.runtime.spawn(in: setup.project, role: role, count: count, config: setup.config, git: setup.harness.repo.git)
+        let leads = try await setup.harness.runtime.spawn(in: setup.project, kind: .lead, count: count, git: setup.harness.repo.git)
         return (setup, leads)
     }
 
-    @Test func numberedLeadsAreToldTheirRoleNameWhileBuildersKeepTheirNumbers() async throws {
+    @Test func numberedLeadsAreToldTheirKindNameWhileBuildersKeepTheirNumbers() async throws {
         let (setup, leads) = try await makeNumberedLeads(2)
         defer { setup.harness.cleanUp() }
         let lead = try #require(leads.first)
-        #expect(lead.agent.name == "Tech Lead 1")
-        let builderRole = try #require(setup.config.role("claude-code"))
-        let builders = try await setup.harness.runtime.spawn(in: setup.project, role: builderRole, count: 2, config: setup.config, git: setup.harness.repo.git)
+        #expect(lead.agent.name == "Lead 1")
+        let builders = try await setup.harness.runtime.spawn(in: setup.project, kind: .builder, count: 2, git: setup.harness.repo.git)
         let builder = try #require(builders.first)
-        #expect(builder.agent.name == "Claude Code 1")
+        #expect(builder.agent.name == "Builder 1")
 
         let leadPrompt = try setup.harness.runtime.turnSetup(for: lead.agent).systemPrompt
-        #expect(leadPrompt.contains("You are Tech Lead, "))
-        #expect(!leadPrompt.contains("Tech Lead 1"))
-        #expect(try setup.harness.runtime.turnSetup(for: builder.agent).systemPrompt.contains("You are Claude Code 1, "))
+        #expect(leadPrompt.contains("You are Lead, "))
+        #expect(!leadPrompt.contains("Lead 1"))
+        #expect(try setup.harness.runtime.turnSetup(for: builder.agent).systemPrompt.contains("You are Builder 1, "))
     }
 
-    @Test func messagesAndReportsUseTheLeadsRoleName() async throws {
+    @Test func messagesAndReportsUseTheLeadsKindName() async throws {
         let (setup, leads) = try await makeNumberedLeads(2)
         defer { setup.harness.cleanUp() }
         let lead = try #require(leads.first)
-
-        let reply = try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(role: "tech-lead", task: "CHAT look around", name: "Tech Lead")), from: lead.id)
-        #expect(reply.hasPrefix("Started Tech Lead. "))
-        let helper = try #require(try agents(setup).first { $0.name == "Tech Lead 3" })
-        let helperSession = try #require(setup.harness.runtime.session(for: helper))
-        try await waitUntil { userMessages(lead).contains("Report from Tech Lead:\n\nThe repo only has a README.") }
-        try await waitUntil { !helperSession.isRunning && !lead.isRunning }
-
-        #expect(try await setup.driver.receive(.agentMessage(agent: "Tech Lead 3", message: "Thanks"), from: lead.id) == "Sent to Tech Lead.")
-        try await waitUntil { userMessages(helperSession).contains("Message from Tech Lead:\n\nThanks") }
-        #expect(!userMessages(helperSession).contains { $0.contains("Tech Lead 1") })
 
         let runner = try await spawnRunner(setup, from: lead)
         try await waitUntil { userMessages(lead).contains("Report from Runner:\n\nThe repo only has a README.") }
         try await waitUntil { !runner.isRunning && !lead.isRunning }
-        #expect(try await setup.driver.receive(.agentMessage(agent: "Tech Lead", message: "Which suite?"), from: runner.id) == "Sent to Tech Lead.")
+        #expect(try await setup.driver.receive(.agentMessage(agent: "Lead 1", message: "Which suite?"), from: runner.id) == "Sent to Lead.")
         try await waitUntil { userMessages(lead).contains("Message from Runner, an agent you started:\n\nWhich suite?") }
+        #expect(try await setup.driver.receive(.agentMessage(agent: "Runner", message: "The fast one"), from: lead.id) == "Sent to Runner.")
+        try await waitUntil { userMessages(runner).contains("Message from Lead:\n\nThe fast one") }
     }
 
-    @Test func messageAgentFindsALeadByRoleNameAndRejectsAnAmbiguousOne() async throws {
+    @Test func messageAgentFindsALeadByKindNameAndRejectsAnAmbiguousOne() async throws {
         let (setup, leads) = try await makeNumberedLeads(3)
         defer { setup.harness.cleanUp() }
         let caller = try #require(leads.first)
         let other = try #require(leads.last)
 
-        await #expect(throws: HandoffError.notAllowed("Several agents are called “Tech Lead”: Tech Lead 2, Tech Lead 3. Use one of those exact names.")) {
-            try await setup.driver.receive(.agentMessage(agent: "tech lead", message: "Hi"), from: caller.id)
+        await #expect(throws: HandoffError.notAllowed("Several agents are called “Lead”: Lead 2, Lead 3. Use one of those exact names.")) {
+            try await setup.driver.receive(.agentMessage(agent: "lead", message: "Hi"), from: caller.id)
         }
         let listing = try await setup.driver.receive(.listAgents, from: caller.id)
-        #expect(listing.contains("- Tech Lead (Tech Lead 1) (you): role tech-lead"))
-        #expect(listing.contains("- Tech Lead (Tech Lead 2): role tech-lead"))
-        #expect(listing.contains("- Tech Lead (Tech Lead 3): role tech-lead"))
+        #expect(listing.contains("- Lead (Lead 1) (you): lead"))
+        #expect(listing.contains("- Lead (Lead 2): lead"))
+        #expect(listing.contains("- Lead (Lead 3): lead"))
 
-        #expect(try await setup.driver.receive(.agentMessage(agent: "Tech Lead 3", message: "Hi"), from: caller.id) == "Sent to Tech Lead.")
-        try await waitUntil { userMessages(other).contains("Message from Tech Lead:\n\nHi") }
+        #expect(try await setup.driver.receive(.agentMessage(agent: "Lead 3", message: "Hi"), from: caller.id) == "Sent to Lead.")
+        try await waitUntil { userMessages(other).contains("Message from Lead:\n\nHi") }
         try await waitUntil { !other.isRunning }
 
         let middle = try #require(setup.harness.runtime.session(for: leads[1].agent))
         try await setup.harness.runtime.delete(middle, in: setup.project, git: setup.harness.repo.git, deleteBranch: false)
-        #expect(try await setup.driver.receive(.agentMessage(agent: "Tech Lead", message: "Again"), from: caller.id) == "Sent to Tech Lead.")
-        try await waitUntil { userMessages(other).contains("Message from Tech Lead:\n\nAgain") }
+        #expect(try await setup.driver.receive(.agentMessage(agent: "Lead", message: "Again"), from: caller.id) == "Sent to Lead.")
+        try await waitUntil { userMessages(other).contains("Message from Lead:\n\nAgain") }
     }
 
     @Test func aReadOnlyLeadIsToldItCanOpenAWorktree() {
@@ -353,10 +368,18 @@ import Testing
         #expect(try HandoffTool.stopAgent.decode(.object(["agent": .string("Ada")])) == .stopAgent("Ada"))
         #expect(try HandoffTool.deleteAgent.decode(.object(["agent": .string("Ada")])) == .deleteAgent("Ada", deleteBranch: false))
         #expect(try HandoffTool.deleteAgent.decode(.object(["agent": .string("Ada"), "delete_branch": .bool(true)])) == .deleteAgent("Ada", deleteBranch: true))
-        #expect(try HandoffTool.spawnAgent.decode(.object(["role": .string("claude-code"), "task": .string("Build it"), "count": .number(0)]))
-            == .spawnAgent(AgentSpawnRequest(role: "claude-code", task: "Build it", count: 1)))
+        #expect(try HandoffTool.spawnAgent.decode(.object(["agent": .string("builder"), "task": .string("Build it"), "count": .number(0)]))
+            == .spawnAgent(AgentSpawnRequest(agent: .builder, task: "Build it", count: 1)))
+        #expect(try HandoffTool.spawnAgent.decode(.object(["agent": .string("checker"), "task": .string("Review it"), "skills": .array([.string("qa-review"), .string(" ")])]))
+            == .spawnAgent(AgentSpawnRequest(agent: .checker, task: "Review it", skills: ["qa-review"])))
         #expect(throws: HandoffError.missing("task")) {
-            try HandoffTool.spawnAgent.decode(.object(["role": .string("claude-code"), "task": .string(" ")]))
+            try HandoffTool.spawnAgent.decode(.object(["agent": .string("builder"), "task": .string(" ")]))
+        }
+        #expect(throws: HandoffError.missing("agent")) {
+            try HandoffTool.spawnAgent.decode(.object(["role": .string("claude-code"), "task": .string("Build it")]))
+        }
+        #expect(throws: HandoffError.self) {
+            try HandoffTool.spawnAgent.decode(.object(["agent": .string("lead"), "task": .string("Build it")]))
         }
         #expect(throws: HandoffError.missing("agent")) { try HandoffTool.stopAgent.decode(.object([:])) }
     }

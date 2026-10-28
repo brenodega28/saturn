@@ -65,11 +65,11 @@ import Testing
         #expect(steps.first { $0.stepId == "qa" }?.outcome == "passed")
 
         let agents = try setup.harness.database.agents(inProject: setup.project.id!).filter { $0.runId == run.id }
-        #expect(agents.filter { $0.role == "tech-lead" }.count == 1)
+        #expect(agents.filter { $0.role == "lead" }.count == 1)
         #expect(agents.filter { $0.planTaskId != nil }.count == 2)
-        #expect(agents.filter { $0.role == "qa-engineer" }.count == 1)
+        #expect(agents.filter { $0.role == "checker" }.count == 1)
 
-        let lead = try #require(agents.first { $0.role == "tech-lead" })
+        let lead = try #require(agents.first { $0.role == "lead" })
         let leadLaunches = setup.harness.launches().filter { $0.contains("You are \(lead.name),") }
         #expect(leadLaunches.count == 3)
         #expect(leadLaunches.allSatisfy { $0.contains("--session-id") && !$0.contains("--resume") })
@@ -104,7 +104,7 @@ import Testing
         defer { setup.harness.cleanUp() }
         let run = try startRun(setup)
         try await waitForHold(setup, run: run, .planApproval)
-        let lead = try #require(try setup.harness.database.agents(inProject: setup.project.id!).first { $0.role == "tech-lead" })
+        let lead = try #require(try setup.harness.database.agents(inProject: setup.project.id!).first { $0.role == "lead" })
 
         let reply = try await setup.driver.receive(.question("Which database?"), from: lead.id!)
 
@@ -114,15 +114,18 @@ import Testing
         #expect(open.first?.agentId == lead.id)
     }
 
-    @Test func plansWithUnknownRolesAreRejectedToTheAgent() async throws {
+    @Test func plansWithUnknownSkillsOrCheckerTasksAreRejectedToTheAgent() async throws {
         let setup = try await makeSetup()
         defer { setup.harness.cleanUp() }
         let run = try startRun(setup)
         try await waitForHold(setup, run: run, .planApproval)
-        let lead = try #require(try setup.harness.database.agents(inProject: setup.project.id!).first { $0.role == "tech-lead" })
+        let lead = try #require(try setup.harness.database.agents(inProject: setup.project.id!).first { $0.kind == .lead })
 
+        await #expect(throws: AgentError.unknownSkills(["rust-wizard"])) {
+            try await setup.driver.receive(.plan(Plan(summary: "x", tasks: [PlanTask(title: "t", skills: ["rust-wizard"])])), from: lead.id!)
+        }
         await #expect(throws: HandoffError.self) {
-            try await setup.driver.receive(.plan(Plan(summary: "x", tasks: [PlanTask(title: "t", role: "rust-wizard")])), from: lead.id!)
+            try await setup.driver.receive(.plan(Plan(summary: "x", tasks: [PlanTask(title: "t", agent: .checker)])), from: lead.id!)
         }
     }
 
@@ -143,7 +146,7 @@ import Testing
         let firstQA = try #require(steps.first { $0.stepId == "qa" })
         let verdict = try #require(firstQA.output.flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) }?.verdict)
         #expect(verdict.issues.first?.description.contains("alpha.txt") == true)
-        #expect(try setup.harness.database.agents(inProject: setup.project.id!).filter { $0.role == "qa-engineer" }.count == 1)
+        #expect(try setup.harness.database.agents(inProject: setup.project.id!).filter { $0.role == "checker" }.count == 1)
 
         try setup.engine.resolveApproval(run, approved: true)
         try await waitUntil(timeout: .seconds(30)) { (try? setup.harness.database.run(id: run.id!))??.status == .succeeded }

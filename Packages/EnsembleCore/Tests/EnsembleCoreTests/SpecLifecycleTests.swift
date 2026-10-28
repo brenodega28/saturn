@@ -33,10 +33,10 @@ final class SpecGateDriver: WorkflowDriver {
         acceptanceCriteria: ["alpha.txt exists", "beta.txt exists"], verification: "ls the repository root"
     )
 
-    func makeChat() async throws -> (Setup, LeadChat, RoleDefinition) {
+    func makeChat() async throws -> (Setup, LeadChat) {
         let setup = try await WorkflowDriverTests().makeSetup()
         let chat = LeadChat(runtime: setup.harness.runtime, engine: setup.engine, driver: setup.driver)
-        return (setup, chat, try #require(setup.config.role("tech-lead")))
+        return (setup, chat)
     }
 
     func messages(_ setup: Setup, _ task: ProjectTask) -> [LeadMessage] {
@@ -52,9 +52,9 @@ final class SpecGateDriver: WorkflowDriver {
     }
 
     @Test func theRequestLeadDraftsAndReplacesTheSpecOutsideTheCheckout() async throws {
-        let (setup, chat, lead) = try await makeChat()
+        let (setup, chat) = try await makeChat()
         defer { setup.harness.cleanUp() }
-        let task = try await chat.createRequest("CHAT hi", lead: lead, in: setup.project)
+        let task = try await chat.createRequest("CHAT hi", in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         #expect(setup.driver.tools(for: leadAgent).contains(.draftSpec))
@@ -100,7 +100,7 @@ final class SpecGateDriver: WorkflowDriver {
         edited = try SpecDocument(markdown: String(contentsOf: url, encoding: .utf8))
         edited.verification = "Open each file"
         try edited.markdown.write(to: url, atomically: true, encoding: .utf8)
-        try await chat.send("CHAT what changed?", to: task, lead: lead, in: setup.project)
+        try await chat.send("CHAT what changed?", to: task, in: setup.project)
         try await waitUntil { messages(setup, task).filter { $0.kind == .lead }.count == 2 }
         let transcript = try String(contentsOf: setup.harness.runtime.paths.transcript(leadAgent.id!), encoding: .utf8)
         #expect(transcript.contains("the user edited this request’s spec draft"))
@@ -110,9 +110,9 @@ final class SpecGateDriver: WorkflowDriver {
     }
 
     @Test func startingTheProposalCommitsTheSpecOnTheRunBranchAndSeedsThePlan() async throws {
-        let (setup, chat, lead) = try await makeChat()
+        let (setup, chat) = try await makeChat()
         defer { setup.harness.cleanUp() }
-        let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", lead: lead, in: setup.project)
+        let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         _ = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
@@ -203,9 +203,9 @@ final class SpecGateDriver: WorkflowDriver {
     }
 
     @Test func theGateStepTurnsCriteriaIntoFindingsForSpecRunsOnly() async throws {
-        let (setup, chat, lead) = try await makeChat()
+        let (setup, chat) = try await makeChat()
         defer { setup.harness.cleanUp() }
-        let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", lead: lead, in: setup.project)
+        let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         _ = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
@@ -215,7 +215,7 @@ final class SpecGateDriver: WorkflowDriver {
         func gate(_ run: Run, _ verdicts: [(String, Verdict)]) async throws -> StepResult {
             let outputs = verdicts.enumerated().map { PreviousOutput(stepId: $0.element.0, iteration: $0.offset + 1, outcome: $0.element.1.outcome, output: StepOutput(verdict: $0.element.1)) }
             let context = StepContext(
-                run: run, task: task, project: setup.project, step: WorkflowStep(id: "gates", type: .gates), roleID: nil, iteration: 1, attempt: 1,
+                run: run, task: task, project: setup.project, step: WorkflowStep(id: "gates", type: .gates), kind: nil, iteration: 1, attempt: 1,
                 runStepID: 0, start: .fresh, inputs: StepInputs(taskTitle: run.title, taskBody: "", previousOutputs: outputs),
                 stepBudgetUSD: nil, runBudgetRemainingUSD: nil
             )
@@ -249,9 +249,9 @@ final class SpecGateDriver: WorkflowDriver {
     }
 
     @Test func approvalTicksPassingCriteriaAndMarksTheSpecDone() async throws {
-        let (setup, chat, lead) = try await makeChat()
+        let (setup, chat) = try await makeChat()
         defer { setup.harness.cleanUp() }
-        let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", lead: lead, in: setup.project)
+        let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         _ = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
@@ -264,8 +264,8 @@ final class SpecGateDriver: WorkflowDriver {
         try await WorkflowDriverTests().waitForHold(setup, run: run, .approval, timeout: .seconds(60))
 
         let runAgents = try setup.harness.database.agents(inProject: setup.project.id!).filter { $0.runId == runID }
-        let reviewer = try #require(runAgents.first { $0.role == "tech-lead" && $0.taskId == nil })
-        let qa = try #require(runAgents.first { $0.role == "qa-engineer" })
+        let reviewer = try #require(runAgents.first { $0.kind == .lead && $0.taskId == nil })
+        let qa = try #require(runAgents.first { $0.kind == .checker })
         for agent in [reviewer, qa] {
             let transcript = try String(contentsOf: setup.harness.runtime.paths.transcript(agent.id!), encoding: .utf8)
             #expect(transcript.contains(#"## Acceptance criteria to check\n1. alpha.txt exists\n2. beta.txt exists"#), "\(agent.role)")
@@ -368,9 +368,9 @@ final class SpecGateDriver: WorkflowDriver {
     }
 
     @Test func requestsWithoutASpecStartExactlyAsBefore() async throws {
-        let (setup, chat, lead) = try await makeChat()
+        let (setup, chat) = try await makeChat()
         defer { setup.harness.cleanUp() }
-        let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", lead: lead, in: setup.project)
+        let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
         let run = try chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)

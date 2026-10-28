@@ -212,7 +212,7 @@ struct RequestChat: View {
     private func holdSentence(_ hold: RunHold, run: Run) -> String {
         let step = model.currentStepTitle(of: run) ?? "the next step"
         switch hold.reason {
-        case .planApproval: return "Here’s the plan. Reorder, change roles or counts, or drop tasks before I start."
+        case .planApproval: return "Here’s the plan. Reorder tasks, change their skills, or drop tasks before I start."
         case .approval: return "It’s ready for your approval at “\(step)”."
         case .loopLimit: return "The work keeps going back and forth. Tell me whether to try once more."
         case .stepBudget, .runBudget: return "We hit a budget limit. Decide whether to spend more."

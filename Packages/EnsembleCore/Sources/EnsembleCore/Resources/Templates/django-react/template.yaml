@@ -1,4 +1,4 @@
 name: Django + React
-description: One builder per area, a short plan for anything bigger than a sentence, checks and gates on every change.
+description: Builders load Django and React skills, a short plan for anything bigger than a sentence, checks and gates on every change.
 order: 1
-crew: [tech-lead, django-developer, django-developer, react-developer, pr-reviewer, qa-engineer]
+recommended_skills: [django-developer, react-developer]

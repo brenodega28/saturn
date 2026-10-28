@@ -54,7 +54,7 @@ private struct TimelineRow: View {
             Button {
                 withAnimation(.snappy(duration: 0.2)) { isExpanded.toggle() }
             } label: {
-                header(role: entry.role.flatMap { id in roles.first { $0.id == id } })
+                header(role: entry.agent?.builtInRole)
             }
             .buttonStyle(.plain)
             .accessibilityHint(isExpanded ? "Collapses the step details" : "Shows the step details")
@@ -212,7 +212,7 @@ private struct TimelineDetails: View {
                 detailBlock("Plan · \(plan.tasks.count) task\(plan.tasks.count == 1 ? "" : "s")") {
                     Text(plan.summary)
                     ForEach(plan.tasks) { task in
-                        Text("• \(task.title) — \(task.role)")
+                        Text("• \(task.title) — \(task.agent.name)\(task.skills.isEmpty ? "" : " · \(task.skills.joined(separator: ", "))")")
                     }
                 }
             }

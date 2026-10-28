@@ -1,14 +1,12 @@
 import Foundation
 
 public enum LeadChatError: Error, LocalizedError, Equatable {
-    case noLeadRole
     case proposalClosed
     case runInProgress
     case unknownWorkflow(String)
 
     public var errorDescription: String? {
         switch self {
-        case .noLeadRole: "This project has no lead role. Add a role with can_spawn: true in Crew › Roles."
         case .proposalClosed: "This proposal was already started or dismissed."
         case .runInProgress: "A run for this request is still going. Wait for it to end, or cancel it first."
         case .unknownWorkflow(let id): "The workflow “\(id)” no longer exists in .ensemble/workflows."
@@ -32,27 +30,26 @@ public final class LeadChat {
 
     @discardableResult
     public func createRequest(
-        _ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, in project: Project, now: Date = .now
+        _ text: String, attachments: [ChatAttachment] = [], in project: Project, now: Date = .now
     ) async throws -> ProjectTask {
         let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let projectId = project.id, !typed.isEmpty || !attachments.isEmpty else { throw AgentError.emptyTask }
-        guard let lead else { throw LeadChatError.noLeadRole }
         let task = try database.insert(ProjectTask(
             projectId: projectId, title: Self.title(text: typed, attachments: attachments),
             body: ChatAttachment.prompt(text: typed, attachments: attachments), source: .chat,
             status: .incoming, createdAt: now, updatedAt: now
         ))
-        try await send(typed, attachments: attachments, to: task, lead: lead, in: project, now: now)
+        try await send(typed, attachments: attachments, to: task, in: project, now: now)
         return task
     }
 
     public func send(
-        _ text: String, attachments: [ChatAttachment] = [], to task: ProjectTask, lead: RoleDefinition?, in project: Project, now: Date = .now
+        _ text: String, attachments: [ChatAttachment] = [], to task: ProjectTask, in project: Project, now: Date = .now
     ) async throws {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let taskId = task.id, !body.isEmpty || !attachments.isEmpty else { return }
         try await driver.ensureServer()
-        let session = try leadSession(for: task, lead: lead, in: project)
+        let session = try leadSession(for: task, in: project)
         if try database.task(id: taskId)?.isClosed == true {
             try database.setClosed(taskId: taskId, reason: nil, at: now)
         }
@@ -128,13 +125,11 @@ public final class LeadChat {
         let config = ProjectConfigLoader.load(repository: project.url)
         guard let workflow = config.workflow(workflowID) else { throw LeadChatError.unknownWorkflow(workflowID) }
         let lead = try database.leadAgent(taskId: proposal.taskId)
-        let leadRoleIDs = Set(config.roles.filter(\.canSpawn).map(\.id))
-        let assigned = lead.map { workflow.assigningLead($0.role, replacing: leadRoleIDs) } ?? workflow
         let spec = try pendingSpec(taskId: proposal.taskId, projectId: task.projectId)
         if task.isClosed {
             try database.setClosed(taskId: proposal.taskId, reason: nil, at: .now)
         }
-        let run = try engine.start(task: task, workflow: assigned, project: project, title: proposal.title, brief: proposal.text)
+        let run = try engine.start(task: task, workflow: workflow, project: project, title: proposal.title, brief: proposal.text)
         if let spec {
             try attachSpec(to: run, taskId: proposal.taskId, document: spec, project: project, config: config)
         }
@@ -168,10 +163,10 @@ public final class LeadChat {
         #endif
     }
 
-    private func leadSession(for task: ProjectTask, lead: RoleDefinition?, in project: Project) throws -> AgentSession {
+    private func leadSession(for task: ProjectTask, in project: Project) throws -> AgentSession {
         if let session = leadSession(for: task) { return session }
-        guard let lead, let taskId = task.id else { throw LeadChatError.noLeadRole }
-        return try runtime.createLeadAgent(in: project, role: lead, taskId: taskId)
+        guard let taskId = task.id else { throw AgentError.emptyTask }
+        return try runtime.createLeadAgent(in: project, taskId: taskId)
     }
 
     func statusNote(taskId: Int64) throws -> String? {
@@ -183,7 +178,7 @@ public final class LeadChat {
         if run.isActive {
             let agents = try database.agents(inProject: run.projectId).filter { $0.runId == runID && $0.taskId != taskId && $0.archivedAt == nil }
             if !agents.isEmpty {
-                lines.append("Agents: " + agents.map { "\(database.displayName(of: $0)) (\($0.role), \(Self.describe($0.status)))" }.joined(separator: "; ") + ".")
+                lines.append("Agents: " + agents.map { "\(database.displayName(of: $0)) (\($0.kind?.rawValue ?? $0.role), \(Self.describe($0.status)))" }.joined(separator: "; ") + ".")
             }
             if let hold = engine.holds[runID] {
                 lines.append("It is waiting for the user: \(Self.describe(hold.reason)).")

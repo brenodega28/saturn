@@ -19,7 +19,7 @@ struct PlanCard: View {
     }
 
     var body: some View {
-        let roles = model.config(for: project).roles
+        let installed = SkillLibrary.skills(in: project.url, pluginSkills: model.pluginSkills(for: project)).map(\.name)
         VStack(alignment: .leading, spacing: 0) {
             header
             if !plan.summary.isEmpty {
@@ -44,7 +44,7 @@ struct PlanCard: View {
             ForEach(Array(plan.tasks.enumerated()), id: \.element.id) { index, task in
                 PlanTaskRow(
                     task: task, number: index + 1, isFirst: index == 0, isLast: index == plan.tasks.count - 1,
-                    roles: roles, plan: $plan
+                    installedSkills: installed, plan: $plan
                 )
                 .overlay(alignment: .top) { Divider().overlay(Color.white.opacity(0.05)) }
             }
@@ -88,7 +88,7 @@ struct PlanCard: View {
             .padding(16)
         } else {
             HStack(spacing: 10) {
-                Text("Each coding agent gets its own worktree")
+                Text("Each task gets its own builder and worktree")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
                 Spacer()
@@ -114,11 +114,11 @@ private struct PlanTaskRow: View {
     let number: Int
     let isFirst: Bool
     let isLast: Bool
-    let roles: [RoleDefinition]
+    let installedSkills: [String]
     @Binding var plan: Plan
 
     var body: some View {
-        let role = roles.first { $0.id == task.role }
+        let role = task.agent.builtInRole
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(String(format: "%02d", number))
@@ -137,7 +137,7 @@ private struct PlanTaskRow: View {
                 arrow("chevron.up", label: "Move up", disabled: isFirst) { plan.moveTask(id: task.id, by: -1) }
                 arrow("chevron.down", label: "Move down", disabled: isLast) { plan.moveTask(id: task.id, by: 1) }
                 Spacer(minLength: 8)
-                roleMenu(selected: role)
+                skillsMenu(role: role)
             Button {
                 plan.removeTask(id: task.id)
             } label: {
@@ -170,21 +170,36 @@ private struct PlanTaskRow: View {
         .accessibilityLabel("\(label), task \(number)")
     }
 
-    private func roleMenu(selected: RoleDefinition?) -> some View {
-        Menu {
-            ForEach(roles) { role in
-                Toggle(role.name, isOn: Binding(get: { role.id == task.role }, set: { if $0 { plan.setRole(role.id, forTask: task.id) } }))
+    private var skillsLabel: String {
+        task.skills.isEmpty ? "No skills" : task.skills.joined(separator: ", ")
+    }
+
+    private func toggle(_ skill: String) {
+        var skills = task.skills
+        if let index = skills.firstIndex(of: skill) { skills.remove(at: index) } else { skills.append(skill) }
+        plan.setSkills(skills, forTask: task.id)
+    }
+
+    private func skillsMenu(role: RoleDefinition) -> some View {
+        let choices = (task.skills + installedSkills).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        return Menu {
+            if choices.isEmpty {
+                Text("No skills installed")
+            }
+            ForEach(choices, id: \.self) { skill in
+                Toggle(skill, isOn: Binding(get: { task.skills.contains(skill) }, set: { _ in toggle(skill) }))
             }
         } label: {
             HStack(spacing: 6) {
-                RoleBadge(role: selected, size: 20)
-                Text(selected?.name ?? task.role).font(.system(size: 12)).lineLimit(1)
+                RoleBadge(role: role, size: 20)
+                Text(role.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                Text(skillsLabel).font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Theme.secondaryText).lineLimit(1)
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
             }
             .padding(.leading, 4)
             .padding(.trailing, 10)
-            .frame(width: 170, height: 28)
+            .frame(width: 260, height: 28)
             .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 8, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
         }
@@ -192,8 +207,8 @@ private struct PlanTaskRow: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Change the role for this task")
-        .accessibilityLabel("Role: \(selected?.name ?? task.role)")
+        .help("Choose the skills this task’s \(role.name.lowercased()) loads")
+        .accessibilityLabel("\(role.name), skills: \(skillsLabel)")
     }
 
 }

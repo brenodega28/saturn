@@ -108,8 +108,8 @@ import Testing
     typealias H = WorkflowHarness
 
     let workflow = WorkflowDefinition(id: "reviewed", name: "Reviewed", steps: [
-        WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "review"),
-        WorkflowStep(id: "review", type: .agent, role: "pr-reviewer", routes: [
+        WorkflowStep(id: "build", type: .agent, agent: .builder, next: "review"),
+        WorkflowStep(id: "review", type: .agent, agent: .checker, routes: [
             StepOutcome.approved: WorkflowRoute(to: "approve"),
             StepOutcome.changesRequested: WorkflowRoute(to: "build", maxLoops: 3),
         ]),
@@ -158,7 +158,7 @@ import Testing
     typealias H = WorkflowHarness
 
     let workflow = WorkflowDefinition(id: "gated", name: "Gated", steps: [
-        WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "gates"),
+        WorkflowStep(id: "build", type: .agent, agent: .builder, next: "gates"),
         WorkflowStep(id: "gates", type: .gates, routes: [StepOutcome.passed: WorkflowRoute(to: "end")]),
     ])
 
@@ -226,7 +226,7 @@ import Testing
         settings.reviewCapacity = 1
         try h.database.updateSettings(settings, forProject: try #require(h.project.id))
         let workflow = WorkflowDefinition(id: "w", name: "W", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "approve"),
+            WorkflowStep(id: "build", type: .agent, agent: .builder, next: "approve"),
             WorkflowStep(id: "approve", type: .approval, routes: [StepOutcome.approved: WorkflowRoute(to: "end")]),
         ])
         h.driver.script("build", H.done(), H.done())
@@ -268,14 +268,14 @@ struct StubRegistry: PackageRegistry {
         let task = try harness.database.insert(ProjectTask(projectId: projectId, title: "Refund button", body: "", source: .chat, status: .running, labels: ["performance"], createdAt: .now, updatedAt: .now))
         let run = try harness.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "w", status: .running, startedAt: .now, title: "Refund button"), state: RunEngineState())
         let session = try await harness.runtime.createRunAgent(
-            in: harness.project, role: RoleDefinition(id: "claude-code", name: "Claude Code"), runId: try #require(run.id), runStepId: nil, task: "Build it", git: harness.repo.git
+            in: harness.project, kind: .builder, runId: try #require(run.id), runStepId: nil, task: "Build it", git: harness.repo.git
         )
         return (harness, driver, session, run, task)
     }
 
     func context(run: Run, task: ProjectTask, project: Project) -> StepContext {
         StepContext(
-            run: run, task: task, project: project, step: WorkflowStep(id: "gates", type: .gates), roleID: nil, iteration: 1, attempt: 1,
+            run: run, task: task, project: project, step: WorkflowStep(id: "gates", type: .gates), kind: nil, iteration: 1, attempt: 1,
             runStepID: 1, start: .fresh, inputs: StepInputs(taskTitle: task.title, taskBody: "", labels: task.labels), stepBudgetUSD: nil, runBudgetRemainingUSD: nil
         )
     }
@@ -363,7 +363,7 @@ struct StubRegistry: PackageRegistry {
         #expect(outputs[3]?.gates?.passed == true)
         #expect(steps[4].outcome == StepOutcome.approved)
 
-        let lead = try #require(try harness.database.agents(inProject: harness.project.id!).first { $0.runId == run.id && $0.role == "tech-lead" })
+        let lead = try #require(try harness.database.agents(inProject: harness.project.id!).first { $0.runId == run.id && $0.role == "lead" })
         let transcript = try String(contentsOf: harness.runtime.paths.transcript(lead.id!), encoding: .utf8)
         #expect(transcript.contains("## How to plan"))
         #expect(transcript.contains("## How to review"))

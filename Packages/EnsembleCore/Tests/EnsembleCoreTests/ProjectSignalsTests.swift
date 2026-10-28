@@ -10,7 +10,7 @@ struct ProjectSignalsTests {
         let workflow = WorkflowDefinition(
             id: "feature", name: "Feature",
             steps: [
-                WorkflowStep(id: "build", type: .agent, role: "claude-code", instructions: "Build it.", next: "checks"),
+                WorkflowStep(id: "build", type: .agent, agent: .builder, instructions: "Build it.", next: "checks"),
                 WorkflowStep(id: "checks", type: .check, next: "gates"),
                 WorkflowStep(id: "gates", type: .gates, next: "end"),
             ],
@@ -88,21 +88,22 @@ struct ProjectSignalsTests {
             GateFinding(kind: .complexity, severity: .warning, title: "create_refund complexity 9", detail: "", file: "orders/views.py", line: 46),
         ])
         let steps: [Int64: [RunStep]] = [1: [try step(1, "gates", status: .succeeded, output: StepOutput(gates: gates), at: 0)]]
-        let roles = [
-            RoleDefinition(id: "django", name: "Django Developer", skills: ["django-dev", "design-tokens"]),
-            RoleDefinition(id: "react", name: "React Developer", skills: ["design-tokens"]),
+        let agents = [
+            Agent(projectId: 1, role: "builder", name: "Builder 1", status: .idle, skills: ["django-dev", "design-tokens"], createdAt: start, updatedAt: start),
+            Agent(projectId: 1, role: "checker", name: "Checker", status: .idle, skills: ["design-tokens"], createdAt: start, updatedAt: start),
+            Agent(projectId: 1, role: "checker", name: "Old", status: .idle, archivedAt: start, skills: ["gone"], createdAt: start, updatedAt: start),
         ]
 
         let problems = ProjectSignals.problems(
             runs: [try run(1)], steps: steps,
             configIssues: [ConfigIssue(file: ".ensemble/checks.yaml", message: "Unknown check kind “typo”")],
-            roles: roles, installedSkills: ["django-dev"]
+            agents: agents, installedSkills: ["django-dev"]
         )
 
         #expect(problems.map(\.category) == [.gateFindings, .gateFindings, .configErrors, .missingSkills])
         #expect(problems.map(\.severity) == [.error, .warning, .error, .warning])
         #expect(problems[1].location == "orders/views.py:46 · Refunds v2")
-        #expect(problems[3].title == "design-tokens is forced by a role but isn’t installed")
-        #expect(problems[3].location == "Django Developer, React Developer")
+        #expect(problems[3].title == "design-tokens was chosen for an agent but isn’t installed")
+        #expect(problems[3].location == "Builder 1, Checker")
     }
 }

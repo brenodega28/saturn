@@ -70,7 +70,7 @@ struct PermissionsSettingsView: View {
                     }
                 }
             }
-            Text("Roles set to Default use Developer if they edit code, Lead if they spawn agents, and Reviewer otherwise.")
+            Text("Builders use Developer, the Lead uses Lead, and checkers use Reviewer. Lead and checkers are always read-only.")
                 .font(.system(size: 11.5))
                 .foregroundStyle(Theme.tertiaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -91,7 +91,7 @@ struct PermissionsSettingsView: View {
                     Button("Delete", role: .destructive) { draft.profiles.removeAll { $0.id == value.id } }
                         .buttonStyle(.pill)
                         .disabled(!usage(of: value.id).isEmpty)
-                        .help(usage(of: value.id).isEmpty ? "Remove this profile" : "Move its roles to another profile first")
+                        .help(usage(of: value.id).isEmpty ? "Remove this profile" : "Built-in agents use this profile")
                 }
             }
             TokenEditor(items: profile.extraCommands, placeholder: "Add a command, e.g. xcodebuild", suggestions: [])
@@ -130,9 +130,8 @@ struct PermissionsSettingsView: View {
     }
 
     private func usage(of id: String) -> String {
-        let config = model.config(for: project)
-        return config.roles
-            .filter { $0.permissionProfile == id || ($0.permissionProfile == PermissionsConfig.defaultProfileID && draft.resolve(for: $0).id == id) }
+        AgentKind.allCases
+            .filter { draft.resolve(for: $0, readOnly: !$0.editsCode).id == id }
             .map(\.name)
             .joined(separator: ", ")
     }

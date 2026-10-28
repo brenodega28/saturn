@@ -7,9 +7,10 @@ struct NewAgentSheet: View {
     @Environment(\.dismiss) private var dismiss
     let project: Project
 
-    @State private var roleID: String?
+    @State private var kind: AgentKind = .builder
     @State private var name = ""
-    @State private var modelName = ""
+    @State private var modelName = AgentKind.builder.defaultModel
+    @State private var skills: [String] = []
     @State private var count = 1
     @State private var isPinned = false
     @State private var task = ""
@@ -20,53 +21,44 @@ struct NewAgentSheet: View {
     @FocusState private var isModelFocused: Bool
 
     var body: some View {
-        let config = model.config(for: project)
+        let role = kind.builtInRole
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("New Agent").font(.system(size: 20, weight: .bold))
-                Text("Add to the \(project.name) crew. Each agent comes from a role in .ensemble/roles.")
+                Text("Add a builder or a checker to \(project.name), then choose its model and the installed skills it loads.")
                     .foregroundStyle(Theme.secondaryText)
             }
 
-            if !model.hasConfig(project) {
-                InstallDefaultsCard(project: project)
-            } else if config.roles.isEmpty {
-                Text("There are no roles in .ensemble/roles yet. Add one in Crew › Roles.")
-                    .foregroundStyle(Theme.secondaryText)
-            } else {
-                roleGroup("Writes code", roles: config.roles.filter(\.editsCode))
-                roleGroup("Reviews, plans and tests", roles: config.roles.filter { !$0.editsCode })
-                if let role = selectedRole(in: config) {
-                    details(for: role, projectModels: config.roles.map(\.model))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 10) {
+                ForEach(AgentKind.spawnable) { option in
+                    KindTile(role: option.builtInRole, isSelected: option == kind) { pick(option) }
                 }
             }
+            details(for: role, projectModels: AgentKind.allCases.map(\.defaultModel))
 
             if let errorMessage {
                 Text(errorMessage).foregroundStyle(Theme.danger).textSelection(.enabled)
             }
 
-            footer(role: selectedRole(in: config))
+            footer(role: role)
         }
         .padding(26)
         .frame(width: 720)
-        .onAppear {
-            model.reloadConfig(for: project)
-            selectDefaultRole(in: model.config(for: project))
-        }
-        .onChange(of: config.roles.map(\.id)) { selectDefaultRole(in: config) }
+        .onAppear { model.reloadConfig(for: project) }
+        .task(id: project.path) { try? await model.loadSkillPlugins(for: project) }
     }
 
-    @ViewBuilder
-    private func roleGroup(_ title: String, roles: [RoleDefinition]) -> some View {
-        if !roles.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 10) {
-                    ForEach(roles) { role in
-                        RoleTile(role: role, isSelected: role.id == roleID) { pick(role) }
-                    }
-                }
-            }
+    private func skillsField() -> some View {
+        let installed = SkillLibrary.skills(in: project.url, pluginSkills: model.pluginSkills(for: project))
+        let names = Set(installed.map(\.name))
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Skills").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+            TokenEditor(items: $skills, placeholder: installed.isEmpty ? "No skills installed" : "Add an installed skill", suggestions: installed.map(\.name), missing: Set(skills.filter { !names.contains($0) }))
+            Text(installed.isEmpty
+                 ? "Install skills in .claude/skills, ~/.claude/skills or with a plugin in Settings › Skills."
+                 : "The agent loads only the skills you add here.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(Theme.tertiaryText)
         }
     }
 
@@ -104,6 +96,8 @@ struct NewAgentSheet: View {
                     .foregroundStyle(Theme.danger)
             }
 
+            skillsField()
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("Workspace").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
                 WorkspaceLine(role: role, branch: model.state(for: project).branch)
@@ -126,9 +120,9 @@ struct NewAgentSheet: View {
         }
     }
 
-    private func footer(role: RoleDefinition?) -> some View {
+    private func footer(role: RoleDefinition) -> some View {
         HStack(spacing: 10) {
-            if let role {
+            Group {
                 Text("Will add").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
                 ScrollView(.horizontal) {
                     HStack(spacing: 6) {
@@ -159,25 +153,14 @@ struct NewAgentSheet: View {
             Button(count > 1 ? "Create \(count) Agents" : "Create Agent") { Task { await create() } }
                 .buttonStyle(.primaryPill)
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(isCreating || role == nil || !isModelValid)
+                .disabled(isCreating || !isModelValid)
         }
     }
 
-    private func selectedRole(in config: ProjectConfig) -> RoleDefinition? {
-        roleID.flatMap(config.role)
-    }
-
-    private func selectDefaultRole(in config: ProjectConfig) {
-        guard roleID.flatMap(config.role) == nil else { return }
-        if let role = config.roles.first(where: \.editsCode) ?? config.roles.first {
-            pick(role)
-        }
-    }
-
-    private func pick(_ role: RoleDefinition) {
-        roleID = role.id
+    private func pick(_ option: AgentKind) {
+        kind = option
         name = ""
-        modelName = role.model
+        modelName = option.defaultModel
     }
 
     private var trimmedModel: String {
@@ -198,12 +181,12 @@ struct NewAgentSheet: View {
     }
 
     private func create() async {
-        guard let role = selectedRole(in: model.config(for: project)) else { return }
+        let role = kind.builtInRole
         isCreating = true
         errorMessage = nil
         defer { isCreating = false }
         do {
-            try await model.spawnAgents(in: project, role: role, count: count, name: baseName(for: role), model: trimmedModel, pinned: isPinned, task: task)
+            try await model.spawnAgents(in: project, kind: kind, count: count, name: baseName(for: role), model: trimmedModel, skills: skills, pinned: isPinned, task: task)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -222,14 +205,14 @@ struct InstallDefaultsCard: View {
                 .foregroundStyle(Theme.accent)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text("This project has no roles yet").font(.system(size: 13.5, weight: .semibold))
-                Text("Add Ensemble’s default roles and workflows to .ensemble/ in \(project.name). They are plain YAML you can edit and commit.")
+                Text("This project has no workflows yet").font(.system(size: 13.5, weight: .semibold))
+                Text("Add Ensemble’s default workflows to .ensemble/ in \(project.name). They are plain YAML you can edit and commit.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Button("Add default roles & workflows") { model.installDefaultConfig(in: project) }
+            Button("Add default workflows") { model.installDefaultConfig(in: project) }
                 .buttonStyle(.primaryPill)
                 .fixedSize()
         }
@@ -238,21 +221,21 @@ struct InstallDefaultsCard: View {
     }
 }
 
-private struct RoleTile: View {
+private struct KindTile: View {
     let role: RoleDefinition
     let isSelected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
                 AgentAvatar(size: 40, appearance: RoleAppearance(role: role))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(role.name).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
-                    Text(role.skills.first ?? "default · no skill")
-                        .font(.system(size: 11.5, design: .monospaced))
+                    Text(role.description)
+                        .font(.system(size: 11.5))
                         .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -319,7 +302,7 @@ private struct ModelField: View {
                 }
                 .textInputCompletion(suggestion)
             }
-            .help("An alias like sonnet always uses the latest model; a full claude- name pins a version. The role’s model is \(roleModel).")
+            .help("An alias like sonnet always uses the latest model; a full claude- name pins a version. The default is \(roleModel).")
     }
 }
 
@@ -338,7 +321,7 @@ private struct WorkspaceLine: View {
                     .font(.system(size: 13.5, weight: .semibold))
                 Text(role.editsCode
                      ? "Own branch off \(branch ?? "the current branch") under \(WorktreeManager.directoryName)/ — safe for parallel coding"
-                     : "Reads the project and every worktree, runs tests — never writes code")
+                     : "Starts fresh, reads the project and every worktree, runs tests — never writes code")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
             }

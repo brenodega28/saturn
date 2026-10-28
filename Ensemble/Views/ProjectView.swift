@@ -33,8 +33,6 @@ struct ProjectScreen: View {
             }
         case .changes:
             ChangesView(project: project)
-        case .roles:
-            RolesView(project: project)
         case .workflows:
             WorkflowsView(project: project)
         case .settings:

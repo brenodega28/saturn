@@ -135,7 +135,7 @@ import Testing
     }()
 
     let workflow = WorkflowDefinition(id: "w", name: "W", steps: [
-        WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "checks"),
+        WorkflowStep(id: "build", type: .agent, agent: .builder, next: "checks"),
         WorkflowStep(id: "checks", type: .check, next: "gates"),
         WorkflowStep(id: "gates", type: .gates, next: "approve"),
         WorkflowStep(id: "approve", type: .approval, routes: [StepOutcome.approved: WorkflowRoute(to: "end"), StepOutcome.changesRequested: WorkflowRoute(to: "build")]),
@@ -212,7 +212,7 @@ import Testing
         defer { h.cleanUp() }
         h.driver.diff = DiffInfo(paths: ["a.py", "b.py", "c.py"], lines: 42)
         h.driver.script("build", WorkflowHarness.done())
-        let id = try await h.start(WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, role: "claude-code")]))
+        let id = try await h.start(WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)]))
         #expect(try h.run(id).status == .succeeded)
         #expect(try h.run(id).linesChanged == 42)
         #expect(try h.run(id).filesChanged == 3)

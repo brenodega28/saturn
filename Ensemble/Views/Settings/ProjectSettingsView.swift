@@ -285,7 +285,7 @@ private struct GeneralSettings: View {
                 row("Worktrees") { Text("\(model.state(for: project).worktrees.count) in \(WorktreeManager.directoryName)/") }
                 row("Config") {
                     Text(model.hasConfig(project)
-                         ? "\(config.roles.count) roles · \(config.workflows.count) workflows · \(config.docs.docs.count) documents"
+                         ? "\(config.workflows.count) workflows · \(config.docs.docs.count) documents"
                          : "No \(ProjectConfig.directoryName)/ folder yet")
                 }
             }
@@ -367,7 +367,7 @@ private struct AgentsSettings: View {
 
             ProjectBudgetCard(project: project)
 
-            Text("Each role picks its model in Crew › Roles.")
+            Text("Each workflow step picks its model; agents you spawn pick theirs in New Agent.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.secondaryText)
         }

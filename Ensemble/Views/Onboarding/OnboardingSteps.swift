@@ -11,7 +11,7 @@ struct OnboardingProjectStep: View {
         OnboardingSection {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("Found in this folder").font(.system(size: 13, weight: .semibold))
-                Text("used to suggest roles and skills").font(.system(size: 12)).foregroundStyle(Theme.tertiaryText)
+                Text("used to suggest skills and checks").font(.system(size: 12)).foregroundStyle(Theme.tertiaryText)
                 Spacer()
                 Button(isScanning ? "Scanning…" : "Scan again") {
                     Task {
@@ -24,7 +24,7 @@ struct OnboardingProjectStep: View {
                 .disabled(isScanning)
             }
             if draft.scan.found.isEmpty {
-                Text("Nothing Ensemble recognises yet. You’ll get a general crew; add stack-specific roles any time.")
+                Text("Nothing Ensemble recognises yet. Agents start with general knowledge; add stack-specific skills any time.")
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.secondaryText)
             } else {
@@ -81,130 +81,84 @@ struct OnboardingProjectStep: View {
     }
 }
 
-struct OnboardingRolesStep: View {
-    let project: Project
+struct OnboardingSkillsStep: View {
     @Binding var draft: OnboardingDraft
-    @State private var isAdding = false
-    @State private var newName = ""
-    @State private var newEditsCode = true
-    @State private var newSkill: String?
 
     var body: some View {
-        Picker("Starting point", selection: Binding(
-            get: { draft.enabled.isEmpty ? 1 : 0 },
-            set: { $0 == 0 ? draft.useRecommendedRoles() : draft.startEmpty() }
-        )) {
-            Text("Recommended for this stack").tag(0)
-            Text("Start empty").tag(1)
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .frame(maxWidth: 380)
-        OnboardingSection {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Roles").font(.system(size: 13, weight: .semibold))
-                Text("\(draft.enabled.count) on").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.link)
-                Spacer()
-                Text("Agents are only created when a run needs them").font(.system(size: 12)).foregroundStyle(Theme.tertiaryText)
-            }
-            ForEach(draft.catalog) { role in
-                roleRow(role)
-            }
-            if isAdding {
-                newRoleForm
-            } else {
-                Button {
-                    isAdding = true
-                } label: {
-                    Label("Create a role", systemImage: "plus")
+        OnboardingSection(title: "Built-in agents") {
+            ForEach(AgentKind.allCases) { kind in
+                let role = kind.builtInRole
+                let profile = draft.setup.permissions.resolve(for: kind, readOnly: !kind.editsCode)
+                HStack(spacing: 12) {
+                    AgentAvatar(size: 32, appearance: RoleAppearance(role: role))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(role.name).font(.system(size: 13, weight: .semibold))
+                        Text(role.description).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText).lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    OnboardingTag(profile.name, tint: Theme.secondaryText)
+                    OnboardingTag(AgentModel(rawValue: role.model)?.title ?? role.model, tint: Theme.link)
                 }
-                .buttonStyle(PillButtonStyle(height: 30))
+                .padding(.vertical, 4)
+            }
+        }
+        if !draft.bundledSkills.isEmpty {
+            Picker("Starting point", selection: Binding(
+                get: { draft.setup.skills.isEmpty ? 1 : 0 },
+                set: { $0 == 0 ? draft.useRecommendedSkills() : draft.startEmpty() }
+            )) {
+                Text("Recommended for this stack").tag(0)
+                Text("No skills").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 380)
+            OnboardingSection {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Skills to install").font(.system(size: 13, weight: .semibold))
+                    Text("\(draft.setup.skills.count) on").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.link)
+                    Spacer()
+                    Text("Added to .claude/skills; the Lead picks them per task").font(.system(size: 12)).foregroundStyle(Theme.tertiaryText)
+                }
+                ForEach(draft.bundledSkills) { skill in
+                    skillRow(skill)
+                }
+            }
+        }
+        OnboardingSection(title: "Already installed") {
+            if draft.installedSkills.isEmpty {
+                Text("No skills yet. Add them to .claude/skills, ~/.claude/skills or install a plugin in Settings › Skills.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                FlowLayout(spacing: 6) {
+                    ForEach(draft.installedSkills) { skill in
+                        OnboardingTag("\(skill.name) · \(skill.source.title.lowercased())", tint: Theme.link)
+                    }
+                }
             }
         }
     }
 
-    private func roleRow(_ role: RoleDefinition) -> some View {
-        let isOn = draft.enabled.contains(role.id)
-        let profile = draft.setup.permissions.resolve(for: role)
+    private func skillRow(_ skill: BundledSkill) -> some View {
+        let isOn = draft.setup.skills.contains(skill.name)
         return HStack(spacing: 12) {
-            AgentAvatar(size: 32, appearance: RoleAppearance(role: role))
+            Image(systemName: "sparkles").foregroundStyle(Theme.link).frame(width: 20).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(role.name).font(.system(size: 13, weight: .semibold))
-                    if draft.customIDs.contains(role.id) { OnboardingTag("Custom", tint: Theme.memory) }
-                    if let reason = draft.scan.roleReasons[role.id] { OnboardingTag("from \(reason)", tint: Theme.successText) }
+                    Text(skill.name).font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    if let reason = draft.scan.skillReasons[skill.name] { OnboardingTag("from \(reason)", tint: Theme.successText) }
                 }
-                Text(role.description).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                Text(skill.description).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText).lineLimit(2)
             }
             Spacer(minLength: 8)
-            OnboardingTag(role.skills.first ?? "no skill", tint: role.skills.isEmpty ? Theme.tertiaryText : Theme.link)
-            OnboardingTag(profile.name, tint: Theme.secondaryText)
-            Button(AgentModel(rawValue: role.model)?.title ?? role.model) { draft.cycleModel(of: role) }
-                .buttonStyle(PillButtonStyle(height: 24))
-                .help("Model: \(role.model). Click to change")
-                .fixedSize()
-            Toggle("Use \(role.name)", isOn: Binding(get: { isOn }, set: { _ in draft.toggle(role) }))
+            Toggle("Install \(skill.name)", isOn: Binding(get: { isOn }, set: { _ in draft.toggle(skill: skill.name) }))
                 .toggleStyle(.switch)
                 .labelsHidden()
         }
         .padding(.vertical, 4)
         .opacity(isOn ? 1 : 0.55)
-    }
-
-    private var newRoleForm: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("New role").font(.system(size: 13, weight: .semibold))
-            HStack(alignment: .bottom, spacing: 16) {
-                OnboardingField("Name") {
-                    TextField("Name", text: $newName, prompt: Text("e.g. Celery Developer")).textFieldStyle(.roundedBorder).labelsHidden()
-                }
-                OnboardingField("Can edit files") {
-                    HStack(spacing: 8) {
-                        Toggle("Can edit files", isOn: $newEditsCode).toggleStyle(.switch).labelsHidden()
-                        Text(newEditsCode ? "Own worktree, Developer access" : "Read-only, Reviewer access")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-                }
-            }
-            OnboardingField("Force a skill") {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 6) {
-                        skillChip(nil)
-                        ForEach(draft.skillChoices, id: \.self) { skillChip($0) }
-                    }
-                }
-                .scrollIndicators(.hidden)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel") { isAdding = false }.buttonStyle(PillButtonStyle(height: 28))
-                Button("Add role") {
-                    draft.addCustomRole(name: newName, editsCode: newEditsCode, skill: newSkill)
-                    newName = ""
-                    newSkill = nil
-                    newEditsCode = true
-                    isAdding = false
-                }
-                .buttonStyle(PillButtonStyle(.primary, height: 28))
-                .disabled(Slug.make(newName).isEmpty)
-            }
-        }
-        .padding(14)
-        .background(Theme.fill, in: .rect(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.accent.opacity(0.4)))
-    }
-
-    private func skillChip(_ skill: String?) -> some View {
-        let isOn = newSkill == skill
-        return Button(skill ?? "no skill") { newSkill = skill }
-            .buttonStyle(.plain)
-            .font(.system(size: 12))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(isOn ? Theme.accent.opacity(0.2) : .clear, in: .capsule)
-            .overlay(Capsule().strokeBorder(isOn ? Theme.accent.opacity(0.6) : Color.white.opacity(0.12)))
-            .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 
@@ -212,17 +166,6 @@ struct OnboardingWorkflowStep: View {
     @Binding var draft: OnboardingDraft
 
     var body: some View {
-        OnboardingSection(title: "Who answers in Chat by default") {
-            ForEach(draft.leadRoles) { role in
-                OnboardingChoice(isOn: draft.setup.leadRole == role.id) { draft.pickLead(role) } content: {
-                    AgentAvatar(size: 30, appearance: RoleAppearance(role: role))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(role.name).font(.system(size: 13, weight: .semibold))
-                        Text(role.description).font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
-                    }
-                }
-            }
-        }
         OnboardingSection(title: "Default workflow") {
             ForEach(draft.setup.workflows) { workflow in
                 OnboardingChoice(isOn: draft.setup.defaultWorkflow == workflow.id) { draft.setup.defaultWorkflow = workflow.id } content: {
@@ -248,7 +191,7 @@ struct OnboardingWorkflowStep: View {
                 .fixedSize()
             }
             Divider().overlay(Theme.hairline)
-            OnboardingRow(title: "Approve plans before agents start", detail: "The lead shows tasks, roles and cost first") {
+            OnboardingRow(title: "Approve plans before agents start", detail: "The Lead shows tasks, skills and cost first") {
                 Toggle("Approve plans before agents start", isOn: $draft.setup.approvePlans).toggleStyle(.switch).labelsHidden()
             }
         }
@@ -389,12 +332,12 @@ struct OnboardingReviewStep: View {
                 ("Branches", "\(ProjectPreferences.cleanPrefix(plan.branchPrefix))/* from \(plan.baseBranch)"),
                 ("Tasks from", plan.githubIssues ? "Chat, GitHub Issues" : "Chat"),
             ])
-            card("\(plan.roles.count) roles", step: .roles, avatars: plan.roles, lines: [
-                ("Builders", plan.roles.filter(\.editsCode).map(\.name).joined(separator: ", ").nonEmpty ?? "None yet"),
-                ("Reviewers", plan.roles.filter { !$0.editsCode && !$0.canSpawn }.map(\.name).joined(separator: ", ").nonEmpty ?? "None"),
+            card("Agents & skills", step: .skills, avatars: AgentKind.allCases.map(\.builtInRole), lines: [
+                ("Agents", AgentKind.allCases.map(\.name).joined(separator: ", ")),
+                ("Install", plan.skills.joined(separator: ", ").nonEmpty ?? "No skills"),
+                ("Installed", draft.installedSkills.map(\.name).joined(separator: ", ").nonEmpty ?? "None yet"),
             ])
             card("Workflow", step: .workflow, lines: [
-                ("Lead", draft.lead?.name ?? "None"),
                 ("Default", draft.workflow?.name ?? plan.defaultWorkflow),
                 ("Finish", plan.endAction.onboardingTitle),
                 ("Plans", plan.approvePlans ? "You approve first" : "Start right away"),
@@ -406,17 +349,12 @@ struct OnboardingReviewStep: View {
                 ("Ask first", [plan.networkWithoutAsking ? nil : "network", plan.installsWithoutAsking ? nil : "installs", plan.testsWithoutAsking ? nil : "shell"].compactMap(\.self).joined(separator: ", ").nonEmpty ?? "nothing"),
             ])
         }
-        if draft.enabledRoles.isEmpty {
-            Label("Turn on at least one role to finish.", systemImage: "exclamationmark.triangle.fill")
-                .font(.system(size: 12.5))
-                .foregroundStyle(Theme.warning)
-        }
         OnboardingSection {
             HStack(spacing: 12) {
-                if let lead = draft.lead { AgentAvatar(size: 36, appearance: RoleAppearance(role: lead)) }
+                AgentAvatar(size: 36, appearance: RoleAppearance(role: draft.lead))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(draft.lead?.name ?? "Your crew") is ready in Chat").font(.system(size: 14, weight: .semibold))
-                    Text(plan.approvePlans ? "Describe what you want built. You’ll approve the plan before anything runs." : "Describe what you want built. The lead plans it and the crew starts right away.")
+                    Text("The \(draft.lead.name) is ready in Chat").font(.system(size: 14, weight: .semibold))
+                    Text(plan.approvePlans ? "Describe what you want built. You’ll approve the plan before anything runs." : "Describe what you want built. The Lead plans it and the agents start right away.")
                         .font(.system(size: 12.5))
                         .foregroundStyle(Theme.secondaryText)
                 }

@@ -134,8 +134,8 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct WorkspaceRuntimeTests {
-    let builder = RoleDefinition(id: "claude-code", name: "Claude Code")
-    let reviewer = RoleDefinition(id: "pr-reviewer", name: "PR Reviewer", editsCode: false)
+    let builder = AgentKind.builder
+    let reviewer = AgentKind.checker
 
     func configure(_ h: AgentHarness, _ change: (inout ProjectSettings) -> Void) throws -> Project {
         var settings = ProjectSettings()
@@ -145,8 +145,8 @@ import Testing
         return try #require(try h.database.project(id: id))
     }
 
-    func spawn(_ h: AgentHarness, project: Project, role: RoleDefinition? = nil, count: Int = 1, pinned: Bool = false) async throws -> [AgentSession] {
-        try await h.runtime.spawn(in: project, role: role ?? builder, count: count, config: ProjectConfig(), git: h.repo.git, pinned: pinned)
+    func spawn(_ h: AgentHarness, project: Project, role: AgentKind? = nil, count: Int = 1, pinned: Bool = false) async throws -> [AgentSession] {
+        try await h.runtime.spawn(in: project, kind: role ?? builder, count: count, git: h.repo.git, pinned: pinned)
     }
 
     func makeRun(_ h: AgentHarness, status: RunStatus) throws -> Int64 {
@@ -198,14 +198,14 @@ import Testing
         }
         h.runtime.worktreePrepared = { [runtime = h.runtime] in try await runtime.runSetupScript($0) }
 
-        let session = try await h.runtime.spawn(in: project, role: builder, count: 1, config: ProjectConfig(), git: h.repo.git, task: "Add a world line to the README").first
+        let session = try await h.runtime.spawn(in: project, kind: builder, count: 1, git: h.repo.git, task: "Add a world line to the README").first
         let agent = try #require(session)
         #expect(h.runtime.isSettingUp(agent))
         try await waitUntil { !h.runtime.isSettingUp(agent) && agent.agent.status == .idle && agent.transcript.session != nil }
 
         let worktree = try #require(agent.agent.worktreeURL)
         let prepared = try String(contentsOf: worktree.appending(path: "prepared.txt"), encoding: .utf8)
-        #expect(prepared == "port 9200 for Claude Code\n")
+        #expect(prepared == "port 9200 for Builder\n")
         let log = try String(contentsOf: SetupRecord.logFile(in: h.data.appending(path: "agents/\(agent.id)")), encoding: .utf8)
         #expect(log.contains("installed"))
         #expect(h.runtime.setupRecord(for: agent.agent)?.status == .succeeded)
@@ -242,7 +242,7 @@ import Testing
         let runId = try makeRun(h, status: .running)
 
         await #expect(throws: SetupScriptError.failed(exitCode: 9, tail: "")) {
-            _ = try await h.runtime.createRunAgent(in: project, role: builder, runId: runId, runStepId: nil, task: "Build it", git: h.repo.git)
+            _ = try await h.runtime.createRunAgent(in: project, kind: builder, runId: runId, runStepId: nil, task: "Build it", git: h.repo.git)
         }
         let projectId = try #require(project.id)
         let agent = try #require(try h.database.agents(inProject: projectId).first)
@@ -259,12 +259,12 @@ import Testing
         }
         h.runtime.worktreePrepared = { [runtime = h.runtime] in try await runtime.runSetupScript($0) }
         let runId = try makeRun(h, status: .running)
-        _ = try await h.runtime.createRunAgent(in: project, role: builder, runId: runId, runStepId: nil, task: "Build it", git: h.repo.git)
+        _ = try await h.runtime.createRunAgent(in: project, kind: builder, runId: runId, runStepId: nil, task: "Build it", git: h.repo.git)
 
         let worktree = try await h.repo.manager.create(agent: "qa-run-\(runId)", slug: "combined")
         try await h.runtime.prepareIntegrationWorktree(at: worktree.path, name: "qa-run-\(runId)", projectId: try #require(project.id))
         let qa = try await h.runtime.createRunAgent(
-            in: project, role: reviewer, runId: runId, runStepId: nil, task: "Test", readOnlyWorktree: (worktree.path, worktree.branch), git: h.repo.git
+            in: project, kind: reviewer, runId: runId, runStepId: nil, task: "Test", readOnlyWorktree: (worktree.path, worktree.branch), git: h.repo.git
         )
         #expect(qa.agent.port == 7001)
         let log = try String(contentsOf: SetupRecord.logFile(in: h.data.appending(path: "agents/\(qa.id)")), encoding: .utf8)
@@ -279,7 +279,7 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct IdleCleanupTests {
-    let builder = RoleDefinition(id: "claude-code", name: "Claude Code")
+    let builder = AgentKind.builder
 
     @Test func policyOnlyPicksUnpinnedIdleAgentsPastTheirTime() {
         let now = Date()
@@ -310,13 +310,13 @@ import Testing
         try h.database.updateSettings(settings, forProject: projectId)
         let project = try #require(try h.database.project(id: projectId))
 
-        let idle = try #require(try await h.runtime.spawn(in: project, role: builder, count: 1, config: ProjectConfig(), git: h.repo.git, name: "Idle Dev").first)
-        let pinned = try #require(try await h.runtime.spawn(in: project, role: builder, count: 1, config: ProjectConfig(), git: h.repo.git, pinned: true, name: "Pinned Dev").first)
+        let idle = try #require(try await h.runtime.spawn(in: project, kind: builder, count: 1, git: h.repo.git, name: "Idle Dev").first)
+        let pinned = try #require(try await h.runtime.spawn(in: project, kind: builder, count: 1, git: h.repo.git, pinned: true, name: "Pinned Dev").first)
         let task = try h.database.insert(ProjectTask(projectId: projectId, title: "Refunds", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
         let active = try h.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: .running, startedAt: .now), state: RunEngineState())
         let finished = try h.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: .succeeded, startedAt: .now), state: RunEngineState())
-        let inRun = try await h.runtime.createRunAgent(in: project, role: builder, runId: try #require(active.id), runStepId: nil, task: "Build", git: h.repo.git)
-        let afterRun = try await h.runtime.createRunAgent(in: project, role: builder, runId: try #require(finished.id), runStepId: nil, task: "Build", git: h.repo.git)
+        let inRun = try await h.runtime.createRunAgent(in: project, kind: builder, runId: try #require(active.id), runStepId: nil, task: "Build", git: h.repo.git)
+        let afterRun = try await h.runtime.createRunAgent(in: project, kind: builder, runId: try #require(finished.id), runStepId: nil, task: "Build", git: h.repo.git)
 
         let scheduler = IdleCleanupScheduler(runtime: h.runtime) { h.repo.git }
         #expect(await scheduler.sweep(now: .now.addingTimeInterval(5 * 60)).isEmpty)
@@ -342,7 +342,7 @@ import Testing
         defer { h.cleanUp() }
         let projectId = try #require(h.project.id)
         let project = try #require(try h.database.project(id: projectId))
-        let agent = try #require(try await h.runtime.spawn(in: project, role: builder, count: 1, config: ProjectConfig(), git: h.repo.git).first)
+        let agent = try #require(try await h.runtime.spawn(in: project, kind: builder, count: 1, git: h.repo.git).first)
         let worktree = try #require(agent.agent.worktreeURL)
         try "draft".write(to: worktree.appending(path: "notes.txt"), atomically: true, encoding: .utf8)
 
@@ -362,17 +362,13 @@ import Testing
         let templates = CrewTemplates.bundled
         #expect(templates.map(\.id) == ["django-react", "solo-with-review", "led-squad"])
         let django = try #require(CrewTemplates.template("django-react"))
-        #expect(Set(django.roles.map(\.id)).isSuperset(of: ["django-developer", "react-developer", "pr-reviewer", "qa-engineer"]))
+        #expect(django.recommendedSkills == ["django-developer", "react-developer"])
         #expect(django.workflows == ["feature-delivery"])
         let solo = try #require(CrewTemplates.template("solo-with-review"))
-        #expect(solo.roles.map(\.id) == ["claude-code", "pr-reviewer"])
+        #expect(solo.recommendedSkills.isEmpty)
         #expect(solo.workflows == ["small-task"])
         let squad = try #require(CrewTemplates.template("led-squad"))
-        #expect(squad.roles.map(\.id) == ["claude-code", "qa-engineer", "tech-lead"])
         #expect(squad.workflows == ["feature-delivery"])
-        for template in templates {
-            #expect(template.crewRoles.count == template.crew.count)
-        }
     }
 
     @Test func installedTemplatesLoadWithoutIssues() throws {
@@ -383,7 +379,6 @@ import Testing
             try template.install(in: folder)
             let config = ProjectConfigLoader.load(repository: folder)
             #expect(config.issues.isEmpty, "\(template.id): \(config.issues.map(\.message))")
-            #expect(Set(config.roles.map(\.id)) == Set(template.roles.map(\.id)))
             #expect(config.workflows.map(\.id) == template.workflows)
         }
     }
@@ -391,10 +386,17 @@ import Testing
     @Test func installKeepsExistingFiles() throws {
         let folder = makeFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
-        let custom = RoleDefinition(id: "pr-reviewer", name: "Our Reviewer", editsCode: false)
+        var custom = WorkflowDefinition(id: "small-task", name: "Our small task", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
+        custom.description = "Ours"
         try ProjectConfigLoader.write(custom, repository: folder)
+        let skill = SkillLibrary.directory(in: folder).appending(path: "django-developer")
+        try FileManager.default.createDirectory(at: skill, withIntermediateDirectories: true)
+        try "ours".write(to: skill.appending(path: "SKILL.md"), atomically: true, encoding: .utf8)
         try #require(CrewTemplates.template("solo-with-review")).install(in: folder)
-        #expect(ProjectConfigLoader.load(repository: folder).role("pr-reviewer")?.name == "Our Reviewer")
+        try #require(CrewTemplates.template("django-react")).install(in: folder)
+        #expect(ProjectConfigLoader.load(repository: folder).workflow("small-task")?.name == "Our small task")
+        #expect(try String(contentsOf: skill.appending(path: "SKILL.md"), encoding: .utf8) == "ours")
+        #expect(FileManager.default.fileExists(atPath: SkillLibrary.directory(in: folder).appending(path: "react-developer/SKILL.md").path))
     }
 
     @Test func createsARepositoryWithTheTemplateCommitted() async throws {
@@ -408,7 +410,7 @@ import Testing
         #expect(try await scratch.git.hasCommit("HEAD", in: folder))
         let files = try await scratch.git.run(["ls-files"], in: folder).split(separator: "\n").map(String.init)
         #expect(files.contains("README.md"))
-        #expect(files.contains(".ensemble/roles/tech-lead.yaml"))
+        #expect(!files.contains { $0.hasPrefix(".ensemble/roles/") })
         #expect(files.contains(".ensemble/workflows/feature-delivery.yaml"))
         #expect(files.contains("AGENTS.md") && files.contains("CLAUDE.md"))
         #expect(AgentInstructions.status(repository: folder).isSetUp)

@@ -107,9 +107,9 @@ extension WorkflowDefinition {
 
     @discardableResult
     public mutating func addStep(
-        _ type: StepType, role: String? = nil, title: String? = nil, position: CanvasPosition? = nil
+        _ type: StepType, agent: AgentKind? = nil, title: String? = nil, position: CanvasPosition? = nil
     ) -> WorkflowStep {
-        let id = uniqueStepID(base: Self.defaultStepBase(type, role: role))
+        let id = uniqueStepID(base: Self.defaultStepBase(type, agent: agent))
         if let last = steps.indices.last, steps[last].routes.isEmpty,
            steps[last].next == nil || steps[last].next == Self.endStepID {
             steps[last].next = id
@@ -118,7 +118,7 @@ extension WorkflowDefinition {
             id: id,
             type: type,
             title: title,
-            role: type == .agent || type == .spawn ? role : nil,
+            agent: type == .spawn ? .builder : type == .agent ? agent : nil,
             maxAgents: type == .spawn ? 4 : nil,
             condition: type == .condition ? StepCondition() : nil,
             next: type == .condition || type == .approval ? nil : Self.endStepID,
@@ -128,9 +128,9 @@ extension WorkflowDefinition {
         return step
     }
 
-    private static func defaultStepBase(_ type: StepType, role: String?) -> String {
+    private static func defaultStepBase(_ type: StepType, agent: AgentKind?) -> String {
         switch type {
-        case .agent: role ?? "agent"
+        case .agent: agent?.rawValue ?? "agent"
         case .spawn: "build"
         case .condition: "check"
         case .approval: "approve"

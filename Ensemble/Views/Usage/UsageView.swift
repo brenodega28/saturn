@@ -31,12 +31,12 @@ struct UsageView: View {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
                             BreakdownCard(title: "By project", rows: report.byProject)
                             BreakdownCard(title: "By run", rows: report.byRun)
-                            BreakdownCard(title: "By role", rows: report.byRole.map(named))
+                            BreakdownCard(title: "By agent kind", rows: report.byRole.map(named))
                             BreakdownCard(title: "By model", rows: report.byModel)
                         }
                         ExpensiveTurnsCard(turns: report.expensiveTurns, roleName: roleName)
                     } else {
-                        EmptyState("No spend \(period == .allTime ? "yet" : period.title.lowercased())", message: "Spend by project, run, role and model shows up here once agents start running.")
+                        EmptyState("No spend \(period == .allTime ? "yet" : period.title.lowercased())", message: "Spend by project, run, agent kind and model shows up here once agents start running.")
                             .frame(minHeight: 260)
                     }
                 }

@@ -166,7 +166,9 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
     public var id: String
     public var type: StepType
     public var title: String?
-    public var role: String?
+    public var agent: AgentKind?
+    public var model: String?
+    public var legacyRole: String?
     public var instructions: String
     public var maxAgents: Int?
     public var checks: [String]?
@@ -187,7 +189,8 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         id: String,
         type: StepType,
         title: String? = nil,
-        role: String? = nil,
+        agent: AgentKind? = nil,
+        model: String? = nil,
         instructions: String = "",
         maxAgents: Int? = nil,
         checks: [String]? = nil,
@@ -207,7 +210,8 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         self.id = id
         self.type = type
         self.title = title
-        self.role = role
+        self.agent = agent
+        self.model = model
         self.instructions = instructions
         self.maxAgents = maxAgents
         self.checks = checks
@@ -226,7 +230,7 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, type, title, role, instructions, checks, condition, message, budget, next, routes, position
+        case id, type, title, agent, model, role, instructions, checks, condition, message, budget, next, routes, position
         case maxAgents = "max_agents"
         case maxRounds = "max_rounds"
         case testFirst = "test_first"
@@ -241,7 +245,9 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         self.id = try container.decode(String.self, forKey: .id)
         self.type = try container.decode(StepType.self, forKey: .type)
         self.title = try container.decodeIfPresent(String.self, forKey: .title)
-        self.role = try container.decodeIfPresent(String.self, forKey: .role)
+        self.model = try container.decodeIfPresent(String.self, forKey: .model)
+        self.legacyRole = try container.decodeIfPresent(String.self, forKey: .role)
+        self.agent = try container.decodeIfPresent(AgentKind.self, forKey: .agent) ?? legacyRole.map(AgentKind.guessing(roleID:))
         self.instructions = try container.decodeIfPresent(String.self, forKey: .instructions) ?? ""
         self.maxAgents = try container.decodeIfPresent(Int.self, forKey: .maxAgents)
         self.checks = try container.decodeIfPresent([String].self, forKey: .checks)
@@ -264,7 +270,8 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         try container.encode(id, forKey: .id)
         try container.encode(type, forKey: .type)
         try container.encodeIfPresent(title, forKey: .title)
-        try container.encodeIfPresent(role, forKey: .role)
+        try container.encodeIfPresent(agent, forKey: .agent)
+        try container.encodeIfPresent(model, forKey: .model)
         if !instructions.isEmpty { try container.encode(instructions, forKey: .instructions) }
         try container.encodeIfPresent(maxAgents, forKey: .maxAgents)
         try container.encodeIfPresent(checks, forKey: .checks)

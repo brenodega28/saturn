@@ -18,7 +18,7 @@ enum DetailDestination: Codable, Hashable {
 }
 
 extension ProjectTab {
-    static let sidebarOrder: [ProjectTab] = [.lead, .tasks, .agents, .roles, .workflows, .changes, .code, .settings]
+    static let sidebarOrder: [ProjectTab] = [.lead, .tasks, .agents, .workflows, .changes, .code, .settings]
 }
 
 extension AppModel {
@@ -33,7 +33,7 @@ extension AppModel {
     func newChat(in project: Project) {
         showChat(in: project)
         startNewLeadRequest(in: project)
-        if let lead = leadRoles(in: project).first { chooseChatTarget(.lead(lead.id), in: project) }
+        chooseChatTarget(.lead(leadRole(in: project).id), in: project)
         composerFocusToken += 1
     }
 
@@ -89,7 +89,7 @@ extension AppModel {
         guard !trimmed.isEmpty, let project = currentProject else { return }
         showChat(in: project)
         startNewLeadRequest(in: project)
-        Task { await sendLeadMessage(trimmed, lead: leadRoles(in: project).first, to: nil, in: project) }
+        Task { await sendLeadMessage(trimmed, lead: leadRole(in: project), to: nil, in: project) }
     }
 
     func openFile(_ path: String, in project: Project) {

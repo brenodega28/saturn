@@ -292,10 +292,8 @@ extension AppModel {
         switch chatTargets[id] {
         case .agent(let agentID):
             return agentSessions(in: project).first { $0.id == agentID }.map { displayName(of: $0.agent, in: project) }
-        case .lead(let role):
-            return leadRoles(in: project).first { $0.id == role }?.name
-        case nil:
-            return leadRoles(in: project).first?.name
+        case .lead, nil:
+            return leadRole(in: project).name
         }
     }
 }

@@ -15,28 +15,26 @@ public struct DetectedTechnology: Sendable, Hashable, Identifiable {
 
 public struct ProjectScan: Sendable, Hashable {
     public var found: [DetectedTechnology]
-    public var roleReasons: [String: String]
+    public var skillReasons: [String: String]
     public var checks: CheckSuggestions
     public var docs: [String]
     public var githubRepository: String?
     public var baseBranch: String?
 
     public init(
-        found: [DetectedTechnology] = [], roleReasons: [String: String] = [:], checks: CheckSuggestions = CheckSuggestions(checks: [], protectedPaths: [], evidence: []),
+        found: [DetectedTechnology] = [], skillReasons: [String: String] = [:], checks: CheckSuggestions = CheckSuggestions(checks: [], protectedPaths: [], evidence: []),
         docs: [String] = [], githubRepository: String? = nil, baseBranch: String? = nil
     ) {
         self.found = found
-        self.roleReasons = roleReasons
+        self.skillReasons = skillReasons
         self.checks = checks
         self.docs = docs
         self.githubRepository = githubRepository
         self.baseBranch = baseBranch
     }
 
-    public var suggestedRoleIDs: [String] {
-        let builders = ["django-developer", "react-developer"].filter { roleReasons[$0] != nil }
-        let base = ["tech-lead"] + (builders.isEmpty ? ["claude-code"] : builders + ["claude-code"]) + ["pr-reviewer"]
-        return base + (roleReasons["qa-engineer"] == nil ? [] : ["qa-engineer"])
+    public var suggestedSkills: [String] {
+        ProjectSetup.skillCatalog.map(\.name).filter { skillReasons[$0] != nil }
     }
 }
 
@@ -81,7 +79,7 @@ public enum ProjectScanner {
         if let manage = files.first(where: { ($0 as NSString).lastPathComponent == "manage.py" }) {
             let where_ = folder(of: manage)
             add("Django", "\(where_) · manage.py")
-            scan.roleReasons["django-developer"] = where_
+            scan.skillReasons["django-developer"] = where_
         }
         let packages = files.filter { ($0 as NSString).lastPathComponent == "package.json" }
         for package in packages {
@@ -89,7 +87,7 @@ public enum ProjectScanner {
             if text.contains("\"react\"") {
                 let where_ = folder(of: package)
                 add(text.contains("\"vite\"") ? "React + Vite" : "React", package)
-                scan.roleReasons["react-developer"] = scan.roleReasons["react-developer"] ?? where_
+                scan.skillReasons["react-developer"] = scan.skillReasons["react-developer"] ?? where_
             } else if packages.count == 1 {
                 add("Node.js", package)
             }
@@ -110,11 +108,6 @@ public enum ProjectScanner {
             if text.contains("mysql") { add("MySQL", compose) }
             if text.contains("redis") { add("Redis", compose) }
         }
-        if let testFolder = files.first(where: { $0.hasPrefix("tests/") || $0.hasPrefix("test/") || $0.contains("/tests/") || $0.contains("Tests/") }) {
-            let root = testFolder.split(separator: "/").prefix { !["tests", "test"].contains($0) && !$0.hasSuffix("Tests") }.count
-            let folderName = testFolder.split(separator: "/").prefix(root + 1).joined(separator: "/") + "/"
-            scan.roleReasons["qa-engineer"] = folderName
-        }
         scan.docs = docCandidates.filter(files.contains)
         if files.contains("AGENTS.md") { add("AGENTS.md", "repo root") }
         return scan
@@ -126,8 +119,7 @@ public struct ProjectSetupPlan: Sendable, Hashable {
     public var branchPrefix: String
     public var githubRepository: String?
     public var githubIssues: Bool
-    public var roles: [RoleDefinition]
-    public var leadRole: String?
+    public var skills: [String]
     public var workflows: [WorkflowDefinition]
     public var defaultWorkflow: String
     public var endAction: EndAction
@@ -144,7 +136,7 @@ public struct ProjectSetupPlan: Sendable, Hashable {
 
     public init(
         baseBranch: String = "main", branchPrefix: String = ProjectPreferences.defaultBranchPrefix, githubRepository: String? = nil, githubIssues: Bool = false,
-        roles: [RoleDefinition] = [], leadRole: String? = nil, workflows: [WorkflowDefinition] = [], defaultWorkflow: String = "feature-delivery",
+        skills: [String] = [], workflows: [WorkflowDefinition] = [], defaultWorkflow: String = "feature-delivery",
         endAction: EndAction = .pullRequest, approvePlans: Bool = true, checks: ChecksConfig? = nil,
         weeklyBudgetUSD: Double? = 60, monthlyBudgetUSD: Double? = 200, perRunBudgetUSD: Double? = 8, maxConcurrentAgents: Int = 4,
         testsWithoutAsking: Bool = true, networkWithoutAsking: Bool = false, installsWithoutAsking: Bool = false, docs: [String] = []
@@ -153,8 +145,7 @@ public struct ProjectSetupPlan: Sendable, Hashable {
         self.branchPrefix = branchPrefix
         self.githubRepository = githubRepository
         self.githubIssues = githubIssues
-        self.roles = roles
-        self.leadRole = leadRole
+        self.skills = skills
         self.workflows = workflows
         self.defaultWorkflow = defaultWorkflow
         self.endAction = endAction
@@ -171,14 +162,11 @@ public struct ProjectSetupPlan: Sendable, Hashable {
     }
 
     public static func recommended(for scan: ProjectScan) -> ProjectSetupPlan {
-        let catalog = ProjectSetup.roleCatalog
-        let roles = scan.suggestedRoleIDs.compactMap { id in catalog.first { $0.id == id } }
-        return ProjectSetupPlan(
+        ProjectSetupPlan(
             baseBranch: scan.baseBranch ?? "main",
             githubRepository: scan.githubRepository,
             githubIssues: scan.githubRepository != nil,
-            roles: roles,
-            leadRole: roles.first(where: \.canSpawn)?.id,
+            skills: scan.suggestedSkills,
             workflows: ProjectSetup.workflowCatalog,
             checks: scan.checks.checks.isEmpty ? nil : scan.checks.config,
             docs: scan.docs.filter { $0 != "CLAUDE.md" && $0 != "README.md" }
@@ -198,7 +186,7 @@ public struct ProjectSetupPlan: Sendable, Hashable {
     public var preferences: ProjectPreferences {
         ProjectPreferences(
             baseBranch: baseBranch.nilIfBlank, branchPrefix: ProjectPreferences.cleanPrefix(branchPrefix),
-            defaultLead: leadRole, defaultWorkflow: defaultWorkflow, approvePlans: approvePlans
+            defaultWorkflow: defaultWorkflow, approvePlans: approvePlans
         )
     }
 
@@ -212,40 +200,24 @@ public struct ProjectSetupPlan: Sendable, Hashable {
     }
 
     public func installedWorkflows() -> [WorkflowDefinition] {
-        let leads = Set(ProjectSetup.roleCatalog.filter(\.canSpawn).map(\.id))
-        let selected = Set(roles.map(\.id))
-        let builder = roles.first { $0.editsCode && !$0.canSpawn }?.id
-        let reviewer = roles.first { !$0.editsCode && !$0.canSpawn && $0.id != "qa-engineer" }?.id ?? leadRole
-        return workflows.map { workflow in
-            var workflow = leadRole.map { workflow.assigningLead($0, replacing: leads) } ?? workflow
-            for index in workflow.steps.indices {
-                guard let role = workflow.steps[index].role, !selected.contains(role) else { continue }
-                let catalogRole = ProjectSetup.roleCatalog.first { $0.id == role }
-                let replacement = catalogRole?.canSpawn == true ? leadRole : catalogRole?.editsCode == true ? builder : reviewer
-                if let replacement { workflow.steps[index].role = replacement }
-            }
+        workflows.map { workflow in
+            var workflow = workflow
             workflow.end.action = endAction
             if let perRunBudgetUSD { workflow.budget = perRunBudgetUSD }
             return workflow
         }
     }
 
-    public var missingRoles: [String] {
-        let selected = Set(roles.map(\.id))
-        return Array(Set(installedWorkflows().flatMap { $0.steps.compactMap(\.role) }).subtracting(selected)).sorted()
-    }
-
     public func apply(to repository: URL) throws {
         let root = ProjectConfig.directory(in: repository)
-        try FileManager.default.createDirectory(at: root.appending(path: "roles"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: root.appending(path: "workflows"), withIntermediateDirectories: true)
         let ignore = root.appending(path: ".gitignore")
         if !FileManager.default.fileExists(atPath: ignore.path) {
             try "memory/\nlocal.yaml\n".write(to: ignore, atomically: true, encoding: .utf8)
         }
-        var installed = roles
-        for id in missingRoles { if let role = ProjectSetup.roleCatalog.first(where: { $0.id == id }) { installed.append(role) } }
-        for role in installed { try ProjectConfigLoader.write(role, repository: repository) }
+        for skill in ProjectSetup.skillCatalog where skills.contains(skill.name) {
+            _ = try skill.install(in: repository)
+        }
         for workflow in installedWorkflows() { try ProjectConfigLoader.write(workflow, repository: repository) }
         if let checks { try ProjectConfigLoader.write(checks, repository: repository) }
         try ProjectConfigLoader.write(permissions, repository: repository)
@@ -261,15 +233,12 @@ public struct ProjectSetupPlan: Sendable, Hashable {
 }
 
 public enum ProjectSetup {
-    public static var roleCatalog: [RoleDefinition] {
-        var roles: [RoleDefinition] = []
-        let bundles = [Bundle.module.url(forResource: "Defaults", withExtension: nil)] + CrewTemplates.bundled.map { Optional($0.directory) }
-        for bundle in bundles.compactMap(\.self) {
-            for role in loadRoles(in: bundle.appending(path: "roles")) where !roles.contains(where: { $0.id == role.id }) {
-                roles.append(role)
-            }
+    public static var skillCatalog: [BundledSkill] {
+        var skills: [BundledSkill] = []
+        for skill in CrewTemplates.bundled.flatMap(\.bundledSkills) where !skills.contains(where: { $0.name == skill.name }) {
+            skills.append(skill)
         }
-        return roles
+        return skills
     }
 
     public static var workflowCatalog: [WorkflowDefinition] {
@@ -286,7 +255,7 @@ public enum ProjectSetup {
     static let hotfixYAML = """
     name: Hotfix
     version: 1
-    description: Smallest path for urgent fixes. One agent builds, the checks still have to pass, you approve.
+    description: Smallest path for urgent fixes. One builder fixes it, the checks still have to pass, you approve.
     trigger:
       sources: [chat, github]
       labels: [hotfix]
@@ -295,7 +264,7 @@ public enum ProjectSetup {
       - id: build
         type: agent
         title: Fix
-        role: claude-code
+        agent: builder
         instructions: Make the smallest change that fixes the problem, add a test that reproduces it, run the tests, and commit.
         next: checks
       - id: checks
@@ -311,14 +280,6 @@ public enum ProjectSetup {
     end:
       action: pull_request
     """
-
-    static func loadRoles(in directory: URL) -> [RoleDefinition] {
-        yamlFiles(in: directory).compactMap { file in
-            guard let text = try? String(contentsOf: file, encoding: .utf8), var role = try? YAMLDecoder().decode(RoleDefinition.self, from: text) else { return nil }
-            role.id = file.deletingPathExtension().lastPathComponent
-            return role
-        }
-    }
 
     static func loadWorkflows(in directory: URL) -> [WorkflowDefinition] {
         yamlFiles(in: directory).compactMap { file in

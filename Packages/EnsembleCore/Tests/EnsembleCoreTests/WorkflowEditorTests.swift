@@ -80,7 +80,7 @@ struct DryRunTests {
 
     @Test func unroutedOutcomeFailsWithAnExplanation() async throws {
         let workflow = WorkflowDefinition(id: "w", name: "W", steps: [
-            WorkflowStep(id: "review", type: .agent, role: "pr-reviewer", routes: ["approved": WorkflowRoute(to: "end")]),
+            WorkflowStep(id: "review", type: .agent, agent: .checker, routes: ["approved": WorkflowRoute(to: "end")]),
         ])
         var script = DryRunScript()
         script.outcomes["review"] = ["rejected"]
@@ -113,28 +113,28 @@ struct DryRunTests {
 
     @Test func hotfixBuiltWithEditingHelpersRuns() async throws {
         var workflow = WorkflowDefinition.blank(id: "hotfix", name: "Hotfix")
-        let dev = workflow.addStep(.agent, role: "claude-code", title: "Fix it")
-        let qa = workflow.addStep(.agent, role: "qa-engineer", title: "Test it")
+        let dev = workflow.addStep(.agent, agent: .builder, title: "Fix it")
+        let qa = workflow.addStep(.agent, agent: .checker, title: "Test it")
         let you = workflow.addStep(.approval, title: "You approve")
         workflow.connect(from: dev.id, to: qa.id)
         workflow.setRoute(from: qa.id, outcome: StepOutcome.passed, to: you.id)
         workflow.setRoute(from: qa.id, outcome: StepOutcome.failed, to: dev.id)
         workflow.setRoute(from: you.id, outcome: StepOutcome.approved, to: WorkflowDefinition.endStepID)
         workflow.setRoute(from: you.id, outcome: StepOutcome.changesRequested, to: dev.id)
-        let config = ProjectConfig(roles: [RoleDefinition(id: "claude-code", name: "Claude Code"), RoleDefinition(id: "qa-engineer", name: "QA", editsCode: false)], workflows: [workflow])
+        let config = ProjectConfig(workflows: [workflow])
         #expect(ConfigValidator.validate(config).isEmpty)
         #expect(workflow.step(qa.id)?.routes[StepOutcome.failed]?.maxLoops == 3)
         var script = DryRunScript.happyPath(for: workflow)
         script.outcomes[qa.id] = [StepOutcome.failed]
         let report = try await DryRun.run(workflow, script: script)
         #expect(report.status == .succeeded)
-        #expect(report.steps.map(\.stepId) == ["claude-code", "qa-engineer", "claude-code", "qa-engineer", "approve", "end"])
+        #expect(report.steps.map(\.stepId) == ["builder", "checker", "builder", "checker", "approve", "end"])
     }
 }
 
 struct WorkflowVersionTests {
     private let base = WorkflowDefinition(id: "w", name: "W", version: 3, steps: [
-        WorkflowStep(id: "build", type: .agent, role: "claude-code", instructions: "Build it"),
+        WorkflowStep(id: "build", type: .agent, agent: .builder, instructions: "Build it"),
     ])
 
     @Test func unchangedWorkflowKeepsItsVersion() {
@@ -192,9 +192,9 @@ struct WorkflowLayoutTests {
         WorkflowStep(id: "check", type: .condition, condition: StepCondition(labelsAny: ["x"]), routes: [
             "yes": WorkflowRoute(to: "fast"), "no": WorkflowRoute(to: "slow"),
         ]),
-        WorkflowStep(id: "fast", type: .agent, role: "a", next: "review"),
-        WorkflowStep(id: "slow", type: .agent, role: "a"),
-        WorkflowStep(id: "review", type: .agent, role: "b", routes: ["changes_requested": WorkflowRoute(to: "fast", maxLoops: 2), "approved": WorkflowRoute(to: "end")]),
+        WorkflowStep(id: "fast", type: .agent, agent: .builder, next: "review"),
+        WorkflowStep(id: "slow", type: .agent, agent: .builder),
+        WorkflowStep(id: "review", type: .agent, agent: .checker, routes: ["changes_requested": WorkflowRoute(to: "fast", maxLoops: 2), "approved": WorkflowRoute(to: "end")]),
     ])
 
     @Test func layoutIsDeterministic() {
@@ -258,24 +258,25 @@ struct WorkflowEditingTests {
 
     @Test func addingAStepChainsItAfterTheLastStep() {
         var workflow = WorkflowDefinition(id: "w", name: "W", steps: [WorkflowStep(id: "a", type: .notify)])
-        let added = workflow.addStep(.agent, role: "qa-engineer", position: CanvasPosition(x: 1, y: 2))
-        #expect(workflow.step("a")?.next == "qa-engineer")
-        #expect(added.id == "qa-engineer" && added.role == "qa-engineer" && added.next == "end")
+        let added = workflow.addStep(.agent, agent: .checker, position: CanvasPosition(x: 1, y: 2))
+        #expect(workflow.step("a")?.next == "checker")
+        #expect(added.id == "checker" && added.agent == .checker && added.model == nil && added.next == "end")
         #expect(added.position == CanvasPosition(x: 1, y: 2))
-        let second = workflow.addStep(.agent, role: "qa-engineer")
+        let second = workflow.addStep(.agent, agent: .checker)
         let gate = workflow.addStep(.condition)
-        let spawn = workflow.addStep(.spawn, role: "claude-code")
-        let approval = workflow.addStep(.approval, role: "ignored")
-        #expect(second.id == "qa-engineer-2")
+        let spawn = workflow.addStep(.spawn, agent: .checker)
+        let approval = workflow.addStep(.approval, agent: .lead)
+        #expect(second.id == "checker-2")
         #expect(gate.condition == StepCondition())
         #expect(spawn.maxAgents == 4)
-        #expect(approval.role == nil)
+        #expect(spawn.agent == .builder)
+        #expect(approval.agent == nil)
     }
 
     @Test func connectChoosesNextThenNamedOutcomes() {
         var workflow = WorkflowDefinition.blank(id: "w", name: "W")
-        let a = workflow.addStep(.agent, role: "dev")
-        let b = workflow.addStep(.agent, role: "qa")
+        let a = workflow.addStep(.agent, agent: .builder)
+        let b = workflow.addStep(.agent, agent: .checker)
         let gate = workflow.addStep(.condition)
         let first = workflow.connect(from: a.id, to: b.id)
         #expect(first == nil)
@@ -294,7 +295,7 @@ struct WorkflowEditingTests {
 
     @Test func firstRouteReplacesThePlaceholderEnding() {
         var workflow = WorkflowDefinition.blank(id: "w", name: "W")
-        let qa = workflow.addStep(.agent, role: "qa")
+        let qa = workflow.addStep(.agent, agent: .checker)
         #expect(workflow.step(qa.id)?.next == "end")
         workflow.setRoute(from: qa.id, outcome: StepOutcome.passed, to: WorkflowDefinition.endStepID)
         #expect(workflow.step(qa.id)?.next == nil)
@@ -313,9 +314,9 @@ struct WorkflowEditingTests {
 
     @Test func removingAStepSplicesItsNextAndDropsRoutes() {
         var workflow = WorkflowDefinition(id: "w", name: "W", steps: [
-            WorkflowStep(id: "a", type: .agent, role: "r", next: "b"),
-            WorkflowStep(id: "b", type: .agent, role: "r", next: "c"),
-            WorkflowStep(id: "c", type: .agent, role: "r", routes: ["failed": WorkflowRoute(to: "b"), "passed": WorkflowRoute(to: "end")]),
+            WorkflowStep(id: "a", type: .agent, agent: .builder, next: "b"),
+            WorkflowStep(id: "b", type: .agent, agent: .builder, next: "c"),
+            WorkflowStep(id: "c", type: .agent, agent: .builder, routes: ["failed": WorkflowRoute(to: "b"), "passed": WorkflowRoute(to: "end")]),
             WorkflowStep(id: "g", type: .condition, condition: StepCondition(outcomeOf: "b", equals: "done")),
         ])
         workflow.removeStep("b")
@@ -326,8 +327,8 @@ struct WorkflowEditingTests {
 
     @Test func renamingAStepUpdatesEveryReference() {
         var workflow = WorkflowDefinition(id: "w", name: "W", steps: [
-            WorkflowStep(id: "a", type: .agent, role: "r", next: "b"),
-            WorkflowStep(id: "b", type: .agent, role: "r", routes: ["failed": WorkflowRoute(to: "b", maxLoops: 2)]),
+            WorkflowStep(id: "a", type: .agent, agent: .builder, next: "b"),
+            WorkflowStep(id: "b", type: .agent, agent: .builder, routes: ["failed": WorkflowRoute(to: "b", maxLoops: 2)]),
             WorkflowStep(id: "g", type: .condition, condition: StepCondition(outcomeOf: "b")),
         ])
         let renamed = workflow.renameStep("b", to: "Code Review")
@@ -342,7 +343,7 @@ struct WorkflowEditingTests {
 
     @Test func routesCanBeRenamedAndRemoved() {
         var workflow = WorkflowDefinition(id: "w", name: "W", steps: [
-            WorkflowStep(id: "a", type: .agent, role: "r", routes: ["ok": WorkflowRoute(to: "end")]),
+            WorkflowStep(id: "a", type: .agent, agent: .builder, routes: ["ok": WorkflowRoute(to: "end")]),
         ])
         let renamed = workflow.renameRoute(from: "a", outcome: "ok", to: "approved")
         #expect(renamed)

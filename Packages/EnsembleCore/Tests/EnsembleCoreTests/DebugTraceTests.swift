@@ -196,8 +196,8 @@ import Testing
         let trace = DebugTrace(paths: AppPaths(root: root))
         h.engine.debugTrace = trace
         let workflow = WorkflowDefinition(id: "loop", name: "Loop", steps: [
-            WorkflowStep(id: "build", type: .agent, role: "claude-code", next: "review"),
-            WorkflowStep(id: "review", type: .agent, role: "pr-reviewer", routes: [
+            WorkflowStep(id: "build", type: .agent, agent: .builder, next: "review"),
+            WorkflowStep(id: "review", type: .agent, agent: .checker, routes: [
                 StepOutcome.approved: WorkflowRoute(to: "end"),
                 StepOutcome.changesRequested: WorkflowRoute(to: "build", maxLoops: 3),
             ]),

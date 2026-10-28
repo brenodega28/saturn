@@ -66,7 +66,7 @@ struct AgentsView: View {
     var body: some View {
         let sessions = model.agentSessions(in: project)
         if sessions.isEmpty {
-            EmptyState("No agents yet", message: "Agents come from roles. Until workflows arrive, spawn them yourself: pick a role, how many, and each coding agent works in its own worktree.") {
+            EmptyState("No agents yet", message: "Workflows start agents when a run needs them. You can also spawn them yourself: pick a builder or a checker, its model and skills; each builder works in its own worktree.") {
                 Button("New Agent") { model.isNewAgentPresented = true }.buttonStyle(.primaryPill)
                 Button("Open Tasks") { model.setTab(.tasks, for: project) }.buttonStyle(.pill)
             }
@@ -165,7 +165,7 @@ private struct AgentCard: View {
                         AgentAvatar(appearance: RoleAppearance(role: role))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                            Text("\(role?.name ?? "Claude Code") · \(session.transcript.session?.model ?? agent.model.modelTitle)")
+                            Text("\(role?.name ?? "Builder") ·\(session.transcript.session?.model ?? agent.model.modelTitle)")
                                 .font(.system(size: 11.5))
                                 .foregroundStyle(Theme.secondaryText)
                                 .lineLimit(1)

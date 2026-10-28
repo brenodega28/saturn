@@ -41,7 +41,7 @@ private struct SettingsPane<Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 content
-                Text("These settings apply to every project. Project settings (roles, checks, budgets, docs) live in each project’s Settings tab.")
+                Text("These settings apply to every project. Project settings (skills, checks, budgets, docs) live in each project’s Settings tab.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.secondaryText)
             }
@@ -98,7 +98,7 @@ private struct EnginesSettings: View {
                     .disabled(model.isCheckingEnvironment)
                 if model.isCheckingEnvironment { ProgressView().controlSize(.small) }
             }
-            Text("More engines (Codex, Gemini CLI) arrive after the MVP; each role already has a provider field.")
+            Text("More engines (Codex, Gemini CLI) arrive after the MVP.")
                 .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
         }
     }

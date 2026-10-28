@@ -99,7 +99,6 @@ private struct RecentProjectRow: View {
     @Environment(AppModel.self) private var model
     let project: Project
     @State private var isHovered = false
-    @State private var crew: [RolePalette] = []
 
     var body: some View {
         Button {
@@ -119,7 +118,6 @@ private struct RecentProjectRow: View {
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 8)
-                CrewStack(palettes: crew)
                 if let activity = model.recentActivity(of: project) {
                     Text(activity.text)
                         .font(.system(size: 12, weight: .medium))
@@ -136,9 +134,6 @@ private struct RecentProjectRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .task(id: project.path) {
-            crew = ProjectConfigLoader.load(repository: project.url).roles.map(\.palette)
-        }
         .contextMenu {
             Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
             Button("Remove from Recents") { model.forgetRecent(project) }

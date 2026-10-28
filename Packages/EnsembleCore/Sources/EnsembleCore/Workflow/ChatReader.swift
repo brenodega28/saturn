@@ -188,7 +188,7 @@ public struct ChatReader {
         fields.append(Self.cost(entry.costUSD))
         fields.append("\(Self.timestamp(entry.startedAt)) to \(entry.endedAt.map(Self.timestamp) ?? "now")")
         var lines = [fields.joined(separator: " · ")]
-        if let role = entry.role { lines.append("Role: \(role)") }
+        if let agent = entry.agent { lines.append("Agent: \(agent.name)") }
         if let feedback = entry.feedback { lines.append("Feedback from \(feedback.fromStep): \(feedback.summary)") }
         if entry.attempts.count > 1 {
             for attempt in entry.attempts {
@@ -197,7 +197,7 @@ public struct ChatReader {
         }
         if let plan = entry.handoff.plan {
             lines.append("Plan: \(plan.summary)")
-            lines += plan.tasks.map { "  - \($0.title) (\($0.role))" }
+            lines += plan.tasks.map { "  - \($0.title) (\($0.label))" }
             if let spec = plan.spec { lines.append("Spec:\n" + spec.markdown) }
         }
         if let verdict = entry.handoff.verdict {
@@ -332,7 +332,7 @@ public struct ChatReader {
     }
 
     static func describe(_ agent: Agent, config: ProjectConfig? = nil) -> String {
-        "\(AgentNaming.displayName(of: agent, config: config)) (\(agent.role), id \(agent.id.map(String.init) ?? "?"))"
+        "\(AgentNaming.displayName(of: agent, config: config)) (\(agent.kind?.rawValue ?? agent.role), id \(agent.id.map(String.init) ?? "?"))"
     }
 
     static func spawner(of agent: Agent, among agents: [Agent], config: ProjectConfig? = nil) -> String {

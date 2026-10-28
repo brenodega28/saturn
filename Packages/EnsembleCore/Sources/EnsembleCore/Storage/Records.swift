@@ -252,6 +252,7 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
     public var spawnedById: Int64?
     public var sessionCostUSD: Double
     public var sessionOutputTokens: Int
+    public var skills: [String]
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -263,11 +264,12 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
         baseBranch: String? = nil, processID: Int32? = nil, lastError: String? = nil,
         runStepId: Int64? = nil, readOnly: Bool = false, planTaskId: String? = nil,
         port: Int? = nil, archivedAt: Date? = nil, taskId: Int64? = nil, spawnedById: Int64? = nil,
-        sessionCostUSD: Double = 0, sessionOutputTokens: Int = 0,
+        sessionCostUSD: Double = 0, sessionOutputTokens: Int = 0, skills: [String] = [],
         createdAt: Date, updatedAt: Date
     ) {
         self.sessionCostUSD = sessionCostUSD
         self.sessionOutputTokens = sessionOutputTokens
+        self.skills = skills
         self.taskId = taskId
         self.spawnedById = spawnedById
         self.port = port
@@ -301,6 +303,8 @@ public struct Agent: Codable, Sendable, Hashable, Identifiable, FetchableRecord,
     }
 
     public var totalTokens: Int { inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens }
+
+    public var kind: AgentKind? { AgentKind(rawValue: role) }
 
     public var worktreeURL: URL? { worktreePath.map { URL(fileURLWithPath: $0, isDirectory: true) } }
 

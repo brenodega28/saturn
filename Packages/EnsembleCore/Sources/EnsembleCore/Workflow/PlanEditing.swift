@@ -8,9 +8,9 @@ extension Plan {
         tasks.swapAt(index, destination)
     }
 
-    public mutating func setRole(_ role: String, forTask id: String) {
+    public mutating func setSkills(_ skills: [String], forTask id: String) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
-        tasks[index].role = role
+        tasks[index].skills = skills
     }
 
     public mutating func removeTask(id: String) {

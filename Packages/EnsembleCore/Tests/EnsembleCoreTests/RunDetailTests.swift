@@ -5,9 +5,9 @@ import Testing
 struct RunGraphLayoutTests {
     static let branching = WorkflowDefinition(id: "branching", name: "Branching", steps: [
         WorkflowStep(id: "triage", type: .condition, routes: ["yes": WorkflowRoute(to: "backend"), "no": WorkflowRoute(to: "frontend")]),
-        WorkflowStep(id: "backend", type: .agent, role: "dev", next: "review"),
-        WorkflowStep(id: "frontend", type: .agent, role: "dev", next: "review"),
-        WorkflowStep(id: "review", type: .agent, role: "lead", routes: [
+        WorkflowStep(id: "backend", type: .agent, agent: .builder, next: "review"),
+        WorkflowStep(id: "frontend", type: .agent, agent: .builder, next: "review"),
+        WorkflowStep(id: "review", type: .agent, agent: .lead, routes: [
             "approved": WorkflowRoute(to: "end"),
             "changes_requested": WorkflowRoute(to: "triage", maxLoops: 2),
             "again": WorkflowRoute(to: "review"),

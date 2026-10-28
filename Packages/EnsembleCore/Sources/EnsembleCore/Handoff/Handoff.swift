@@ -4,19 +4,21 @@ public struct PlanTask: Sendable, Hashable, Codable, Identifiable {
     public var id: String
     public var title: String
     public var details: String
-    public var role: String
+    public var agent: AgentKind
+    public var skills: [String]
     public var files: [String]
 
-    public init(id: String = UUID().uuidString, title: String, details: String = "", role: String, files: [String] = []) {
+    public init(id: String = UUID().uuidString, title: String, details: String = "", agent: AgentKind = .builder, skills: [String] = [], files: [String] = []) {
         self.id = id
         self.title = title
         self.details = details
-        self.role = role
+        self.agent = agent
+        self.skills = skills
         self.files = files
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, details, role, files
+        case id, title, details, agent, role, skills, files
     }
 
     public init(from decoder: Decoder) throws {
@@ -24,8 +26,24 @@ public struct PlanTask: Sendable, Hashable, Codable, Identifiable {
         self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
         self.title = try container.decode(String.self, forKey: .title)
         self.details = try container.decodeIfPresent(String.self, forKey: .details) ?? ""
-        self.role = try container.decode(String.self, forKey: .role)
+        let named = try container.decodeIfPresent(String.self, forKey: .agent) ?? container.decodeIfPresent(String.self, forKey: .role)
+        self.agent = named.map(AgentKind.guessing(roleID:)) ?? .builder
+        self.skills = try container.decodeIfPresent([String].self, forKey: .skills) ?? []
         self.files = try container.decodeIfPresent([String].self, forKey: .files) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(details, forKey: .details)
+        try container.encode(agent, forKey: .agent)
+        try container.encode(skills, forKey: .skills)
+        try container.encode(files, forKey: .files)
+    }
+
+    public var label: String {
+        skills.isEmpty ? agent.rawValue : "\(agent.rawValue), skills: \(skills.joined(separator: ", "))"
     }
 }
 
@@ -356,31 +374,40 @@ public struct ChatReadRequest: Sendable, Hashable {
 }
 
 public struct AgentSpawnRequest: Sendable, Hashable, Codable {
-    public var role: String
+    public var agent: AgentKind
     public var task: String
     public var name: String?
     public var model: String?
     public var count: Int
+    public var skills: [String]
 
-    public init(role: String, task: String, name: String? = nil, model: String? = nil, count: Int = 1) {
-        self.role = role
+    public init(agent: AgentKind, task: String, name: String? = nil, model: String? = nil, count: Int = 1, skills: [String] = []) {
+        self.agent = agent
         self.task = task
         self.name = name
         self.model = model
         self.count = count
+        self.skills = skills
     }
 
     enum CodingKeys: String, CodingKey {
-        case role, task, name, model, count
+        case agent, task, name, model, count, skills
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.role = try container.decode(String.self, forKey: .role)
+        let named = try container.decode(String.self, forKey: .agent).trimmingCharacters(in: .whitespaces).lowercased()
+        guard let agent = AgentKind(rawValue: named), AgentKind.spawnable.contains(agent) else {
+            throw HandoffError.notAllowed("Unknown agent “\(named)”. Use one of: \(AgentKind.spawnable.map(\.rawValue).joined(separator: ", ")).")
+        }
+        self.agent = agent
         self.task = try container.decode(String.self, forKey: .task)
         self.name = try container.decodeIfPresent(String.self, forKey: .name)
         self.model = try container.decodeIfPresent(String.self, forKey: .model)
         self.count = max(1, try container.decodeIfPresent(Int.self, forKey: .count) ?? 1)
+        self.skills = (try container.decodeIfPresent([String].self, forKey: .skills) ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 }
 
@@ -410,7 +437,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     public var description: String {
         switch self {
         case .submitPlan:
-            "Submit your plan: a short summary, the list of tasks with the role that builds each and the files it owns, and a short spec (interfaces, acceptance criteria, out of scope, verification). Skip the spec only when the request fits in one sentence. Call once when planning is done, then end your turn."
+            "Submit your plan: a short summary, the list of tasks with the files each owns and the installed skills its builder should load, and a short spec (interfaces, acceptance criteria, out of scope, verification). Skip the spec only when the request fits in one sentence. Call once when planning is done, then end your turn."
         case .submitVerdict:
             "Submit your review or test verdict. outcome is approved or changes_requested for reviews, passed or failed for tests. List concrete issues. Then end your turn."
         case .submitResult:
@@ -424,9 +451,9 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .messageAgent:
             "Send an instruction to another agent in this project, by its name. It arrives as that agent's next message. Use it to pass on the user's instructions or to steer agents you lead. An agent a lead started can message only that lead."
         case .listAgents:
-            "List every agent in this project with its role, status, branch, worktree and task."
+            "List every agent in this project with its kind, skills, status, branch, worktree and task."
         case .spawnAgent:
-            "Start new agents of a role with a task. Agents of roles that edit code get their own worktree and branch. They start working on the task right away. When each one ends its turn, its report arrives as your next message, so end your turn after calling this instead of checking on them."
+            "Start new agents with a task: builders get their own worktree and branch and edit code; checkers are read-only and start fresh, for reviews and tests. Choose the installed skills each should load. They start working on the task right away. When each one ends its turn, its report arrives as your next message, so end your turn after calling this instead of checking on them."
         case .stopAgent:
             "Stop another agent's current turn and drop its queued messages. It keeps its worktree, branch and history and can be messaged again later."
         case .deleteAgent:
@@ -455,9 +482,13 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "tasks": array(object([
                     "title": string("Short imperative task title"),
                     "details": string("What to build, constraints, and how to verify it"),
-                    "role": string("Role id that should build this task"),
+                    "agent": .object([
+                        "type": .string("string"), "enum": .array([.string(AgentKind.builder.rawValue)]),
+                        "description": .string("Who builds this task: always builder. Reviews and tests run in the workflow's own steps after the build."),
+                    ]),
+                    "skills": array(string("An installed skill the builder should load for this task")),
                     "files": array(string("A file or folder this task owns")),
-                ], required: ["title", "role"])),
+                ], required: ["title"])),
                 "spec": object([
                     "interfaces": array(string("A function, endpoint, type or command the work adds or changes, with its signature")),
                     "acceptance_criteria": array(string("A checkable statement that is true when the work is done")),
@@ -515,12 +546,16 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             return object([:], required: [])
         case .spawnAgent:
             return object([
-                "role": string("Role id of the new agents"),
+                "agent": .object([
+                    "type": .string("string"), "enum": .array(AgentKind.spawnable.map { JSONValue.string($0.rawValue) }),
+                    "description": .string("builder edits code in its own worktree; checker is read-only and starts fresh, for reviews and tests"),
+                ]),
                 "task": string("What the agents should do, with everything they need to start"),
-                "name": string("Base name for the agents; defaults to the role's name"),
-                "model": string("Model alias or full name; defaults to the role's model"),
+                "name": string("Base name for the agents; defaults to Builder or Checker"),
+                "model": string("Model alias or full name; defaults to sonnet"),
                 "count": .object(["type": .string("integer"), "minimum": .number(1), "maximum": .number(Double(AgentRuntime.maxSpawnCount))]),
-            ], required: ["role", "task"])
+                "skills": array(string("An installed skill the agents should load, by name")),
+            ], required: ["agent", "task"])
         case .stopAgent:
             return object(["agent": string("The agent's name, as list_agents shows it")], required: ["agent"])
         case .deleteAgent:
@@ -593,11 +628,9 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .listAgents:
             return .listAgents
         case .spawnAgent:
+            guard arguments["agent"]?.string?.isEmpty == false else { throw HandoffError.missing("agent") }
             let request = try decoder.decode(AgentSpawnRequest.self, from: data)
-            for (field, value) in [("role", request.role), ("task", request.task)]
-            where value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                throw HandoffError.missing(field)
-            }
+            if request.task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw HandoffError.missing("task") }
             return .spawnAgent(request)
         case .stopAgent:
             guard let agent = arguments["agent"]?.string, !agent.isEmpty else { throw HandoffError.missing("agent") }

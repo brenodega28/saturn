@@ -37,18 +37,8 @@ public enum LeadRequest {
 }
 
 extension WorkflowDefinition {
-    public func leadRole(among leadRoleIDs: Set<String>) -> String? {
-        steps.lazy.compactMap(\.role).first { leadRoleIDs.contains($0) }
-    }
-
-    public func assigningLead(_ leadID: String, replacing leadRoleIDs: Set<String>) -> WorkflowDefinition {
-        var workflow = self
-        for index in workflow.steps.indices where workflow.steps[index].type == .agent {
-            if let role = workflow.steps[index].role, leadRoleIDs.contains(role) {
-                workflow.steps[index].role = leadID
-            }
-        }
-        return workflow
+    public var hasLead: Bool {
+        steps.contains { $0.type == .agent && $0.agent == .lead }
     }
 }
 

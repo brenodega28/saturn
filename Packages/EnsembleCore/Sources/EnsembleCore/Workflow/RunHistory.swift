@@ -35,7 +35,7 @@ public struct RunHistory: Sendable, Hashable {
         public var stepId: String
         public var title: String
         public var type: StepType?
-        public var role: String?
+        public var agent: AgentKind?
         public var iteration: Int
         public var attempts: [Attempt]
         public var handoff: Handoff
@@ -95,7 +95,7 @@ public struct RunHistory: Sendable, Hashable {
             }
             entries.append(Entry(
                 id: firstID, stepId: first.stepId, title: RunTimeline.title(ofStep: first.stepId, in: workflow),
-                type: workflow.step(first.stepId)?.type, role: workflow.step(first.stepId)?.role,
+                type: workflow.step(first.stepId)?.type, agent: workflow.step(first.stepId)?.agent,
                 iteration: first.iteration, attempts: attempts,
                 handoff: Handoff(plan: output.plan, verdict: output.verdict, result: output.verdict == nil ? output.summary : nil, taskResults: output.taskResults),
                 feedback: Self.decodeFeedback(first.input), hop: hop,

@@ -120,7 +120,7 @@ extension JSONValue {
         let messages = sink.received.map(\.message)
         guard case .plan(let receivedPlan) = messages[0] else { Issue.record("expected a plan"); return }
         #expect(receivedPlan.summary == "Split it")
-        #expect(receivedPlan.tasks.map(\.role) == ["builder"])
+        #expect(receivedPlan.tasks.map(\.agent) == [.builder])
         #expect(messages[1] == .verdict(Verdict(outcome: "changes_requested", summary: "One bug", issues: [ReviewIssue(description: "Off by one", file: "a.swift")])))
         #expect(messages[2] == .result("hello"))
         #expect(messages[3] == .pin(PinDraft(file: "db.sql", startLine: 3, endLine: 9, title: "Drops a table", tags: ["migration"], explanation: "Data loss")))

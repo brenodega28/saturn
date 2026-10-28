@@ -21,13 +21,13 @@ public enum AgentNaming {
         return names
     }
 
-    public static func displayName(of name: String, role: RoleDefinition?) -> String {
-        guard let role, role.canSpawn, number(of: name, base: role.name) != nil else { return name }
-        return role.name
+    public static func displayName(of name: String, kind: AgentKind?) -> String {
+        guard let kind, kind == .lead, number(of: name, base: kind.name) != nil else { return name }
+        return kind.name
     }
 
-    public static func displayName(of agent: Agent, config: ProjectConfig?) -> String {
-        displayName(of: agent.name, role: config?.role(agent.role))
+    public static func displayName(of agent: Agent, config: ProjectConfig? = nil) -> String {
+        displayName(of: agent.name, kind: agent.kind)
     }
 
     static func number(of name: String, base: String) -> Int? {
@@ -41,7 +41,6 @@ public enum AgentNaming {
 
 extension AppDatabase {
     public func displayName(of agent: Agent) -> String {
-        let config = (try? project(id: agent.projectId)).flatMap { $0 }.map { ProjectConfigLoader.load(repository: $0.url) }
-        return AgentNaming.displayName(of: agent, config: config)
+        AgentNaming.displayName(of: agent)
     }
 }

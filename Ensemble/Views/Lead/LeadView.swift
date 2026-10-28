@@ -149,13 +149,11 @@ private struct NewRequestIntro: View {
         Group {
             if config.workflows.isEmpty {
                 EmptyState("No workflows yet", message: "The lead starts a workflow from .ensemble/workflows/. Add the defaults to get Feature delivery and Small task.") {
-                    Button("Add Default Roles and Workflows") { model.installDefaultConfig(in: project) }
+                    Button("Add Default Workflows") { model.installDefaultConfig(in: project) }
                         .buttonStyle(.primaryPill)
                 }
-            } else if model.leadRoles(in: project).isEmpty {
-                EmptyState("No lead role", message: "A lead is a role with can_spawn: true. Add one in Crew › Roles, or pick a workflow that needs no lead.")
             } else {
-                EmptyState("Talk to an agent", message: "Ask a question or describe what you need. The lead answers here, and proposes a run when there’s work to do.")
+                EmptyState("Talk to the Lead", message: "Ask a question or describe what you need. The Lead answers here, proposes a run when there’s work to do, then plans and reviews it.")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

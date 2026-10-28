@@ -86,7 +86,6 @@ private struct ProjectOutlineTree: View {
         case .changes: OutlineChangesRows(project: project, projectID: projectID)
         case .code: OutlineSourceRows(project: project, projectID: projectID)
         case .settings: OutlineSettingsRows(project: project, projectID: projectID)
-        case .roles: EmptyView()
         }
     }
 
@@ -109,7 +108,7 @@ private struct ProjectOutlineTree: View {
             return model.changesRunSelections[projectID].map { !runs.contains($0) } ?? true
         case .settings:
             return !OutlineSettingsRows.childSections.contains(model.settingsSections[projectID] ?? .general)
-        case .lead, .tasks, .workflows, .code, .roles:
+        case .lead, .tasks, .workflows, .code:
             return true
         }
     }
@@ -127,7 +126,7 @@ private struct ProjectOutlineTree: View {
             return ProjectOutline.countBadge(model.agentSessions(in: project).count)
         case .workflows:
             return ProjectOutline.countBadge(model.config(for: project).workflows.count)
-        case .code, .settings, .roles:
+        case .code, .settings:
             return nil
         }
     }
@@ -462,16 +461,11 @@ private struct OutlineSettingsRows: View {
     let project: Project
     let projectID: Int64
 
-    static let childSections: Set<SettingsSection> = [.checks, .agents]
+    static let childSections: Set<SettingsSection> = [.skills, .checks, .agents]
 
     var body: some View {
         let config = model.config(for: project)
-        let roles = SidebarDestination.section(project: projectID, tab: .roles)
-        OutlineChildRow(title: "Roles", meta: config.roles.isEmpty ? "" : "\(config.roles.count)", dot: Theme.neutral, isSelected: model.sidebarDestination == roles) {
-            model.sidebarDestination = roles
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Roles, \(config.roles.count)")
+        settingsRow("Skills", section: .skills, count: SkillLibrary.installedSkills(in: project.url).union(model.pluginSkills(for: project)).count)
         settingsRow("Checks", section: .checks, count: config.checks?.checks.count ?? 0)
         settingsRow("Budgets", section: .agents, count: 0)
     }

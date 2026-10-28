@@ -14,7 +14,7 @@ public struct RunGraph: Sendable, Hashable {
         public var id: String
         public var title: String
         public var type: StepType?
-        public var role: String?
+        public var agent: AgentKind?
         public var layer: Int
         public var column: Int
         public var visits: Int
@@ -63,7 +63,7 @@ public struct RunGraph: Sendable, Hashable {
             columns[layer] = column + 1
             let step = workflow.step(id)
             return Node(
-                id: id, title: RunTimeline.title(ofStep: id, in: workflow), type: step?.type, role: step?.role,
+                id: id, title: RunTimeline.title(ofStep: id, in: workflow), type: step?.type, agent: step?.agent,
                 layer: layer, column: column, visits: Self.visits(of: id, in: ordered),
                 state: Self.state(of: id, run: run, hold: hold, steps: ordered)
             )

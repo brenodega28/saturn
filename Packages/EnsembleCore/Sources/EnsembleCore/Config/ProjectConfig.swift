@@ -46,13 +46,13 @@ public enum DocReaders: Sendable, Hashable, Codable {
         }
     }
 
-    public func includes(_ role: RoleDefinition) -> Bool {
+    public func includes(_ kind: AgentKind) -> Bool {
         switch self {
         case .all: true
-        case .leads: role.canSpawn
-        case .coding: role.editsCode
-        case .reviewers: !role.editsCode && !role.canSpawn
-        case .roles(let ids): ids.contains(role.id)
+        case .leads: kind == .lead
+        case .coding: kind == .builder
+        case .reviewers: kind == .checker
+        case .roles(let ids): ids.contains { AgentKind.guessing(roleID: $0) == kind }
         }
     }
 }
@@ -103,7 +103,6 @@ public struct DocsIndex: Sendable, Hashable, Codable {
 public struct ProjectConfig: Sendable, Hashable {
     public static let directoryName = ".ensemble"
 
-    public var roles: [RoleDefinition]
     public var workflows: [WorkflowDefinition]
     public var docs: DocsIndex
     public var checks: ChecksConfig?
@@ -112,45 +111,39 @@ public struct ProjectConfig: Sendable, Hashable {
     public var preferences: ProjectPreferences
     public var specs: SpecsConfig
     public var issues: [ConfigIssue]
+    public var migrationNotices: [MigrationNotice]
 
     public init(
-        roles: [RoleDefinition] = [], workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil,
+        workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil,
         review: ReviewPolicy = ReviewPolicy(), permissions: PermissionsConfig = PermissionsConfig(),
-        preferences: ProjectPreferences = ProjectPreferences(), specs: SpecsConfig = SpecsConfig(), issues: [ConfigIssue] = []
+        preferences: ProjectPreferences = ProjectPreferences(), specs: SpecsConfig = SpecsConfig(), issues: [ConfigIssue] = [],
+        migrationNotices: [MigrationNotice] = []
     ) {
         self.permissions = permissions
         self.preferences = preferences
         self.specs = specs
-        self.roles = roles
         self.workflows = workflows
         self.docs = docs
         self.checks = checks
         self.review = review
         self.issues = issues
+        self.migrationNotices = migrationNotices
     }
+
+    public var roles: [RoleDefinition] { AgentKind.allCases.map(\.builtInRole) }
+
+    public var lead: RoleDefinition { AgentKind.lead.builtInRole }
 
     public func role(_ id: String) -> RoleDefinition? {
-        roles.first { $0.id == id }
-    }
-
-    public static let defaultLeadID = "tech-lead"
-
-    public var leadRoles: [RoleDefinition] {
-        let leads = roles.filter(\.canSpawn)
-        let preferred = preferences.defaultLead.flatMap { id in leads.contains { $0.id == id } ? id : nil } ?? Self.defaultLeadID
-        return leads.filter { $0.id == preferred } + leads.filter { $0.id != preferred }
+        AgentKind(rawValue: id)?.builtInRole
     }
 
     public func workflow(_ id: String) -> WorkflowDefinition? {
         workflows.first { $0.id == id }
     }
 
-    public func docs(for role: RoleDefinition) -> [DocEntry] {
-        let indexed = docs.docs.filter { $0.enabled && $0.readers.includes(role) }
-        let extra = role.docs
-            .filter { path in !indexed.contains { $0.path == path } }
-            .map { DocEntry(title: ($0 as NSString).lastPathComponent, path: $0, readers: .roles([role.id])) }
-        return indexed + extra
+    public func docs(for kind: AgentKind) -> [DocEntry] {
+        docs.docs.filter { $0.enabled && $0.readers.includes(kind) }
     }
 
     public static func directory(in repository: URL) -> URL {
@@ -167,12 +160,13 @@ public enum ProjectConfigLoader {
     public static func load(repository: URL) -> ProjectConfig {
         let root = ProjectConfig.directory(in: repository)
         var issues: [ConfigIssue] = []
-
-        let roles: [RoleDefinition] = yamlFiles(in: root.appending(path: "roles")).compactMap { file in
-            decode(RoleDefinition.self, file: file, relativeTo: repository, issues: &issues).map { role in
-                var role = role
-                role.id = file.deletingPathExtension().lastPathComponent
-                return role
+        var notices: [MigrationNotice] = []
+        if hasConfig(repository: repository) {
+            do {
+                notices = try RoleMigration.migrate(repository: repository)
+                RoleMigration.keep(notices, for: repository)
+            } catch {
+                issues.append(ConfigIssue(file: ProjectConfig.directoryName, message: "Couldn’t migrate roles to agent kinds: \(error.localizedDescription)"))
             }
         }
 
@@ -206,15 +200,11 @@ public enum ProjectConfigLoader {
 
         let specs = loadSpecs(repository: repository, issues: &issues)
         var config = ProjectConfig(
-            roles: roles, workflows: workflows, docs: docs, checks: checks, review: review, permissions: permissions,
-            preferences: ProjectPreferences.load(repository: repository), specs: specs, issues: issues
+            workflows: workflows, docs: docs, checks: checks, review: review, permissions: permissions,
+            preferences: ProjectPreferences.load(repository: repository), specs: specs, issues: issues, migrationNotices: notices
         )
         config.issues += ConfigValidator.validate(config)
         return config
-    }
-
-    public static func write(_ role: RoleDefinition, repository: URL) throws {
-        try writeYAML(role, to: ProjectConfig.directory(in: repository).appending(path: "roles/\(role.id).yaml"))
     }
 
     public static func write(_ workflow: WorkflowDefinition, repository: URL) throws {
@@ -252,10 +242,6 @@ public enum ProjectConfigLoader {
         return decode(SpecsConfig.self, file: file, relativeTo: repository, issues: &issues) ?? SpecsConfig()
     }
 
-    public static func deleteRole(_ id: String, repository: URL) throws {
-        try FileManager.default.removeItem(at: ProjectConfig.directory(in: repository).appending(path: "roles/\(id).yaml"))
-    }
-
     public static func installDefaults(repository: URL) throws {
         guard let defaults = Bundle.module.url(forResource: "Defaults", withExtension: nil) else { return }
         try install(from: defaults, repository: repository)
@@ -263,20 +249,24 @@ public enum ProjectConfigLoader {
 
     static func install(from bundle: URL, repository: URL) throws {
         let root = ProjectConfig.directory(in: repository)
-        for folder in ["roles", "workflows"] {
-            let source = bundle.appending(path: folder)
-            let destination = root.appending(path: folder)
-            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-            for file in try FileManager.default.contentsOfDirectory(at: source, includingPropertiesForKeys: nil) {
-                let target = destination.appending(path: file.lastPathComponent)
-                if !FileManager.default.fileExists(atPath: target.path) {
-                    try FileManager.default.copyItem(at: file, to: target)
-                }
-            }
+        try copyMissing(from: bundle.appending(path: "workflows"), to: root.appending(path: "workflows"))
+        let skills = bundle.appending(path: "skills")
+        if FileManager.default.fileExists(atPath: skills.path) {
+            try copyMissing(from: skills, to: SkillLibrary.directory(in: repository))
         }
         let ignore = root.appending(path: ".gitignore")
         if !FileManager.default.fileExists(atPath: ignore.path) {
             try "memory/\nlocal.yaml\n".write(to: ignore, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private static func copyMissing(from source: URL, to destination: URL) throws {
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        for file in try FileManager.default.contentsOfDirectory(at: source, includingPropertiesForKeys: nil) {
+            let target = destination.appending(path: file.lastPathComponent)
+            if !FileManager.default.fileExists(atPath: target.path) {
+                try FileManager.default.copyItem(at: file, to: target)
+            }
         }
     }
 
@@ -328,30 +318,9 @@ public enum ProjectConfigLoader {
 public enum ConfigValidator {
     public static func validate(_ config: ProjectConfig) -> [ConfigIssue] {
         var issues: [ConfigIssue] = []
-        let roleIDs = Set(config.roles.map(\.id))
         let preferencesFile = "\(ProjectConfig.directoryName)/\(ProjectPreferences.fileName)"
-        if let lead = config.preferences.defaultLead, !config.roles.contains(where: { $0.id == lead && $0.canSpawn }) {
-            issues.append(ConfigIssue(file: preferencesFile, message: "default lead “\(lead)” isn’t a role that can spawn agents"))
-        }
         if let workflow = config.preferences.defaultWorkflow, config.workflow(workflow) == nil {
             issues.append(ConfigIssue(file: preferencesFile, message: "default workflow “\(workflow)” doesn’t exist"))
-        }
-
-        for role in config.roles {
-            let file = "\(ProjectConfig.directoryName)/roles/\(role.id).yaml"
-            if !ModelCatalog.isValid(role.model) {
-                issues.append(ConfigIssue(file: file, message: "model “\(role.model)” isn’t a known model"))
-            }
-            if role.provider != "claude-code" {
-                issues.append(ConfigIssue(file: file, message: "provider “\(role.provider)” isn’t supported yet; only claude-code"))
-            }
-            if !config.permissions.knownIDs.contains(role.permissionProfile) {
-                let known = config.permissions.knownIDs.map { "“\($0)”" }.joined(separator: ", ")
-                issues.append(ConfigIssue(file: file, message: "permission profile “\(role.permissionProfile)” isn’t known; use one of \(known)"))
-            }
-            if role.canSpawn && role.editsCode {
-                issues.append(ConfigIssue(file: file, message: "a role can’t both spawn agents and edit code"))
-            }
         }
 
         issues += ReviewPolicy.validate(config.review).map { ConfigIssue(file: "\(ProjectConfig.directoryName)/\(ReviewPolicy.fileName)", message: $0) }
@@ -376,12 +345,16 @@ public enum ConfigValidator {
                 let prefix = "steps.\(step.id): "
                 switch step.type {
                 case .agent, .spawn:
-                    guard let role = step.role else {
-                        issues.append(ConfigIssue(file: file, message: prefix + "needs a role"))
+                    if let model = step.model, !ModelCatalog.isValid(model) {
+                        issues.append(ConfigIssue(file: file, message: prefix + "model “\(model)” isn’t a known model"))
+                    }
+                    guard let agent = step.agent else {
+                        let kinds = AgentKind.allCases.map(\.rawValue).joined(separator: ", ")
+                        issues.append(ConfigIssue(file: file, message: prefix + "needs an agent: one of \(kinds)"))
                         continue
                     }
-                    if !roleIDs.contains(role) {
-                        issues.append(ConfigIssue(file: file, message: prefix + "role “\(role)” doesn’t exist"))
+                    if step.type == .spawn, agent != .builder {
+                        issues.append(ConfigIssue(file: file, message: prefix + "spawn steps start builders; use agent: builder"))
                     }
                 case .condition:
                     if step.condition == nil {

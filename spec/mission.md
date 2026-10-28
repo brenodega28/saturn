@@ -21,7 +21,7 @@ The experience it sets out:
 - **Written for humans.** Plain-language summaries, plans and pins. Review shows what needs a person and says why.
 - **Decisions come to you.** Questions, approvals, failures and pins from every project land in one Inbox and can be answered there.
 - **Cost always visible.** Spend shows in the sidebar, on every run and agent, and before a plan starts.
-- **Guided start.** Onboarding scans the project, suggests roles, workflows, checks and limits, and gets to the first task in a few steps.
+- **Guided start.** Onboarding scans the project, suggests workflows, skills, checks and limits, and gets to the first task in a few steps.
 
 The evidence is consistent: speed is easy and stability is hard. Agents raise output, but unchecked they also raise PR size, review time, duplication, complexity and bugs. Ensemble's job is to keep the speed and pay the stability bill up front. It does that with the harness around the model, not with the model.
 

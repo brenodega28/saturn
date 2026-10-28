@@ -17,9 +17,9 @@ enum ReaderChoice: Hashable, CaseIterable, Identifiable {
         switch self {
         case .all: "All agents"
         case .leads: "Lead only"
-        case .coding: "Coding agents"
-        case .reviewers: "Review & QA"
-        case .roles: "Choose roles…"
+        case .coding: "Builders"
+        case .reviewers: "Checkers"
+        case .roles: "Choose agents…"
         }
     }
 
@@ -39,9 +39,9 @@ extension DocReaders {
         switch self {
         case .all: ["All agents"]
         case .leads: ["Lead"]
-        case .coding: ["Coding agents"]
-        case .reviewers: ["Review & QA"]
-        case .roles(let ids): ids.map { id in roles.first { $0.id == id }?.name ?? id }
+        case .coding: ["Builders"]
+        case .reviewers: ["Checkers"]
+        case .roles(let ids): ids.map { id in roles.first { $0.id == id }?.name ?? AgentKind.guessing(roleID: id).name }
         }
     }
 }
@@ -85,7 +85,7 @@ struct DocsSettingsView: View {
                 }
                 .padding(16)
                 if docs.isEmpty {
-                    Text("No documents yet. Roles can still list files in their own docs.")
+                    Text("No documents yet.")
                         .font(.system(size: 12.5))
                         .foregroundStyle(Theme.secondaryText)
                         .padding([.horizontal, .bottom], 16)
@@ -195,7 +195,7 @@ struct DocsSettingsView: View {
                         ))
                     }
                 } label: {
-                    Text(chosenRoles.isEmpty ? choice.title : "\(chosenRoles.count) roles")
+                    Text(chosenRoles.isEmpty ? choice.title : "\(chosenRoles.count) agents")
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()

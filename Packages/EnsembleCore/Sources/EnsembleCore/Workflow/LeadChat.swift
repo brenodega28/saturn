@@ -64,7 +64,8 @@ public final class LeadChat {
         #if DEBUG
         runtime.debugTrace?.chatMessage(body, direction: "user_to_agent", chat: "lead", agent: session.agent, at: now)
         #endif
-        let status = try statusNote(taskId: taskId).map { (prompt.isEmpty ? "" : "\n\n---\n") + $0 } ?? ""
+        let notes = [driver.specEditNote(projectId: task.projectId, taskId: taskId), try statusNote(taskId: taskId)].compactMap(\.self)
+        let status = notes.isEmpty ? "" : (prompt.isEmpty ? "" : "\n\n---\n") + notes.joined(separator: "\n\n---\n")
         session.send(prompt + status, images: attachments.filter(\.isImage))
     }
 
@@ -129,10 +130,14 @@ public final class LeadChat {
         let lead = try database.leadAgent(taskId: proposal.taskId)
         let leadRoleIDs = Set(config.roles.filter(\.canSpawn).map(\.id))
         let assigned = lead.map { workflow.assigningLead($0.role, replacing: leadRoleIDs) } ?? workflow
+        let spec = try pendingSpec(taskId: proposal.taskId, projectId: task.projectId)
         if task.isClosed {
             try database.setClosed(taskId: proposal.taskId, reason: nil, at: .now)
         }
         let run = try engine.start(task: task, workflow: assigned, project: project, title: proposal.title, brief: proposal.text)
+        if let spec {
+            try attachSpec(to: run, taskId: proposal.taskId, document: spec, project: project, config: config)
+        }
         if let lead, let runID = run.id {
             runtime.session(for: lead)?.attach(toRun: runID)
         }

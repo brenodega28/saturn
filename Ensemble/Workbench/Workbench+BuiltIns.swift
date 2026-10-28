@@ -11,6 +11,9 @@ extension WorkbenchRegistry {
         register(NavigatorTabSpec(id: "runs", title: "Runs", systemImage: "play.circle", order: 10, showsScope: true) {
             AnyView(RunsNavigator())
         })
+        register(NavigatorTabSpec(id: "specs", title: "Specs", systemImage: "doc.text", order: 15) {
+            AnyView(SpecsNavigator())
+        })
         register(NavigatorTabSpec(id: "agents", title: "Agents", systemImage: "person.2", order: 20, showsScope: true) {
             AnyView(AgentsNavigator())
         })
@@ -159,6 +162,17 @@ extension WorkbenchRegistry {
                 return .file(project: project, path: path)
             },
             content: { item in AnyView(FileEditor(item: item)) }
+        ))
+        register(EditorKindSpec(
+            id: EditorKindID.spec,
+            title: { item, model in model.specTitle(item) },
+            systemImage: { _ in "doc.text" },
+            jumpBar: { item, model in
+                guard let project = model.project(of: item) else { return [] }
+                return [model.projectSegment(project) { .section(.lead, in: $0) }, JumpSegment(title: "Specs"), JumpSegment(title: model.specTitle(item))]
+            },
+            isAvailable: { item, _ in item.ref.map { FileManager.default.fileExists(atPath: $0) } ?? false },
+            content: { item in AnyView(SpecEditor(item: item)) }
         ))
     }
 

@@ -1,3 +1,4 @@
+import AppKit
 import EnsembleCore
 import Foundation
 import Observation
@@ -81,6 +82,9 @@ final class AppModel {
     let inboxNotifier = InboxNotifier()
     var runDetailIDs: [Int64: Int64] = [:]
     let idleCleanup: IdleCleanupScheduler
+    let planUsage = PlanUsagePoller()
+    @ObservationIgnored private var planUsageActivationObserver: NSObjectProtocol?
+    @ObservationIgnored private var lastPlanUsageActivationRefresh: Date?
 
     private(set) var environment: EnvironmentReport?
     private(set) var providerMode: ProviderMode?
@@ -157,6 +161,11 @@ final class AppModel {
         restoreNavigation()
         connectGitHub()
         WorkbenchRegistry.shared.registerChatLinkCommands()
+        planUsageActivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshPlanUsageOnActivation() }
+        }
     }
 
     var git: GitClient? {
@@ -246,6 +255,7 @@ final class AppModel {
             alert = AppAlert(title: "Couldn’t start Ensemble’s agent tools", message: error.localizedDescription)
         }
         await checkEnvironment()
+        updatePlanUsagePolling()
         perform("Couldn’t recover runs") { try engine.recover() }
         await deleteAgentsOfClosedRequests()
         startInbox()
@@ -291,7 +301,31 @@ final class AppModel {
         providerMode = mode
         agents.providerMode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: Self.providerModeKey)
+        updatePlanUsagePolling()
         await checkEnvironment()
+    }
+
+    private static let planUsageActivationInterval: TimeInterval = 30
+
+    private func updatePlanUsagePolling() {
+        guard providerMode == .claudeSignIn else {
+            planUsage.stop()
+            return
+        }
+        lastPlanUsageActivationRefresh = .now
+        if planUsage.isRunning {
+            Task { await planUsage.refresh() }
+        } else {
+            planUsage.start()
+        }
+    }
+
+    private func refreshPlanUsageOnActivation() {
+        guard providerMode == .claudeSignIn, planUsage.isRunning else { return }
+        let now = Date.now
+        if let last = lastPlanUsageActivationRefresh, now.timeIntervalSince(last) < Self.planUsageActivationInterval { return }
+        lastPlanUsageActivationRefresh = now
+        Task { await planUsage.refresh() }
     }
 
     var weeklySpend: Double {

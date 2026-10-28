@@ -15,6 +15,7 @@ extension WorkbenchRegistry {
         register(StatusItemSpec(id: "checks", placement: .leading, order: 20) { AnyView(ChecksStatusItem()) })
         register(StatusItemSpec(id: "problems", placement: .leading, order: 30) { AnyView(ProblemsStatusItem()) })
         register(StatusItemSpec(id: "claude", placement: .trailing, order: 0) { AnyView(ClaudeStatusItem()) })
+        register(StatusItemSpec(id: "planUsage", placement: .trailing, order: 5) { AnyView(PlanUsageStatusItem()) })
         register(StatusItemSpec(id: "limits", placement: .trailing, order: 10) { AnyView(LimitsStatusItem()) })
 
         register(WorkbenchCommand(id: "run.start", title: "Start", menu: "Run", section: 0, order: 0, shortcut: KeyboardShortcut("r"),
@@ -544,6 +545,44 @@ private struct ClaudeStatusItem: View {
                     Text("claude broken")
                 }
             }
+        }
+    }
+}
+
+private struct PlanUsageStatusItem: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let poller = model.planUsage
+        if PlanUsageDisplay.isVisible(mode: model.providerMode, usage: poller.usage, needsSignIn: poller.needsSignIn) {
+            if let usage = poller.usage, !poller.needsSignIn {
+                let segments = PlanUsageDisplay.segments(usage)
+                StatusButton(help: PlanUsageDisplay.help(usage), action: { model.selection = .usage }) {
+                    HStack(spacing: 0) {
+                        ForEach(Array(segments.enumerated()), id: \.element.id) { index, segment in
+                            if index > 0 { Text(" · ") }
+                            Text("\(segment.title) ")
+                            Text("\(segment.percent)%").foregroundStyle(segment.severity.color)
+                        }
+                    }
+                    .font(.system(size: 11.5, design: .monospaced))
+                }
+                .accessibilityLabel("Claude plan usage: \(PlanUsageDisplay.label(usage))")
+            } else {
+                StatusButton(help: "Sign in to Claude Code again to see plan usage", action: { model.selection = .usage }) {
+                    Text("Claude sign-in expired")
+                }
+            }
+        }
+    }
+}
+
+extension PlanUsageSeverity {
+    var color: Color {
+        switch self {
+        case .normal: Theme.secondaryText
+        case .warning: Theme.warning
+        case .danger: Theme.danger
         }
     }
 }

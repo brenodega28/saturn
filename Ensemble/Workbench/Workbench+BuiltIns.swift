@@ -401,7 +401,7 @@ private struct BranchStatusItem: View {
 
     var body: some View {
         if let active = state.active, active.kind == EditorKindID.agent, let session = model.session(for: active), let branch = session.agent.branch {
-            StatusButton(help: "Branch and worktree of \(session.agent.name)", action: {
+            StatusButton(help: "Branch and worktree of \(model.displayName(of: session.agent))", action: {
                 state.navigatorTab = "source-control"
                 state.show(.navigator)
             }) {

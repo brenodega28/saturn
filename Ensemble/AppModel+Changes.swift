@@ -112,7 +112,7 @@ extension AppModel {
     @discardableResult
     func askToCombine(_ path: ChangedPath, agentID: Int64?) -> Bool {
         guard let session = session(forAgentID: agentID) else { return false }
-        let others = path.diffs.filter { $0.agentId != agentID }.map { "\($0.agentName) (\($0.branch))" }
+        let others = path.diffs.filter { $0.agentId != agentID }.map { "\(displayName(of: $0)) (\($0.branch))" }
         if others.isEmpty {
             session.send("""
             \(path.path) can’t merge cleanly: your branch and the base branch change the same lines. \
@@ -138,12 +138,16 @@ extension AppModel {
     }
 
     func sendChangesBack(in run: Run, pins: [Pin]) {
-        let names = Dictionary(agents(inRun: run).compactMap { agent in agent.id.map { ($0, agent.name) } }, uniquingKeysWith: { first, _ in first })
+        let names = Dictionary(agents(inRun: run).compactMap { agent in agent.id.map { ($0, displayName(of: agent)) } }, uniquingKeysWith: { first, _ in first })
         let summary = Pin.changeRequestSummary(pins, agentNames: names)
         guard !summary.isEmpty else { return }
         performReview("Couldn’t send the changes back") {
             try engine.resolveApproval(run, approved: false, note: summary)
         }
+    }
+
+    func displayName(of diff: BranchFileDiff) -> String {
+        session(forAgentID: diff.agentId).map { displayName(of: $0.agent) } ?? diff.agentName
     }
 
     private func session(forAgentID id: Int64?) -> AgentSession? {

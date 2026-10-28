@@ -119,7 +119,7 @@ struct FileCard: View {
     private var uniqueAuthors: [(id: Int64?, name: String)] {
         var seen = Set<String>()
         return path.diffs.compactMap { diff in
-            seen.insert(diff.agentName).inserted ? (diff.agentId, diff.agentName) : nil
+            seen.insert(diff.agentName).inserted ? (diff.agentId, model.displayName(of: diff)) : nil
         }
     }
 
@@ -331,13 +331,14 @@ struct ReviewerNotes: View {
 }
 
 struct BranchHeader: View {
+    @Environment(AppModel.self) private var model
     let entry: BranchFileDiff
     let appearance: RoleAppearance
 
     var body: some View {
         HStack(spacing: 8) {
             AgentAvatar(size: 18, appearance: appearance).shadow(radius: 0)
-            Text(entry.agentName).fontWeight(.semibold)
+            Text(model.displayName(of: entry)).fontWeight(.semibold)
             Spacer(minLength: 8)
             Text(entry.branch)
                 .font(.system(size: 11, design: .monospaced))
@@ -353,10 +354,11 @@ struct BranchHeader: View {
 }
 
 struct OverlapNote: View {
+    @Environment(AppModel.self) private var model
     let path: ChangedPath
 
     var body: some View {
-        Label("\(path.diffs.map(\.agentName).joined(separator: " and ")) both change this file. Their changes merge cleanly.", systemImage: "arrow.triangle.merge")
+        Label("\(path.diffs.map { model.displayName(of: $0) }.joined(separator: " and ")) both change this file. Their changes merge cleanly.", systemImage: "arrow.triangle.merge")
             .font(.system(size: 12.5))
             .foregroundStyle(Theme.warning)
             .padding(.horizontal, 16)
@@ -412,7 +414,7 @@ struct ConflictPanel: View {
         var seen = Set<Int64>()
         return path.diffs.compactMap { entry in
             guard let id = entry.agentId, seen.insert(id).inserted else { return nil }
-            return (id, entry.agentName)
+            return (id, model.displayName(of: entry))
         }
     }
 }

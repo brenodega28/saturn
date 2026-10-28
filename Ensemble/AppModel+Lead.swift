@@ -220,7 +220,7 @@ extension AppModel {
             questions: (try? database.requestQuestions(taskId: taskID)) ?? [],
             heldRunIDs: Set(runs.compactMap(\.id).filter { engine.holds[$0] != nil })
         )
-        return RequestThreadData(thread: thread, timelines: timelines, leadRole: leadRole, leadName: lead?.name ?? leadRole?.name ?? "Lead")
+        return RequestThreadData(thread: thread, timelines: timelines, leadRole: leadRole, leadName: lead.map { AgentNaming.displayName(of: $0.name, role: leadRole) } ?? leadRole?.name ?? "Lead")
     }
 
     func runWorkflow(_ run: Run) -> WorkflowDefinition? {

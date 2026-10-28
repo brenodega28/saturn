@@ -236,6 +236,76 @@ import Testing
         }
     }
 
+    func makeNumberedLeads(_ count: Int) async throws -> (Setup, [AgentSession]) {
+        let setup = try await WorkflowDriverTests().makeSetup()
+        let role = try #require(setup.config.role("tech-lead"))
+        let leads = try await setup.harness.runtime.spawn(in: setup.project, role: role, count: count, config: setup.config, git: setup.harness.repo.git)
+        return (setup, leads)
+    }
+
+    @Test func numberedLeadsAreToldTheirRoleNameWhileBuildersKeepTheirNumbers() async throws {
+        let (setup, leads) = try await makeNumberedLeads(2)
+        defer { setup.harness.cleanUp() }
+        let lead = try #require(leads.first)
+        #expect(lead.agent.name == "Tech Lead 1")
+        let builderRole = try #require(setup.config.role("claude-code"))
+        let builders = try await setup.harness.runtime.spawn(in: setup.project, role: builderRole, count: 2, config: setup.config, git: setup.harness.repo.git)
+        let builder = try #require(builders.first)
+        #expect(builder.agent.name == "Claude Code 1")
+
+        let leadPrompt = try setup.harness.runtime.turnSetup(for: lead.agent).systemPrompt
+        #expect(leadPrompt.contains("You are Tech Lead, "))
+        #expect(!leadPrompt.contains("Tech Lead 1"))
+        #expect(try setup.harness.runtime.turnSetup(for: builder.agent).systemPrompt.contains("You are Claude Code 1, "))
+    }
+
+    @Test func messagesAndReportsUseTheLeadsRoleName() async throws {
+        let (setup, leads) = try await makeNumberedLeads(2)
+        defer { setup.harness.cleanUp() }
+        let lead = try #require(leads.first)
+
+        let reply = try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(role: "tech-lead", task: "CHAT look around", name: "Tech Lead")), from: lead.id)
+        #expect(reply.hasPrefix("Started Tech Lead. "))
+        let helper = try #require(try agents(setup).first { $0.name == "Tech Lead 3" })
+        let helperSession = try #require(setup.harness.runtime.session(for: helper))
+        try await waitUntil { userMessages(lead).contains("Report from Tech Lead:\n\nThe repo only has a README.") }
+        try await waitUntil { !helperSession.isRunning && !lead.isRunning }
+
+        #expect(try await setup.driver.receive(.agentMessage(agent: "Tech Lead 3", message: "Thanks"), from: lead.id) == "Sent to Tech Lead.")
+        try await waitUntil { userMessages(helperSession).contains("Message from Tech Lead:\n\nThanks") }
+        #expect(!userMessages(helperSession).contains { $0.contains("Tech Lead 1") })
+
+        let runner = try await spawnRunner(setup, from: lead)
+        try await waitUntil { userMessages(lead).contains("Report from Runner:\n\nThe repo only has a README.") }
+        try await waitUntil { !runner.isRunning && !lead.isRunning }
+        #expect(try await setup.driver.receive(.agentMessage(agent: "Tech Lead", message: "Which suite?"), from: runner.id) == "Sent to Tech Lead.")
+        try await waitUntil { userMessages(lead).contains("Message from Runner, an agent you started:\n\nWhich suite?") }
+    }
+
+    @Test func messageAgentFindsALeadByRoleNameAndRejectsAnAmbiguousOne() async throws {
+        let (setup, leads) = try await makeNumberedLeads(3)
+        defer { setup.harness.cleanUp() }
+        let caller = try #require(leads.first)
+        let other = try #require(leads.last)
+
+        await #expect(throws: HandoffError.notAllowed("Several agents are called “Tech Lead”: Tech Lead 2, Tech Lead 3. Use one of those exact names.")) {
+            try await setup.driver.receive(.agentMessage(agent: "tech lead", message: "Hi"), from: caller.id)
+        }
+        let listing = try await setup.driver.receive(.listAgents, from: caller.id)
+        #expect(listing.contains("- Tech Lead (Tech Lead 1) (you): role tech-lead"))
+        #expect(listing.contains("- Tech Lead (Tech Lead 2): role tech-lead"))
+        #expect(listing.contains("- Tech Lead (Tech Lead 3): role tech-lead"))
+
+        #expect(try await setup.driver.receive(.agentMessage(agent: "Tech Lead 3", message: "Hi"), from: caller.id) == "Sent to Tech Lead.")
+        try await waitUntil { userMessages(other).contains("Message from Tech Lead:\n\nHi") }
+        try await waitUntil { !other.isRunning }
+
+        let middle = try #require(setup.harness.runtime.session(for: leads[1].agent))
+        try await setup.harness.runtime.delete(middle, in: setup.project, git: setup.harness.repo.git, deleteBranch: false)
+        #expect(try await setup.driver.receive(.agentMessage(agent: "Tech Lead", message: "Again"), from: caller.id) == "Sent to Tech Lead.")
+        try await waitUntil { userMessages(other).contains("Message from Tech Lead:\n\nAgain") }
+    }
+
     @Test func aReadOnlyLeadIsToldItCanOpenAWorktree() {
         let directory = URL(fileURLWithPath: "/tmp/repo")
         #expect(ClaudeLaunch.readOnlySystemPrompt(agentName: "Lead", directory: directory, canOpenWorktree: true).contains(HandoffTool.openWorktree.qualifiedName))

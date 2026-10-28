@@ -26,11 +26,22 @@ public enum AgentNaming {
         return role.name
     }
 
+    public static func displayName(of agent: Agent, config: ProjectConfig?) -> String {
+        displayName(of: agent.name, role: config?.role(agent.role))
+    }
+
     static func number(of name: String, base: String) -> Int? {
         if name.caseInsensitiveCompare(base) == .orderedSame { return 1 }
         let prefix = base + " "
         guard name.count > prefix.count,
               name.lowercased().hasPrefix(prefix.lowercased()) else { return nil }
         return Int(name.dropFirst(prefix.count))
+    }
+}
+
+extension AppDatabase {
+    public func displayName(of agent: Agent) -> String {
+        let config = (try? project(id: agent.projectId)).flatMap { $0 }.map { ProjectConfigLoader.load(repository: $0.url) }
+        return AgentNaming.displayName(of: agent, config: config)
     }
 }

@@ -55,7 +55,7 @@ enum DebugTraceReadme {
       replaced by `{"preview": <first 2048 characters>, "originalLength": <characters>}`. Lines that are not JSON
       appear as `text` (cut at 2048 with `originalLength`).
     - `turn_summary`: written when a turn's `result` line arrives. `durationMS` (Claude Code's), `wallClockMS`
-      (from launch), `costUSD` (this turn; `processTotalCostUSD` is the process's running total), `inputTokens`,
+      (from launch), `costUSD` (this turn; `processTotalCostUSD` is Claude Code's `total_cost_usd`, which carries the session's earlier spend over a resume), `inputTokens`,
       `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `apiCalls` (distinct assistant message ids),
       `toolCalls` (count by tool name), `toolCallTotal`, `failedToolCalls` (`tool`, `toolUseId`, `error` preview of
       results with is_error), `permissionDenials` (`tool`, `toolUseId`, `input`: what was blocked), `interrupted`,

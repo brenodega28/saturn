@@ -1,6 +1,6 @@
 ---
 title: "Chat inspector: spec and permission requests"
-status: in-progress
+status: done
 owner: ""
 linked_runs: [59]
 created: 2026-10-29
@@ -29,16 +29,16 @@ Match the "In the frame · Chat" design: when the Chat tab is the active editor 
 
 ## Acceptance criteria
 
-- [ ] With the Chat tab active and a request selected, the inspector header reads "Chat" and shows the Permission requests section above the Specfile section, laid out as in the design.
-- [ ] A pending permission request appears in the inspector with Allow once / Allow for this run / Deny. Each button gives the same result as the old chat card did, and the request then moves into the history list with its decision.
-- [ ] Neither a permission card nor the spec card appears anywhere in the chat thread or above it.
-- [ ] The Specfile section shows the spec draft's status, path, title, summary, interfaces, out of scope, acceptance criteria and verification, and Open in editor opens the spec. With no spec it shows an empty state.
-- [ ] The pending count in the section header matches the number of pending requests and updates when one is answered.
-- [ ] With the inspector hidden, a newly arriving permission request for the request on screen opens the inspector. Requests that were already pending don't reopen it after the user closes it.
-- [ ] Switching to another request updates the inspector to that request. Selecting New request (or a direct chat) shows the inspector's 'No selection' state.
-- [ ] The ProposalCard 'Spec attached' link still works.
-- [ ] No code comments are added.
-- [ ] `swift test` in Packages/EnsembleCore passes and the app builds with xcodebuild.
+- [x] With the Chat tab active and a request selected, the inspector header reads "Chat" and shows the Permission requests section above the Specfile section, laid out as in the design.
+- [x] A pending permission request appears in the inspector with Allow once / Allow for this run / Deny. Each button gives the same result as the old chat card did, and the request then moves into the history list with its decision.
+- [x] Neither a permission card nor the spec card appears anywhere in the chat thread or above it.
+- [x] The Specfile section shows the spec draft's status, path, title, summary, interfaces, out of scope, acceptance criteria and verification, and Open in editor opens the spec. With no spec it shows an empty state.
+- [x] The pending count in the section header matches the number of pending requests and updates when one is answered.
+- [x] With the inspector hidden, a newly arriving permission request for the request on screen opens the inspector. Requests that were already pending don't reopen it after the user closes it.
+- [x] Switching to another request updates the inspector to that request. Selecting New request (or a direct chat) shows the inspector's 'No selection' state.
+- [x] The ProposalCard 'Spec attached' link still works.
+- [x] No code comments are added.
+- [x] `swift test` in Packages/EnsembleCore passes and the app builds with xcodebuild.
 
 ## Verification
 

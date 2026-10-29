@@ -508,6 +508,14 @@ import Testing
         #expect(thread.items.map(\.id) == ["message-1", "message-3", "message-2", "message-4", "message-5"])
     }
 
+    @Test func permissionCardsStayOutOfTheThread() {
+        let thread = RequestThread(
+            task: task, messages: [message(1, .user, 1), message(2, .proposal, 2), message(3, .permission, 3), message(4, .lead, 4)],
+            runs: [], timelines: [:], questions: [], heldRunIDs: []
+        )
+        #expect(thread.items.map(\.id) == ["message-1", "message-4", "message-2"])
+    }
+
     @Test func olderRequestsWithoutMessagesStartWithTheirBodyAndEndWithTheResult() {
         let run = Run(id: 8, projectId: 1, taskId: 1, workflow: "small-task", status: .succeeded, startedAt: at(1), endedAt: at(9))
         let thread = RequestThread(task: task, messages: [], runs: [run], timelines: [:], questions: [], heldRunIDs: [8])

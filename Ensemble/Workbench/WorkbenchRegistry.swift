@@ -9,12 +9,14 @@ enum InspectorSubject: Hashable {
     case file(project: Int64, path: String)
     case run(project: Int64, run: Int64)
     case step(project: Int64, workflow: String, step: String)
+    case chat(project: Int64, request: Int64)
 
     enum Kind: String {
         case agent
         case file
         case run
         case step
+        case chat
     }
 
     var kind: Kind {
@@ -23,12 +25,13 @@ enum InspectorSubject: Hashable {
         case .file: .file
         case .run: .run
         case .step: .step
+        case .chat: .chat
         }
     }
 
     var project: Int64 {
         switch self {
-        case .agent(let project, _), .file(let project, _), .run(let project, _), .step(let project, _, _): project
+        case .agent(let project, _), .file(let project, _), .run(let project, _), .step(let project, _, _), .chat(let project, _): project
         }
     }
 }

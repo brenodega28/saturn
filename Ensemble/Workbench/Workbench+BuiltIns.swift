@@ -95,6 +95,9 @@ extension WorkbenchRegistry {
                 ]
             },
             inspectorSubject: { item, model in
+                if item.tab == .lead {
+                    return model.chatInspectorSubject(for: item)
+                }
                 guard item.tab == .workflows, let project = item.project, let editor = model.workflowEditors[project] else { return nil }
                 return .step(project: project, workflow: editor.draft.id, step: editor.selection.nodeID ?? "")
             },

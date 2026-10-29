@@ -193,6 +193,7 @@ extension InspectorSubject.Kind {
         case .file: "File"
         case .run: "Run"
         case .step: "Workflow step"
+        case .chat: "Chat"
         }
     }
 }

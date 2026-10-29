@@ -60,6 +60,8 @@ public struct RequestThread: Sendable, Hashable {
             case .lead:
                 add(message.createdAt, .message(message))
                 addProposalsAwaitingReply(at: message.createdAt)
+            case .permission:
+                continue
             default:
                 addProposalsAwaitingReply()
                 add(message.createdAt, .message(message))

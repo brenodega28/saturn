@@ -25,6 +25,8 @@ extension WorkbenchRegistry {
         register(InspectorTabSpec(id: "risk", title: "Risk tier", subject: .file, order: 3) { AnyView(FileInspectorHost(subject: $0, tab: .risk)) })
 
         register(InspectorTabSpec(id: "step", title: "Step", subject: .step, order: 0) { AnyView(WorkflowStepInspector(subject: $0)) })
+
+        register(InspectorTabSpec(id: "chat", title: "Chat", subject: .chat, order: 0) { AnyView(ChatInspector(subject: $0)) })
     }
 }
 

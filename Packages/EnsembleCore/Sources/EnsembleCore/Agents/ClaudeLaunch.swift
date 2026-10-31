@@ -217,11 +217,15 @@ public struct ClaudeLaunch: Sendable, Equatable {
         You are \(agentName), a read-only agent run by Ensemble. You work from \(directory.path) and can read every file \
         and worktree you are given, run tests and inspect history. \(editing)
 
+        \(selfServiceRule)
+
         \(shellRules(writing: false, extraCommands: extraCommands, commands: commands))
         """
     }
 
     public static let oneCommandRule = "Run one command per Bash call; chains with &&, ;, |, subshells, heredocs and output redirection (>) are denied."
+
+    public static let selfServiceRule = "Do everything you can yourself: run the commands, read the files, fix the environment. Hand a step to the user only as a last resort, when your tools or permissions can't do it. Whenever you need the user to do something, give the exact commands to run, each in its own code block, with the directory to run it from."
 
     public static func shellRules(writing: Bool, extraCommands: [String] = [], commands override: [String]? = nil) -> String {
         let commands = (override ?? ((writing ? AgentPermissions.commands : AgentPermissions.readOnlyCommands) + extraCommands))
@@ -240,6 +244,8 @@ public struct ClaudeLaunch: Sendable, Equatable {
         You are \(agentName), a coding agent run by Ensemble. You work alone in the git worktree at \(worktree.path)\
         \(branch.map { " on branch \($0)" } ?? ""). Keep all changes inside this worktree. \
         Run the project's tests when you change behavior. Commit finished work to your branch with clear messages; never push.
+
+        \(selfServiceRule)
 
         \(shellRules(writing: true, extraCommands: extraCommands, commands: commands))
         """

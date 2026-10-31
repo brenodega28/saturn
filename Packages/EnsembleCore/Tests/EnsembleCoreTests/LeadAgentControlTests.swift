@@ -362,6 +362,24 @@ import Testing
         #expect(!ClaudeLaunch.readOnlySystemPrompt(agentName: "Reviewer", directory: directory).contains(HandoffTool.openWorktree.qualifiedName))
     }
 
+    @Test func everyBasePromptTellsTheAgentToServeItself() {
+        let directory = URL(fileURLWithPath: "/tmp/repo")
+        #expect(ClaudeLaunch.systemPrompt(agentName: "Builder", worktree: directory, branch: "crew/builder").contains(ClaudeLaunch.selfServiceRule))
+        #expect(ClaudeLaunch.systemPrompt(agentName: "Builder", worktree: directory, branch: nil).contains(ClaudeLaunch.selfServiceRule))
+        #expect(ClaudeLaunch.readOnlySystemPrompt(agentName: "Lead", directory: directory, canOpenWorktree: true).contains(ClaudeLaunch.selfServiceRule))
+        #expect(ClaudeLaunch.readOnlySystemPrompt(agentName: "Reviewer", directory: directory).contains(ClaudeLaunch.selfServiceRule))
+    }
+
+    @Test func buildersCheckersAndLeadsAreToldToServeThemselves() async throws {
+        let (setup, lead) = try await makeLead()
+        defer { setup.harness.cleanUp() }
+        let builder = try #require(try await setup.harness.runtime.spawn(in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git).first)
+        let checker = try #require(try await setup.harness.runtime.spawn(in: setup.project, kind: .checker, count: 1, git: setup.harness.repo.git).first)
+        for agent in [builder.agent, checker.agent, lead.agent] {
+            #expect(try setup.harness.runtime.turnSetup(for: agent).systemPrompt.contains(ClaudeLaunch.selfServiceRule), "\(agent.name)")
+        }
+    }
+
     @Test func newToolsDecodeTheirArguments() throws {
         #expect(try HandoffTool.listAgents.decode(.object([:])) == .listAgents)
         #expect(try HandoffTool.openWorktree.decode(.object([:])) == .openWorktree)

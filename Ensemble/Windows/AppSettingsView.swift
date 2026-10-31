@@ -11,6 +11,14 @@ enum NotificationPreferences {
     static func isEnabled(_ kind: InboxKind) -> Bool {
         UserDefaults.standard.object(forKey: key(kind)) as? Bool ?? true
     }
+
+    static func key(_ event: ChatNotificationEvent) -> String {
+        "notify.chat.\(event.rawValue)"
+    }
+
+    static func isEnabled(_ event: ChatNotificationEvent) -> Bool {
+        UserDefaults.standard.object(forKey: key(event)) as? Bool ?? true
+    }
 }
 
 struct AppSettingsView: View {
@@ -116,6 +124,18 @@ private struct NotificationSettings: View {
                         get: { _ = revision; return NotificationPreferences.isEnabled(kind) },
                         set: {
                             UserDefaults.standard.set($0, forKey: NotificationPreferences.key(kind))
+                            revision += 1
+                        }
+                    ))
+                }
+            }
+            Text("Lead chat").font(.system(size: 13, weight: .semibold))
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(ChatNotificationEvent.allCases, id: \.self) { event in
+                    Toggle(InboxNotifier.eventTitle(event), isOn: Binding(
+                        get: { _ = revision; return NotificationPreferences.isEnabled(event) },
+                        set: {
+                            UserDefaults.standard.set($0, forKey: NotificationPreferences.key(event))
                             revision += 1
                         }
                     ))

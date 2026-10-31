@@ -1,6 +1,6 @@
 ---
 title: macOS notifications for lead-chat actions and finished runs
-status: in-progress
+status: done
 owner: ""
 linked_runs: [64]
 created: 2026-10-31
@@ -27,16 +27,16 @@ Today `InboxNotifier` (Ensemble/AppModel+Inbox.swift) sends macOS notifications 
 
 ## Acceptance criteria
 
-- [ ] A permission card added to a lead chat posts a macOS notification that names the agent and the request.
-- [ ] A run proposal posts a notification with the proposal title.
-- [ ] When the lead ends a turn with a reply in a chat, a notification shows the start of the reply.
-- [ ] When a run finishes (succeeded, failed or cancelled), a notification shows the run title and its outcome.
-- [ ] Each of the four events has its own toggle in Settings › Notifications. Turning a toggle off stops that event's notifications. All toggles default to on.
-- [ ] No notification is posted while Ensemble is frontmost and showing that chat. One is posted if the app is in the background or showing a different chat.
-- [ ] Clicking a lead-chat or run notification brings the app forward and opens that project's lead chat for that request.
-- [ ] Clicking an Inbox notification opens that item the same way the Inbox's Open button does (`openInboxItem`), not the Inbox list.
-- [ ] Events from before launch don't notify, and no event notifies more than once.
-- [ ] No code comments are added (user preference). Existing EnsembleCore tests still pass.
+- [x] A permission card added to a lead chat posts a macOS notification that names the agent and the request.
+- [x] A run proposal posts a notification with the proposal title.
+- [x] When the lead ends a turn with a reply in a chat, a notification shows the start of the reply.
+- [x] When a run finishes (succeeded, failed or cancelled), a notification shows the run title and its outcome.
+- [x] Each of the four events has its own toggle in Settings › Notifications. Turning a toggle off stops that event's notifications. All toggles default to on.
+- [x] No notification is posted while Ensemble is frontmost and showing that chat. One is posted if the app is in the background or showing a different chat.
+- [x] Clicking a lead-chat or run notification brings the app forward and opens that project's lead chat for that request.
+- [x] Clicking an Inbox notification opens that item the same way the Inbox's Open button does (`openInboxItem`), not the Inbox list.
+- [x] Events from before launch don't notify, and no event notifies more than once.
+- [x] No code comments are added (user preference). Existing EnsembleCore tests still pass.
 
 ## Verification
 

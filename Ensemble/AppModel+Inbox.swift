@@ -30,6 +30,13 @@ extension AppModel {
             }
             inboxNotifier.post(wanted, projectName: { [weak self] id in self?.project(withID: id)?.name })
         }
+        agents.observeTurnEnds { [weak self] session in
+            guard let self, session.agent.kind == .lead, session.agent.status == .idle, let taskID = session.agent.taskId,
+                  !session.isRunning, !session.isQueued else { return }
+            chatNotifications.leadTurnEnded(taskId: taskID) { [weak self] run in
+                run.id.flatMap { self?.engine.runs[$0] } ?? run
+            }
+        }
         inbox.start()
         chatNotifications.start()
         inboxNotifier.requestAuthorization()

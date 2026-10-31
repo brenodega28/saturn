@@ -128,8 +128,18 @@ public enum NotificationSuppression {
 }
 
 extension AppDatabase {
-    static let notifiedMessageKinds: [LeadMessageKind] = [.permission, .proposal, .lead]
+    static let notifiedMessageKinds: [LeadMessageKind] = [.permission, .proposal]
     static let finishedRunStatuses: [RunStatus] = [.succeeded, .failed, .cancelled]
+
+    static func fetchLeadTurnSources(_ db: Database, taskId: Int64, since date: Date) throws -> (messages: [LeadMessage], runs: [Run]) {
+        let messages = try LeadMessage
+            .filter(LeadMessage.Columns.taskId == taskId)
+            .filter(LeadMessage.Columns.createdAt >= date)
+            .order(LeadMessage.Columns.createdAt, Column("id"))
+            .fetchAll(db)
+        let runs = try Run.filter(Column("taskId") == taskId).fetchAll(db)
+        return (messages, runs)
+    }
 
     static func fetchChatNotificationSources(_ db: Database, since date: Date) throws -> (messages: [LeadMessage], runs: [Run]) {
         let messages = try LeadMessage
@@ -156,6 +166,7 @@ public final class ChatNotificationFeed {
     @ObservationIgnored private let launchedAt: Date
     @ObservationIgnored private var seenMessages: Set<Int64> = []
     @ObservationIgnored private var seenRuns: Set<Int64> = []
+    @ObservationIgnored private var consideredReplies: Set<Int64> = []
     @ObservationIgnored private var cancellable: AnyDatabaseCancellable?
 
     public init(database: AppDatabase, launchedAt: Date = .now) {
@@ -180,9 +191,41 @@ public final class ChatNotificationFeed {
         cancellable = nil
     }
 
+    public static func isWaitingOnUser(_ status: RunStatus) -> Bool {
+        status == .waitingOnYou || ChatNotification.outcome(of: status) != nil
+    }
+
+    public static func finalReply(in messages: [LeadMessage], runs: [Run]) -> LeadMessage? {
+        guard runs.allSatisfy({ isWaitingOnUser($0.status) }) else { return nil }
+        let conversation = messages.filter { $0.kind == .lead || $0.kind == .user }
+        guard let reply = conversation.last, reply.kind == .lead,
+              let replyIndex = messages.lastIndex(where: { $0.id == reply.id }) else { return nil }
+        let turnStart = messages[..<replyIndex].lastIndex { $0.kind == .lead || $0.kind == .user }.map { $0 + 1 } ?? messages.startIndex
+        let turnRaisedCard = messages[turnStart..<replyIndex].contains { $0.kind == .proposal || $0.kind == .permission }
+        return turnRaisedCard ? nil : reply
+    }
+
+    public func leadTurnEnded(taskId: Int64, liveRun: (Run) -> Run = { $0 }) {
+        let since = launchedAt
+        do {
+            let sources = try database.writer.read { db in try AppDatabase.fetchLeadTurnSources(db, taskId: taskId, since: since) }
+            receiveLeadTurnEnd(messages: sources.messages, runs: sources.runs.map(liveRun))
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    public func receiveLeadTurnEnd(messages: [LeadMessage], runs: [Run]) {
+        let fresh = messages.filter { $0.createdAt >= launchedAt }
+        guard let latestID = fresh.last(where: { $0.kind == .lead })?.id, !consideredReplies.contains(latestID) else { return }
+        consideredReplies.insert(latestID)
+        guard let reply = Self.finalReply(in: fresh, runs: runs), let notification = ChatNotification(message: reply) else { return }
+        onNew?([notification])
+    }
+
     public func receive(messages: [LeadMessage], runs: [Run]) {
         var fresh: [ChatNotification] = []
-        for message in messages where message.createdAt >= launchedAt {
+        for message in messages where message.createdAt >= launchedAt && message.kind != .lead {
             guard let id = message.id, !seenMessages.contains(id), let notification = ChatNotification(message: message) else { continue }
             seenMessages.insert(id)
             fresh.append(notification)

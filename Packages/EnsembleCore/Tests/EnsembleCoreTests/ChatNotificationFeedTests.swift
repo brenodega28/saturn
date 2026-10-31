@@ -40,19 +40,91 @@ import Testing
             ],
             runs: [run(10, .succeeded, endedMinutes: 6), run(11, .failed, endedMinutes: 7), run(12, .cancelled, endedMinutes: 8)]
         )
+        feed.receiveLeadTurnEnd(messages: [message(20, .user, minutes: 9), message(21, .lead, minutes: 10, text: longReply)], runs: [])
 
         let items = notified()
-        #expect(items.map(\.event) == [.permissionCard, .runProposal, .leadReply, .runFinished, .runFinished, .runFinished])
+        #expect(items.map(\.event) == [.permissionCard, .runProposal, .runFinished, .runFinished, .runFinished, .leadReply])
         #expect(items[0].title.contains("Builder 2"))
         #expect(items[0].body == "git push origin main")
         #expect(items[1].title.contains("Notify for chat events"))
-        #expect(items[2].body.count <= ChatNotification.excerptLength + 1)
-        #expect(longReply.hasPrefix(String(items[2].body.dropLast())))
-        #expect(items[2].body.hasSuffix("…"))
-        #expect(items[3].title == "Ship it")
-        #expect(items.dropFirst(3).map(\.body) == ["Run succeeded", "Run failed", "Run cancelled"])
+        #expect(items[2].title == "Ship it")
+        #expect(items[2...4].map(\.body) == ["Run succeeded", "Run failed", "Run cancelled"])
+        #expect(items[5].body.count <= ChatNotification.excerptLength + 1)
+        #expect(longReply.hasPrefix(String(items[5].body.dropLast())))
+        #expect(items[5].body.hasSuffix("…"))
         #expect(items.allSatisfy { $0.projectId == 1 && $0.taskId == 7 })
         #expect(Set(items.map(\.dedupeKey)).count == items.count)
+    }
+
+    @Test func leadRowsAloneNeverNotify() throws {
+        let feed = ChatNotificationFeed(database: try AppDatabase.inMemory(), launchedAt: launch)
+        let notified = collect(feed)
+
+        feed.receive(messages: [message(1, .user, minutes: 1), message(2, .lead, minutes: 2)], runs: [])
+
+        #expect(notified().isEmpty)
+    }
+
+    @Test func leadReplyWaitsUntilNoRunIsInProgress() throws {
+        let feed = ChatNotificationFeed(database: try AppDatabase.inMemory(), launchedAt: launch)
+        let notified = collect(feed)
+        let chat = [message(1, .user, minutes: 1), message(2, .lead, minutes: 2, text: "Planning step done")]
+
+        feed.receiveLeadTurnEnd(messages: chat, runs: [run(1, .running, endedMinutes: nil)])
+        #expect(notified().isEmpty)
+
+        for (index, status) in [RunStatus.pending, .running, .paused, .interrupted].enumerated() {
+            let id = Int64(3 + index)
+            let reply = message(id, .lead, minutes: Double(id), text: "Step \(id)")
+            feed.receiveLeadTurnEnd(messages: chat + [reply], runs: [run(1, .succeeded, endedMinutes: 2), run(2, status, endedMinutes: nil)])
+        }
+        #expect(notified().isEmpty)
+
+        for (index, status) in [RunStatus.waitingOnYou, .succeeded, .failed, .cancelled].enumerated() {
+            let id = Int64(10 + index)
+            let reply = message(id, .lead, minutes: Double(id), text: "Over to you \(id)")
+            feed.receiveLeadTurnEnd(messages: chat + [message(id * 10, .user, minutes: Double(id) - 0.5), reply], runs: [run(1, status, endedMinutes: nil)])
+        }
+        #expect(notified().map(\.body) == ["Over to you 10", "Over to you 11", "Over to you 12", "Over to you 13"])
+    }
+
+    @Test func leadReplySkipsTurnsThatRaisedAProposalOrPermissionCard() throws {
+        let feed = ChatNotificationFeed(database: try AppDatabase.inMemory(), launchedAt: launch)
+        let notified = collect(feed)
+        var chat = [message(1, .user, minutes: 1), message(2, .proposal, minutes: 2, title: "Plan"), message(3, .lead, minutes: 3)]
+
+        feed.receiveLeadTurnEnd(messages: chat, runs: [])
+        chat += [message(4, .permission, minutes: 4, title: "Ada"), message(5, .lead, minutes: 5, text: "Ada asked to push")]
+        feed.receiveLeadTurnEnd(messages: chat, runs: [run(1, .waitingOnYou, endedMinutes: nil)])
+        #expect(notified().isEmpty)
+
+        chat += [message(6, .user, minutes: 6), message(7, .note, minutes: 6.5), message(8, .lead, minutes: 7, text: "Done")]
+        feed.receiveLeadTurnEnd(messages: chat, runs: [])
+        #expect(notified().map(\.body) == ["Done"])
+    }
+
+    @Test func leadReplyNotifiesOnceAndIgnoresTurnsWithoutANewReply() throws {
+        let feed = ChatNotificationFeed(database: try AppDatabase.inMemory(), launchedAt: launch)
+        let notified = collect(feed)
+        let chat = [message(1, .user, minutes: 1), message(2, .lead, minutes: 2, text: "Hi")]
+
+        feed.receiveLeadTurnEnd(messages: chat, runs: [])
+        feed.receiveLeadTurnEnd(messages: chat, runs: [])
+        feed.receiveLeadTurnEnd(messages: chat + [message(3, .user, minutes: 3)], runs: [])
+        feed.receiveLeadTurnEnd(messages: [message(9, .user, minutes: -2), message(10, .lead, minutes: -1)], runs: [])
+
+        #expect(notified().map(\.dedupeKey) == ["lead-message-2"])
+    }
+
+    @Test func aReplySkippedDuringARunDoesNotNotifyLater() throws {
+        let feed = ChatNotificationFeed(database: try AppDatabase.inMemory(), launchedAt: launch)
+        let notified = collect(feed)
+        let chat = [message(1, .user, minutes: 1), message(2, .lead, minutes: 2)]
+
+        feed.receiveLeadTurnEnd(messages: chat, runs: [run(1, .running, endedMinutes: nil)])
+        feed.receiveLeadTurnEnd(messages: chat, runs: [run(1, .succeeded, endedMinutes: 3)])
+
+        #expect(notified().isEmpty)
     }
 
     @Test func ignoresRunsThatAreNotFinished() throws {
@@ -75,7 +147,7 @@ import Testing
         let notified = collect(feed)
 
         feed.receive(
-            messages: [message(1, .lead, minutes: -1), message(2, .permission, minutes: 1, title: "Ada")],
+            messages: [message(1, .proposal, minutes: -1), message(2, .permission, minutes: 1, title: "Ada")],
             runs: [run(1, .succeeded, endedMinutes: -1), run(2, .failed, endedMinutes: 2)]
         )
 
@@ -90,7 +162,7 @@ import Testing
 
         feed.receive(messages: [first], runs: [finished])
         feed.receive(messages: [first], runs: [finished])
-        feed.receive(messages: [first, message(2, .lead, minutes: 3)], runs: [finished])
+        feed.receive(messages: [first, message(2, .permission, minutes: 3)], runs: [finished])
         feed.receive(messages: [], runs: [run(1, .succeeded, endedMinutes: 2)])
 
         #expect(notified().map(\.dedupeKey) == ["lead-message-1", "run-1", "lead-message-2"])
@@ -100,9 +172,9 @@ import Testing
         let feed = ChatNotificationFeed(database: try AppDatabase.inMemory(), launchedAt: launch)
         let notified = collect(feed)
 
-        feed.receive(messages: [message(5, .lead, minutes: 1)], runs: [run(5, .failed, endedMinutes: 1)])
+        feed.receive(messages: [message(5, .proposal, minutes: 1)], runs: [run(5, .failed, endedMinutes: 1)])
 
-        #expect(notified().map(\.event) == [.leadReply, .runFinished])
+        #expect(notified().map(\.event) == [.runProposal, .runFinished])
     }
 
     @Test func liveFeedReportsNewRowsOnce() async throws {
@@ -120,23 +192,35 @@ import Testing
 
         try database.insert(LeadMessage(projectId: projectId, taskId: taskId, kind: .user, text: "Hi", createdAt: at(1)))
         try database.insert(LeadMessage(projectId: projectId, taskId: taskId, kind: .lead, text: "Hello back", createdAt: at(2)))
-        try await waitUntil { notified().count == 1 }
-        #expect(notified().first?.event == .leadReply)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(notified().isEmpty)
+        feed.leadTurnEnded(taskId: taskId)
+        #expect(notified().map(\.event) == [.leadReply])
         #expect(notified().first?.body == "Hello back")
 
         let running = Run(projectId: projectId, taskId: taskId, workflow: "feature-delivery", status: .running, startedAt: at(1), title: "Deliver")
         var row = try await database.writer.write { db in try running.inserted(db) }
+        try database.insert(LeadMessage(projectId: projectId, taskId: taskId, kind: .lead, text: "Step done", createdAt: at(2.5)))
+        feed.leadTurnEnded(taskId: taskId)
+        #expect(notified().count == 1)
+        try database.insert(LeadMessage(projectId: projectId, taskId: taskId, kind: .lead, text: "Live state says waiting", createdAt: at(2.6)))
+        feed.leadTurnEnded(taskId: taskId) { run in
+            var live = run
+            live.status = .waitingOnYou
+            return live
+        }
+        #expect(notified().map(\.body) == ["Hello back", "Live state says waiting"])
         row.status = .succeeded
         row.endedAt = at(3)
         let finished = row
         try await database.writer.write { db in try finished.update(db) }
-        try await waitUntil { notified().count == 2 }
+        try await waitUntil { notified().count == 3 }
         #expect(notified().last?.event == .runFinished)
         #expect(notified().last?.title == "Deliver")
 
         try database.insert(LeadMessage(projectId: projectId, taskId: taskId, kind: .note, text: "Note", createdAt: at(4)))
         try await Task.sleep(for: .milliseconds(100))
-        #expect(notified().count == 2)
+        #expect(notified().count == 3)
         feed.stop()
     }
 

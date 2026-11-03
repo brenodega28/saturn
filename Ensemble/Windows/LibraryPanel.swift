@@ -86,7 +86,6 @@ extension StepType {
 
 struct LibraryPanel: View {
     @Environment(AppModel.self) private var model
-    @Environment(WorkbenchState.self) private var state
     @AppStorage("library.snippets") private var storedSnippets: Data?
     @State private var tab: LibraryTab = .stepTypes
     @State private var query = ""
@@ -231,7 +230,7 @@ struct LibraryPanel: View {
             } else if let roleID = entry.roleID, let role = config.role(roleID) {
                 editor.addStep(.agent, role: role, at: nil)
             }
-            state.open(.section(.workflows, in: id))
+            model.open(.workflows)
             note = "Added \(entry.title) to \(editor.draft.name)."
         } else {
             model.copyToPasteboard(entry.payload)

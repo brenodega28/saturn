@@ -235,3 +235,21 @@ private struct FailedReplyRow: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+struct ChatRecipientChip: View {
+    let name: String
+    let appearance: RoleAppearance
+
+    var body: some View {
+        HStack(spacing: 6) {
+            AgentAvatar(size: 22, appearance: appearance)
+            Text("To \(name)").font(.system(size: 12)).lineLimit(1)
+        }
+        .padding(.leading, 4)
+        .padding(.trailing, 10)
+        .frame(height: 30)
+        .background(Color.white.opacity(0.08), in: Capsule())
+        .fixedSize()
+        .accessibilityElement(children: .combine)
+    }
+}

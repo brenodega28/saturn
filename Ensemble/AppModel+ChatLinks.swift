@@ -17,6 +17,7 @@ extension AppModel {
         guard let projectID = project.id else { return }
         let messageIDs = Set(((try? database.leadMessages(taskId: link.requestID)) ?? []).compactMap(\.id))
         chatHighlight = ChatLink(requestID: link.requestID, messageID: link.messageID.flatMap { messageIDs.contains($0) ? $0 : nil })
+        mainWindow.spec = nil
         runDetailIDs[projectID] = nil
         showRequest(id: link.requestID, inProjectID: projectID)
         selection = .project(projectID)
@@ -57,9 +58,9 @@ extension AppModel {
     }
 }
 
-extension WorkbenchRegistry {
+extension CommandRegistry {
     func registerChatLinkCommands() {
-        register(WorkbenchCommand(id: "file.copy-chat-link", title: "Copy Link to Chat", menu: "File", section: 2, order: 0, keywords: "url share reference request ensemble",
+        register(MenuCommand(id: "file.copy-chat-link", title: "Copy Link to Chat", menu: "File", section: 2, order: 0, keywords: "url share reference request ensemble",
                                   isEnabled: { $0.model.chatRequestForLink != nil }) { $0.model.copyLinkToSelectedChat() })
     }
 }

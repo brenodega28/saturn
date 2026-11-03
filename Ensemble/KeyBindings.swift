@@ -92,18 +92,18 @@ final class KeyBindings {
         }
     }
 
-    func shortcut(for command: WorkbenchCommand) -> KeyboardShortcut? {
+    func shortcut(for command: MenuCommand) -> KeyboardShortcut? {
         if let override = overrides[command.id] {
             return override?.shortcut
         }
         return command.shortcut
     }
 
-    func isCustomized(_ command: WorkbenchCommand) -> Bool {
+    func isCustomized(_ command: MenuCommand) -> Bool {
         overrides[command.id] != nil
     }
 
-    func set(_ shortcut: StoredShortcut?, for command: WorkbenchCommand) {
+    func set(_ shortcut: StoredShortcut?, for command: MenuCommand) {
         if shortcut == command.shortcut.map(StoredShortcut.init) {
             overrides[command.id] = nil
         } else {
@@ -112,7 +112,7 @@ final class KeyBindings {
         save()
     }
 
-    func reset(_ command: WorkbenchCommand) {
+    func reset(_ command: MenuCommand) {
         overrides[command.id] = nil
         save()
     }
@@ -122,8 +122,8 @@ final class KeyBindings {
         save()
     }
 
-    func conflicts(in commands: [WorkbenchCommand]) -> [StoredShortcut: [WorkbenchCommand]] {
-        var byShortcut: [StoredShortcut: [WorkbenchCommand]] = [:]
+    func conflicts(in commands: [MenuCommand]) -> [StoredShortcut: [MenuCommand]] {
+        var byShortcut: [StoredShortcut: [MenuCommand]] = [:]
         for command in commands {
             guard let shortcut = shortcut(for: command) else { continue }
             byShortcut[StoredShortcut(shortcut), default: []].append(command)
@@ -145,8 +145,8 @@ struct KeyBindingsEditor: View {
 
     var body: some View {
         let bindings = KeyBindings.shared
-        let registry = WorkbenchRegistry.shared
-        let menus = WorkbenchRegistry.menuBar + ["View.Navigator", "Context"]
+        let registry = CommandRegistry.shared
+        let menus = CommandRegistry.menuBar + ["Context"]
         let all = registry.commands.filter { menus.contains($0.menu) }
         let conflicts = bindings.conflicts(in: all)
         VStack(alignment: .leading, spacing: 10) {
@@ -160,7 +160,7 @@ struct KeyBindingsEditor: View {
                     let commands = all.filter { $0.menu == menu && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)) }
                         .sorted { ($0.section, $0.order, $0.title) < ($1.section, $1.order, $1.title) }
                     if !commands.isEmpty {
-                        Section(menu == "View.Navigator" ? "Navigator" : menu == "Context" ? "Context menus" : menu) {
+                        Section(menu == "Context" ? "Context menus" : menu) {
                             ForEach(commands) { command in
                                 row(command, bindings: bindings, conflicts: conflicts)
                             }
@@ -176,7 +176,7 @@ struct KeyBindingsEditor: View {
         .onDisappear(perform: stopRecording)
     }
 
-    private func row(_ command: WorkbenchCommand, bindings: KeyBindings, conflicts: [StoredShortcut: [WorkbenchCommand]]) -> some View {
+    private func row(_ command: MenuCommand, bindings: KeyBindings, conflicts: [StoredShortcut: [MenuCommand]]) -> some View {
         let shortcut = bindings.shortcut(for: command)
         let clashes = shortcut.flatMap { conflicts[StoredShortcut($0)] }?.filter { $0.id != command.id } ?? []
         return HStack {
@@ -202,7 +202,7 @@ struct KeyBindingsEditor: View {
         }
     }
 
-    private func startRecording(_ command: WorkbenchCommand) {
+    private func startRecording(_ command: MenuCommand) {
         stopRecording()
         recording = command.id
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in

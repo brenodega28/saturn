@@ -303,12 +303,12 @@ struct CommandPalette: View {
 
     private var goToCommands: [PaletteCommand] {
         var commands = [
-            PaletteCommand(id: "go-inbox", title: "Inbox", meta: model.inboxCount > 0 ? "\(model.inboxCount) waiting" : "", glyph: .symbol("tray")) { model.selection = .inbox },
+            PaletteCommand(id: "go-inbox", title: "Inbox", meta: model.inboxCount > 0 ? "\(model.inboxCount) waiting" : "", glyph: .symbol("tray")) { model.open(.inbox) },
         ]
         if let project = model.currentProject {
-            commands += ProjectTab.sidebarOrder.enumerated().map { index, tab in
+            commands += ProjectTab.sidebarOrder.map { tab in
                 PaletteCommand(id: "go-\(tab.rawValue)", title: tab.title, meta: project.name, glyph: .symbol(tab.paletteSymbol)) {
-                    model.goToSection(index + 1)
+                    if let tool = MainTool(tab: tab) { model.open(tool) } else { model.expand(project) }
                 }
             }
             commands += SettingsSection.allCases.map { section in
@@ -318,12 +318,15 @@ struct CommandPalette: View {
             }
         }
         commands += [
-            PaletteCommand(id: "go-usage", title: "Usage", meta: String(format: "$%.2f this week · $%.2f this month", model.weeklySpend, model.monthlySpend), glyph: .symbol("chart.bar")) { model.selection = .usage },
-            PaletteCommand(id: "go-quality", title: "Quality", glyph: .symbol("gauge.with.dots.needle.33percent")) { model.selection = .quality },
+            PaletteCommand(id: "go-usage", title: "Usage", meta: String(format: "$%.2f this week · $%.2f this month", model.weeklySpend, model.monthlySpend), glyph: .symbol("chart.bar")) { model.open(.usage) },
+            PaletteCommand(id: "go-quality", title: "Quality", glyph: .symbol("gauge.with.dots.needle.33percent")) {
+                model.mainWindow.spec = nil
+                model.selection = .quality
+            },
         ]
         commands += model.openProjects.compactMap { project in
             guard let id = project.id, id != model.currentProject?.id else { return nil }
-            return PaletteCommand(id: "project-\(id)", title: project.name, meta: "Switch project", glyph: .symbol("folder")) { model.selection = .project(id) }
+            return PaletteCommand(id: "project-\(id)", title: project.name, meta: "Switch project", glyph: .symbol("folder")) { model.expand(project) }
         }
         return commands
     }
@@ -344,9 +347,9 @@ struct CommandPalette: View {
     }
 
     private var menuGroups: [PaletteGroup] {
-        let context = CommandContext(model: model, workbench: model.activeWorkbench, openWindow: openWindow)
-        return WorkbenchRegistry.menuBar.compactMap { menu in
-            let commands = WorkbenchRegistry.shared.commands(in: menu).flatMap(\.self).filter { $0.isEnabled(context) }
+        let context = CommandContext(model: model, openWindow: openWindow)
+        return CommandRegistry.menuBar.compactMap { menu in
+            let commands = CommandRegistry.shared.commands(in: menu).flatMap(\.self).filter { $0.isEnabled(context) }
             guard !commands.isEmpty else { return nil }
             return PaletteGroup(name: "\(menu) menu", commands: commands.map { command in
                 PaletteCommand(

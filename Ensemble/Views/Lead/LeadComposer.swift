@@ -20,24 +20,23 @@ struct LeadComposer: View {
     }
 
     private func composer(lead: RoleDefinition?, leadName: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             ChatComposerInput(
                 text: $text,
                 attachments: $attachments,
                 isDropTargeted: $isDropTargeted,
                 placeholder: placeholder(leadName: leadName),
-                accessibilityLabel: request == nil ? "New request for the lead" : "Message to \(leadName)",
+                accessibilityLabel: request == nil ? "New request for the lead" : "Message \(leadName)",
                 onSubmit: { send(lead: lead) }
             )
             HStack(spacing: 8) {
-                ChatRecipientChip(name: lead?.name ?? leadName, appearance: RoleAppearance(role: lead))
                 Spacer()
                 Button(action: { send(lead: lead) }) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 14, weight: .bold))
+                    V4Icon(glyph: .send, size: 15, lineWidth: 2.4)
                         .frame(width: 34, height: 34)
-                        .background(Theme.accent, in: Circle())
+                        .background(V4.blue, in: Circle())
                         .foregroundStyle(.white)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSend(lead: lead))
@@ -46,15 +45,21 @@ struct LeadComposer: View {
                 .accessibilityLabel("Send")
             }
         }
-        .padding(EdgeInsets(top: 14, leading: 18, bottom: 10, trailing: 12))
-        .background(Color(white: 0.19).opacity(0.7), in: .rect(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+        .padding(EdgeInsets(top: 12, leading: 16, bottom: 10, trailing: 12))
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(red: 48 / 255, green: 48 / 255, blue: 54 / 255).opacity(0.86))
+        }
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+        .shadow(color: .black.opacity(0.4), radius: 15, y: 10)
         .chatAttachmentDrop($attachments, isTargeted: $isDropTargeted)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Message \(leadName)")
     }
 
     private func placeholder(leadName: String) -> String {
-        guard let request else { return "Ask or describe what you need. The lead replies and proposes a run when it’s time." }
-        return request.isClosed ? "Send a message to reopen…" : "Message \(leadName)"
+        if request?.isClosed == true { return "Send a message to reopen…" }
+        return "Describe a change, or reply to \(leadName)…"
     }
 
     private func canSend(lead: RoleDefinition?) -> Bool {

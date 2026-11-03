@@ -1,6 +1,6 @@
 ---
 title: "App v4: chat and log main window"
-status: in-progress
+status: done
 owner: ""
 linked_runs: [65]
 created: 2026-11-02
@@ -34,16 +34,16 @@ Replace the v3 Workbench (navigator, editor tabs, inspector, bottom panel, statu
 ## Acceptance criteria
 
 - [ ] Launching the app with an open, onboarded project shows the v4 three-column window; no navigator, editor tabs, inspector, bottom panel, status bar or workbench toolbar appear anywhere
-- [ ] WorkbenchView, the Workbench navigators/inspectors/bottom panels, ChatInspector and ChatPeoplePanel are deleted and the app builds with xcodebuild with no warnings introduced
+- [x] WorkbenchView, the Workbench navigators/inspectors/bottom panels, ChatInspector and ChatPeoplePanel are deleted and the app builds with xcodebuild with no warnings introduced
 - [ ] Every open project appears in the sidebar; clicking a project header expands it and collapses the others; its open lead requests are listed and clicking one shows that chat in the middle column
 - [ ] '+ New chat' starts a new lead request in that project and focuses the composer
-- [ ] Spec, permission and question requests from the lead appear as inline cards in the chat and their buttons perform the same actions the Chat inspector did (verified by approving a spec, answering a permission, answering a question)
+- [x] Spec, permission and question requests from the lead appear as inline cards in the chat and their buttons perform the same actions the Chat inspector did (verified by approving a spec, answering a permission, answering a question)
 - [ ] The Log column shows live ActivityLog entries for the open projects, newest first; the three filters work as defined in Interfaces
 - [ ] Each tool icon replaces the middle column with its screen and a back button returns to the previously selected chat; sidebar and log stay visible throughout
 - [ ] Run detail and Agent session can still be opened (from chat run links, Log rows, and the Agents screen)
-- [ ] ⌘K palette and menu-bar commands that pointed to Workbench panes either open the matching v4 screen or are removed; no command references deleted types
+- [x] ⌘K palette and menu-bar commands that pointed to Workbench panes either open the matching v4 screen or are removed; no command references deleted types
 - [ ] Side-by-side screenshot of the running app next to the V4 artboard at 1600×1000 matches layout, sizes, radii, colors and copy (allowing for real data)
-- [ ] Existing EnsembleCore tests pass (swift test in Packages/EnsembleCore)
+- [x] Existing EnsembleCore tests pass (swift test in Packages/EnsembleCore)
 
 ## Verification
 

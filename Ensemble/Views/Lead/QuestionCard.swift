@@ -12,7 +12,7 @@ struct QuestionCard: View {
         let agent = item.agentId.flatMap { model.agent(id: $0) }
         let name = agent.map { model.displayName(of: $0, in: project) }
         VStack(alignment: .leading, spacing: 8) {
-            Text(name.map { "\(Text("Question").fontWeight(.semibold).foregroundStyle(V4.orangeText)) · \($0) asks: \(item.title)" } ?? "\(Text("Question").fontWeight(.semibold).foregroundStyle(V4.orangeText)) · \(item.title)")
+            Text("\(Text("Question").fontWeight(.semibold).foregroundStyle(V4.orangeText)) · \(item.title)")
                 .font(.system(size: 12))
                 .foregroundStyle(V4.label.opacity(0.75))
                 .fixedSize(horizontal: false, vertical: true)

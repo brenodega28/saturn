@@ -3,16 +3,6 @@ import EnsembleUI
 import Foundation
 import SwiftUI
 
-extension EditorKindID {
-    static let spec = "spec"
-}
-
-extension EditorItem {
-    static func spec(_ url: URL, in project: Int64) -> EditorItem {
-        EditorItem(kind: EditorKindID.spec, project: project, ref: url.path)
-    }
-}
-
 extension SpecStatus {
     var color: Color {
         switch self {
@@ -44,16 +34,14 @@ extension AppModel {
     }
 
     func openSpec(_ file: SpecFile, in project: Project) {
-        guard let id = project.id else { return }
         if !file.isDraft, let path = file.relativePath {
-            activeWorkbench?.open(.file(path, in: id))
+            openFile(path, in: project)
         } else {
-            activeWorkbench?.open(.spec(file.url, in: id))
+            openSpecScreen(file.url.path, in: project)
         }
     }
 
-    func specTitle(_ item: EditorItem) -> String {
-        guard let path = item.ref else { return "Spec" }
+    func specTitle(atPath path: String) -> String {
         let document = (try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)).flatMap { try? SpecDocument(markdown: $0) }
         return document?.title ?? "Spec"
     }
@@ -61,7 +49,7 @@ extension AppModel {
 
 struct SpecEditor: View {
     @Environment(AppModel.self) private var model
-    let item: EditorItem
+    let path: String
     @State private var text = ""
     @State private var saved = ""
     @State private var loadedPath: String?
@@ -81,9 +69,9 @@ struct SpecEditor: View {
                 .accessibilityLabel("Spec draft text")
         }
         .padding(EdgeInsets(top: 14, leading: 22, bottom: 20, trailing: 20))
-        .task(id: item.ref) { load() }
+        .task(id: path) { load() }
         .task(id: text) {
-            guard text != saved, loadedPath == item.ref else { return }
+            guard text != saved, loadedPath == path else { return }
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             save()
@@ -128,7 +116,6 @@ struct SpecEditor: View {
     }
 
     private func load() {
-        guard let path = item.ref else { return }
         let contents = (try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)) ?? ""
         text = contents
         saved = contents
@@ -137,7 +124,7 @@ struct SpecEditor: View {
     }
 
     private func save() {
-        guard let path = item.ref, loadedPath == path else { return }
+        guard loadedPath == path else { return }
         do {
             try text.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
             saved = text

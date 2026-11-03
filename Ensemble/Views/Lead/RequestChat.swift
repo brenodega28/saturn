@@ -9,25 +9,21 @@ struct RequestChat: View {
     @State private var data: RequestThreadData?
     @State private var highlightedItemID: String?
     @State private var spec: SpecFile?
-    @State private var pendingPermissionIDs: Set<Int64>?
 
     var body: some View {
         let session = model.leadSession(for: task)
         let isThinking = session.map { $0.isRunning || $0.isQueued } ?? false
         let background = model.backgroundSessions(for: task)
-        VStack(spacing: 10) {
-            RequestHeader(task: task, project: project)
-                .frame(maxWidth: 820)
-                .frame(maxWidth: .infinity)
-            thread(isThinking: isThinking, session: session, background: background)
-        }
+        thread(isThinking: isThinking, session: session, background: background)
     }
 
     private func thread(isThinking: Bool, session: AgentSession?, background: [AgentSession]) -> some View {
         let held = model.heldSends(for: model.leadSendTarget(for: task, in: project))
         return ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    ChatHeaderPill(task: task, project: project)
+                        .frame(maxWidth: .infinity)
                     if let data {
                         ForEach(data.thread.items) { item in
                             row(item, data: data)
@@ -54,9 +50,9 @@ struct RequestChat: View {
                     }
                 }
                 .animation(.snappy(duration: 0.25), value: data?.thread.items.map(\.id))
-                .frame(maxWidth: 820)
+                .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
-                .padding(.bottom, 8)
+                .padding(EdgeInsets(top: 22, leading: 28, bottom: 150, trailing: 28))
             }
             .defaultScrollAnchor(.bottom)
             .followsBottom(of: [isThinking ? session.flatMap(Self.latestEntry) : nil] + background.map(Self.latestEntry))
@@ -119,18 +115,8 @@ struct RequestChat: View {
     private func reload() {
         let latestSpec = model.specDraft(for: task)
         if latestSpec != spec { spec = latestSpec }
-        revealInspectorForNewPermissions()
         guard let latest = model.requestThread(for: task, in: project) else { return }
         if latest.thread != data?.thread { data = latest }
-    }
-
-    private func revealInspectorForNewPermissions() {
-        guard let taskID = task.id else { return }
-        let pending = Set(model.permissionCards(forRequest: taskID).filter { $0.permissionStatus == .pending }.compactMap(\.id))
-        if let known = pendingPermissionIDs, !pending.isSubset(of: known) {
-            model.revealChatInspector(in: project)
-        }
-        pendingPermissionIDs = pending
     }
 
     @ViewBuilder
@@ -157,7 +143,12 @@ struct RequestChat: View {
             }
         case .runStarted(let run):
             LeadBubble(role: data.leadRole, name: data.leadName, date: run.startedAt) {
-                Text("Started the run.").font(.system(size: 14))
+                HStack(spacing: 8) {
+                    if model.runWorkflow(run).map({ !$0.hasLead }) == true {
+                        NoPlanPill()
+                    }
+                    Text("Started the run.").font(.system(size: 14))
+                }
                 RunCard(run: live(run), workflow: model.runWorkflow(run), timeline: run.id.flatMap { data.timelines[$0] }, agentCount: agentCount(run))
             }
         case .step(let run, let entry):
@@ -191,13 +182,24 @@ struct RequestChat: View {
                 ChatText(message.text)
             }
         case .proposal:
-            ProposalCard(proposal: message, project: project, hasActiveRun: data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil, isRequestClosed: task.isClosed, spec: spec)
+            let hasActiveRun = data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil
+            if let spec, let document = ProposalCard.attachedSpec(spec, to: message) {
+                let workflow = message.workflow.flatMap { model.config(for: project).workflow($0) }
+                SpecCard(
+                    spec: spec, document: document, proposal: message, project: project,
+                    canStart: !hasActiveRun && !task.isClosed && workflow != nil,
+                    startHelp: ProposalCard.startHelp(hasActiveRun: hasActiveRun, isRequestClosed: task.isClosed)
+                )
                 .padding(.leading, 42)
+            } else {
+                ProposalCard(proposal: message, project: project, hasActiveRun: hasActiveRun, isRequestClosed: task.isClosed)
+                    .padding(.leading, 42)
+            }
         case .note:
             DirectMessageNote(text: message.text)
                 .padding(.leading, 42)
         case .permission:
-            EmptyView()
+            PermissionCard(card: message, project: project)
         }
     }
 
@@ -229,65 +231,33 @@ struct RequestChat: View {
     }
 }
 
-private struct RequestHeader: View {
+private struct ChatHeaderPill: View {
     @Environment(AppModel.self) private var model
     let task: ProjectTask
     let project: Project
 
     var body: some View {
-        HStack(spacing: 10) {
-            Text(task.title.isEmpty ? "Request #\(task.id ?? 0)" : task.title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.secondaryText)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Button { model.copyLink(to: task) } label: {
-                Label("Copy Link", systemImage: "link")
-            }
-            .buttonStyle(PillButtonStyle(height: 26))
-            .font(.system(size: 12))
-            .fixedSize()
-            .help("Copy an ensemble:// link to this chat to paste in another chat or app")
-            if let reason = task.closeReason {
-                closedBanner(reason)
-            } else {
-                closeMenu
-            }
-        }
+        Text(text)
+            .font(.system(size: 11.5))
+            .foregroundStyle(V4.label.opacity(0.72))
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(task.closeReason.map { $0.color.opacity(0.12) } ?? Color.white.opacity(0.06), in: Capsule())
+            .contextMenu { RequestCloseMenu(request: task, project: project) }
+            .help("Right-click to copy a link to this chat or close it")
+            .accessibilityAddTraits(.isHeader)
     }
 
-    private func closedBanner(_ reason: RequestCloseReason) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: reason == .done ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .foregroundStyle(reason.color)
-                .accessibilityHidden(true)
-            Text("Closed as \(reason.title) · Send a message to reopen")
-                .foregroundStyle(Theme.secondaryText)
+    private var text: String {
+        let title = task.title.isEmpty ? "Request #\(task.id ?? 0)" : task.title
+        var parts = [title, "started \(task.createdAt.formatted(date: .omitted, time: .shortened))"]
+        if let reason = task.closeReason {
+            parts.append("closed as \(reason.title) · send a message to reopen")
+        } else if let run = model.latestRun(of: task), run.isActive {
+            parts.append("run in \(model.currentStepTitle(of: run) ?? model.statusLabel(of: run))")
         }
-        .font(.system(size: 12))
-        .padding(.horizontal, 10)
-        .frame(height: 26)
-        .background(reason.color.opacity(0.1), in: Capsule())
-        .accessibilityElement(children: .combine)
-    }
-
-    private var closeMenu: some View {
-        let hasActiveRun = model.requestHasActiveRun(task)
-        return Menu {
-            ForEach(RequestCloseReason.allCases, id: \.self) { reason in
-                Button(reason.title) {
-                    Task { await model.closeRequest(task, as: reason, in: project) }
-                }
-            }
-        } label: {
-            Label("Close", systemImage: "checkmark.circle")
-        }
-        .menuStyle(.button)
-        .buttonStyle(PillButtonStyle(height: 26))
-        .font(.system(size: 12))
-        .fixedSize()
-        .disabled(hasActiveRun)
-        .help(hasActiveRun ? RequestCloseReason.blockedHelp : "Close this request as done or dropped and clean up its worktrees")
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -312,7 +282,7 @@ struct ThinkingRow: View {
         let activity = session.map { TranscriptLayout.activity($0.transcript.entries, live: $0.transcript.liveEntry) } ?? .working
         let root = session.flatMap { $0.transcript.session?.cwd ?? $0.agent.worktreePath }
         HStack(alignment: activity.isReply ? .top : .center, spacing: 12) {
-            RoleBadge(role: role, size: 30)
+            LeadAvatar(appearance: RoleAppearance(role: role))
             SessionActivityView(activity: activity, name: name, root: root)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .animation(.snappy(duration: 0.2), value: activity.phase)
@@ -465,39 +435,38 @@ private extension SessionActivity {
     }
 }
 
-private struct ProposalCard: View {
+struct ProposalCard: View {
     @Environment(AppModel.self) private var model
     let proposal: LeadMessage
     let project: Project
     let hasActiveRun: Bool
     let isRequestClosed: Bool
-    var spec: SpecFile?
     @State private var showsBrief = false
+
+    static func attachedSpec(_ spec: SpecFile, to proposal: LeadMessage) -> SpecDocument? {
+        guard let document = spec.document else { return nil }
+        if proposal.status == .open { return document.status == .done ? nil : document }
+        return proposal.runId.map(document.linkedRuns.contains) == true ? document : nil
+    }
+
+    static func startHelp(hasActiveRun: Bool, isRequestClosed: Bool) -> String {
+        if isRequestClosed { return "This request is closed. Send a message to reopen it first." }
+        return hasActiveRun ? "Wait for the current run to end" : "Start the run; the lead plans it first"
+    }
 
     var body: some View {
         let workflow = proposal.workflow.flatMap { model.config(for: project).workflow($0) }
-        let attached = attachedSpec
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "point.3.connected.trianglepath.dotted")
-                    .foregroundStyle(Color(hex: 0x9CC6FF))
-                    .accessibilityHidden(true)
-                Text("Proposed run").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
-                Text(workflow?.displayName ?? proposal.workflow ?? "").font(.system(size: 12)).foregroundStyle(Color(hex: 0x9CC6FF))
+                Text("Proposed run").font(.system(size: 12, weight: .semibold)).foregroundStyle(V4.secondary)
+                Text(workflow?.displayName ?? proposal.workflow ?? "").font(.system(size: 12)).foregroundStyle(V4.link)
+                if workflow.map({ !$0.hasLead }) == true {
+                    NoPlanPill()
+                }
                 Spacer(minLength: 0)
                 statusLabel
             }
-            Text(proposal.title ?? "Run").font(.system(size: 14.5, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
-            if let spec, let document = attached {
-                Button { model.openSpec(spec, in: project) } label: {
-                    Label("Spec attached: \(document.title) · \(document.acceptanceCriteria.count) criteria", systemImage: "doc.text")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.link)
-                        .lineLimit(1)
-                }
-                .buttonStyle(.plain)
-                .help(proposal.status == .open ? "Starting the run commits this spec on the run branch" : "Open the spec")
-            }
+            Text(proposal.title ?? "Run").font(.system(size: 14, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
             if showsBrief {
                 ChatText(proposal.text)
                     .foregroundStyle(Theme.secondaryText)
@@ -507,41 +476,31 @@ private struct ProposalCard: View {
             }
             .buttonStyle(.plain)
             .font(.system(size: 12.5, weight: .medium))
-            .foregroundStyle(Color(hex: 0x9CC6FF))
+            .foregroundStyle(V4.link)
             .help(showsBrief ? "Hide the full brief" : "Show the full brief the run will start from")
             if proposal.status == .open {
                 HStack(spacing: 8) {
-                    Button { model.startProposal(proposal, in: project) } label: { Label("Start Run", systemImage: "play.fill") }
-                        .buttonStyle(PillButtonStyle(.primary, height: 30))
-                        .disabled(hasActiveRun || isRequestClosed || workflow == nil)
-                        .help(startHelp)
+                    Spacer(minLength: 0)
                     Button("Dismiss") { model.dismissProposal(proposal) }
-                        .buttonStyle(PillButtonStyle(height: 30))
+                        .buttonStyle(V4Pill(kind: .secondary))
                         .help("Don’t run this; keep talking to the lead")
+                    Button("Start run") { model.startProposal(proposal, in: project) }
+                        .buttonStyle(V4Pill(kind: .primary, horizontalPadding: 16))
+                        .disabled(hasActiveRun || isRequestClosed || workflow == nil)
+                        .help(Self.startHelp(hasActiveRun: hasActiveRun, isRequestClosed: isRequestClosed))
                 }
             }
         }
-        .padding(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+        .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.accent.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.accent.opacity(0.28)))
-    }
-
-    private var attachedSpec: SpecDocument? {
-        guard let document = spec?.document else { return nil }
-        if proposal.status == .open { return document.status == .done ? nil : document }
-        return proposal.runId.map(document.linkedRuns.contains) == true ? document : nil
-    }
-
-    private var startHelp: String {
-        if isRequestClosed { return "This request is closed. Send a message to reopen it first." }
-        return hasActiveRun ? "Wait for the current run to end" : "Start the run; the lead plans it first"
+        .background(Color.white.opacity(0.045), in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(proposal.status == .open ? V4.blue.opacity(0.35) : Color.white.opacity(0.08)))
     }
 
     @ViewBuilder
     private var statusLabel: some View {
         switch proposal.status {
-        case .started: Text("Started").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.successText)
+        case .started: Text("Started").font(.system(size: 12, weight: .semibold)).foregroundStyle(V4.greenText)
         case .dismissed: Text("Dismissed").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.tertiaryText)
         default: EmptyView()
         }
@@ -631,19 +590,20 @@ struct RequestBubble: View {
                     .background(Theme.accent.opacity(0.85), in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 6, topTrailingRadius: 20, style: .continuous))
                     .accessibilityLabel("You: \(text)")
             }
-            HStack(spacing: 10) {
-                if let onCancel {
+            if let onCancel {
+                HStack(spacing: 10) {
                     Button("Cancel", action: onCancel)
                         .buttonStyle(.plain)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(Theme.link)
                         .help("Stop this message and put it back in the composer (Esc)")
                         .accessibilityLabel("Cancel send")
+                    Text(date.formatted(.relative(presentation: .named))).font(.system(size: 11.5)).foregroundStyle(V4.secondary)
                 }
-                Text(date.formatted(.relative(presentation: .named))).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
             }
         }
-        .frame(maxWidth: 640, alignment: .trailing)
+        .help(date.formatted(date: .abbreviated, time: .shortened))
+        .frame(maxWidth: 593, alignment: .trailing)
         .frame(maxWidth: .infinity, alignment: .trailing)
         .accessibilityElement(children: attachments.isEmpty && onCancel == nil ? .combine : .contain)
     }
@@ -735,13 +695,14 @@ struct LeadBubble<Content: View>: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            RoleBadge(role: role, size: 30)
+            LeadAvatar(appearance: RoleAppearance(role: role))
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 4) {
                     Text(name).fontWeight(.semibold).foregroundStyle(.white)
-                    Text("· \(date.formatted(.relative(presentation: .named)))").foregroundStyle(Theme.secondaryText)
+                    Text("· \(date.formatted(date: .omitted, time: .shortened))").foregroundStyle(V4.secondary)
                 }
                 .font(.system(size: 12))
+                .help(date.formatted(date: .abbreviated, time: .shortened))
                 content
             }
             .frame(maxWidth: .infinity, alignment: .leading)

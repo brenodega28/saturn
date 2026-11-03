@@ -6,6 +6,7 @@ struct QuestionFormView<Accessory: View>: View {
     let form: QuestionForm
     let recipient: String?
     var compact = false
+    var quickAnswers = false
     let send: (String) -> Void
     @ViewBuilder let accessory: Accessory
 
@@ -33,7 +34,11 @@ struct QuestionFormView<Accessory: View>: View {
                     .textSelection(.enabled)
                     .id(step)
                 if !question.options.isEmpty {
-                    options(question.options)
+                    if quickAnswers && !form.isMultiStep {
+                        answerButtons(question.options)
+                    } else {
+                        options(question.options)
+                    }
                 }
             }
             answerRow
@@ -87,6 +92,16 @@ struct QuestionFormView<Accessory: View>: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+    }
+
+    private func answerButtons(_ options: [String]) -> some View {
+        FlowLayout(spacing: 8) {
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                Button(option) { send(option) }
+                    .buttonStyle(V4Pill(kind: index == 0 ? .orange : .secondary, height: 28, horizontalPadding: 12))
+                    .help("Answer “\(option)”\(recipient.map { " to \($0)" } ?? "")")
             }
         }
     }

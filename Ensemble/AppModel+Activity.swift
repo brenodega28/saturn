@@ -87,8 +87,4 @@ extension AppModel {
         let output = result?.standardOutput ?? ""
         listeningPorts = Set(ports.filter { port in output.contains(":\(port)\n") || output.hasSuffix(":\(port)") })
     }
-
-    var backgroundActivity: [ActivityEntry] {
-        WorkbenchRegistry.shared.activitySources.flatMap { $0.entries(self) }
-    }
 }

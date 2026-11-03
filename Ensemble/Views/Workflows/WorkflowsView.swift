@@ -5,7 +5,6 @@ import SwiftUI
 struct WorkflowsView: View {
     @Environment(AppModel.self) private var model
     let project: Project
-    @Environment(\.isInWorkbench) private var isInWorkbench
     @State private var editor: WorkflowEditor?
     @State private var pendingAction: PendingAction?
     @State private var isConfirmingDelete = false
@@ -134,10 +133,7 @@ struct WorkflowsView: View {
         )
         return VStack(alignment: .leading, spacing: 12) {
             header(editor, config: config, issueCount: issues.count, mode: mode)
-            if isInWorkbench {
-                WorkflowCanvas(editor: editor, roles: config.roles)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if mode.showsInspectorColumn {
+            if mode.showsInspectorColumn {
                 HStack(alignment: .top, spacing: WorkflowsLayoutMode.columnSpacing) {
                     WorkflowCanvas(editor: editor, roles: config.roles)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -4,10 +4,9 @@ struct AppCommands: Commands {
     let model: AppModel
     let updater: Updater
     @Environment(\.openWindow) private var openWindow
-    @FocusedValue(\.workbench) private var workbench
 
     private var context: CommandContext {
-        CommandContext(model: model, workbench: workbench ?? model.activeWorkbench, openWindow: openWindow)
+        CommandContext(model: model, openWindow: openWindow)
     }
 
     var body: some Commands {
@@ -27,9 +26,6 @@ struct AppCommands: Commands {
         }
 
         CommandGroup(after: .sidebar) {
-            Menu("Navigator") {
-                RegistryMenuItems(menu: "View.Navigator", context: context)
-            }
             RegistryMenuItems(menu: "View", context: context)
         }
 
@@ -89,7 +85,7 @@ struct RegistryMenuItems: View {
     let context: CommandContext
 
     var body: some View {
-        let groups = WorkbenchRegistry.shared.commands(in: menu)
+        let groups = CommandRegistry.shared.commands(in: menu)
         ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
             if index > 0 { Divider() }
             ForEach(group) { command in
@@ -100,7 +96,7 @@ struct RegistryMenuItems: View {
 }
 
 private struct RegistryMenuItem: View {
-    let command: WorkbenchCommand
+    let command: MenuCommand
     let context: CommandContext
 
     var body: some View {

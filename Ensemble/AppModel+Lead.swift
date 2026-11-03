@@ -216,15 +216,42 @@ extension AppModel {
         }
         let lead = try? database.leadAgent(taskId: taskID)
         let leadRole = lead.flatMap { config(for: project).role($0.role) } ?? runs.last.flatMap { leadRole(for: $0, in: project) } ?? leadRole(in: project)
-        let thread = RequestThread(
+        let messages = (try? database.leadMessages(taskId: taskID)) ?? []
+        var thread = RequestThread(
             task: task,
-            messages: (try? database.leadMessages(taskId: taskID)) ?? [],
+            messages: messages,
             runs: runs,
             timelines: timelines,
             questions: (try? database.requestQuestions(taskId: taskID)) ?? [],
             heldRunIDs: Set(runs.compactMap(\.id).filter { engine.holds[$0] != nil })
         )
+        thread.items = Self.placingPermissions(messages.filter { $0.kind == .permission }, in: thread.items)
         return RequestThreadData(thread: thread, timelines: timelines, leadRole: leadRole, leadName: lead.map { AgentNaming.displayName(of: $0) } ?? leadRole.name)
+    }
+
+    static func placingPermissions(_ cards: [LeadMessage], in items: [RequestThread.Item]) -> [RequestThread.Item] {
+        guard !cards.isEmpty else { return items }
+        let liveStart = items.firstIndex(where: \.isLive) ?? items.endIndex
+        var settled = Array(items[..<liveStart])
+        let sorted = cards.sorted { $0.createdAt < $1.createdAt }
+        for card in sorted where card.permissionStatus.map({ $0 != .pending }) == true {
+            let index = settled.firstIndex { item in date(of: item).map { $0 > card.createdAt } ?? false } ?? settled.endIndex
+            settled.insert(.message(card), at: index)
+        }
+        let pending = sorted.filter { $0.permissionStatus.map { $0 == .pending } ?? true }.map(RequestThread.Item.message)
+        return settled + pending + items[liveStart...]
+    }
+
+    private static func date(of item: RequestThread.Item) -> Date? {
+        switch item {
+        case .request(let task): task.createdAt
+        case .message(let message): message.createdAt
+        case .runStarted(let run): run.startedAt
+        case .step(_, let entry): entry.endedAt ?? entry.startedAt
+        case .answeredQuestion(let question): question.resolvedAt ?? question.createdAt
+        case .runEnded(let run): run.endedAt
+        case .openQuestion, .hold: nil
+        }
     }
 
     func runWorkflow(_ run: Run) -> WorkflowDefinition? {

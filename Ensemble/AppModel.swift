@@ -110,7 +110,7 @@ final class AppModel {
     var problemCursor = -1
     var pinPrompt: PinPrompt?
     var workflowMenuAction: WorkflowMenuAction?
-    @ObservationIgnored weak var activeWorkbench: WorkbenchState?
+    let mainWindow = MainWindowNavigation()
     @ObservationIgnored var connectivity: ConnectivityMonitor?
     let leadChat: LeadChat
     let directChat: DirectChat
@@ -120,7 +120,10 @@ final class AppModel {
 
     var selection: SidebarItem? {
         didSet {
-            if case .project(let id) = selection { lastProjectID = id }
+            if case .project(let id) = selection {
+                lastProjectID = id
+                if tabs[id] == nil { tabs[id] = .lead }
+            }
             persistNavigation()
         }
     }
@@ -158,7 +161,7 @@ final class AppModel {
         driver.gitHubProvider = { try? GitHubAuth(secrets: secrets).client() }
         restoreNavigation()
         connectGitHub()
-        WorkbenchRegistry.shared.registerChatLinkCommands()
+        CommandRegistry.shared.registerChatLinkCommands()
         planUsageActivationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -181,11 +184,11 @@ final class AppModel {
     }
 
     func tab(for project: Project) -> ProjectTab {
-        project.id.map(tab(forProjectID:)) ?? .agents
+        project.id.map(tab(forProjectID:)) ?? .lead
     }
 
     private func tab(forProjectID id: Int64) -> ProjectTab {
-        tabs[id] ?? .agents
+        tabs[id] ?? .lead
     }
 
     var sidebarDestination: SidebarDestination? {
@@ -597,11 +600,9 @@ final class AppModel {
     }
 
     private func restoreNavigation() {
-        let defaults = UserDefaults.standard
-        let savedTabs = defaults.data(forKey: Self.tabsKey).flatMap { try? JSONDecoder().decode([Int64: ProjectTab].self, from: $0) }
-        let savedSelection = defaults.data(forKey: Self.selectionKey).flatMap { try? JSONDecoder().decode(SidebarItem?.self, from: $0) }
-        tabs = savedTabs ?? [:]
-        selection = savedSelection ?? nil
+        let savedSelection = UserDefaults.standard.data(forKey: Self.selectionKey).flatMap { try? JSONDecoder().decode(SidebarItem?.self, from: $0) }
+        tabs = [:]
+        if case .project = savedSelection { selection = savedSelection } else { selection = nil }
     }
 }
 

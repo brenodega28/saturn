@@ -229,38 +229,43 @@ import Testing
         #expect(transcript.contains("The repo only has a README."))
     }
 
-    @Test func backgroundSessionsAreTheWorkingAgentsTheLeadSpawnedOutsideARun() async throws {
+    @Test func workingSessionsAreEveryRunningAgentOnTheRequestExceptTheChatLead() async throws {
         let setup = try await WorkflowDriverTests().makeSetup()
         defer { setup.harness.cleanUp() }
         let database = setup.harness.database
+        let runtime = setup.harness.runtime
         let now = Date()
         let task = try database.insert(ProjectTask(
             projectId: setup.project.id!, title: "Run the tests", body: "Please.", source: .chat, status: .incoming, createdAt: now, updatedAt: now
         ))
-        let lead = try setup.harness.runtime.createLeadAgent(in: setup.project, taskId: task.id!)
-        let chat = LeadChat(runtime: setup.harness.runtime, engine: setup.engine, driver: setup.driver)
+        let lead = try runtime.createLeadAgent(in: setup.project, taskId: task.id!)
+        let chat = LeadChat(runtime: runtime, engine: setup.engine, driver: setup.driver)
         try setup.harness.setMode("slow")
-        #expect(chat.backgroundSessions(for: task).isEmpty)
+        #expect(chat.workingSessions(for: task).isEmpty)
 
         let runner = try await spawnRunner(setup, from: lead)
-        let bystander = try #require(try await setup.harness.runtime.spawn(in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git, name: "Bystander").first)
+        let bystander = try #require(try await runtime.spawn(in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git, name: "Bystander").first)
         bystander.send("CHAT look around")
-        try await waitUntil { runner.isRunning && bystander.isRunning }
-        #expect(chat.backgroundSessions(for: task).map(\.id) == [runner.id])
+        lead.send("CHAT keep going")
+        try await waitUntil { runner.isRunning && bystander.isRunning && (lead.isRunning || lead.isQueued) }
+        #expect(chat.workingSessions(for: task).map(\.id) == [runner.id])
 
-        var inRun = try #require(try database.agent(id: runner.id))
         let run = try database.insert(Run(projectId: setup.project.id!, taskId: task.id!, workflow: "feature-delivery", status: .running, startedAt: now), state: RunEngineState())
-        inRun.runId = run.id
-        try database.save(inRun)
-        #expect(chat.backgroundSessions(for: task).isEmpty)
-        inRun.runId = nil
-        try database.save(inRun)
-        #expect(chat.backgroundSessions(for: task).map(\.id) == [runner.id])
+        runner.attach(toRun: try #require(run.id))
+        #expect(chat.workingSessions(for: task).map(\.id) == [runner.id])
+
+        let builder = try #require(try await runtime.spawn(in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git, name: "Run Builder").first)
+        builder.attach(toRun: try #require(run.id))
+        #expect(chat.workingSessions(for: task).map(\.id) == [runner.id])
+        builder.send("CHAT build it")
+        try await waitUntil { builder.isRunning || builder.isQueued }
+        #expect(chat.workingSessions(for: task).map(\.id) == [runner.id, builder.id].sorted())
 
         runner.stop()
+        builder.stop()
         bystander.stop()
-        try await waitUntil { !runner.isRunning && !runner.isQueued }
-        #expect(chat.backgroundSessions(for: task).isEmpty)
+        try await waitUntil { !runner.isRunning && !runner.isQueued && !builder.isRunning && !builder.isQueued }
+        #expect(chat.workingSessions(for: task).isEmpty)
     }
 
     @Test func theSpawnedAgentsMigrationAddsTheSpawnerColumn() throws {

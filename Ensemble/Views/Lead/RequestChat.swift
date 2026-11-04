@@ -13,11 +13,11 @@ struct RequestChat: View {
     var body: some View {
         let session = model.leadSession(for: task)
         let isThinking = session.map { $0.isRunning || $0.isQueued } ?? false
-        let background = model.backgroundSessions(for: task)
-        thread(isThinking: isThinking, session: session, background: background)
+        let working = model.workingSessions(for: task)
+        thread(isThinking: isThinking, session: session, working: working)
     }
 
-    private func thread(isThinking: Bool, session: AgentSession?, background: [AgentSession]) -> some View {
+    private func thread(isThinking: Bool, session: AgentSession?, working: [AgentSession]) -> some View {
         let held = model.heldSends(for: model.leadSendTarget(for: task, in: project))
         return ScrollViewReader { proxy in
             ScrollView {
@@ -40,9 +40,9 @@ struct RequestChat: View {
                         RequestBubble(held: send, onCancel: model.cancelHeldSend)
                             .id(send.id.uuidString)
                     }
-                    if !background.isEmpty {
-                        BackgroundAgentsRow(sessions: background, project: project)
-                            .id(Self.backgroundID)
+                    if !working.isEmpty {
+                        WorkingAgentsRow(sessions: working, project: project)
+                            .id(Self.workingID)
                     }
                     if isThinking {
                         ThinkingRow(role: data?.leadRole, name: data?.leadName ?? "Lead", session: session)
@@ -55,12 +55,12 @@ struct RequestChat: View {
                 .padding(EdgeInsets(top: 22, leading: 28, bottom: 150, trailing: 28))
             }
             .defaultScrollAnchor(.bottom)
-            .followsBottom(of: [isThinking ? session.flatMap(Self.latestEntry) : nil] + background.map(Self.latestEntry))
+            .followsBottom(of: [isThinking ? session.flatMap(Self.latestEntry) : nil] + working.map(Self.latestEntry))
             .onChange(of: data?.thread.items.last?.id) {
                 if !revealHighlight(proxy) { scrollToEnd(proxy) }
             }
             .onChange(of: isThinking) { scrollToEnd(proxy) }
-            .onChange(of: background.map(\.id)) { scrollToEnd(proxy) }
+            .onChange(of: working.map(\.id)) { scrollToEnd(proxy) }
             .onChange(of: held.map(\.id)) { scrollToEnd(proxy) }
             .onChange(of: model.chatHighlight) { revealHighlight(proxy) }
         }
@@ -74,7 +74,7 @@ struct RequestChat: View {
     }
 
     private static let thinkingID = "thinking"
-    private static let backgroundID = "background-agents"
+    private static let workingID = "working-agents"
 
     private static func latestEntry(of session: AgentSession) -> TranscriptEntry? {
         session.transcript.liveEntry ?? session.transcript.entries.last
@@ -101,8 +101,8 @@ struct RequestChat: View {
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
         let isThinking = model.leadSession(for: task).map { $0.isRunning || $0.isQueued } ?? false
         let lastHeld = model.heldSends(for: model.leadSendTarget(for: task, in: project)).last?.id.uuidString
-        let backgroundID = model.backgroundSessions(for: task).isEmpty ? nil : Self.backgroundID
-        let target = isThinking ? Self.thinkingID : backgroundID ?? lastHeld ?? data?.thread.items.last?.id
+        let workingID = model.workingSessions(for: task).isEmpty ? nil : Self.workingID
+        let target = isThinking ? Self.thinkingID : workingID ?? lastHeld ?? data?.thread.items.last?.id
         guard let target else { return }
         withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(target, anchor: .bottom) }
     }
@@ -291,7 +291,7 @@ struct ThinkingRow: View {
     }
 }
 
-private struct BackgroundAgentsRow: View {
+private struct WorkingAgentsRow: View {
     @Environment(AppModel.self) private var model
     let sessions: [AgentSession]
     let project: Project
@@ -313,7 +313,7 @@ private struct BackgroundAgentsRow: View {
                     .background(Color.white.opacity(0.06), in: Circle())
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("\(sessions.count) agents working in the background")
+                    Text("\(sessions.count) agents working")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.secondaryText)
                         .frame(minHeight: 30)
@@ -348,7 +348,7 @@ private struct BackgroundAgentRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 4) {
                     Text(name).fontWeight(.semibold).foregroundStyle(.white)
-                    Text("· working in the background").foregroundStyle(Theme.secondaryText)
+                    Text(session.agent.runId == nil ? "· working in the background" : "· working on the run").foregroundStyle(Theme.secondaryText)
                 }
                 .font(.system(size: 12))
                 SessionActivityView(activity: activity, name: name, root: root)

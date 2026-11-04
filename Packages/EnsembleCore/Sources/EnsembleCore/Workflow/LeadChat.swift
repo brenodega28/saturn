@@ -107,11 +107,18 @@ public final class LeadChat {
         return runtime.session(for: agent)
     }
 
-    public func backgroundSessions(for task: ProjectTask) -> [AgentSession] {
-        guard let taskId = task.id, let leadId = (try? database.leadAgent(taskId: taskId))??.id,
+    public func workingSessions(for task: ProjectTask) -> [AgentSession] {
+        guard let taskId = task.id,
+              let requestAgents = try? database.requestAgents(taskId: taskId),
               let spawned = try? database.spawnedAgents(taskId: taskId) else { return [] }
-        return spawned
-            .filter { $0.spawnedById == leadId && $0.runId == nil }
+        let leadId = (try? database.leadAgent(taskId: taskId))??.id
+        var seen = Set<Int64>()
+        return (requestAgents + spawned)
+            .filter { agent in
+                guard let id = agent.id, id != leadId else { return false }
+                return seen.insert(id).inserted
+            }
+            .sorted { ($0.id ?? 0) < ($1.id ?? 0) }
             .compactMap { runtime.session(for: $0) }
             .filter { $0.isRunning || $0.isQueued }
     }

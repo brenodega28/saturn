@@ -1,6 +1,6 @@
 ---
 title: Restore the bottom status bar in the v4 main window
-status: in-progress
+status: done
 owner: ""
 linked_runs: [68]
 created: 2026-11-03
@@ -26,14 +26,14 @@ The v4 chat-and-log rebuild (merge 0e14688) removed the Workbench StatusBar. Thi
 
 ## Acceptance criteria
 
-- [ ] A status bar spans the full window width at the bottom of the main window, below all three columns, and does not overlap or clip them
-- [ ] Each item appears under the same conditions as before (e.g. Agents only when an agent is working or needs you; Checks only when a check board entry exists; Problems only when there are problems; plan usage per PlanUsageDisplay.isVisible; offline only when isOffline; rate limit only when a session hit a 429)
-- [ ] Item text matches the old wording
-- [ ] Clicking each item goes to the target listed in Interfaces
-- [ ] Colors, fonts, background and hairline come from V4Style tokens, no hard-coded Theme/hex colors from the old bar
-- [ ] Accessibility labels from the old items are kept (e.g. "N errors, M warnings", plan usage label)
-- [ ] No code comments added
-- [ ] The app builds and existing tests pass
+- [x] A status bar spans the full window width at the bottom of the main window, below all three columns, and does not overlap or clip them
+- [x] Each item appears under the same conditions as before (e.g. Agents only when an agent is working or needs you; Checks only when a check board entry exists; Problems only when there are problems; plan usage per PlanUsageDisplay.isVisible; offline only when isOffline; rate limit only when a session hit a 429)
+- [x] Item text matches the old wording
+- [x] Clicking each item goes to the target listed in Interfaces
+- [x] Colors, fonts, background and hairline come from V4Style tokens, no hard-coded Theme/hex colors from the old bar
+- [x] Accessibility labels from the old items are kept (e.g. "N errors, M warnings", plan usage label)
+- [x] No code comments added
+- [x] The app builds and existing tests pass
 
 ## Verification
 

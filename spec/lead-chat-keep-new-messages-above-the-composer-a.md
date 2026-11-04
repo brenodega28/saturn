@@ -1,6 +1,6 @@
 ---
 title: "Lead chat: keep new messages above the composer and follow the thinking lead"
-status: in-progress
+status: done
 owner: ""
 linked_runs: [70]
 created: 2026-11-03
@@ -25,14 +25,14 @@ In the lead request chat, a message you send lands behind the floating composer,
 
 ## Acceptance criteria
 
-- [ ] Sending a message in an existing request chat shows the new bubble (held or sent) fully visible above the composer, never behind it
-- [ ] This still holds when the composer is taller than one line (multi-line text, pasted-text or image attachments)
-- [ ] While the lead is thinking, streaming a reply or running tools, the chat stays pinned to the bottom with no manual scrolling. The growing thinking row and new messages stay visible above the composer
-- [ ] If the user scrolls up while the lead is working, the chat stops following and doesn't yank them back. Scrolling back near the bottom resumes following
-- [ ] Sending a message always jumps to the bottom and resumes following, even if the user had scrolled up
-- [ ] Opening a request chat starts at the bottom with the last item visible above the composer
-- [ ] Jumping to a message from a chat link (`chatHighlight`) still centers and highlights that message
-- [ ] The last item can be scrolled fully above the composer, and no oversized empty gap is left below it
+- [x] Sending a message in an existing request chat shows the new bubble (held or sent) fully visible above the composer, never behind it
+- [x] This still holds when the composer is taller than one line (multi-line text, pasted-text or image attachments)
+- [x] While the lead is thinking, streaming a reply or running tools, the chat stays pinned to the bottom with no manual scrolling. The growing thinking row and new messages stay visible above the composer
+- [x] If the user scrolls up while the lead is working, the chat stops following and doesn't yank them back. Scrolling back near the bottom resumes following
+- [x] Sending a message always jumps to the bottom and resumes following, even if the user had scrolled up
+- [x] Opening a request chat starts at the bottom with the last item visible above the composer
+- [x] Jumping to a message from a chat link (`chatHighlight`) still centers and highlights that message
+- [x] The last item can be scrolled fully above the composer, and no oversized empty gap is left below it
 - [ ] The app builds, and the existing test suites pass
 
 ## Verification

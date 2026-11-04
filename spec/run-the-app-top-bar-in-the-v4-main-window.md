@@ -1,6 +1,6 @@
 ---
 title: Run-the-app top bar in the v4 main window
-status: in-progress
+status: done
 owner: ""
 linked_runs: [83]
 created: 2026-11-04
@@ -35,18 +35,18 @@ Add the "Run the app" toolbar from the v4 design (artboard project/V4.dc.html on
 ## Acceptance criteria
 
 - [ ] The main window shows the run bar above the chat and log columns, matching the artboard's layout, sizes, radii, colors, fonts and copy at 1600×1000 (allowing for real data)
-- [ ] RunCommandDetector returns the right command for fixtures with: package.json dev script (npm, pnpm, yarn and bun lockfiles), Makefile dev target, Procfile, and nothing at all. Unit tests cover each case
+- [x] RunCommandDetector returns the right command for fixtures with: package.json dev script (npm, pnpm, yarn and bun lockfiles), Makefile dev target, Procfile, and nothing at all. Unit tests cover each case
 - [ ] With no override and nothing detected, Start is disabled and the status line says no run command was found, with a link to Settings › Workspaces
 - [ ] Setting a Run command override in Settings › Workspaces persists across relaunch and is used instead of the detected one; clearing it falls back to detection
 - [ ] The branch picker lists the main checkout and every non-archived agent with a worktree in the current project, with its status; picking one closes the popover and selects it
 - [ ] Start runs the command in the selected worktree (or the project folder for Main) with PORT/ENSEMBLE_PORT set when a port exists. Status shows Starting, then Running with the detected port(s) and uptime. The localhost link opens the detected port in the browser
-- [ ] Port detection works both from a URL printed in the output and, for a server that prints no URL, from the process group's listening sockets (unit/integration test with a small script server)
+- [x] Port detection works both from a URL printed in the output and, for a server that prints no URL, from the process group's listening sockets (unit/integration test with a small script server)
 - [ ] Server output appears live in the Log column as 'run' rows with the project id; the All and Needs you filters treat them like other entries
-- [ ] Stop kills the whole process group (child processes such as a spawned node/vite server are gone afterwards; verified by checking the port stops listening) and the status returns to Stopped
-- [ ] Starting on a second branch while one is running stops the first one (its port stops listening) before the new one starts
-- [ ] A process that exits on its own shows 'exited with code N' in the status and the Log
+- [x] Stop kills the whole process group (child processes such as a spawned node/vite server are gone afterwards; verified by checking the port stops listening) and the status returns to Stopped
+- [x] Starting on a second branch while one is running stops the first one (its port stops listening) before the new one starts
+- [x] A process that exits on its own shows 'exited with code N' in the status and the Log
 - [ ] Quitting Ensemble while the app runs leaves no orphaned processes; archiving or cleaning up the agent whose worktree is running stops the app first
-- [ ] EnsembleCore tests pass (swift test in Packages/EnsembleCore) and the app builds with xcodebuild with no new warnings
+- [x] EnsembleCore tests pass (swift test in Packages/EnsembleCore) and the app builds with xcodebuild with no new warnings
 
 ## Verification
 

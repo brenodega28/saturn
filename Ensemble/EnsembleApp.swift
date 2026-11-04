@@ -21,6 +21,8 @@ struct EnsembleApp: App {
                         }
                 case .failed(let message):
                     LaunchFailureView(message: message)
+                case .alreadyRunning:
+                    EmptyView()
                 }
             }
             .preferredColorScheme(.dark)
@@ -84,7 +86,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor var model: AppModel?
 
     @MainActor
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard Launch.isBlockedByAnotherInstance else { return }
+        NSApp.windows.forEach { $0.orderOut(nil) }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Ensemble is already running with this data folder."
+        alert.informativeText = "Quit the other copy first."
+        alert.addButton(withTitle: "Quit")
+        NSApp.activate()
+        alert.runModal()
+        NSApp.terminate(nil)
+    }
+
+    @MainActor
     func applicationWillTerminate(_ notification: Notification) {
+        model?.engine.stopOrphanWatchdog()
         model?.agents.terminateAll()
     }
 }
@@ -113,11 +130,23 @@ enum WindowID {
 enum Launch {
     case ready(AppModel)
     case failed(String)
+    case alreadyRunning
+
+    @MainActor private(set) static var instanceLock: InstanceLock?
+    @MainActor private(set) static var isBlockedByAnotherInstance = false
 
     @MainActor
     static func start() -> Launch {
+        let paths = AppPaths.standard
         do {
-            let paths = AppPaths.standard
+            instanceLock = try InstanceLock.acquire(paths: paths)
+        } catch InstanceLockError.alreadyRunning {
+            isBlockedByAnotherInstance = true
+            return .alreadyRunning
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+        do {
             let database = try AppDatabase.open(at: paths.database)
             return .ready(AppModel(database: database, paths: paths, secrets: KeychainSecretStore(service: AppModel.keychainService)))
         } catch {

@@ -13,6 +13,7 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
         case result(StepResult)
         case failure(String)
         case hang
+        case gated(ReplyGate)
     }
 
     var replies: [String: [Reply]] = [:]
@@ -97,7 +98,26 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
             throw ScriptedFailure(message: message)
         case .hang:
             while true { try await Task.sleep(for: .seconds(3600)) }
+        case .gated(let gate):
+            return await gate.wait()
         }
+    }
+}
+
+@MainActor
+final class ReplyGate {
+    private var result: StepResult?
+    private var waiter: CheckedContinuation<StepResult, Never>?
+
+    func wait() async -> StepResult {
+        if let result { return result }
+        return await withCheckedContinuation { waiter = $0 }
+    }
+
+    func open(_ result: StepResult) {
+        self.result = result
+        waiter?.resume(returning: result)
+        waiter = nil
     }
 }
 

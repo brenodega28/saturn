@@ -258,6 +258,7 @@ final class AppModel {
         await checkEnvironment()
         updatePlanUsagePolling()
         perform("Couldn’t recover runs") { try engine.recover() }
+        engine.startOrphanWatchdog()
         await deleteAgentsOfClosedRequests()
         startInbox()
         startBudgetMonitor()

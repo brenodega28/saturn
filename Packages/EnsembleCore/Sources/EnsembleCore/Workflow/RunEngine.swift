@@ -43,6 +43,8 @@ public final class RunEngine {
     @ObservationIgnored private var workflowCache: [Int64: WorkflowDefinition] = [:]
     @ObservationIgnored private var mergingRuns: Set<Int64> = []
     @ObservationIgnored private var openingPullRequests: Set<Int64> = []
+    @ObservationIgnored private var suspectedOrphans: Set<Int64> = []
+    @ObservationIgnored private var orphanWatchdog: Task<Void, Never>?
     #if DEBUG
     @ObservationIgnored var debugTrace: DebugTrace?
     #endif
@@ -383,6 +385,59 @@ public final class RunEngine {
             guard let runID = run.id else { continue }
             refresh(run, state: try database.engineState(runId: runID))
         }
+    }
+
+    @discardableResult
+    public func reviveOrphanedRuns(now: Date = .now) throws -> [Int64] {
+        var orphans: Set<Int64> = []
+        for run in try database.runs(status: [.running]) {
+            guard let runID = run.id, drivers[runID] == nil, try database.engineState(runId: runID).hold == nil else { continue }
+            orphans.insert(runID)
+        }
+        let confirmed = orphans.intersection(suspectedOrphans).sorted()
+        suspectedOrphans = orphans.subtracting(confirmed)
+        var revived: [Int64] = []
+        for runID in confirmed {
+            try interruptInFlightSteps(runID: runID)
+            let loaded = try load(runID)
+            guard loaded.run.status == .running, loaded.state.hold == nil else { continue }
+            try commit(loaded)
+            #if DEBUG
+            traceControl(loaded.run, action: "revive_orphan")
+            #endif
+            launch(runID)
+            try postRevivalNote(loaded, now: now)
+            revived.append(runID)
+        }
+        return revived
+    }
+
+    private func postRevivalNote(_ loaded: LoadedRun, now: Date) throws {
+        let run = loaded.run
+        let stepID = run.currentStep ?? loaded.state.cursor?.stepId ?? ""
+        let stepTitle = loaded.workflow.step(stepID)?.displayTitle ?? stepID
+        let text = "Run “\(run.title)” had stopped moving at “\(stepTitle)”, so Ensemble picked it up again."
+        try database.insert(LeadMessage(projectId: run.projectId, taskId: run.taskId, kind: .note, text: text, runId: try loaded.id, createdAt: now))
+    }
+
+    public func startOrphanWatchdog(interval: Duration = .seconds(30)) {
+        orphanWatchdog?.cancel()
+        orphanWatchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard !Task.isCancelled, let self else { return }
+                _ = try? self.reviveOrphanedRuns(now: self.clock())
+            }
+        }
+    }
+
+    public func stopOrphanWatchdog() {
+        orphanWatchdog?.cancel()
+        orphanWatchdog = nil
+    }
+
+    public var isWatchingForOrphans: Bool {
+        orphanWatchdog != nil
     }
 
     public nonisolated static let reminderPrefix = "Still waiting for you: "

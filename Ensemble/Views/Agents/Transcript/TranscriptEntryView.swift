@@ -172,8 +172,10 @@ struct SessionActivityView: View {
     }
 }
 
-struct FollowsBottom<Value: Equatable>: ViewModifier {
+struct FollowsBottom<Value: Equatable, Jump: Equatable, Release: Equatable>: ViewModifier {
     let value: Value
+    let jump: Jump
+    let release: Release
     @State private var position = ScrollPosition(edge: .bottom)
     @State private var follows = true
     @State private var phase: ScrollPhase = .idle
@@ -182,30 +184,60 @@ struct FollowsBottom<Value: Equatable>: ViewModifier {
         content
             .scrollPosition($position)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
-            .onScrollGeometryChange(for: Bool.self, of: Self.isNearBottom) { _, near in
-                if Self.isUserDriven(phase) { follows = near }
+            .onScrollGeometryChange(for: Bool.self, of: BottomFollowing.isNearBottom) { _, near in
+                if BottomFollowing.isUserDriven(phase) { follows = near }
+            }
+            .onScrollGeometryChange(for: CGFloat.self, of: BottomFollowing.bottomOffset) { _, _ in
+                followIfPinned()
             }
             .onScrollPhaseChange { old, new, context in
                 phase = new
-                if new == .idle, Self.isUserDriven(old) { follows = Self.isNearBottom(context.geometry) }
+                if new == .idle, BottomFollowing.isUserDriven(old) { follows = BottomFollowing.isNearBottom(context.geometry) }
             }
-            .onChange(of: value) {
-                guard follows, !Self.isUserDriven(phase) else { return }
-                position.scrollTo(edge: .bottom)
+            .onChange(of: value) { followIfPinned() }
+            .onChange(of: jump) {
+                follows = true
+                withAnimation(.snappy(duration: 0.25)) { position.scrollTo(edge: .bottom) }
             }
+            .onChange(of: release) { follows = false }
     }
+
+    private func followIfPinned() {
+        guard follows, !BottomFollowing.isUserDriven(phase) else { return }
+        position.scrollTo(edge: .bottom)
+    }
+}
+
+enum BottomFollowing {
+    static let nearBottomTolerance: CGFloat = 48
 
     static func isUserDriven(_ phase: ScrollPhase) -> Bool {
         phase == .tracking || phase == .interacting || phase == .decelerating
     }
 
     static func isNearBottom(_ geometry: ScrollGeometry) -> Bool {
-        geometry.visibleRect.maxY >= geometry.contentSize.height + geometry.contentInsets.bottom - 48
+        isNearBottom(offset: geometry.contentOffset.y, bottomOffset: bottomOffset(geometry))
+    }
+
+    static func isNearBottom(offset: CGFloat, bottomOffset: CGFloat) -> Bool {
+        offset >= bottomOffset - nearBottomTolerance
+    }
+
+    static func bottomOffset(_ geometry: ScrollGeometry) -> CGFloat {
+        bottomOffset(contentHeight: geometry.contentSize.height, bottomInset: geometry.contentInsets.bottom, containerHeight: geometry.containerSize.height)
+    }
+
+    static func bottomOffset(contentHeight: CGFloat, bottomInset: CGFloat, containerHeight: CGFloat) -> CGFloat {
+        contentHeight + bottomInset - containerHeight
     }
 }
 
 extension View {
     func followsBottom(of value: some Equatable) -> some View {
-        modifier(FollowsBottom(value: value))
+        modifier(FollowsBottom(value: value, jump: false, release: false))
+    }
+
+    func followsBottom(of value: some Equatable, jumpingOn jump: some Equatable, releasingOn release: some Equatable) -> some View {
+        modifier(FollowsBottom(value: value, jump: jump, release: release))
     }
 }

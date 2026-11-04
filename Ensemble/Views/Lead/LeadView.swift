@@ -66,9 +66,10 @@ struct NewRequestHeldSends: View {
             }
             .frame(maxWidth: 760)
             .frame(maxWidth: .infinity)
-            .padding(EdgeInsets(top: 22, leading: 28, bottom: 150, trailing: 28))
+            .padding(EdgeInsets(top: 22, leading: 28, bottom: 16, trailing: 28))
         }
         .defaultScrollAnchor(.bottom)
+        .followsBottom(of: held.map(\.id), jumpingOn: held.count, releasingOn: false)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -89,7 +90,6 @@ struct NewRequestIntro: View {
                 EmptyState("Talk to the Lead", message: "Ask a question or describe what you need. The Lead answers here, proposes a run when there’s work to do, then plans and reviews it.")
             }
         }
-        .padding(.bottom, 120)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

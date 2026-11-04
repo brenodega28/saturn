@@ -33,7 +33,7 @@ Replace the v3 Workbench (navigator, editor tabs, inspector, bottom panel, statu
 
 ## Acceptance criteria
 
-- [ ] Launching the app with an open, onboarded project shows the v4 three-column window; no navigator, editor tabs, inspector, bottom panel, status bar or workbench toolbar appear anywhere
+- [ ] Launching the app with an open, onboarded project shows the v4 three-column window; no navigator, editor tabs, inspector, bottom panel or workbench toolbar appear anywhere; a full-width status bar runs along the window bottom under all three columns
 - [x] WorkbenchView, the Workbench navigators/inspectors/bottom panels, ChatInspector and ChatPeoplePanel are deleted and the app builds with xcodebuild with no warnings introduced
 - [ ] Every open project appears in the sidebar; clicking a project header expands it and collapses the others; its open lead requests are listed and clicking one shows that chat in the middle column
 - [ ] '+ New chat' starts a new lead request in that project and focuses the composer

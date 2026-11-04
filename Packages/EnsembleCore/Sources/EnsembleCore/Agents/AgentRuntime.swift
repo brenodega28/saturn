@@ -76,6 +76,7 @@ public final class AgentRuntime {
     public var worktreePrepared: (@MainActor (WorktreePreparation) async throws -> Void)?
     public var gitProvider: @MainActor () -> GitClient? = { nil }
     public var pluginSkills: @MainActor (Project) -> Set<String> = { _ in [] }
+    @ObservationIgnored public var willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
     public var apiRetryDelays: [Duration] = [.seconds(60), .seconds(300), .seconds(900), .seconds(1800), .seconds(3600)]
     public var crashRestartLimit = 1
     public var lingerGrace: Duration = .seconds(10)
@@ -486,6 +487,7 @@ public final class AgentRuntime {
         let manager = WorktreeManager(repository: project.url, git: git)
         if let path = session.agent.worktreeURL,
            let worktree = try await manager.list().first(where: { $0.agent == path.lastPathComponent }) {
+            await willRemoveWorktree(worktree.path)
             try await manager.remove(worktree, force: true, deleteBranch: deleteBranch)
         } else if deleteBranch, let branch = session.agent.branch {
             _ = try? await git.run(["branch", "-D", branch], in: project.url)

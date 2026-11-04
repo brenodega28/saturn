@@ -56,6 +56,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     public let runtime: AgentRuntime
     public var gitProvider: @MainActor () -> GitClient? = { nil }
     public var gitHubProvider: @MainActor () -> GitHubClient? = { nil }
+    public var willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
     public var pollInterval: Duration = .milliseconds(250)
     public var memoryUpdater: PinnedMemoryUpdater?
 
@@ -1170,6 +1171,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         guard local else { return }
         let manager = WorktreeManager(repository: repository, git: git)
         for worktree in (try? await manager.list()) ?? [] where worktree.branch == branch {
+            await willRemoveWorktree(worktree.path)
             try? await manager.remove(worktree, force: true, deleteBranch: false)
         }
         _ = try? await git.run(["branch", "-D", branch], in: repository)
@@ -1219,10 +1221,12 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         for session in sessions {
             session.stop()
             if let path = session.agent.worktreeURL, let worktree = worktrees.first(where: { realPath(of: $0.path) == realPath(of: path) }) {
+                await willRemoveWorktree(worktree.path)
                 try? await manager.remove(worktree, force: true, deleteBranch: session.agent.readOnly)
             }
         }
         for worktree in worktrees where worktree.agent.hasSuffix("-run-\(runId)") {
+            await willRemoveWorktree(worktree.path)
             try? await manager.remove(worktree, force: true, deleteBranch: worktree.agent.hasPrefix("qa-"))
         }
         if let spec = specStore.link(runId: runId) {

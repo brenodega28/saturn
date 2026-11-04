@@ -27,6 +27,7 @@ public final class IdleCleanupScheduler {
     public let runtime: AgentRuntime
     public var gitProvider: @MainActor () -> GitClient?
     public var interval: Duration
+    public var willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
     private var loop: Task<Void, Never>?
 
     public init(runtime: AgentRuntime, interval: Duration = .seconds(60), gitProvider: @escaping @MainActor () -> GitClient? = { nil }) {
@@ -61,7 +62,7 @@ public final class IdleCleanupScheduler {
         for project in projects {
             guard let projectId = project.id, project.settings.idleCleanupMinutes > 0 else { continue }
             for session in dueSessions(in: projectId, minutes: project.settings.idleCleanupMinutes, now: now) {
-                if await runtime.archiveIdleAgent(session, in: project, git: git, now: now) {
+                if await runtime.archiveIdleAgent(session, in: project, git: git, now: now, willRemoveWorktree: willRemoveWorktree) {
                     archived.append(session.id)
                 }
             }
@@ -83,11 +84,17 @@ public final class IdleCleanupScheduler {
 }
 
 extension AgentRuntime {
-    public func archiveIdleAgent(_ session: AgentSession, in project: Project, git: GitClient, now: Date = .now) async -> Bool {
+    public func archiveIdleAgent(
+        _ session: AgentSession, in project: Project, git: GitClient, now: Date = .now,
+        willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
+    ) async -> Bool {
         if let path = session.agent.worktreeURL, FileManager.default.fileExists(atPath: path.path) {
             let manager = WorktreeManager(repository: project.url, git: git)
             let target = realPath(of: path)
             if let worktree = try? await manager.list().first(where: { realPath(of: $0.path) == target }) {
+                guard let status = try? await git.run(["status", "--porcelain"], in: path),
+                      status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+                await willRemoveWorktree(path)
                 do {
                     try await manager.remove(worktree, force: false, deleteBranch: false)
                 } catch {

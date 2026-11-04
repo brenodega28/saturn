@@ -99,6 +99,39 @@ import Testing
         #expect(try setup.harness.database.task(id: run.taskId)?.status == .done)
     }
 
+    @Test func aBuilderLingeringAfterSubmittingStillHandsOffItsResult() async throws {
+        let setup = try await makeSetup()
+        defer {
+            let pids = (try? String(contentsOf: setup.harness.bin.appending(path: "linger.pids"), encoding: .utf8)) ?? ""
+            for pid in pids.split(separator: "\n").compactMap({ Int32($0) }) { kill(pid, SIGKILL) }
+            setup.harness.cleanUp()
+        }
+        try "".write(to: setup.harness.bin.appending(path: "linger"), atomically: true, encoding: .utf8)
+        setup.harness.runtime.lingerGrace = .milliseconds(300)
+
+        let now = Date()
+        let task = try setup.harness.database.insert(ProjectTask(
+            projectId: setup.project.id!, title: "Add gamma", body: "One file.", source: .chat,
+            status: .incoming, createdAt: now, updatedAt: now
+        ))
+        let run = try setup.engine.start(task: task, workflow: try #require(setup.config.workflow("small-task")), project: setup.project)
+        try await waitForHold(setup, run: run, .approval, timeout: .seconds(30))
+
+        let steps = try setup.harness.database.runSteps(runId: run.id!)
+        #expect(steps.map(\.stepId) == ["build", "review", "approve"])
+        let build = try #require(steps.first { $0.stepId == "build" })
+        #expect(build.status == .succeeded)
+        let output = try #require(build.output.flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) })
+        #expect(output.summary?.hasPrefix("Wrote ") == true)
+
+        let builder = try #require(try setup.harness.database.agents(inProject: setup.project.id!).first { $0.runId == run.id && $0.kind == .builder })
+        #expect(builder.status == .idle)
+        let transcript = try String(contentsOf: setup.harness.runtime.paths.transcript(builder.id!), encoding: .utf8)
+        #expect(transcript.contains("background tasks"))
+        #expect(transcript.contains(AgentWorkflowDriver.stopBackgroundTasksGuide))
+        #expect(!transcript.contains("\"notice\":\"retrying\""))
+    }
+
     @Test func questionsWaitForTheUsersAnswer() async throws {
         let setup = try await makeSetup()
         defer { setup.harness.cleanUp() }

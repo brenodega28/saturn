@@ -248,6 +248,12 @@ enum FakeClaude {
       esac
     done
     if [ "$mode" = "lingering" ]; then (sleep 30) & fi
+    if [ "$mode" = "linger-after-result" ] || [ -f "$FAKE_DIR/linger" ]; then
+      echo $$ >> "$FAKE_DIR/linger.pids"
+      sleep 600 &
+      echo $! >> "$FAKE_DIR/linger.pids"
+      wait
+    fi
     exit 0
     """#
 

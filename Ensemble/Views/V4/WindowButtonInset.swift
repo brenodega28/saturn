@@ -32,6 +32,8 @@ private struct WindowButtonInset: NSViewRepresentable {
         private var observers: [NSObjectProtocol] = []
         private weak var observedWindow: NSWindow?
         private var isRepositioning = false
+        private static let standardButtonGap: CGFloat = 6
+        private var buttonGap = standardButtonGap
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -52,6 +54,7 @@ private struct WindowButtonInset: NSViewRepresentable {
 
         private func attach(to window: NSWindow) {
             observedWindow = window
+            buttonGap = Self.measuredGap(in: window) ?? Self.standardButtonGap
             let center = NotificationCenter.default
             let windowEvents: [Notification.Name] = [
                 NSWindow.didResizeNotification,
@@ -86,18 +89,27 @@ private struct WindowButtonInset: NSViewRepresentable {
 
         private func reposition() {
             guard !isRepositioning, let window = observedWindow, !window.styleMask.contains(.fullScreen) else { return }
-            let buttons = Self.buttons(of: window)
-            guard let close = buttons.first, let container = close.superview else { return }
             isRepositioning = true
             defer { isRepositioning = false }
-            let targetInWindow = NSPoint(x: placement.leading, y: window.frame.height - placement.centerFromTop)
-            let target = container.convert(targetInWindow, from: nil)
-            let dx = target.x - close.frame.minX
-            let dy = target.y - close.frame.midY
-            guard abs(dx) > 0.5 || abs(dy) > 0.5 else { return }
-            for button in buttons where button.superview === container {
-                button.setFrameOrigin(NSPoint(x: button.frame.minX + dx, y: button.frame.minY + dy))
+            let midYInWindow = window.frame.height - placement.centerFromTop
+            var minXInWindow = placement.leading
+            for button in Self.buttons(of: window) {
+                guard let container = button.superview else { continue }
+                let target = container.convert(NSPoint(x: minXInWindow, y: midYInWindow), from: nil)
+                let origin = NSPoint(x: target.x, y: target.y - button.frame.height / 2)
+                if abs(button.frame.minX - origin.x) > 0.5 || abs(button.frame.minY - origin.y) > 0.5 {
+                    button.setFrameOrigin(origin)
+                }
+                minXInWindow += button.frame.width + buttonGap
             }
+        }
+
+        private static func measuredGap(in window: NSWindow) -> CGFloat? {
+            guard let close = window.standardWindowButton(.closeButton),
+                  let minimize = window.standardWindowButton(.miniaturizeButton),
+                  close.superview === minimize.superview else { return nil }
+            let gap = minimize.frame.minX - close.frame.maxX
+            return gap > 0 && gap < 20 ? gap : nil
         }
 
         private static func buttons(of window: NSWindow) -> [NSButton] {

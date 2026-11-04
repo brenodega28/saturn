@@ -52,12 +52,12 @@ extension AppModel {
         let entries = activityLog.entries(matching: LogFilter(), projectIds: projects)
         switch scope {
         case .all:
-            return entries.reversed()
+            return entries
         case .chat:
             let chat = chatLogScope()
-            return entries.filter(chat.contains).reversed()
+            return entries.filter(chat.contains)
         case .needsYou:
-            return entries.filter { $0.level == .warning }.reversed()
+            return entries.filter { $0.level == .warning }
         }
     }
 
@@ -126,6 +126,8 @@ struct LogColumn: View {
                     .padding(.top, 4)
                     .padding(.bottom, 16)
                 }
+                .followsBottom(of: entries.last?.id)
+                .id(scope)
                 .accessibilityLabel("Raw log")
             }
         }
@@ -141,7 +143,7 @@ struct LogColumn: View {
     private var header: some View {
         HStack(spacing: 8) {
             Text("Log")
-                .font(V4.display(14))
+                .font(.system(size: 14, weight: .bold))
                 .accessibilityAddTraits(.isHeader)
             HStack(spacing: 5) {
                 Circle().fill(V4.green).frame(width: 6, height: 6).accessibilityHidden(true)

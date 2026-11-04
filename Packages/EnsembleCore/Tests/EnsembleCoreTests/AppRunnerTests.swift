@@ -175,6 +175,56 @@ import Testing
         #expect(!(await PortProbe.isListening(port: port)))
     }
 
+    @Test func idleCleanupStopsTheAppBeforeRemovingItsWorktree() async throws {
+        let h = try await AgentHarness.make()
+        defer { h.cleanUp() }
+        let projectId = try #require(h.project.id)
+        var settings = ProjectSettings()
+        settings.idleCleanupMinutes = 10
+        try h.database.updateSettings(settings, forProject: projectId)
+        let project = try #require(try h.database.project(id: projectId))
+        let idle = try #require(try await h.runtime.spawn(in: project, kind: .builder, count: 1, git: h.repo.git, name: "Idle Dev").first)
+        let worktree = try #require(idle.agent.worktreeURL)
+
+        let port = Self.freePort()
+        let runner = makeRunner()
+        await runner.start(command: Self.server(printing: false), in: worktree, branch: idle.agent.branch ?? "", port: port)
+        let group = try #require(runner.processGroup)
+        #expect(await eventually { runner.state.ports == [port] })
+
+        var worktreeExistedWhenStopped = false
+        let scheduler = IdleCleanupScheduler(runtime: h.runtime) { h.repo.git }
+        scheduler.willRemoveWorktree = { path in
+            worktreeExistedWhenStopped = FileManager.default.fileExists(atPath: path.path)
+            if runner.isRunning(in: path) { await runner.stop() }
+        }
+        let archived = await scheduler.sweep(now: .now.addingTimeInterval(11 * 60))
+
+        #expect(archived == [idle.id])
+        #expect(worktreeExistedWhenStopped)
+        #expect(runner.state == .stopped(exitCode: nil))
+        #expect(!ProcessGroup.isAlive(group))
+        #expect(!(await PortProbe.isListening(port: port)))
+        #expect(!FileManager.default.fileExists(atPath: worktree.path))
+    }
+
+    @Test func idleCleanupLeavesTheAppRunningInADirtyWorktree() async throws {
+        let h = try await AgentHarness.make()
+        defer { h.cleanUp() }
+        let projectId = try #require(h.project.id)
+        let project = try #require(try h.database.project(id: projectId))
+        let agent = try #require(try await h.runtime.spawn(in: project, kind: .builder, count: 1, git: h.repo.git).first)
+        let worktree = try #require(agent.agent.worktreeURL)
+        try "draft".write(to: worktree.appending(path: "notes.txt"), atomically: true, encoding: .utf8)
+
+        var hookCalls = 0
+        let scheduler = IdleCleanupScheduler(runtime: h.runtime) { h.repo.git }
+        scheduler.willRemoveWorktree = { _ in hookCalls += 1 }
+
+        #expect(await scheduler.sweep(now: .now.addingTimeInterval(60 * 60)).isEmpty)
+        #expect(hookCalls == 0)
+    }
+
     @Test func launchFailureIsReported() async throws {
         let runner = makeRunner()
         await runner.start(command: "true", in: folder.appending(path: "missing"), branch: "main", port: nil)

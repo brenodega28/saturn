@@ -1,6 +1,6 @@
 ---
 title: Route every lead-chat permission request to the lead chat
-status: in-progress
+status: done
 owner: ""
 linked_runs: [69]
 created: 2026-11-03
@@ -24,13 +24,13 @@ Permission requests only become a card in the lead chat when the asker is a non-
 
 ## Acceptance criteria
 
-- [ ] A permission request from the lead agent itself becomes a pending card in its own chat, creates no Inbox item, and the lead is not sent the 'asked to' relay message.
-- [ ] A request from an agent in a small-task run (a workflow with no lead step) becomes a card in that run's chat, not an Inbox item.
-- [ ] A request from an agent the lead started with spawn_agent outside any run becomes a card in the lead's chat.
-- [ ] A request from a run agent becomes a card even when the lead's session isn't live. The relay message is simply skipped.
-- [ ] An agent with no run, no taskId and no spawning lead still asks in the Inbox (the existing anAgentOutsideALeadChatRunAsksInTheInbox test still passes).
-- [ ] Allow once, allow for the run and deny on these new cards resume or block the asker exactly as they do for run cards today. When the lead itself is the asker, it is the only one notified.
-- [ ] No regressions: the PermissionRoutingTests, DesignParityTests, RealClaudeHookTests and LeadChatTests suites pass. New tests in PermissionRoutingTests cover each new case above.
+- [x] A permission request from the lead agent itself becomes a pending card in its own chat, creates no Inbox item, and the lead is not sent the 'asked to' relay message.
+- [x] A request from an agent in a small-task run (a workflow with no lead step) becomes a card in that run's chat, not an Inbox item.
+- [x] A request from an agent the lead started with spawn_agent outside any run becomes a card in the lead's chat.
+- [x] A request from a run agent becomes a card even when the lead's session isn't live. The relay message is simply skipped.
+- [x] An agent with no run, no taskId and no spawning lead still asks in the Inbox (the existing anAgentOutsideALeadChatRunAsksInTheInbox test still passes).
+- [x] Allow once, allow for the run and deny on these new cards resume or block the asker exactly as they do for run cards today. When the lead itself is the asker, it is the only one notified.
+- [x] No regressions: the PermissionRoutingTests, DesignParityTests, RealClaudeHookTests and LeadChatTests suites pass. New tests in PermissionRoutingTests cover each new case above.
 
 ## Verification
 

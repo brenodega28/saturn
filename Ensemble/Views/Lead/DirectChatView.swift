@@ -6,6 +6,7 @@ struct DirectChatView: View {
     @Environment(AppModel.self) private var model
     let session: AgentSession
     let project: Project
+    @State private var sendCount = 0
 
     var body: some View {
         let role = model.role(for: session.agent, in: project)
@@ -13,44 +14,51 @@ struct DirectChatView: View {
         let messages = model.directMessages(with: session)
         let isWaitingForReply = messages.contains(where: \.awaitingReply) && (session.isRunning || session.isQueued)
         let held = model.heldSends(for: .direct(session.id))
+        let userMessageCount = messages.count { $0.kind == .user }
         VStack(spacing: 14) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        DirectAgentCard(session: session, project: project, role: role)
-                        Text(scopeNote)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.tertiaryText)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                        ForEach(messages) { message in
-                            bubble(message, role: role, name: name)
-                                .id(message.id)
-                        }
-                        ForEach(held) { send in
-                            RequestBubble(held: send, onCancel: model.cancelHeldSend)
-                                .id(send.id)
-                        }
-                        if isWaitingForReply {
-                            ThinkingRow(role: role, name: name, session: session)
-                                .id(Self.thinkingID)
-                        } else if session.agent.status == .failed, messages.contains(where: \.awaitingReply) {
-                            FailedReplyRow(name: name, error: session.agent.lastError)
-                                .padding(.leading, 42)
-                        }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    DirectAgentCard(session: session, project: project, role: role)
+                    Text(scopeNote)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.tertiaryText)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                    ForEach(messages) { message in
+                        bubble(message, role: role, name: name)
+                            .id(message.id)
                     }
-                    .frame(maxWidth: 820)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 8)
+                    ForEach(held) { send in
+                        RequestBubble(held: send, onCancel: model.cancelHeldSend)
+                            .id(send.id)
+                    }
+                    if isWaitingForReply {
+                        ThinkingRow(role: role, name: name, session: session)
+                    } else if session.agent.status == .failed, messages.contains(where: \.awaitingReply) {
+                        FailedReplyRow(name: name, error: session.agent.lastError)
+                            .padding(.leading, 42)
+                    }
                 }
-                .defaultScrollAnchor(.top, for: .alignment)
-                .defaultScrollAnchor(.bottom, for: .initialOffset)
-                .onChange(of: messages.last?.id) { scrollToEnd(proxy, waiting: isWaitingForReply, last: messages.last?.id) }
-                .onChange(of: isWaitingForReply) { scrollToEnd(proxy, waiting: isWaitingForReply, last: messages.last?.id) }
-                .onChange(of: held.map(\.id)) {
-                    guard let last = held.last?.id else { return }
-                    withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(last, anchor: .bottom) }
-                }
+                .frame(maxWidth: 820)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 8)
+            }
+            .defaultScrollAnchor(.top, for: .alignment)
+            .followsBottom(
+                of: FollowSignature(
+                    messages: messages.map(\.id),
+                    held: held.map(\.id),
+                    isWaitingForReply: isWaitingForReply,
+                    entry: isWaitingForReply ? session.transcript.liveEntry ?? session.transcript.entries.last : nil
+                ),
+                jumpingOn: sendCount,
+                releasingOn: false
+            )
+            .onChange(of: held.map(\.id)) { old, new in
+                if new.contains(where: { !old.contains($0) }) { sendCount += 1 }
+            }
+            .onChange(of: userMessageCount) { old, new in
+                if new > old { sendCount += 1 }
             }
             DirectComposer(session: session, project: project)
                 .frame(maxWidth: 820)
@@ -58,7 +66,12 @@ struct DirectChatView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private static let thinkingID: Int64 = -1
+    private struct FollowSignature: Equatable {
+        let messages: [Int64?]
+        let held: [UUID]
+        let isWaitingForReply: Bool
+        let entry: TranscriptEntry?
+    }
 
     private var scopeNote: String {
         let name = model.displayName(of: session.agent, in: project)
@@ -79,10 +92,6 @@ struct DirectChatView: View {
         }
     }
 
-    private func scrollToEnd(_ proxy: ScrollViewProxy, waiting: Bool, last: Int64?) {
-        guard let target = waiting ? Self.thinkingID : last else { return }
-        withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(target, anchor: .bottom) }
-    }
 }
 
 private struct DirectAgentCard: View {

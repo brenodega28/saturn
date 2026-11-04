@@ -9,6 +9,8 @@ struct RequestChat: View {
     @State private var data: RequestThreadData?
     @State private var highlightedItemID: String?
     @State private var spec: SpecFile?
+    @State private var sendCount = 0
+    @State private var revealCount = 0
 
     var body: some View {
         let session = model.leadSession(for: task)
@@ -52,16 +54,26 @@ struct RequestChat: View {
                 .animation(.snappy(duration: 0.25), value: data?.thread.items.map(\.id))
                 .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
-                .padding(EdgeInsets(top: 22, leading: 28, bottom: 150, trailing: 28))
+                .padding(EdgeInsets(top: 22, leading: 28, bottom: 16, trailing: 28))
             }
             .defaultScrollAnchor(.bottom)
-            .followsBottom(of: [isThinking ? session.flatMap(Self.latestEntry) : nil] + background.map(Self.latestEntry))
-            .onChange(of: data?.thread.items.last?.id) {
-                if !revealHighlight(proxy) { scrollToEnd(proxy) }
+            .followsBottom(
+                of: FollowSignature(
+                    items: data?.thread.items.map(\.id) ?? [],
+                    held: held.map(\.id),
+                    isThinking: isThinking,
+                    entries: [isThinking ? session.flatMap(Self.latestEntry) : nil] + background.map(Self.latestEntry)
+                ),
+                jumpingOn: sendCount,
+                releasingOn: revealCount
+            )
+            .onChange(of: data?.thread.items.last?.id) { revealHighlight(proxy) }
+            .onChange(of: held.map(\.id)) { old, new in
+                if new.contains(where: { !old.contains($0) }) { sendCount += 1 }
             }
-            .onChange(of: isThinking) { scrollToEnd(proxy) }
-            .onChange(of: background.map(\.id)) { scrollToEnd(proxy) }
-            .onChange(of: held.map(\.id)) { scrollToEnd(proxy) }
+            .onChange(of: data.map(Self.userMessageCount)) { old, new in
+                if let old, let new, new > old { sendCount += 1 }
+            }
             .onChange(of: model.chatHighlight) { revealHighlight(proxy) }
         }
         .task(id: task.id) {
@@ -76,17 +88,28 @@ struct RequestChat: View {
     private static let thinkingID = "thinking"
     private static let backgroundID = "background-agents"
 
+    private struct FollowSignature: Equatable {
+        let items: [String]
+        let held: [UUID]
+        let isThinking: Bool
+        let entries: [TranscriptEntry?]
+    }
+
     private static func latestEntry(of session: AgentSession) -> TranscriptEntry? {
         session.transcript.liveEntry ?? session.transcript.entries.last
     }
 
-    @discardableResult
-    private func revealHighlight(_ proxy: ScrollViewProxy) -> Bool {
-        guard let link = model.chatHighlight, link.requestID == task.id, let data else { return false }
+    private static func userMessageCount(in data: RequestThreadData) -> Int {
+        data.thread.items.count { if case .message(let message) = $0 { message.kind == .user } else { false } }
+    }
+
+    private func revealHighlight(_ proxy: ScrollViewProxy) {
+        guard let link = model.chatHighlight, link.requestID == task.id, let data else { return }
         model.chatHighlight = nil
         guard let messageID = link.messageID,
               let target = data.thread.items.first(where: { if case .message(let message) = $0 { message.id == messageID } else { false } })?.id
-        else { return false }
+        else { return }
+        revealCount += 1
         Task {
             try? await Task.sleep(for: .milliseconds(50))
             withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(target, anchor: .center) }
@@ -95,16 +118,6 @@ struct RequestChat: View {
             guard highlightedItemID == target else { return }
             withAnimation(.easeOut(duration: 1.2)) { highlightedItemID = nil }
         }
-        return true
-    }
-
-    private func scrollToEnd(_ proxy: ScrollViewProxy) {
-        let isThinking = model.leadSession(for: task).map { $0.isRunning || $0.isQueued } ?? false
-        let lastHeld = model.heldSends(for: model.leadSendTarget(for: task, in: project)).last?.id.uuidString
-        let backgroundID = model.backgroundSessions(for: task).isEmpty ? nil : Self.backgroundID
-        let target = isThinking ? Self.thinkingID : backgroundID ?? lastHeld ?? data?.thread.items.last?.id
-        guard let target else { return }
-        withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(target, anchor: .bottom) }
     }
 
     private func insertion(of item: RequestThread.Item) -> AnyTransition {

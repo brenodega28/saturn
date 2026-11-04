@@ -26,18 +26,18 @@ struct ChatColumn: View {
     private var leadChat: some View {
         let selected = model.selectedRequest(in: project)
         let newRequestHeld = selected == nil ? model.heldSends(for: model.leadSendTarget(for: nil, in: project)) : []
-        return ZStack(alignment: .bottom) {
-            Group {
-                if let selected {
-                    RequestChat(task: selected, project: project)
-                        .id(selected.id)
-                } else if !newRequestHeld.isEmpty {
-                    NewRequestHeldSends(held: newRequestHeld)
-                } else {
-                    NewRequestIntro(project: project)
-                }
+        return Group {
+            if let selected {
+                RequestChat(task: selected, project: project)
+                    .id(selected.id)
+            } else if !newRequestHeld.isEmpty {
+                NewRequestHeldSends(held: newRequestHeld)
+            } else {
+                NewRequestIntro(project: project)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             LeadComposer(project: project, request: selected)
                 .frame(maxWidth: 760)
                 .padding(.horizontal, 28)

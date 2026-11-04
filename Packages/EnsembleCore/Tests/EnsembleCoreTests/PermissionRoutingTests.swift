@@ -58,7 +58,7 @@ import Testing
         userTexts(session).reduce(0) { $0 + $1.components(separatedBy: phrase).count - 1 }
     }
 
-    func makeRun(in existing: AgentHarness? = nil, builderNames: [String] = ["Dev 1", "Dev 2"]) async throws -> LeadRun {
+    func makeRun(in existing: AgentHarness? = nil, workflow workflowName: String = "feature-delivery", builderNames: [String] = ["Dev 1", "Dev 2"]) async throws -> LeadRun {
         let harness: AgentHarness
         if let existing {
             harness = existing
@@ -67,7 +67,7 @@ import Testing
             try ProjectConfigLoader.installDefaults(repository: harness.repo.root)
             try LegacyWorkflows.install(repository: harness.repo.root)
         }
-        let workflow = try #require(ProjectConfigLoader.load(repository: harness.repo.root).workflow("feature-delivery"))
+        let workflow = try #require(ProjectConfigLoader.load(repository: harness.repo.root).workflow(workflowName))
         let driver = AgentWorkflowDriver(runtime: harness.runtime)
         driver.gitProvider = { harness.repo.git }
         let projectId = try #require(harness.project.id)
@@ -198,6 +198,89 @@ import Testing
             let note = "The user answered Dev 1’s request to run `\(command)`: \(outcome). Nothing for you to do."
             try await waitUntil { Self.userTexts(setup.lead).contains { $0.contains(note) } }
         }
+    }
+
+    @Test func theLeadsOwnRequestBecomesACardInItsChatAndOnlyTheLeadIsTold() async throws {
+        let setup = try await makeRun()
+        defer { setup.harness.cleanUp() }
+
+        let reply = await setup.hook("java -version", from: setup.lead)
+
+        #expect(Self.reason(reply) == AgentRuntime.leadChatReason)
+        let card = try #require(try setup.cards().first)
+        #expect(try setup.cards().count == 1)
+        #expect(card.permissionStatus == .pending && card.text == "java -version")
+        #expect(try setup.permissionItems().isEmpty)
+        #expect(try setup.requests().first?.inboxItemId == nil)
+
+        try setup.answerLatestCard(.allowOnce)
+
+        try await waitUntil { Self.userTexts(setup.lead).contains { $0.hasPrefix("The user allowed you to run `java -version`") } }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(Self.occurrences(of: "asked to run", in: setup.lead) == 0)
+        #expect(Self.occurrences(of: "The user answered", in: setup.lead) == 0)
+        #expect(try setup.cards().first?.permissionStatus == .allowedOnce)
+        #expect(Self.decision(await setup.hook("java -version", from: setup.lead)) == "allow")
+    }
+
+    @Test func anAgentInARunWithoutALeadStepAsksInThatRunsChat() async throws {
+        let setup = try await makeRun(workflow: "small-task")
+        defer { setup.harness.cleanUp() }
+        let builder = setup.builders[0]
+
+        let reply = await setup.hook("java -version", from: builder)
+
+        #expect(Self.reason(reply) == AgentRuntime.leadChatReason)
+        let card = try #require(try setup.cards().first)
+        #expect(card.runId == setup.runId && card.title == "Dev 1" && card.permissionStatus == .pending)
+        #expect(try setup.permissionItems().isEmpty)
+        try await waitUntil { Self.userTexts(setup.lead).contains { $0.contains("Dev 1 asked to run `java -version`") } }
+
+        try setup.answerLatestCard(.deny)
+
+        try await waitUntil { Self.userTexts(builder).contains { $0.hasPrefix("The user said no to: run `java -version`") } }
+        try await waitUntil { Self.userTexts(setup.lead).contains { $0.contains("The user answered Dev 1’s request to run `java -version`: denied.") } }
+        #expect(Self.reason(await setup.hook("java -version", from: builder))?.hasPrefix("The user said no to this") == true)
+    }
+
+    @Test func anAgentTheLeadSpawnedOutsideARunAsksInTheLeadsChat() async throws {
+        let setup = try await makeRun(builderNames: [])
+        defer { setup.harness.cleanUp() }
+        _ = try await setup.driver.receive(.spawnAgent(AgentSpawnRequest(agent: .builder, task: "Check the JDK", name: "Runner")), from: setup.lead.id)
+        let runner = try #require(try setup.database.agents(inProject: setup.projectId).first { $0.name == "Runner" })
+        let session = try #require(setup.harness.runtime.session(for: runner))
+        #expect(runner.runId == nil && runner.taskId == nil && runner.spawnedById == setup.lead.id)
+
+        let reply = await setup.hook("java -version", from: session)
+
+        #expect(Self.reason(reply) == AgentRuntime.leadChatReason)
+        let card = try #require(try setup.cards().first)
+        #expect(card.runId == nil && card.title == "Runner" && card.permissionStatus == .pending)
+        #expect(try setup.permissionItems().isEmpty)
+
+        try setup.answerLatestCard(.allowOnce)
+
+        try await waitUntil { Self.userTexts(session).contains { $0.hasPrefix("The user allowed you to run `java -version`") } }
+        #expect(Self.decision(await setup.hook("java -version", from: session)) == "allow")
+    }
+
+    @Test func aRunAgentAsksInTheChatEvenWithoutALeadSession() async throws {
+        let setup = try await makeRun()
+        defer { setup.harness.cleanUp() }
+        try await setup.harness.runtime.delete(setup.lead, in: setup.harness.project, git: setup.harness.repo.git, deleteBranch: false)
+        #expect(try setup.database.leadAgent(taskId: setup.run.taskId) == nil)
+        let builder = setup.builders[0]
+
+        let reply = await setup.hook("java -version", from: builder)
+
+        #expect(Self.reason(reply) == AgentRuntime.leadChatReason)
+        #expect(try setup.cards().first?.permissionStatus == .pending)
+        #expect(try setup.permissionItems().isEmpty)
+
+        try setup.answerLatestCard(.allowForRun)
+
+        try await waitUntil { Self.userTexts(builder).contains { $0.contains("any `java` command for the rest of this run") } }
+        #expect(Self.decision(await setup.hook("java -version", from: setup.builders[1])) == "allow")
     }
 
     @Test func anAgentOutsideALeadChatRunAsksInTheInbox() async throws {

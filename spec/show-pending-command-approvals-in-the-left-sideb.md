@@ -1,6 +1,6 @@
 ---
 title: Show pending command approvals in the left sidebar
-status: in-progress
+status: done
 owner: ""
 linked_runs: [81]
 created: 2026-11-04
@@ -25,15 +25,15 @@ When an agent working on a chat asks to run a command that needs the user's OK, 
 
 ## Acceptance criteria
 
-- [ ] A chat with at least one pending permission card shows "Needs approval" as its sidebar subtitle, taking priority over "Needs you" and over the run step label
-- [ ] That chat's status dot is the orange needs-you color while the approval is pending
-- [ ] The chat row's orange badge count includes its pending approvals (added to the existing needs-you count) and stays hidden for the currently open chat, as today
-- [ ] A collapsed project with a chat that has a pending approval shows the orange attention dot on its header
-- [ ] Allowing or denying the card (once, for run, or deny) clears the status, dot and badge without restarting the app or switching chats
-- [ ] A new permission card appears in the sidebar status without restarting the app or switching chats
-- [ ] The VoiceOver label of the row includes the "Needs approval" status
-- [ ] Permission requests that go to the Inbox (agents with no owning chat) keep their current behavior
-- [ ] New core logic has unit tests in EnsembleCoreTests; the full EnsembleCore test suite passes and the app builds
+- [x] A chat with at least one pending permission card shows "Needs approval" as its sidebar subtitle, taking priority over "Needs you" and over the run step label
+- [x] That chat's status dot is the orange needs-you color while the approval is pending
+- [x] The chat row's orange badge count includes its pending approvals (added to the existing needs-you count) and stays hidden for the currently open chat, as today
+- [x] A collapsed project with a chat that has a pending approval shows the orange attention dot on its header
+- [x] Allowing or denying the card (once, for run, or deny) clears the status, dot and badge without restarting the app or switching chats
+- [x] A new permission card appears in the sidebar status without restarting the app or switching chats
+- [x] The VoiceOver label of the row includes the "Needs approval" status
+- [x] Permission requests that go to the Inbox (agents with no owning chat) keep their current behavior
+- [x] New core logic has unit tests in EnsembleCoreTests; the full EnsembleCore test suite passes and the app builds
 
 ## Verification
 

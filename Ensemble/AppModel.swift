@@ -78,6 +78,7 @@ final class AppModel {
     let inbox: InboxFeed
     let inboxNotifier = InboxNotifier()
     let chatNotifications: ChatNotificationFeed
+    let pendingPermissions: PendingPermissionFeed
     var runDetailIDs: [Int64: Int64] = [:]
     let idleCleanup: IdleCleanupScheduler
     let planUsage = PlanUsagePoller()
@@ -155,6 +156,7 @@ final class AppModel {
         self.gitHub = GitHubIntegration(engine: engine, secrets: secrets)
         self.inbox = InboxFeed(database: database)
         self.chatNotifications = ChatNotificationFeed(database: database)
+        self.pendingPermissions = PendingPermissionFeed(database: database)
         self.idleCleanup = IdleCleanupScheduler(runtime: agents)
         driver.gitProvider = { [weak self] in self?.git }
         connectWorkspaces()

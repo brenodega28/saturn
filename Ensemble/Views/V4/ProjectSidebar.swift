@@ -98,7 +98,7 @@ private struct ProjectGroup: View {
 
     private var attentionColor: Color? {
         let items = model.inbox.items.filter { $0.projectId == project.id }
-        if items.contains(where: { AppModel.needsYouKinds.contains($0.kind) }) { return V4.orange }
+        if model.projectHasPendingApprovals(project) || items.contains(where: { AppModel.needsYouKinds.contains($0.kind) }) { return V4.orange }
         if items.contains(where: { $0.kind == .failure }) { return Color(hex: 0xFF5A4E) }
         return nil
     }
@@ -116,7 +116,8 @@ private struct RequestRow: View {
         let title = request.title.isEmpty ? "Request #\(request.id ?? 0)" : request.title
         let meta = model.requestStatusLabel(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs)
         let dot = model.statusColor(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs)
-        let badge = badgeCount(latestRun: run)
+        let approvals = model.pendingApprovalCount(of: request)
+        let badge = badgeCount(latestRun: run, pendingApprovals: approvals)
         let isCurrent = model.selectedRequestID == request.id && model.mainScreen.isChat
         Button { model.showChat(request) } label: {
             HStack(spacing: 9) {
@@ -162,13 +163,24 @@ private struct RequestRow: View {
         .contextMenu { RequestCloseMenu(request: request, project: project) }
         .help("\(title) — \(meta)")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Chat \(title), \(meta)\(badge > 0 ? ", \(badge) need\(badge == 1 ? "s" : "") you" : "")")
+        .accessibilityLabel(Self.accessibilityLabel(title: title, meta: meta, badge: badge, pendingApprovals: approvals))
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 
-    private func badgeCount(latestRun: Run?) -> Int {
+    static func accessibilityLabel(title: String, meta: String, badge: Int, pendingApprovals: Int) -> String {
+        var parts = ["Chat \(title)", meta]
+        if pendingApprovals > 0 {
+            parts.append("\(pendingApprovals) command approval\(pendingApprovals == 1 ? "" : "s") pending")
+        }
+        if badge > 0 {
+            parts.append("\(badge) need\(badge == 1 ? "s" : "") you")
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private func badgeCount(latestRun: Run?, pendingApprovals: Int) -> Int {
         guard let id = request.id else { return 0 }
-        let count = model.needsYouItems.filter { model.taskID(of: $0) == id }.count
+        let count = model.needsYouItems.filter { model.taskID(of: $0) == id }.count + pendingApprovals
         if count > 0 { return count }
         return model.requestNeedsYou(request, latestRun: latestRun, needsYouTaskIDs: needsYouTaskIDs) ? 1 : 0
     }

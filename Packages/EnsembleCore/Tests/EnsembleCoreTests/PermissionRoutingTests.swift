@@ -112,6 +112,28 @@ import Testing
         #expect(try setup.permissionItems().isEmpty)
     }
 
+    @Test func pendingCardsAreCountedUntilAnswered() async throws {
+        let setup = try await makeRun()
+        defer { setup.harness.cleanUp() }
+        let feed = PendingPermissionFeed(database: setup.database)
+        feed.start()
+        defer { feed.stop() }
+
+        _ = await setup.hook("java -version", from: setup.builders[0])
+        _ = await setup.hook("java -version", from: setup.builders[1])
+
+        #expect(try setup.cards().count == 2)
+        #expect(try setup.database.pendingPermissionCounts(projectId: setup.projectId) == [setup.run.taskId: 2])
+        try await waitUntil { feed.count(taskId: setup.run.taskId) == 2 }
+        #expect(feed.count(projectId: setup.projectId) == 2)
+        try setup.answerLatestCard(.deny)
+        #expect(try setup.database.pendingPermissionCounts(projectId: setup.projectId) == [setup.run.taskId: 1])
+        let first = try #require(try setup.cards().first?.permissionRequestId)
+        try setup.harness.runtime.answerPermission(requestId: first, decision: .allowForRun)
+        #expect(try setup.database.pendingPermissionCounts(projectId: setup.projectId).isEmpty)
+        try await waitUntil { feed.count(projectId: setup.projectId) == 0 }
+    }
+
     @Test func theLeadIsToldOnceAndToldNotToAnswer() async throws {
         let setup = try await makeRun()
         defer { setup.harness.cleanUp() }

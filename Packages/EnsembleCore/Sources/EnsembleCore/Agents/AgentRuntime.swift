@@ -78,6 +78,7 @@ public final class AgentRuntime {
     public var pluginSkills: @MainActor (Project) -> Set<String> = { _ in [] }
     public var apiRetryDelays: [Duration] = [.seconds(60), .seconds(300), .seconds(900), .seconds(1800), .seconds(3600)]
     public var crashRestartLimit = 1
+    public var lingerGrace: Duration = .seconds(10)
     public internal(set) var settingUp: Set<Int64> = []
     public private(set) var usageRevision = 0
     public private(set) var apiCooldownUntil: Date?

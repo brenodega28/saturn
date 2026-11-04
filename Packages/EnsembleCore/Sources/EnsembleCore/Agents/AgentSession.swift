@@ -413,6 +413,7 @@ public final class AgentSession: Identifiable {
                     }
                     account(result)
                     source.closeInput()
+                    killIfLingering(source)
                     if let reply = latestReply?.trimmingCharacters(in: .whitespacesAndNewlines), !reply.isEmpty {
                         latestReply = nil
                         runtime.turnReplied(agent, reply)
@@ -426,6 +427,16 @@ public final class AgentSession: Identifiable {
             runtime.debugTrace?.processExited(code: code, standardError: standardError, agent: agent)
             #endif
             processEnded(code: code, standardError: standardError)
+        }
+    }
+
+    private func killIfLingering(_ source: AgentProcessHandle) {
+        let grace = runtime.lingerGrace
+        Task { [weak self] in
+            try? await Task.sleep(for: grace)
+            guard let self, self.handle === source, self.stopTarget == nil, self.pendingFailure == nil, self.turnCompletedInProcess else { return }
+            self.record(notice: .stopped, detail: "Claude Code was still running background tasks after its turn ended, so Ensemble ended them.")
+            source.kill()
         }
     }
 

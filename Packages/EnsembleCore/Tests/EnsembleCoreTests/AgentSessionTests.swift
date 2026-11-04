@@ -159,6 +159,82 @@ import Testing
         #expect(session.agent.costUSD == 0.01)
     }
 
+    @Test func claudeLingeringAfterItsResultIsKilledAndTheTurnEndsIdle() async throws {
+        let harness = try await AgentHarness.make(mode: "linger-after-result")
+        defer { harness.cleanUp() }
+        harness.runtime.lingerGrace = .milliseconds(300)
+        var endedTurns = 0
+        harness.runtime.observeTurnEnds { _ in endedTurns += 1 }
+
+        let session = try await harness.spawn()
+        try await waitUntil { transcriptKinds(session).contains("finished") }
+        let finishedAt = ContinuousClock.now
+        #expect(session.isRunning)
+
+        try await waitUntil(timeout: .seconds(5)) { session.agent.status == .idle && !session.isRunning }
+        #expect(ContinuousClock.now - finishedAt < .seconds(3))
+        #expect(endedTurns == 1)
+        #expect(lingerNotices(session).count == 1)
+        #expect(transcriptKinds(session).suffix(2) == ["finished", "notice:stopped"])
+        #expect(!transcriptKinds(session).contains("notice:retrying"))
+        #expect(session.agent.lastError == nil)
+        #expect(harness.launches().count == 1)
+
+        let pids = lingerPIDs(harness)
+        #expect(pids.count == 2)
+        try await waitUntil(timeout: .seconds(3)) { pids.allSatisfy { kill($0, 0) != 0 } }
+    }
+
+    @Test func claudeExitingAfterItsResultRecordsNoLingerNotice() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        harness.runtime.lingerGrace = .milliseconds(200)
+
+        let session = try await harness.spawn()
+        try await waitUntil { session.agent.status == .idle }
+        try await Task.sleep(for: .milliseconds(500))
+
+        #expect(transcriptKinds(session) == ["notice:started", "user", "assistant", "tool:Edit", "assistant", "finished"])
+        #expect(lingerNotices(session).isEmpty)
+    }
+
+    @Test func lingerTimerLeavesTheNextTurnRunning() async throws {
+        let harness = try await AgentHarness.make()
+        defer { harness.cleanUp() }
+        harness.runtime.lingerGrace = .milliseconds(800)
+
+        let session = try await harness.spawn()
+        try await waitUntil { session.agent.status == .idle }
+        try harness.setMode("slow")
+        session.send("Run the tests")
+        try await waitUntil { session.transcript.activeTool?.name == "Bash" }
+        try await Task.sleep(for: .milliseconds(1200))
+
+        #expect(session.isRunning)
+        #expect(session.agent.status == .working)
+        #expect(lingerNotices(session).isEmpty)
+        session.stop()
+        try await waitUntil { session.agent.status == .stopped }
+    }
+
+    @Test func lingerTimerLeavesAStoppedAgentStopped() async throws {
+        let harness = try await AgentHarness.make(mode: "linger-after-result")
+        defer {
+            for pid in lingerPIDs(harness) { kill(pid, SIGKILL) }
+            harness.cleanUp()
+        }
+        harness.runtime.lingerGrace = .milliseconds(500)
+
+        let session = try await harness.spawn()
+        try await waitUntil { transcriptKinds(session).contains("finished") }
+        session.stop()
+        try await waitUntil { session.agent.status == .stopped }
+
+        #expect(lingerNotices(session).isEmpty)
+        #expect(transcriptKinds(session).last == "notice:stopped")
+        #expect(!transcriptKinds(session).contains("notice:retrying"))
+    }
+
     @Test func crashMarksTheAgentFailedWithStandardError() async throws {
         let harness = try await AgentHarness.make(mode: "crash")
         defer { harness.cleanUp() }
@@ -294,6 +370,18 @@ import Testing
             if case .user(let text) = entry.content { return text }
             return nil
         }
+    }
+
+    private func lingerNotices(_ session: AgentSession) -> [String] {
+        session.transcript.entries.compactMap { entry in
+            if case .notice(.stopped, let detail?) = entry.content, detail.contains("background tasks") { return detail }
+            return nil
+        }
+    }
+
+    private func lingerPIDs(_ harness: AgentHarness) -> [Int32] {
+        ((try? String(contentsOf: harness.bin.appending(path: "linger.pids"), encoding: .utf8)) ?? "")
+            .split(separator: "\n").compactMap { Int32($0) }
     }
 }
 

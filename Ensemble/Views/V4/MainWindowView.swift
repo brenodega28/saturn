@@ -22,6 +22,7 @@ struct MainWindowView: View {
         .ignoresSafeArea()
         .toolbar(removing: .title)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .insetsWindowButtons(leading: 22, centerFromTop: 32)
         .overlay(alignment: .top) {
             if model.mainWindow.isLibraryShown {
                 LibraryPanel { model.mainWindow.isLibraryShown = false }

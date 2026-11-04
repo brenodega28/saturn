@@ -792,7 +792,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             } else if let guide = testFirstGuide(for: context.run) {
                 parts.append(guide)
             }
-            parts.append("When you’re done and tests pass, commit, then call `\(HandoffTool.submitResult.qualifiedName)` with what you changed and how you verified it. Then end your turn.")
+            parts.append("When you’re done and tests pass, commit, then call `\(HandoffTool.submitResult.qualifiedName)` with what you changed and how you verified it. Then end your turn. \(Self.stopBackgroundTasksGuide)")
         }
         return parts.joined(separator: "\n\n")
     }
@@ -859,9 +859,11 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         if let spec = effectiveSpec(context.plan, run: context.step.run) { parts.append("## Spec\n" + spec.markdown) }
         if !context.step.step.instructions.isEmpty { parts.append(context.step.step.instructions) }
         if let guide = testFirstGuide(for: context.step.run) { parts.append(guide) }
-        parts.append("Build it in your worktree, run the tests, commit, then call `\(HandoffTool.submitResult.qualifiedName)` with what you changed and how you verified it. Then end your turn.")
+        parts.append("Build it in your worktree, run the tests, commit, then call `\(HandoffTool.submitResult.qualifiedName)` with what you changed and how you verified it. Then end your turn. \(Self.stopBackgroundTasksGuide)")
         return parts.joined(separator: "\n\n")
     }
+
+    nonisolated static let stopBackgroundTasksGuide = "Before you call `\(HandoffTool.submitResult.qualifiedName)`, stop any servers or background commands you started."
 
     private func feedbackMessage(_ feedback: Feedback, issues: [ReviewIssue], task: PlanTask) -> String {
         var parts = ["# Changes requested (\(feedback.fromStep))", feedback.summary]
@@ -869,7 +871,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         if !list.isEmpty {
             parts.append(list.map { "- \($0.description)\($0.file.map { " (\($0))" } ?? "")" }.joined(separator: "\n"))
         }
-        parts.append("Fix this in your worktree for “\(task.title)”, run the tests, commit, then call `\(HandoffTool.submitResult.qualifiedName)` and end your turn.")
+        parts.append("Fix this in your worktree for “\(task.title)”, run the tests, commit, then call `\(HandoffTool.submitResult.qualifiedName)` and end your turn. \(Self.stopBackgroundTasksGuide)")
         return parts.joined(separator: "\n\n")
     }
 
@@ -1005,7 +1007,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             # Resolve a merge conflict
             Your branch conflicts with `\(conflict.base)` or with work the other builders already finished. Ensemble merged \(merged.map { "`\($0)`" }.joined(separator: ", ")) into your worktree\(conflicted.isEmpty ? "" : ", and git stopped with conflicts in \(files.joined(separator: ", "))").
 
-            \(conflicted.isEmpty ? "The merge went through, but check that both changes still work together." : "Open each file, keep both sides' changes so all functions and tests remain, and remove every conflict marker (<<<<<<<, =======, >>>>>>>) with the Edit tool.") Run the tests, then `git add` the files and `git commit --no-edit`. Finally call `\(HandoffTool.submitResult.qualifiedName)` describing the resolution, and end your turn.
+            \(conflicted.isEmpty ? "The merge went through, but check that both changes still work together." : "Open each file, keep both sides' changes so all functions and tests remain, and remove every conflict marker (<<<<<<<, =======, >>>>>>>) with the Edit tool.") Run the tests, then `git add` the files and `git commit --no-edit`. Finally call `\(HandoffTool.submitResult.qualifiedName)` describing the resolution, and end your turn. \(Self.stopBackgroundTasksGuide)
             """
     }
 

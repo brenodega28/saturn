@@ -1,6 +1,6 @@
 ---
 title: Implement the v4 left sidebar tree
-status: in-progress
+status: done
 owner: ""
 linked_runs: [82]
 created: 2026-11-04
@@ -29,19 +29,19 @@ Rebuild `ProjectSidebar` (Ensemble/Views/V4/ProjectSidebar.swift) to match the l
 
 ## Acceptance criteria
 
-- [ ] With a project open, the sidebar shows the groups Work, Crew and Review, then Settings, in the order from the design, each section with its icon
-- [ ] Clicking Chat starts a new chat in that project; each other section opens its tool screen; Source opens the Code screen
-- [ ] The section matching the current main screen is highlighted; Chat is highlighted on the chat screen and Agents on an agent detail screen
-- [ ] The open chats of the project appear indented under Chat with a status dot, title and status; a chat that needs you shows an orange "Needs you" unless it is the current chat
-- [ ] Only active runs appear under Tasks; clicking one opens its run detail; finished runs don't appear
-- [ ] The Tasks badge shows the project's needs-you task count, the Agents badge its total agent count and the Changes badge the branches waiting for review; badges are hidden at 0
-- [ ] The bottom row has exactly four buttons: Inbox (with its badge), Search, Usage and App settings; App settings opens the app Settings window
-- [ ] There is no "+ New chat" row
-- [ ] Collapsed projects still show only the header with its attention dot; clicking a header expands that project
-- [ ] Chat row context menus, tooltips and accessibility labels (including the pending command approvals count) still work
-- [ ] VoiceOver reads the section rows and the four tool buttons with their names and badge counts
-- [ ] No code comments are added (per CLAUDE.md)
-- [ ] The app builds, and `swift test` in Packages/EnsembleCore passes
+- [x] With a project open, the sidebar shows the groups Work, Crew and Review, then Settings, in the order from the design, each section with its icon
+- [x] Clicking Chat starts a new chat in that project; each other section opens its tool screen; Source opens the Code screen
+- [x] The section matching the current main screen is highlighted; Chat is highlighted on the chat screen and Agents on an agent detail screen
+- [x] The open chats of the project appear indented under Chat with a status dot, title and status; a chat that needs you shows an orange "Needs you" unless it is the current chat
+- [x] Only active runs appear under Tasks; clicking one opens its run detail; finished runs don't appear
+- [x] The Tasks badge shows the project's needs-you task count, the Agents badge its total agent count and the Changes badge the branches waiting for review; badges are hidden at 0
+- [x] The bottom row has exactly four buttons: Inbox (with its badge), Search, Usage and App settings; App settings opens the app Settings window
+- [x] There is no "+ New chat" row
+- [x] Collapsed projects still show only the header with its attention dot; clicking a header expands that project
+- [x] Chat row context menus, tooltips and accessibility labels (including the pending command approvals count) still work
+- [x] VoiceOver reads the section rows and the four tool buttons with their names and badge counts
+- [x] No code comments are added (per CLAUDE.md)
+- [x] The app builds, and `swift test` in Packages/EnsembleCore passes
 
 ## Verification
 

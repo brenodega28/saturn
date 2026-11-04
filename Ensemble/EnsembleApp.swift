@@ -102,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationWillTerminate(_ notification: Notification) {
         model?.engine.stopOrphanWatchdog()
+        model?.stopAllAppsImmediately()
         model?.agents.terminateAll()
     }
 }

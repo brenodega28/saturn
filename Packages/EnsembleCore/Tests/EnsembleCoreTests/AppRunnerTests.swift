@@ -1,0 +1,185 @@
+import Darwin
+import Foundation
+import Testing
+@testable import EnsembleCore
+
+@MainActor
+@Suite(.serialized) struct AppRunnerTests {
+    let folder: URL
+    let log = ActivityLog()
+
+    init() throws {
+        folder = FileManager.default.temporaryDirectory.appending(path: "ensemble-runner-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+
+    var environment: [String: String] {
+        AppRunner.environment(from: ToolLocator().environment(merging: [
+            "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
+            "ANTHROPIC_API_KEY": "secret",
+            "CLAUDE_CODE_ENTRYPOINT": "cli",
+        ]))
+    }
+
+    func makeRunner(grace: Duration = .seconds(5)) -> AppRunner {
+        AppRunner(projectId: 42, log: log, environment: environment, killGracePeriod: grace)
+    }
+
+    static func freePort() -> Int {
+        let descriptor = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        defer { close(descriptor) }
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr = in_addr(s_addr: INADDR_LOOPBACK.bigEndian)
+        var size = socklen_t(MemoryLayout<sockaddr_in>.size)
+        _ = withUnsafeMutablePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { generic in
+                bind(descriptor, generic, size)
+                return getsockname(descriptor, generic, &size)
+            }
+        }
+        return Int(UInt16(bigEndian: address.sin_port))
+    }
+
+    func eventually(_ timeout: Duration = .seconds(15), _ condition: () -> Bool) async -> Bool {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return condition()
+    }
+
+    var runMessages: [String] {
+        log.entries.filter { $0.source == AppRunner.logSource }.map(\.message)
+    }
+
+    static func server(printing url: Bool) -> String {
+        (url ? "echo \"  Local:   http://localhost:$PORT/\"\n" : "echo booting\n") + "sh -c 'exec nc -lk $PORT' &\nwait"
+    }
+
+    @Test func detectsThePortFromAPrintedURLAndStopKillsTheGroup() async throws {
+        let port = Self.freePort()
+        let runner = makeRunner()
+        await runner.start(command: Self.server(printing: true), label: "make dev", in: folder, branch: "main", port: port)
+        let group = try #require(runner.processGroup)
+
+        #expect(await eventually { runner.state.ports == [port] })
+        #expect(await PortProbe.isListening(port: port))
+        #expect(ListeningPorts.pids(inGroup: group).count >= 2)
+        #expect(runner.isRunning(in: folder))
+        #expect(!runner.isRunning(in: folder.appending(path: "other")))
+        #expect(runMessages.first == "make dev · main")
+        #expect(runMessages.contains("Local:   http://localhost:\(port)/"))
+        #expect(runMessages.contains("ready · http://localhost:\(port) · main"))
+        #expect(log.entries.filter { $0.source == AppRunner.logSource }.allSatisfy { $0.projectId == 42 })
+
+        await runner.stop()
+
+        #expect(runner.state == .stopped(exitCode: nil))
+        #expect(runner.processGroup == nil)
+        #expect(!runner.isRunning(in: folder))
+        #expect(!ProcessGroup.isAlive(group))
+        #expect(!(await PortProbe.isListening(port: port)))
+        #expect(runMessages.last == "stopped")
+    }
+
+    @Test func detectsThePortFromListeningSocketsWhenNothingIsPrinted() async throws {
+        let port = Self.freePort()
+        let runner = makeRunner()
+        await runner.start(command: Self.server(printing: false), in: folder, branch: "crew/a/b", port: port)
+        let group = try #require(runner.processGroup)
+
+        #expect(await eventually { runner.state.ports == [port] })
+        #expect(ListeningPorts.ports(inGroup: group).contains(port))
+        if case .running(_, let since) = runner.state {
+            #expect(since <= .now)
+        } else {
+            Issue.record("expected running, got \(runner.state)")
+        }
+
+        await runner.stop()
+        #expect(!(await PortProbe.isListening(port: port)))
+    }
+
+    @Test func passesPortAndStripsAgentSecrets() async throws {
+        let runner = makeRunner()
+        await runner.start(command: "echo \"port=$PORT ensemble=$ENSEMBLE_PORT key=${ANTHROPIC_API_KEY:-none} entry=${CLAUDE_CODE_ENTRYPOINT:-none} cwd=$(pwd -P)\"", in: folder, branch: "main", port: 5181)
+
+        #expect(await eventually { runner.state == .stopped(exitCode: 0) })
+        #expect(runMessages.contains("port=5181 ensemble=5181 key=none entry=none cwd=\(realPath(of: folder))"))
+        #expect(runMessages.last == "exited with code 0")
+    }
+
+    @Test func processExitingOnItsOwnReportsTheCode() async throws {
+        let runner = makeRunner()
+        await runner.start(command: "echo working\necho 'Error: something broke' >&2\necho 'just a warning' >&2\nexit 3", in: folder, branch: "main", port: nil)
+
+        #expect(await eventually { runner.state == .stopped(exitCode: 3) })
+        let entries = log.entries.filter { $0.source == AppRunner.logSource }
+        #expect(entries.first { $0.message == "Error: something broke" }?.level == .error)
+        #expect(entries.first { $0.message == "just a warning" }?.level == .info)
+        #expect(entries.first { $0.message == "working" }?.level == .info)
+        #expect(entries.last?.message == "exited with code 3")
+        #expect(entries.last?.level == .error)
+        #expect(runner.processGroup == nil)
+    }
+
+    @Test func startingAnotherBranchStopsTheFirst() async throws {
+        let first = Self.freePort()
+        let second = Self.freePort()
+        let runner = makeRunner()
+        await runner.start(command: Self.server(printing: true), in: folder, branch: "main", port: first)
+        let firstGroup = try #require(runner.processGroup)
+        #expect(await eventually { runner.state.ports == [first] })
+
+        await runner.start(command: Self.server(printing: true), in: folder, branch: "crew/x/y", port: second)
+
+        #expect(!ProcessGroup.isAlive(firstGroup))
+        #expect(!(await PortProbe.isListening(port: first)))
+        #expect(await eventually { runner.state.ports == [second] })
+        #expect(runner.branch == "crew/x/y")
+        #expect(runMessages.contains("stopped"))
+        await runner.stop()
+    }
+
+    @Test func childrenIgnoringTermAreKilledAfterTheGracePeriod() async throws {
+        let port = Self.freePort()
+        let runner = makeRunner(grace: .seconds(1))
+        let stubborn = #"perl -MIO::Socket::INET -e '$SIG{TERM} = "IGNORE"; my $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1", LocalPort => $ENV{PORT}, Listen => 5, ReuseAddr => 1) or die; sleep 600' &"# + "\nwait"
+        await runner.start(command: stubborn, in: folder, branch: "main", port: port)
+        let group = try #require(runner.processGroup)
+        #expect(await eventually { runner.state.ports == [port] })
+
+        let started = ContinuousClock.now
+        await runner.stop()
+
+        #expect(ContinuousClock.now - started >= .seconds(1))
+        #expect(!ProcessGroup.isAlive(group))
+        #expect(!(await PortProbe.isListening(port: port)))
+        #expect(runner.state == .stopped(exitCode: nil))
+    }
+
+    @Test func stopImmediatelyBlocksUntilTheGroupIsGone() async throws {
+        let port = Self.freePort()
+        let runner = makeRunner()
+        await runner.start(command: Self.server(printing: false), in: folder, branch: "main", port: port)
+        let group = try #require(runner.processGroup)
+        #expect(await eventually { runner.state.ports == [port] })
+
+        runner.stopImmediately()
+
+        #expect(!ProcessGroup.isAlive(group))
+        #expect(runner.state == .stopped(exitCode: nil))
+        #expect(!(await PortProbe.isListening(port: port)))
+    }
+
+    @Test func launchFailureIsReported() async throws {
+        let runner = makeRunner()
+        await runner.start(command: "true", in: folder.appending(path: "missing"), branch: "main", port: nil)
+
+        if case .failed = runner.state {} else { Issue.record("expected failed, got \(runner.state)") }
+        #expect(runner.processGroup == nil)
+    }
+}

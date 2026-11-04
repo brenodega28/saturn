@@ -9,18 +9,77 @@ struct WorkspacesSettingsView: View {
     let project: Project
     @State private var scriptDraft = ""
     @State private var basePortDraft = ""
+    @State private var runCommandDraft = ""
 
     var body: some View {
         let settings = project.settings
-        SettingsPage("Workspaces", subtitle: "How each agent’s worktree is prepared, which port it gets, and when idle agents are cleaned up.") {
+        SettingsPage("Workspaces", subtitle: "How each agent’s worktree is prepared, which port it gets, how the app runs, and when idle agents are cleaned up.") {
             setupCard(settings)
             portsCard(settings)
+            runCommandCard(settings)
             cleanupCard(settings)
         }
         .task(id: project.id) {
             scriptDraft = project.settings.setupScript
             basePortDraft = project.settings.basePort.map(String.init) ?? ""
+            runCommandDraft = project.settings.runCommand
         }
+    }
+
+    private func runCommandCard(_ settings: ProjectSettings) -> some View {
+        let detected = RunCommandDetector.detect(in: project.url)
+        let isDirty = runCommandDraft != settings.runCommand
+        let override = settings.runCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        return VStack(alignment: .leading, spacing: 12) {
+            header("Run command", detail: "What Start in the run bar launches, with zsh -lc in the chosen checkout. PORT and ENSEMBLE_PORT are set to the agent’s port, or the base port for your checkout. Stop ends every process it started.")
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("Detected").font(.system(size: 13))
+                if let detected {
+                    Text(detected.label)
+                        .font(.system(size: 12.5, design: .monospaced))
+                        .textSelection(.enabled)
+                    Text("from the \(detected.origin)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.secondaryText)
+                } else {
+                    Text("Nothing detected")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Theme.secondaryText)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 10) {
+                Text("Override").font(.system(size: 13))
+                TextField(detected?.label ?? "npm run dev", text: $runCommandDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12.5, design: .monospaced))
+                    .onSubmit { if isDirty { saveRunCommand() } }
+                    .accessibilityLabel("Run command override")
+                    .help("Leave empty to use the detected command")
+                Button("Revert") { runCommandDraft = settings.runCommand }
+                    .buttonStyle(.pill)
+                    .disabled(!isDirty)
+                    .help("Discard your edits to the run command")
+                Button("Save") { saveRunCommand() }
+                    .buttonStyle(.primaryPill)
+                    .disabled(!isDirty)
+                    .help("Use this command when you press Start")
+            }
+            Text(override.isEmpty
+                ? (detected == nil ? "Ensemble looks for a package.json dev script, a Makefile dev target or a Procfile. Add one, or set a command here." : "Start uses the detected command.")
+                : "Start uses your override. Clear it and save to go back to the detected command.")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .card(cornerRadius: 16)
+    }
+
+    private func saveRunCommand() {
+        let value = runCommandDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        runCommandDraft = value
+        update { $0.runCommand = value }
     }
 
     private func setupCard(_ settings: ProjectSettings) -> some View {

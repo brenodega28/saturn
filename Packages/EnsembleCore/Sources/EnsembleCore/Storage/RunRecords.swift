@@ -36,6 +36,7 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
     public var weeklyBudgetUSD: Double?
     public var budgetOverrideWeek: String?
     public var reviewCapacity: Int
+    public var runCommand: String
 
     public init(
         maxConcurrentAgents: Int = 4,
@@ -50,8 +51,10 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         budgetOverrideMonth: String? = nil,
         weeklyBudgetUSD: Double? = nil,
         budgetOverrideWeek: String? = nil,
-        reviewCapacity: Int = 3
+        reviewCapacity: Int = 3,
+        runCommand: String = ""
     ) {
+        self.runCommand = runCommand
         self.weeklyBudgetUSD = weeklyBudgetUSD
         self.budgetOverrideWeek = budgetOverrideWeek
         self.reviewCapacity = reviewCapacity
@@ -83,6 +86,7 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         self.reviewCapacity = try container.decodeIfPresent(Int.self, forKey: .reviewCapacity) ?? defaults.reviewCapacity
         self.weeklyBudgetUSD = try container.decodeIfPresent(Double.self, forKey: .weeklyBudgetUSD)
         self.budgetOverrideWeek = try container.decodeIfPresent(String.self, forKey: .budgetOverrideWeek)
+        self.runCommand = try container.decodeIfPresent(String.self, forKey: .runCommand) ?? ""
     }
 }
 

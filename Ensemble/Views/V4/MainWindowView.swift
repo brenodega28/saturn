@@ -10,9 +10,19 @@ struct MainWindowView: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 ProjectSidebar()
-                MiddleColumn()
-                    .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
-                LogColumn()
+                    .overlay { RunMenuDismissal() }
+                VStack(spacing: 8) {
+                    if let project = model.currentProject {
+                        RunBar(project: project)
+                            .zIndex(1)
+                    }
+                    HStack(spacing: 8) {
+                        MiddleColumn()
+                            .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                        LogColumn()
+                    }
+                    .overlay { RunMenuDismissal() }
+                }
             }
             .padding(8)
             MainStatusBar()
@@ -38,6 +48,19 @@ struct MainWindowView: View {
         .sheet(item: $model.pinPrompt) { prompt in PinPromptSheet(prompt: prompt) }
         .onChange(of: model.mainScreen) { old, new in
             model.mainWindow.record(from: old, to: new)
+        }
+    }
+}
+
+private struct RunMenuDismissal: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if model.isRunMenuOpen {
+            Color.black.opacity(0.001)
+                .contentShape(.rect)
+                .onTapGesture { model.isRunMenuOpen = false }
+                .accessibilityHidden(true)
         }
     }
 }

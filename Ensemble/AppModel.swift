@@ -104,6 +104,9 @@ final class AppModel {
     var settingsSections: [Int64: SettingsSection] = [:]
     var workflowEditors: [Int64: WorkflowEditor] = [:]
     let activityLog = ActivityLog()
+    var appRunners: [Int64: AppRunner] = [:]
+    var runTargetSelections: [Int64: String] = [:]
+    var isRunMenuOpen = false
     var activeClones: [String: Date] = [:]
     var listeningPorts: Set<Int> = []
     var isOffline = false
@@ -160,6 +163,7 @@ final class AppModel {
         self.idleCleanup = IdleCleanupScheduler(runtime: agents)
         driver.gitProvider = { [weak self] in self?.git }
         connectWorkspaces()
+        connectAppRunners()
         driver.gitHubProvider = { try? GitHubAuth(secrets: secrets).client() }
         restoreNavigation()
         connectGitHub()
@@ -447,6 +451,7 @@ final class AppModel {
 
     func deleteAgent(_ session: AgentSession, in project: Project, deleteBranch: Bool) async {
         guard let git = requireGit() else { return }
+        if let worktree = session.agent.worktreeURL { await stopApp(runningIn: worktree) }
         do {
             try await agents.delete(session, in: project, git: git, deleteBranch: deleteBranch)
             if selectedAgent(in: project)?.id == session.id { select(nil, in: project) }
@@ -501,6 +506,7 @@ final class AppModel {
         guard let id = project.id else { return }
         perform("Couldn’t close \(project.name)") { try database.closeProject(id: id) }
         projectStates[id] = nil
+        if let runner = appRunners[id] { Task { await runner.stop() } }
         reloadProjects()
         if selection == .project(id) {
             selection = openProjects.first?.id.map(SidebarItem.project)
@@ -551,6 +557,7 @@ final class AppModel {
 
     func removeWorktree(_ worktree: Worktree, in project: Project, force: Bool, deleteBranch: Bool) async throws {
         guard let manager = worktreeManager(for: project) else { return }
+        await stopApp(runningIn: worktree.path)
         try await manager.remove(worktree, force: force, deleteBranch: deleteBranch)
         await refresh(project)
     }

@@ -23,6 +23,9 @@ extension AppModel {
         driver.willRemoveWorktree = { [weak self] worktree in
             await self?.stopApp(runningIn: worktree)
         }
+        agents.willRemoveWorktree = { [weak self] worktree in
+            await self?.stopApp(runningIn: worktree)
+        }
     }
 
     func runTargets(in project: Project) -> [RunTarget] {

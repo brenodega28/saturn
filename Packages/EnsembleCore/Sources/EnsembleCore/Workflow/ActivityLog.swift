@@ -188,6 +188,7 @@ public struct LogFilter: Sendable, Hashable {
 public final class ActivityLog {
     public private(set) var entries: [LogEntry] = []
     public let capacity: Int
+    public var sourceLimits: [String: Int] = [:]
     private var nextID = 1
 
     public init(capacity: Int = 2000) {
@@ -200,6 +201,16 @@ public final class ActivityLog {
             draft.id = nextID
             nextID += 1
             entries.append(draft)
+        }
+        for source in Set(drafts.map(\.source)) {
+            guard let limit = sourceLimits[source] else { continue }
+            var excess = entries.count { $0.source == source } - limit
+            guard excess > 0 else { continue }
+            entries.removeAll { entry in
+                guard excess > 0, entry.source == source else { return false }
+                excess -= 1
+                return true
+            }
         }
         if entries.count > capacity {
             entries.removeFirst(entries.count - capacity)

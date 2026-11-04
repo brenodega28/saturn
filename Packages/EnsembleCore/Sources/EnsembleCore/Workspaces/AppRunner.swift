@@ -27,6 +27,7 @@ public enum AppRunState: Sendable, Equatable {
 public final class AppRunner {
     public static let logSource = "run"
     public static let maximumLineLength = 2000
+    public static let logLimit = 500
 
     public let projectId: Int64
     public private(set) var state: AppRunState = .idle
@@ -52,6 +53,7 @@ public final class AppRunner {
     public init(projectId: Int64, log: ActivityLog, environment: [String: String], killGracePeriod: Duration = .seconds(5), portWait: Duration = .seconds(30)) {
         self.projectId = projectId
         self.log = log
+        log.sourceLimits[Self.logSource] = Self.logLimit
         self.environment = environment
         self.killGracePeriod = killGracePeriod
         self.portWait = portWait

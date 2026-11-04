@@ -292,6 +292,50 @@ import Testing
         #expect(try await setup.harness.repo.manager.list().isEmpty)
     }
 
+    @Test func deletingAnAgentStopsTheAppBeforeRemovingItsWorktree() async throws {
+        let h = try await AgentHarness.make()
+        defer { h.cleanUp() }
+        let projectId = try #require(h.project.id)
+        let project = try #require(try h.database.project(id: projectId))
+        let agent = try #require(try await h.runtime.spawn(in: project, kind: .builder, count: 1, git: h.repo.git, name: "Doomed Dev").first)
+        let worktree = try #require(agent.agent.worktreeURL)
+
+        let port = Self.freePort()
+        let runner = makeRunner()
+        await runner.start(command: Self.cacheWritingServer(), in: worktree, branch: agent.agent.branch ?? "", port: port)
+        let group = try #require(runner.processGroup)
+        #expect(await eventually { runner.state.ports == [port] })
+
+        var stoppedWhileWorktreeExisted: [Bool] = []
+        h.runtime.willRemoveWorktree = hookStoppingRunner(runner) { stoppedWhileWorktreeExisted.append($0) }
+
+        try await h.runtime.delete(agent, in: project, git: h.repo.git, deleteBranch: true)
+
+        #expect(stoppedWhileWorktreeExisted == [true])
+        #expect(runner.state == .stopped(exitCode: nil))
+        #expect(!ProcessGroup.isAlive(group))
+        #expect(!(await PortProbe.isListening(port: port)))
+        #expect(!FileManager.default.fileExists(atPath: worktree.path))
+    }
+
+    @Test func serverLinesAreCappedSoOtherLogRowsSurvive() async throws {
+        let small = ActivityLog(capacity: 50)
+        let runner = AppRunner(projectId: 42, log: small, environment: environment)
+        small.sourceLimits[AppRunner.logSource] = 10
+        small.append([LogEntry(date: .now, level: .info, source: "Dev 1", projectId: 42, message: "finished its turn")])
+
+        await runner.start(command: "for i in $(seq 1 200); do echo line-$i; done", in: folder, branch: "main", port: nil)
+        #expect(await eventually { runner.state == .stopped(exitCode: 0) })
+
+        let runRows = small.entries.filter { $0.source == AppRunner.logSource }
+        #expect(runRows.count == 10)
+        #expect(runRows.last?.message == "exited with code 0")
+        #expect(small.entries.contains { $0.source == "Dev 1" })
+        let shared = ActivityLog()
+        _ = AppRunner(projectId: 1, log: shared, environment: [:])
+        #expect(shared.sourceLimits[AppRunner.logSource] == AppRunner.logLimit)
+    }
+
     @Test func launchFailureIsReported() async throws {
         let runner = makeRunner()
         await runner.start(command: "true", in: folder.appending(path: "missing"), branch: "main", port: nil)

@@ -451,7 +451,6 @@ final class AppModel {
 
     func deleteAgent(_ session: AgentSession, in project: Project, deleteBranch: Bool) async {
         guard let git = requireGit() else { return }
-        if let worktree = session.agent.worktreeURL { await stopApp(runningIn: worktree) }
         do {
             try await agents.delete(session, in: project, git: git, deleteBranch: deleteBranch)
             if selectedAgent(in: project)?.id == session.id { select(nil, in: project) }

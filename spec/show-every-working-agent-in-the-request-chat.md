@@ -1,6 +1,6 @@
 ---
 title: Show every working agent in the request chat
-status: in-progress
+status: done
 owner: ""
 linked_runs: [73]
 created: 2026-11-03
@@ -25,16 +25,16 @@ The request chat shows a live row while the Lead is thinking, but agents working
 
 ## Acceptance criteria
 
-- [ ] While a run's builder is working, the request chat shows a row at the bottom of the thread with the builder's badge, its name and its live activity (current tool and target, Thinking…, or the reply it is writing)
-- [ ] Run checkers and the run lead show up the same way while they are running or queued
-- [ ] Agents the chat lead spawned outside a run still show up as before, with the subtitle '· working in the background'
-- [ ] The chat lead never appears in this row; it keeps its own thinking row
-- [ ] When two or more agents are working, they collapse into one grouped list headed 'N agents working', with one line per agent
-- [ ] Clicking an agent's row or line opens that agent's session
-- [ ] An agent's row disappears once it stops running or queued, and the chat scrolls to keep the row in view as it appears or changes, like it does today
-- [ ] Each agent appears at most once, even if it matches both the request's runs and the spawned-by-lead query
-- [ ] LeadAgentControlTests covers the new behavior: a run agent working on the request is included, the chat lead and agents on other requests are excluded, and idle agents are excluded. The existing assertion that run agents are excluded is updated to match
-- [ ] `swift test` passes in Packages/EnsembleCore and the app builds with xcodebuild
+- [x] While a run's builder is working, the request chat shows a row at the bottom of the thread with the builder's badge, its name and its live activity (current tool and target, Thinking…, or the reply it is writing)
+- [x] Run checkers and the run lead show up the same way while they are running or queued
+- [x] Agents the chat lead spawned outside a run still show up as before, with the subtitle '· working in the background'
+- [x] The chat lead never appears in this row; it keeps its own thinking row
+- [x] When two or more agents are working, they collapse into one grouped list headed 'N agents working', with one line per agent
+- [x] Clicking an agent's row or line opens that agent's session
+- [x] An agent's row disappears once it stops running or queued, and the chat scrolls to keep the row in view as it appears or changes, like it does today
+- [x] Each agent appears at most once, even if it matches both the request's runs and the spawned-by-lead query
+- [x] LeadAgentControlTests covers the new behavior: a run agent working on the request is included, the chat lead and agents on other requests are excluded, and idle agents are excluded. The existing assertion that run agents are excluded is updated to match
+- [x] `swift test` passes in Packages/EnsembleCore and the app builds with xcodebuild
 
 ## Verification
 

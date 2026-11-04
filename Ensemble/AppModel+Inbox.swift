@@ -39,6 +39,7 @@ extension AppModel {
         }
         inbox.start()
         chatNotifications.start()
+        pendingPermissions.start()
         inboxNotifier.requestAuthorization()
     }
 
@@ -170,6 +171,14 @@ extension AppModel {
             }
         }
         return taskIDs
+    }
+
+    func pendingApprovalCount(of task: ProjectTask) -> Int {
+        task.id.map(pendingPermissions.count(taskId:)) ?? 0
+    }
+
+    func projectHasPendingApprovals(_ project: Project) -> Bool {
+        project.id.map(pendingPermissions.count(projectId:)).map { $0 > 0 } ?? false
     }
 
     func requestNeedsYou(_ task: ProjectTask, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> Bool {

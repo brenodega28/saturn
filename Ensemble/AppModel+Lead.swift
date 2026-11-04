@@ -128,6 +128,7 @@ extension AppModel {
     }
 
     func requestStatusLabel(of request: ProjectTask, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> String {
+        if pendingApprovalCount(of: request) > 0 { return "Needs approval" }
         if requestNeedsYou(request, latestRun: latestRun, needsYouTaskIDs: needsYouTaskIDs) { return "Needs you" }
         guard let latestRun else { return "Chat" }
         let label = statusLabel(of: latestRun)

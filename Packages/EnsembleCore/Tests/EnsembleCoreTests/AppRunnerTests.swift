@@ -225,6 +225,73 @@ import Testing
         #expect(hookCalls == 0)
     }
 
+    static func cacheWritingServer() -> String {
+        "(while true; do mkdir -p .vite; date > .vite/stamp; sleep 0.05; done) &\n" + server(printing: false)
+    }
+
+    func hookStoppingRunner(_ runner: AppRunner, record: @escaping @MainActor (Bool) -> Void) -> @MainActor (URL) async -> Void {
+        { path in
+            guard runner.isRunning(in: path) else { return }
+            record(FileManager.default.fileExists(atPath: path.path))
+            await runner.stop()
+        }
+    }
+
+    @Test func runCleanupStopsTheAppBeforeRemovingARunWorktree() async throws {
+        let h = try await AgentHarness.make()
+        defer { h.cleanUp() }
+        let projectId = try #require(h.project.id)
+        let now = Date()
+        let task = try h.database.insert(ProjectTask(projectId: projectId, title: "Preview", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now))
+        let run = try h.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: .running, startedAt: now, baseBranch: "main"), state: RunEngineState())
+        let runId = try #require(run.id)
+        let worktree = try await h.repo.manager.create(agent: "preview-run-\(runId)", slug: "preview").path
+
+        let port = Self.freePort()
+        let runner = makeRunner()
+        await runner.start(command: Self.cacheWritingServer(), in: worktree, branch: "preview", port: port)
+        let group = try #require(runner.processGroup)
+        #expect(await eventually { runner.state.ports == [port] })
+
+        var stoppedWhileWorktreeExisted: [Bool] = []
+        let driver = AgentWorkflowDriver(runtime: h.runtime)
+        driver.gitProvider = { h.repo.git }
+        driver.willRemoveWorktree = hookStoppingRunner(runner) { stoppedWhileWorktreeExisted.append($0) }
+
+        _ = try await driver.finish(run, end: WorkflowEnd(action: .leave, cleanUpWorktrees: true))
+
+        #expect(stoppedWhileWorktreeExisted == [true])
+        #expect(runner.state == .stopped(exitCode: nil))
+        #expect(!ProcessGroup.isAlive(group))
+        #expect(!(await PortProbe.isListening(port: port)))
+        #expect(try await h.repo.manager.list().isEmpty)
+    }
+
+    @Test func mergingADeliveryStopsTheAppRunningInTheDeliveryWorktree() async throws {
+        let setup = try await WorkflowDriverTests().makeMergeSetup()
+        defer { setup.harness.cleanUp() }
+        let worktree = try setup.harness.repo.manager.path(forAgent: "delivery-run-1")
+        try await setup.harness.repo.manager.ensureExcluded()
+        try await setup.git.run(["worktree", "add", worktree.path, WorkflowDriverTests.MergeSetup.branch], in: setup.root)
+
+        let port = Self.freePort()
+        let runner = makeRunner()
+        await runner.start(command: Self.cacheWritingServer(), in: worktree, branch: WorkflowDriverTests.MergeSetup.branch, port: port)
+        let group = try #require(runner.processGroup)
+        #expect(await eventually { runner.state.ports == [port] })
+
+        var stoppedWhileWorktreeExisted: [Bool] = []
+        setup.driver.willRemoveWorktree = hookStoppingRunner(runner) { stoppedWhileWorktreeExisted.append($0) }
+
+        _ = try await setup.driver.mergeDelivery(setup.run, method: .rebase)
+
+        #expect(stoppedWhileWorktreeExisted == [true])
+        #expect(runner.state == .stopped(exitCode: nil))
+        #expect(!ProcessGroup.isAlive(group))
+        #expect(!(await PortProbe.isListening(port: port)))
+        #expect(try await setup.harness.repo.manager.list().isEmpty)
+    }
+
     @Test func launchFailureIsReported() async throws {
         let runner = makeRunner()
         await runner.start(command: "true", in: folder.appending(path: "missing"), branch: "main", port: nil)

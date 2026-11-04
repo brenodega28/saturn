@@ -20,6 +20,9 @@ extension AppModel {
         idleCleanup.willRemoveWorktree = { [weak self] worktree in
             await self?.stopApp(runningIn: worktree)
         }
+        driver.willRemoveWorktree = { [weak self] worktree in
+            await self?.stopApp(runningIn: worktree)
+        }
     }
 
     func runTargets(in project: Project) -> [RunTarget] {

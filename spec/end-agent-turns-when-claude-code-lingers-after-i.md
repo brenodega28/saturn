@@ -1,6 +1,6 @@
 ---
 title: End agent turns when Claude Code lingers after its result
-status: in-progress
+status: done
 owner: ""
 linked_runs: [80]
 created: 2026-11-04
@@ -29,7 +29,7 @@ A workflow step only advances once the agent's Claude Code process exits. `Agent
 ## Acceptance criteria
 
 - [ ] With FakeClaude in the new linger mode and a small `lingerGrace`, a session's turn ends: status becomes `.idle`, `isRunning` is false and `runtime.turnEnded` fires within about `lingerGrace` after the `result` line.
-- [ ] The lingering fake process and its child processes are gone after the kill (check that the recorded pid is no longer alive).
+- [x] The lingering fake process and its child processes are gone after the kill (check that the recorded pid is no longer alive).
 - [ ] A workflow build step whose builder calls `submit_result` and then lingers advances with that recorded result. It doesn't wait for the process to exit, and doesn't raise `missingHandoff` or `agentFailed`.
 - [ ] A linger kill is not treated as a crash: no `.retrying` notice, no restart, `crashRestarts` unchanged, and status isn't `.failed`.
 - [ ] Normal mode is unchanged: a fake that exits right after its result ends the turn the same way it does today, and no linger notice is recorded.

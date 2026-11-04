@@ -1,6 +1,6 @@
 ---
 title: "Stop a second instance from hijacking runs, and re-drive orphaned steps"
-status: in-progress
+status: done
 owner: ""
 linked_runs: [74]
 created: 2026-11-03
@@ -26,13 +26,13 @@ Runs 71 and 72 stalled because a second Ensemble instance (a builder's `open -n`
 
 ## Acceptance criteria
 
-- [ ] Launching a second Ensemble process against the same data directory shows the alert and quits. It doesn't terminate any Claude process, change any agent or run row, or start an MCP server. Covered by an EnsembleCore test: a second `InstanceLock.acquire` on the same root throws `alreadyRunning`, and succeeds once the first lock is released.
-- [ ] A different AppPaths root (for example a temp directory in tests) can be locked at the same time as the standard one.
-- [ ] RunEngine test: a run with status `.running` whose driver task has ended without finishing the step is re-driven by `reviveOrphanedRuns` on the second check, not the first. Its stuck step ends `interrupted`, a new attempt starts with `.resume`, and the run reaches its next step.
-- [ ] RunEngine test: a run with a live driver, a run in `.waitingOnYou`, a run in `.paused`, and a finished run are never revived.
-- [ ] Each revive inserts exactly one `.note` LeadMessage on that run's request chat, and the note shows in the chat as a system line, not as a lead reply. No agent session gets a turn just because of the note.
-- [ ] The watchdog stops when the app quits and doesn't revive a run twice in the same orphan episode.
-- [ ] No code comments. The xcodebuild app build succeeds, and `swift test --package-path Packages/EnsembleCore` passes.
+- [x] Launching a second Ensemble process against the same data directory shows the alert and quits. It doesn't terminate any Claude process, change any agent or run row, or start an MCP server. Covered by an EnsembleCore test: a second `InstanceLock.acquire` on the same root throws `alreadyRunning`, and succeeds once the first lock is released.
+- [x] A different AppPaths root (for example a temp directory in tests) can be locked at the same time as the standard one.
+- [x] RunEngine test: a run with status `.running` whose driver task has ended without finishing the step is re-driven by `reviveOrphanedRuns` on the second check, not the first. Its stuck step ends `interrupted`, a new attempt starts with `.resume`, and the run reaches its next step.
+- [x] RunEngine test: a run with a live driver, a run in `.waitingOnYou`, a run in `.paused`, and a finished run are never revived.
+- [x] Each revive inserts exactly one `.note` LeadMessage on that run's request chat, and the note shows in the chat as a system line, not as a lead reply. No agent session gets a turn just because of the note.
+- [x] The watchdog stops when the app quits and doesn't revive a run twice in the same orphan episode.
+- [x] No code comments. The xcodebuild app build succeeds, and `swift test --package-path Packages/EnsembleCore` passes.
 
 ## Verification
 

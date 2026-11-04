@@ -36,6 +36,7 @@ enum V4 {
 
 enum V4Glyph {
     case laptop
+    case chat
     case inbox
     case changes
     case search
@@ -72,6 +73,8 @@ enum V4Glyph {
         case .laptop:
             box(4, 6, 16, 10)
             line((2, 19), (22, 19))
+        case .chat:
+            line((4, 5), (20, 5), (20, 16), (9, 16), (4, 20), (4, 5))
         case .inbox:
             line((3, 13), (6, 5), (18, 5), (21, 13), (21, 19), (3, 19), (3, 13))
             line((3, 13), (8, 13), (9, 15), (15, 15), (16, 13), (21, 13))

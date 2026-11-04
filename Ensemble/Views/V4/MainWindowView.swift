@@ -7,13 +7,16 @@ struct MainWindowView: View {
 
     var body: some View {
         @Bindable var model = model
-        HStack(spacing: 8) {
-            ProjectSidebar()
-            MiddleColumn()
-                .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
-            LogColumn()
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                ProjectSidebar()
+                MiddleColumn()
+                    .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                LogColumn()
+            }
+            .padding(8)
+            MainStatusBar()
         }
-        .padding(8)
         .frame(minWidth: 1160, minHeight: 680)
         .background(V4.container)
         .ignoresSafeArea()

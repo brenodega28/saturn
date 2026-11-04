@@ -94,12 +94,16 @@ extension AgentRuntime {
     nonisolated static let inboxReason = "This needs the user’s OK, so Ensemble asked them in their Inbox. Carry on with other work or end your turn; you’ll get a message with the answer."
     nonisolated static let leadChatReason = "This needs the user’s OK, so Ensemble is asking them through the lead chat. Carry on with other work or end your turn; you’ll get a message with the answer."
 
-    func relayLead(for agent: Agent, runId: Int64) throws -> Agent? {
-        guard let run = try database.run(id: runId),
-              let lead = try database.leadAgent(taskId: run.taskId), lead.id != agent.id, lead.taskId != nil,
-              session(for: lead) != nil,
-              let workflow = try? YAMLWorkflow.decode(run.workflowSnapshot) else { return nil }
-        return workflow.steps.contains { $0.type == .agent && $0.agent == .lead } ? lead : nil
+    func owningTaskId(of agent: Agent) throws -> Int64? {
+        var current = agent
+        var visited: Set<Int64> = []
+        while true {
+            if let taskId = current.taskId { return taskId }
+            if let runId = current.runId, let run = try database.run(id: runId) { return run.taskId }
+            guard let id = current.id, visited.insert(id).inserted,
+                  let spawnerId = current.spawnedById, let spawner = try database.agent(id: spawnerId) else { return nil }
+            current = spawner
+        }
     }
 
     func permissionDecision(_ input: JSONValue, agent: Agent, policy: PermissionPolicy) throws -> JSONValue {
@@ -145,13 +149,15 @@ extension AgentRuntime {
             projectId: agent.projectId, agentId: agentId, runId: agent.runId, capability: capability, request: request,
             status: .pending, createdAt: .now
         )
-        if let runId = agent.runId, let lead = try relayLead(for: agent, runId: runId), let taskId = lead.taskId {
+        if let taskId = try owningTaskId(of: agent) {
             let record = try database.insert(pending)
             try database.insert(LeadMessage(
-                projectId: agent.projectId, taskId: taskId, kind: .permission, text: request, title: name, runId: runId,
+                projectId: agent.projectId, taskId: taskId, kind: .permission, text: request, title: name, runId: agent.runId,
                 createdAt: .now, permissionRequestId: record.id, permissionStatus: .pending, capability: capability
             ))
-            session(for: lead)?.send("\(name) asked to \(action). The user sees an Allow/Deny card in this chat; don’t answer it yourself.")
+            if let lead = try database.leadAgent(taskId: taskId), lead.id != agent.id {
+                session(for: lead)?.send("\(name) asked to \(action). The user sees an Allow/Deny card in this chat; don’t answer it yourself.")
+            }
             return Self.decision("deny", reason: Self.leadChatReason)
         }
         let item = try database.createInboxItem(InboxItem(

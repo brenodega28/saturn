@@ -324,9 +324,10 @@ public final class AgentRuntime {
         let config = files.map { ProjectConfigLoader.load(repository: $0) }
         let policy = PermissionPolicy(profile: (config?.permissions ?? PermissionsConfig()).resolve(for: agent.kind, readOnly: agent.readOnly), readOnly: agent.readOnly)
         let name = AgentNaming.displayName(of: agent, config: config)
+        let shellRules = ClaudeLaunch.shellRules(policy, guarded: mcpServer != nil)
         var prompt = agent.readOnly
-            ? ClaudeLaunch.readOnlySystemPrompt(agentName: name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree), commands: policy.commands)
-            : ClaudeLaunch.systemPrompt(agentName: name, worktree: directory, branch: agent.branch, commands: policy.commands)
+            ? ClaudeLaunch.readOnlySystemPrompt(agentName: name, directory: directory, canOpenWorktree: mcpServer != nil && tools.contains(.openWorktree), shellRules: shellRules)
+            : ClaudeLaunch.systemPrompt(agentName: name, worktree: directory, branch: agent.branch, shellRules: shellRules)
         if let guide = ClaudeLaunch.askGuide(policy), mcpServer != nil { prompt += "\n\n" + guide }
         let isLead = agent.kind == .lead
         if let files, let config, let project {

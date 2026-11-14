@@ -17,14 +17,14 @@ public enum ProposalStatus: String, Codable, Sendable, Hashable {
 
 public enum PermissionCardStatus: String, Codable, Sendable, Hashable {
     case pending
+    case allowed
     case allowedOnce
     case allowedForRun
     case denied
 
     init(_ decision: PermissionDecision) {
         switch decision {
-        case .allowOnce: self = .allowedOnce
-        case .allowForRun: self = .allowedForRun
+        case .allow: self = .allowed
         case .deny: self = .denied
         }
     }

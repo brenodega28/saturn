@@ -228,12 +228,17 @@ import Testing
 
     @Test func requestsAreClassifiedByCapability() {
         let policy = PermissionPolicy(profile: profile([:]), readOnly: false)
-        #expect(policy.capability(ofTool: "Bash", input: .object(["command": .string("npm install left-pad")]))?.0 == .installPackages)
-        #expect(policy.capability(ofTool: "Bash", input: .object(["command": .string("git push origin HEAD")]))?.0 == .gitPush)
-        #expect(policy.capability(ofTool: "Bash", input: .object(["command": .string("curl https://x.dev")]))?.0 == .network)
-        #expect(policy.capability(ofTool: "Bash", input: .object(["command": .string("pytest -q")]))?.0 == .runShell)
-        #expect(policy.capability(ofTool: "WebFetch", input: .object(["url": .string("https://docs.dev")]))?.1 == "https://docs.dev")
-        #expect(policy.capability(ofTool: "Read", input: nil) == nil)
+        func capabilities(_ command: String) -> [PermissionCapability]? {
+            policy.assess(tool: "Bash", input: .object(["command": .string(command)]))?.needs.map(\.capability)
+        }
+        #expect(capabilities("npm install left-pad") == [.installPackages])
+        #expect(capabilities("git push origin HEAD") == [.gitPush])
+        #expect(capabilities("curl https://x.dev") == [.network])
+        #expect(capabilities("pytest -q") == [.runShell])
+        #expect(capabilities("rm -rf build") == [.riskyCommands])
+        let fetch = policy.assess(tool: "WebFetch", input: .object(["url": .string("https://docs.dev/a")]))
+        #expect(fetch?.request == "https://docs.dev/a" && fetch?.needs.map(\.rule) == ["fetch from docs.dev"])
+        #expect(policy.assess(tool: "Read", input: nil) == nil)
     }
 }
 
@@ -274,6 +279,6 @@ import Testing
         #expect(reply["hookSpecificOutput"]?["permissionDecisionReason"]?.string?.hasPrefix("Developer agents may never push") == true)
         #expect(try harness.database.openInboxItems(projectId: try #require(harness.project.id)).isEmpty)
         let test: JSONValue = .object(["hook_event_name": .string("PreToolUse"), "tool_name": .string("Bash"), "tool_input": .object(["command": .string("pytest -q")])])
-        #expect(await harness.runtime.handleHook(test, agentID: session.id) == .object([:]))
+        #expect(await harness.runtime.handleHook(test, agentID: session.id)["hookSpecificOutput"]?["permissionDecision"] == .string("allow"))
     }
 }

@@ -65,7 +65,8 @@ extension AgentRuntime {
                 if protected != .object([:]) { return protected }
             }
             let policy = PermissionPolicy(profile: config.permissions.resolve(for: agent.kind, readOnly: agent.readOnly), readOnly: agent.readOnly)
-            return (try? permissionDecision(input, agent: agent, policy: policy)) ?? .object([:])
+            let directory = (agent.worktreeURL ?? project.url).path
+            return (try? permissionDecision(input, agent: agent, policy: policy, directory: directory)) ?? .object([:])
         }
         guard !agent.readOnly, let worktree = agent.worktreeURL, let checks = config.checks else { return .object([:]) }
         switch input["hook_event_name"]?.string {

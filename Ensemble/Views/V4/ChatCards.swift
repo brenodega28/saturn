@@ -18,6 +18,7 @@ extension PermissionCardStatus {
     var title: String {
         switch self {
         case .pending: "Waiting for you"
+        case .allowed: "Allowed for this chat"
         case .allowedOnce: "Allowed once"
         case .allowedForRun: "Allowed for this run"
         case .denied: "Denied"
@@ -32,7 +33,7 @@ extension PermissionCapability {
         case .runShell: Theme.paused
         case .network: Theme.info
         case .installPackages: Theme.warning
-        case .gitPush: Color(hex: 0xFF8A80)
+        case .gitPush, .riskyCommands: Color(hex: 0xFF8A80)
         }
     }
 }
@@ -42,6 +43,7 @@ struct PermissionCard: View {
     let card: LeadMessage
     let project: Project
     @State private var agent: Agent?
+    @State private var rules: [String] = []
 
     var body: some View {
         let name = agent.map { model.displayName(of: $0, in: project) } ?? card.title ?? "An agent"
@@ -61,6 +63,12 @@ struct PermissionCard: View {
                     .padding(.horizontal, 9)
                     .padding(.vertical, 6)
                     .background(V4.code, in: .rect(cornerRadius: 8, style: .continuous))
+                if !rules.isEmpty {
+                    Text("Covers \(rules.map { "`\($0)`" }.joined(separator: ", "))")
+                        .font(.system(size: 12))
+                        .foregroundStyle(V4.label.opacity(0.75))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let reason {
                     Text(reason)
                         .font(.system(size: 13))
@@ -69,15 +77,12 @@ struct PermissionCard: View {
                 }
                 if status == .pending {
                     HStack(spacing: 8) {
-                        Button("Allow once") { model.answerPermission(card, decision: .allowOnce) }
+                        Button("Allow") { model.answerPermission(card, decision: .allow) }
                             .buttonStyle(V4Pill(kind: .orange, height: 28, horizontalPadding: 12))
-                            .help("Let the agent run this exact command one more time")
-                        Button("Allow for this run") { model.answerPermission(card, decision: .allowForRun) }
-                            .buttonStyle(V4Pill(kind: .secondary, height: 28, horizontalPadding: 12))
-                            .help("Let every agent in this run use `\(PermissionPolicy.commandName(of: card.text))` until the run ends")
+                            .help("Let the lead and every worker in this chat run this and similar commands without asking again")
                         Button("Deny") { model.answerPermission(card, decision: .deny) }
                             .buttonStyle(V4Pill(kind: .deny, height: 28, horizontalPadding: 12))
-                            .help("Tell the agent to find another way")
+                            .help("Tell the agent to find another way; similar commands stay denied in this chat")
                     }
                 } else {
                     Text(status.title)
@@ -91,9 +96,9 @@ struct PermissionCard: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(V4.orange.opacity(0.35)))
         }
         .task(id: card.permissionRequestId) {
-            agent = card.permissionRequestId
-                .flatMap { try? model.database.permissionRequest(id: $0) }
-                .flatMap { try? model.database.agent(id: $0.agentId) }
+            let request = card.permissionRequestId.flatMap { try? model.database.permissionRequest(id: $0) }
+            rules = request?.rules ?? []
+            agent = request.flatMap { try? model.database.agent(id: $0.agentId) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Permission request from \(name)")
@@ -107,7 +112,7 @@ struct PermissionCard: View {
     private var reason: String? {
         guard let capability = card.capability else { return nil }
         let run = card.runId.flatMap(model.run(withID:))?.displayTitle
-        return ["This needs your OK to \(capability.title.lowercased()).", run.map { "Run: \($0)." }].compactMap(\.self).joined(separator: " ")
+        return ["Needs your OK: \(capability.title.lowercased()).", run.map { "Run: \($0)." }].compactMap(\.self).joined(separator: " ")
     }
 }
 

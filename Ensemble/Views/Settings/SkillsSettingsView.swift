@@ -15,7 +15,7 @@ struct SkillsSettingsView: View {
 
     var body: some View {
         let plugins = project.id.flatMap { model.skillPlugins[$0] } ?? []
-        let skills = SkillLibrary.skills(in: project.url, pluginSkills: model.pluginSkills(for: project))
+        let skills = SkillLibrary.skills(in: project.filesRoot, pluginSkills: model.pluginSkills(for: project))
         SettingsPage("Skills", subtitle: "Skills installed for this project, from .claude/skills, the project’s plugins and ~/.claude/skills. The Lead chooses which skills each builder or checker loads; Ensemble never turns them on for every agent.") {
             installCard(plugins: plugins)
 

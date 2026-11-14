@@ -46,6 +46,7 @@ public enum CodeDocument: Sendable, Hashable {
     case binary
     case tooLarge(bytes: Int)
     case missing
+    case loading
 }
 
 public struct CodeSearchHit: Sendable, Hashable {
@@ -72,9 +73,15 @@ public struct CodeWorkspace: Sendable {
     public func snapshot() async throws -> CodeSnapshot {
         let tracked = try await lines(of: ["ls-files", "-z"], separator: "\0")
         let untracked = try await lines(of: ["ls-files", "--others", "--exclude-standard", "-z"], separator: "\0")
-        let files = Array(Set(tracked + untracked))
-            .filter { FileManager.default.fileExists(atPath: root.appending(path: $0).path) }
-            .sorted()
+        let files: [String]
+        if git.isRemote {
+            let deleted = Set(try await lines(of: ["ls-files", "--deleted", "-z"], separator: "\0"))
+            files = Array(Set(tracked + untracked).subtracting(deleted)).sorted()
+        } else {
+            files = Array(Set(tracked + untracked))
+                .filter { FileManager.default.fileExists(atPath: root.appending(path: $0).path) }
+                .sorted()
+        }
 
         var changes: [String: CodeFileChange] = [:]
         if let reference = try await comparisonReference() {
@@ -92,8 +99,8 @@ public struct CodeWorkspace: Sendable {
                 changes[path]?.lines = ranges
             }
         }
-        for path in untracked where FileManager.default.fileExists(atPath: root.appending(path: path).path) {
-            guard case .text(let lines) = document(path) else {
+        for path in untracked where git.isRemote || FileManager.default.fileExists(atPath: root.appending(path: path).path) {
+            guard !git.isRemote, case .text(let lines) = document(path) else {
                 changes[path] = CodeFileChange(status: .added)
                 continue
             }
@@ -106,11 +113,35 @@ public struct CodeWorkspace: Sendable {
         Self.document(at: root.appending(path: path))
     }
 
+    public func loadDocument(_ path: String) async -> CodeDocument {
+        guard let client = git.sshClient else { return document(path) }
+        let script = #"""
+        cd -- "$1" 2>/dev/null || exit 3
+        [ -f "./$2" ] || exit 4
+        size=$(wc -c < "./$2" | tr -d ' ')
+        echo "$size"
+        [ "$size" -le "$3" ] && base64 < "./$2"
+        exit 0
+        """#
+        guard let result = try? await client.run(arguments: ["sh", "-c", script, "ensemble", root.path, path, String(Self.maxDocumentBytes)]),
+              result.succeeded else { return .missing }
+        let output = result.standardOutput
+        let firstLine = output.prefix { $0 != "\n" }
+        guard let size = Int(firstLine.trimmingCharacters(in: .whitespaces)) else { return .missing }
+        guard size <= Self.maxDocumentBytes else { return .tooLarge(bytes: size) }
+        guard let data = Data(base64Encoded: String(output.dropFirst(firstLine.count)), options: .ignoreUnknownCharacters) else { return .missing }
+        return Self.document(from: data)
+    }
+
     public static func document(at url: URL) -> CodeDocument {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
               let size = attributes[.size] as? Int else { return .missing }
         guard size <= maxDocumentBytes else { return .tooLarge(bytes: size) }
         guard let data = try? Data(contentsOf: url) else { return .missing }
+        return document(from: data)
+    }
+
+    static func document(from data: Data) -> CodeDocument {
         guard !data.prefix(8000).contains(0), let text = String(data: data, encoding: .utf8) else { return .binary }
         var lines = text.components(separatedBy: "\n")
         if lines.count > 1, lines.last == "" { lines.removeLast() }
@@ -120,6 +151,7 @@ public struct CodeWorkspace: Sendable {
     public func search(_ needle: String, in files: [String], limit: Int = 200) async -> [CodeSearchHit] {
         let query = needle.trimmingCharacters(in: .whitespaces).lowercased()
         guard !query.isEmpty else { return [] }
+        if git.isRemote { return await remoteSearch(query, limit: limit) }
         let root = root
         return await Task.detached(priority: .userInitiated) {
             var hits: [CodeSearchHit] = []
@@ -135,6 +167,24 @@ public struct CodeWorkspace: Sendable {
             }
             return hits
         }.value
+    }
+
+    func remoteSearch(_ query: String, limit: Int) async -> [CodeSearchHit] {
+        guard let result = try? await git.execute(["grep", "--untracked", "-z", "-n", "-I", "-i", "-F", "-e", query], in: root) else { return [] }
+        return Self.parseGrep(result.standardOutput, query: query, limit: limit)
+    }
+
+    static func parseGrep(_ output: String, query: String, limit: Int) -> [CodeSearchHit] {
+        var hits: [CodeSearchHit] = []
+        for record in output.split(separator: "\n") where hits.count < limit {
+            let fields = record.split(separator: "\0", maxSplits: 2, omittingEmptySubsequences: false)
+            guard fields.count == 3, let line = Int(fields[1]) else { continue }
+            let trimmed = fields[2].trimmingCharacters(in: .whitespaces)
+            guard let range = trimmed.lowercased().range(of: query) else { continue }
+            let start = trimmed.lowercased().distance(from: trimmed.lowercased().startIndex, to: range.lowerBound)
+            hits.append(CodeSearchHit(path: String(fields[0]), line: line, text: trimmed, matchStart: start, matchLength: query.count))
+        }
+        return hits
     }
 
     func comparisonReference() async throws -> String? {

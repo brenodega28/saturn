@@ -36,8 +36,8 @@ extension AppModel {
         return [projectSource] + agentSources
     }
 
-    func codeWorkspace(for source: CodeSource) -> CodeWorkspace? {
-        git.map { CodeWorkspace(root: source.root, baseBranch: source.baseBranch, git: $0) }
+    func codeWorkspace(for source: CodeSource, in project: Project) -> CodeWorkspace? {
+        git(for: project).map { CodeWorkspace(root: source.root, baseBranch: source.baseBranch, git: $0) }
     }
 
     func codePins(for source: CodeSource) -> [Pin] {

@@ -141,7 +141,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             return "Pinned \(file):\(draft.startLine)-\(draft.endLine) for the user."
         case .evidence(let draft):
             guard let runId = agent.runId else { throw HandoffError.notAllowed("Evidence belongs to workflow runs.") }
-            return try attachEvidence(draft, runId: runId, agent: agent)
+            return try await attachEvidence(draft, runId: runId, agent: agent)
         case .question(let question, let questions):
             if let runId = agent.runId, try relayLead(for: agent, runId: runId) != nil {
                 awaitingLead.insert(agentID)
@@ -234,7 +234,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             try requireLead(agent)
             let (project, _) = try projectAndConfig(for: agent)
             let spawned = try await runtime.spawn(
-                in: project, kind: request.agent, count: request.count, git: try requireGit(),
+                in: project, kind: request.agent, count: request.count, git: try requireGit(for: project),
                 name: request.name, model: request.model, task: request.task, skills: request.skills, spawnedBy: agent
             )
             let skills = request.skills.isEmpty ? "" : " with \(request.skills.joined(separator: ", "))"
@@ -254,14 +254,14 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
             let (project, _) = try projectAndConfig(for: agent)
             guard let session = runtime.session(for: target) else { throw HandoffError.notAllowed("\(targetName) can’t be deleted.") }
-            try await runtime.delete(session, in: project, git: try requireGit(), deleteBranch: deleteBranch)
+            try await runtime.delete(session, in: project, git: try requireGit(for: project), deleteBranch: deleteBranch)
             return "Deleted \(targetName)\(deleteBranch && target.branch != nil ? " and its branch" : "")."
         case .openWorktree:
             try requireLead(agent)
             guard agent.worktreePath == nil else { throw HandoffError.notAllowed("You already work in \(agent.worktreePath ?? "a worktree").") }
             let (project, _) = try projectAndConfig(for: agent)
             guard let session = runtime.session(for: agent) else { throw HandoffError.notAllowed("This agent no longer exists.") }
-            try await runtime.openWorktree(for: session, in: project, git: try requireGit())
+            try await runtime.openWorktree(for: session, in: project, git: try requireGit(for: project))
             let path = session.agent.worktreePath ?? ""
             let branch = session.agent.branch.map { " on branch \($0)" } ?? ""
             session.send("Your worktree at \(path)\(branch) is ready and you can now edit files there. Continue with the change you were about to make.")
@@ -396,9 +396,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     public func runAgentStep(_ context: StepContext) async throws -> StepResult {
         try await ensureServer()
-        let git = try requireGit()
+        let git = try requireGit(for: context.project)
         guard let kind = context.kind else { throw WorkflowDriverError.missingAgent(context.step.id) }
-        let config = ProjectConfigLoader.load(repository: context.project.url)
+        let config = ProjectConfigLoader.load(repository: context.project.filesRoot)
         let expected = expectedHandoff(for: context, kind: kind, workflow: workflowSnapshot(context.run))
         let runId = try requireRunID(context.run)
         try await ensureSpecBranch(for: context.run, project: context.project, git: git)
@@ -457,7 +457,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     public func runSpawnStep(_ context: SpawnContext) async throws -> StepResult {
         try await ensureServer()
-        let git = try requireGit()
+        let git = try requireGit(for: context.step.project)
         let runId = try requireRunID(context.step.run)
         let project = context.step.project
         try await ensureSpecBranch(for: context.step.run, project: project, git: git)
@@ -557,7 +557,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     public func diffInfo(_ run: Run) async -> DiffInfo {
-        guard let git = gitProvider(), let runId = run.id,
+        guard let git = try? requireGit(forRun: run), let runId = run.id,
               let builders = try? runtime.runSessions(runId: runId, projectId: run.projectId).filter({ !$0.agent.readOnly })
         else { return DiffInfo() }
         var paths: Set<String> = []
@@ -577,7 +577,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     public func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult {
         endRelay(for: run)
-        let git = try requireGit()
+        let git = try requireGit(forRun: run)
         let runId = try requireRunID(run)
         guard let project = try runtime.database.project(id: run.projectId) else { throw WorkflowDriverError.notReady("The project is gone.") }
         let branches = try builderBranches(runId: runId, projectId: run.projectId)
@@ -919,12 +919,17 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     private func projectAndConfig(for agent: Agent) throws -> (Project, ProjectConfig) {
         guard let project = try runtime.database.project(id: agent.projectId) else { throw HandoffError.notAllowed("The project is gone.") }
-        return (project, ProjectConfigLoader.load(repository: project.url))
+        return (project, ProjectConfigLoader.load(repository: project.filesRoot))
     }
 
-    func requireGit() throws -> GitClient {
-        guard let git = gitProvider() else { throw WorkflowDriverError.notReady("git isn’t available.") }
+    func requireGit(for project: Project) throws -> GitClient {
+        guard let git = project.sshClient.map(GitClient.init(ssh:)) ?? gitProvider() else { throw WorkflowDriverError.notReady("git isn’t available.") }
         return git
+    }
+
+    func requireGit(forRun run: Run) throws -> GitClient {
+        guard let project = try runtime.database.project(id: run.projectId) else { throw WorkflowDriverError.notReady("The project is gone.") }
+        return try requireGit(for: project)
     }
 
     func requireRunID(_ run: Run) throws -> Int64 {
@@ -972,7 +977,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         var mergedBefore: [String] = []
         var head = base
         for branch in branches {
-            let result = try await git.runner.run(git.executable, ["merge-tree", "--write-tree", "--name-only", "--no-messages", head, branch], in: project.url)
+            let result = try await git.execute(["merge-tree", "--write-tree", "--name-only", "--no-messages", head, branch], in: project.url)
             let lines = result.standardOutput.split(separator: "\n").map(String.init)
             if result.exitCode == 1 {
                 return BranchConflict(branch: branch, base: base, mergedBefore: mergedBefore, files: Array(lines.dropFirst()))
@@ -996,7 +1001,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         var conflicted: [String] = []
         let merged = [conflict.base] + conflict.mergedBefore
         for branch in merged {
-            let result = try await git.runner.run(git.executable, identity + ["merge", "--no-ff", "--no-edit", branch], in: worktree)
+            let result = try await git.execute(identity + ["merge", "--no-ff", "--no-edit", branch], in: worktree)
             if !result.succeeded {
                 conflicted = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: worktree))?
                     .split(separator: "\n").map(String.init) ?? conflict.files
@@ -1014,7 +1019,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     func prepareIntegrationWorktree(for run: Run, project: Project, git: GitClient, purpose: String) async throws -> IntegrationResult {
         let runId = try requireRunID(run)
-        let manager = WorktreeManager(repository: project.url, git: git)
+        let manager = WorktreeManager(project: project, git: git)
         let agent = "\(purpose)-run-\(runId)"
         if let stale = try await manager.list().first(where: { $0.agent == Slug.make(agent) }) {
             try await manager.remove(stale, force: true, deleteBranch: true)
@@ -1058,7 +1063,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     public func mergeDelivery(_ run: Run, method: MergeMethod) async throws -> String {
-        let git = try requireGit()
+        let git = try requireGit(forRun: run)
         guard let project = try runtime.database.project(id: run.projectId) else { throw WorkflowDriverError.notReady("The project is gone.") }
         guard let branch = run.deliveryBranch, let base = run.baseBranch else {
             throw WorkflowDriverError.notReady("This run has no delivery branch to merge.")
@@ -1101,7 +1106,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     public func openPullRequest(_ run: Run) async throws -> String {
-        let git = try requireGit()
+        let git = try requireGit(forRun: run)
         guard let project = try runtime.database.project(id: run.projectId) else { throw WorkflowDriverError.notReady("The project is gone.") }
         guard let branch = run.deliveryBranch, let base = run.baseBranch else {
             throw WorkflowDriverError.notReady("This run has no delivery branch to open a pull request for.")
@@ -1111,8 +1116,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func commitIdentity(in repository: URL, git: GitClient) async throws -> [String] {
-        let name = try await git.runner.run(git.executable, ["config", "user.name"], in: repository)
-        let email = try await git.runner.run(git.executable, ["config", "user.email"], in: repository)
+        let name = try await git.execute(["config", "user.name"], in: repository)
+        let email = try await git.execute(["config", "user.email"], in: repository)
         if name.succeeded, email.succeeded, !name.standardOutput.trimmed.isEmpty, !email.standardOutput.trimmed.isEmpty {
             return []
         }
@@ -1120,7 +1125,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func mergeOrAbort(_ arguments: [String], branch: String, in repository: URL, git: GitClient) async throws {
-        let result = try await git.runner.run(git.executable, arguments, in: repository)
+        let result = try await git.execute(arguments, in: repository)
         guard !result.succeeded else { return }
         let conflicted = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: repository))?
             .split(separator: "\n").map(String.init) ?? []
@@ -1134,13 +1139,13 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     private func rebase(_ ref: String, onto base: String, branch: String, run: Run, repository: URL, identity: [String], git: GitClient) async throws -> String {
         let manager = WorktreeManager(repository: repository, git: git)
         let path = try manager.path(forAgent: "rebase-run-\(try requireRunID(run))")
-        if FileManager.default.fileExists(atPath: path.path) {
+        if (try? await git.fileSystem.fileExists(path)) == true {
             _ = try? await git.run(["worktree", "remove", "--force", path.path], in: repository)
         }
         try await manager.ensureExcluded()
-        try FileManager.default.createDirectory(at: manager.crewDirectory, withIntermediateDirectories: true)
+        try await git.fileSystem.createDirectory(manager.crewDirectory)
         try await git.run(["worktree", "add", "--detach", path.path, ref], in: repository)
-        let result = try? await git.runner.run(git.executable, identity + ["rebase", base], in: path)
+        let result = try? await git.execute(identity + ["rebase", base], in: path)
         var head: String?
         var conflicted: [String] = []
         if result?.succeeded == true {
@@ -1163,7 +1168,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     private func deleteBranch(_ branch: String, local: Bool, in repository: URL, git: GitClient) async throws {
         if try await git.hasCommit("refs/remotes/origin/\(branch)", in: repository) {
-            let result = try await git.runner.run(git.executable, ["push", "origin", "--delete", branch], in: repository)
+            let result = try await git.execute(["push", "origin", "--delete", branch], in: repository)
             if !result.succeeded {
                 _ = try? await git.run(["fetch", "--prune", "origin"], in: repository)
             }
@@ -1216,7 +1221,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     private func cleanUp(runId: Int64, project: Project, git: GitClient) async {
         guard let sessions = try? runtime.runSessions(runId: runId, projectId: project.id ?? -1) else { return }
-        let manager = WorktreeManager(repository: project.url, git: git)
+        let manager = WorktreeManager(project: project, git: git)
         let worktrees = (try? await manager.list()) ?? []
         for session in sessions {
             session.stop()

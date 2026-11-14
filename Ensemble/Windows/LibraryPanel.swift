@@ -253,7 +253,7 @@ struct LibraryPanel: View {
             }
         case .skills:
             guard let project = model.currentProject else { return [] }
-            return SkillLibrary.skills(in: project.url, pluginSkills: model.pluginSkills(for: project)).map { skill in
+            return SkillLibrary.skills(in: project.filesRoot, pluginSkills: model.pluginSkills(for: project)).map { skill in
                 LibraryEntry(
                     id: "skill-\(skill.name)", title: skill.name, detail: skill.description.isEmpty ? "From \(skill.source.location)" : skill.description,
                     explanation: "Ask the Lead to give the \(skill.name) skill to a builder or checker.",

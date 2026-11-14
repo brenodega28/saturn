@@ -107,15 +107,28 @@ enum DuplicationScanner {
         }
     }
 
-    static func scan(_ diff: ScannedDiff, worktree: URL, trackedFiles: [String], limit: Int, agentName: String?) -> [GateFinding] {
+    static let maximumFileBytes = 300_000
+
+    static func candidates(_ diff: ScannedDiff, trackedFiles: [String]) -> [String] {
+        let extensions = Set(diff.added.filter { !GeneratedFiles.isGenerated($0.file) }.map { ($0.file as NSString).pathExtension.lowercased() }.filter { !$0.isEmpty })
+        return trackedFiles.filter { extensions.contains(($0 as NSString).pathExtension.lowercased()) && !GeneratedFiles.isGenerated($0) }
+    }
+
+    static func scan(_ diff: ScannedDiff, worktree: URL, trackedFiles: [String], limit: Int, agentName: String?, contents: [String: String]? = nil) -> [GateFinding] {
         let addedByFile = Dictionary(grouping: diff.added.filter { !GeneratedFiles.isGenerated($0.file) }, by: \.file)
         guard !addedByFile.isEmpty else { return [] }
-        let extensions = Set(addedByFile.keys.map { ($0 as NSString).pathExtension.lowercased() }.filter { !$0.isEmpty })
         var existing: Set<String> = []
-        for path in trackedFiles where extensions.contains((path as NSString).pathExtension.lowercased()) && !GeneratedFiles.isGenerated(path) {
+        for path in candidates(diff, trackedFiles: trackedFiles) {
             let url = worktree.appending(path: path)
-            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path), (attributes[.size] as? Int ?? 0) < 300_000,
-                  let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            let text: String
+            if let contents {
+                guard let fetched = contents[path] else { continue }
+                text = fetched
+            } else {
+                guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path), (attributes[.size] as? Int ?? 0) < maximumFileBytes,
+                      let local = try? String(contentsOf: url, encoding: .utf8) else { continue }
+                text = local
+            }
             let addedNumbers = Set(addedByFile[path]?.map(\.line) ?? [])
             let lines = text.split(separator: "\n", omittingEmptySubsequences: false).enumerated().map { (number: $0.offset + 1, text: String($0.element)) }
             for entry in windows(lines) where Set(entry.numbers).isDisjoint(with: addedNumbers) {

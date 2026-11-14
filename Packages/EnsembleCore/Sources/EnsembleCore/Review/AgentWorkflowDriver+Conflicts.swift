@@ -5,7 +5,7 @@ extension AgentWorkflowDriver {
 
     @discardableResult
     public func askToCombine(_ conflict: MergeConflict, in run: Run) async throws -> String {
-        let git = try requireGit()
+        let git = try requireGit(forRun: run)
         let (session, project) = try builder(owning: conflict.branch, in: run)
         guard let worktree = session.agent.worktreeURL else { throw WorkflowDriverError.notReady("\(displayName(of: session.agent)) has no worktree.") }
         let current = try await git.currentBranch(in: project.url)
@@ -18,7 +18,7 @@ extension AgentWorkflowDriver {
     }
 
     public func keep(_ winner: String, resolving conflict: MergeConflict, in run: Run) async throws {
-        let git = try requireGit()
+        let git = try requireGit(forRun: run)
         let identity = Self.ensembleIdentity
         if conflict.otherIsBase {
             let (session, _) = try builder(owning: conflict.branch, in: run)
@@ -41,11 +41,11 @@ extension AgentWorkflowDriver {
     }
 
     public func stageForMergeTool(_ conflict: MergeConflict, in run: Run) async throws -> (worktree: URL, files: [String]) {
-        let git = try requireGit()
+        let git = try requireGit(forRun: run)
         let (session, _) = try builder(owning: conflict.branch, in: run)
         guard let worktree = session.agent.worktreeURL else { throw WorkflowDriverError.notReady("\(displayName(of: session.agent)) has no worktree.") }
         try await commitPending(in: worktree, git: git)
-        _ = try await git.runner.run(git.executable, Self.ensembleIdentity + ["merge", "--no-ff", "--no-commit", conflict.other], in: worktree)
+        _ = try await git.execute(Self.ensembleIdentity + ["merge", "--no-ff", "--no-commit", conflict.other], in: worktree)
         let files = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: worktree))?.split(separator: "\n").map(String.init) ?? []
         return (worktree, files.isEmpty ? conflict.paths : files)
     }

@@ -40,6 +40,7 @@ enum V4 {
 
 enum V4Glyph {
     case laptop
+    case server
     case chat
     case inbox
     case changes
@@ -77,6 +78,11 @@ enum V4Glyph {
         case .laptop:
             box(4, 6, 16, 10)
             line((2, 19), (22, 19))
+        case .server:
+            box(4, 4, 16, 7)
+            box(4, 13, 16, 7)
+            circle(8, 7.5, 0.6)
+            circle(8, 16.5, 0.6)
         case .chat:
             line((4, 5), (20, 5), (20, 16), (9, 16), (4, 20), (4, 5))
         case .inbox:

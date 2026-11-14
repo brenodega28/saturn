@@ -83,7 +83,7 @@ extension AppModel {
     }
 
     func runCommand(for project: Project, in folder: URL? = nil) -> DetectedRunCommand? {
-        RunCommandDetector.resolve(override: project.settings.runCommand, in: folder ?? project.url)
+        RunCommandDetector.resolve(override: project.settings.runCommand, in: project.isRemote ? project.filesRoot : folder ?? project.url)
     }
 
     func startApp(_ target: RunTarget, in project: Project) async {
@@ -96,6 +96,16 @@ extension AppModel {
             appRunners[id] = runner
         }
         runner.environment = AppRunner.environment(from: agents.processEnvironment)
+        if project.isRemote {
+            do {
+                runner.remote = try await remoteAgentHost(for: project)
+            } catch {
+                alert = AppAlert(title: "Couldn’t run \(project.name) on \(project.location)", message: error.localizedDescription)
+                return
+            }
+        } else {
+            runner.remote = nil
+        }
         await runner.start(command: command.command, label: command.label, in: target.folder, branch: target.branch, port: target.port)
     }
 

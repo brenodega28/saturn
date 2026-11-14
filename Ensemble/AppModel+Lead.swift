@@ -51,7 +51,7 @@ extension AppModel {
     }
 
     func closeRequest(_ task: ProjectTask, as reason: RequestCloseReason, in project: Project) async {
-        guard let git else {
+        guard let git = git(for: project) else {
             alert = AppAlert(title: "git isn’t available", message: "Ensemble couldn’t find git. Install the Xcode Command Line Tools and check again.")
             return
         }
@@ -69,8 +69,8 @@ extension AppModel {
     }
 
     func deleteAgentsOfClosedRequests() async {
-        guard let git else { return }
         for project in openProjects {
+            guard let git = git(for: project) else { continue }
             await leadChat.deleteAgentsOfClosedRequests(in: project, git: git)
         }
     }

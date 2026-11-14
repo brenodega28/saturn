@@ -41,8 +41,8 @@ public struct ProjectScan: Sendable, Hashable {
 public enum ProjectScanner {
     public static let docCandidates = ["AGENTS.md", "CLAUDE.md", "README.md", "CONTRIBUTING.md", "ARCHITECTURE.md", "docs/ROADMAP.md", "spec/mission.md", "spec/roadmap.md"]
 
-    public static func scan(repository: URL, git: GitClient? = nil) async -> ProjectScan {
-        var scan = scanFiles(repository: repository)
+    public static func scan(repository: URL, git: GitClient? = nil, files: URL? = nil) async -> ProjectScan {
+        var scan = scanFiles(repository: files ?? repository)
         if let git {
             scan.githubRepository = try? await GitHubRemote.originRepository(in: repository, git: git)
             scan.baseBranch = await defaultBranch(of: repository, git: git)

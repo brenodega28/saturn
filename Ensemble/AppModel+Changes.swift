@@ -22,7 +22,7 @@ extension AppModel {
     }
 
     func loadChanges(for run: Run, in project: Project) async -> RunChangeSet? {
-        guard let runID = run.id, let git = requireGitForReview() else { return nil }
+        guard let runID = run.id, let git = project.isRemote ? git(for: project) : requireGitForReview() else { return nil }
         let agents = (try? database.agents(inRun: runID)) ?? []
         return await RunChanges(git: git).load(runId: runID, agents: agents, repository: project.url)
     }

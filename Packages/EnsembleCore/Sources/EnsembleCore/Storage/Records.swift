@@ -7,15 +7,17 @@ public struct Project: Codable, Sendable, Hashable, Identifiable, FetchableRecor
     public var id: Int64?
     public var name: String
     public var path: String
+    public var host: String?
     public var isOpen: Bool
     public var createdAt: Date
     public var lastOpenedAt: Date
     public var settings: ProjectSettings
 
-    public init(id: Int64? = nil, name: String, path: String, isOpen: Bool, createdAt: Date, lastOpenedAt: Date, settings: ProjectSettings = ProjectSettings()) {
+    public init(id: Int64? = nil, name: String, path: String, host: String? = nil, isOpen: Bool, createdAt: Date, lastOpenedAt: Date, settings: ProjectSettings = ProjectSettings()) {
         self.id = id
         self.name = name
         self.path = path
+        self.host = host
         self.isOpen = isOpen
         self.createdAt = createdAt
         self.lastOpenedAt = lastOpenedAt
@@ -24,12 +26,19 @@ public struct Project: Codable, Sendable, Hashable, Identifiable, FetchableRecor
 
     public var url: URL { URL(fileURLWithPath: path, isDirectory: true) }
 
+    public var isRemote: Bool { host != nil }
+
+    public var location: String {
+        host.map { "\(SSHDestination.displayName($0)):\(path)" } ?? path
+    }
+
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
     }
 
     public enum Columns {
         public static let path = Column(CodingKeys.path)
+        public static let host = Column(CodingKeys.host)
         public static let name = Column(CodingKeys.name)
         public static let isOpen = Column(CodingKeys.isOpen)
         public static let lastOpenedAt = Column(CodingKeys.lastOpenedAt)

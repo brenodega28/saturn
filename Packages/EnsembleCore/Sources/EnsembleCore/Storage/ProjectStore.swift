@@ -4,21 +4,24 @@ import GRDB
 extension AppDatabase {
     @discardableResult
     public func openProject(at url: URL, now: Date = .now) throws -> Project {
-        let path = url.standardizedFileURL.path
-        return try writer.write { db in
-            if var project = try Project.filter(Project.Columns.path == path).fetchOne(db) {
+        try openProject(path: url.standardizedFileURL.path, host: nil, name: url.lastPathComponent, now: now)
+    }
+
+    @discardableResult
+    public func openRemoteProject(path: String, host: String, now: Date = .now) throws -> Project {
+        let name = path.split(separator: "/").last.map(String.init) ?? host
+        return try openProject(path: path, host: host, name: name, now: now)
+    }
+
+    private func openProject(path: String, host: String?, name: String, now: Date) throws -> Project {
+        try writer.write { db in
+            if var project = try Project.filter(Project.Columns.path == path && Project.Columns.host == host).fetchOne(db) {
                 project.isOpen = true
                 project.lastOpenedAt = now
                 try project.update(db)
                 return project
             }
-            var project = Project(
-                name: url.lastPathComponent,
-                path: path,
-                isOpen: true,
-                createdAt: now,
-                lastOpenedAt: now
-            )
+            var project = Project(name: name, path: path, host: host, isOpen: true, createdAt: now, lastOpenedAt: now)
             try project.insert(db)
             return project
         }

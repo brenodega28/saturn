@@ -10,6 +10,13 @@ extension AppModel {
         agents.gitProvider = { [weak self] in self?.git }
         agents.pluginSkills = { [weak self] project in self?.pluginSkills(for: project) ?? [] }
         idleCleanup.gitProvider = { [weak self] in self?.git }
+        agents.remoteHostProvider = { [weak self] project in
+            guard let self else { throw RemoteProjectUnsupported("Running agents on the host") }
+            return try await self.remoteAgentHost(for: project)
+        }
+        agents.remoteFilesChanged = { [weak self] project in
+            Task { try? await self?.pullRemoteFiles(project) }
+        }
     }
 
     func createProject(from template: CrewTemplate?, at folder: URL) async {

@@ -4,9 +4,9 @@ extension AgentWorkflowDriver {
     nonisolated static let needsDecision = "needs_decision"
 
     public func runGateStep(_ context: StepContext) async throws -> StepResult {
-        let git = try requireGit()
+        let git = try requireGit(for: context.project)
         let runId = try requireRunID(context.run)
-        let policy = ProjectConfigLoader.load(repository: context.project.url).review
+        let policy = ProjectConfigLoader.load(repository: context.project.filesRoot).review
         let builders = try runtime.runSessions(runId: runId, projectId: context.project.id ?? -1)
             .filter { !$0.agent.readOnly && $0.agent.worktreeURL != nil && $0.agent.archivedAt == nil }
         let evidence = try runtime.database.evidence(runId: runId)
@@ -51,7 +51,14 @@ extension AgentWorkflowDriver {
             findings += await dependencyFindings(changes.map(\.path), start: start, worktree: worktree, agent: agent, git: git)
         }
         let tracked = ((try? await git.run(["ls-files"], in: worktree)) ?? "").split(separator: "\n").map(String.init)
-        findings += DuplicationScanner.scan(diff, worktree: worktree, trackedFiles: tracked, limit: policy.gates.maxDuplicateLines, agentName: agent.name)
+        let contents: [String: String]? = if let client = git.sshClient {
+            await SSHFileSystem(client: client).readTextFiles(
+                in: worktree, paths: DuplicationScanner.candidates(diff, trackedFiles: tracked), maximumBytes: DuplicationScanner.maximumFileBytes
+            )
+        } else {
+            nil
+        }
+        findings += DuplicationScanner.scan(diff, worktree: worktree, trackedFiles: tracked, limit: policy.gates.maxDuplicateLines, agentName: agent.name, contents: contents)
         findings += ComplexityScanner.scan(diff, limit: policy.gates.maxComplexityIncrease, agentName: agent.name)
 
         let mine = evidence.filter { $0.agentId == agent.id }
@@ -77,7 +84,7 @@ extension AgentWorkflowDriver {
     private func dependencyFindings(_ paths: [String], start: String, worktree: URL, agent: Agent, git: GitClient) async -> [GateFinding] {
         var findings: [GateFinding] = []
         for path in paths where DependencyScanner.isManifest(path) {
-            guard let head = try? String(contentsOf: worktree.appending(path: path), encoding: .utf8) else { continue }
+            guard let head = (try? await git.fileSystem.readText(worktree.appending(path: path))).flatMap({ $0 }) else { continue }
             let base = try? await git.run(["show", "\(start):\(path)"], in: worktree)
             for dependency in DependencyScanner.newDependencies(file: path, base: base, head: head) {
                 let exists = await packageRegistry.exists(dependency.name, in: dependency.ecosystem)

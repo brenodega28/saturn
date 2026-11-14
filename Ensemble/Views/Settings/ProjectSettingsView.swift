@@ -139,9 +139,13 @@ struct SettingsContainer: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
     }
 
+    private var visibleSections: [SettingsSection] {
+        Array(SettingsSection.allCases)
+    }
+
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(SettingsSection.allCases) { item in
+            ForEach(visibleSections) { item in
                 let isSelected = item == section
                 Button {
                     section = item
@@ -169,7 +173,7 @@ struct SettingsContainer: View {
 
     private var compactSidebar: some View {
         VStack(spacing: 2) {
-            ForEach(SettingsSection.allCases) { item in
+            ForEach(visibleSections) { item in
                 let isSelected = item == section
                 Button {
                     section = item
@@ -273,11 +277,15 @@ private struct GeneralSettings: View {
     var body: some View {
         let config = model.config(for: project)
         SettingsPage("General", subtitle: "Where this project lives and the state of its Ensemble config.") {
+            if project.isRemote {
+                RemoteHostCard(project: project)
+            }
             VStack(alignment: .leading, spacing: 10) {
                 row("Folder") {
                     HStack {
-                        Text(project.path.abbreviatingHome).font(Theme.monospaced).textSelection(.enabled)
+                        Text(project.isRemote ? project.location : project.path.abbreviatingHome).font(Theme.monospaced).textSelection(.enabled)
                         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
+                            .disabled(project.isRemote)
                             .buttonStyle(.link)
                     }
                 }

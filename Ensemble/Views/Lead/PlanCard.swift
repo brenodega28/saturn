@@ -19,7 +19,7 @@ struct PlanCard: View {
     }
 
     var body: some View {
-        let installed = SkillLibrary.skills(in: project.url, pluginSkills: model.pluginSkills(for: project)).map(\.name)
+        let installed = SkillLibrary.skills(in: project.filesRoot, pluginSkills: model.pluginSkills(for: project)).map(\.name)
         VStack(alignment: .leading, spacing: 0) {
             header
             if !plan.summary.isEmpty {

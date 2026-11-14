@@ -38,6 +38,9 @@ struct WelcomeView: View {
                 LauncherButton(title: "Open Folder…", systemImage: "folder", shortcut: "⌘O", isPrimary: true) {
                     model.isOpenPanelPresented = true
                 }
+                LauncherButton(title: "Open SSH Folder…", systemImage: "network", shortcut: "", isPrimary: false) {
+                    model.isRemoteFolderPresented = true
+                }
                 LauncherButton(title: "Clone Repository…", systemImage: "arrow.triangle.branch", shortcut: "⇧⌘O", isPrimary: false) {
                     model.isClonePresented = true
                 }
@@ -102,16 +105,16 @@ private struct RecentProjectRow: View {
 
     var body: some View {
         Button {
-            Task { await model.openFolder(project.url) }
+            Task { await model.reopen(project) }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "folder")
+                Image(systemName: project.isRemote ? "network" : "folder")
                     .foregroundStyle(Theme.link)
                     .frame(width: 36, height: 36)
                     .background(Theme.fillRaised, in: .rect(cornerRadius: 10, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(project.name).font(.system(size: 14, weight: .semibold))
-                    Text(project.path.abbreviatingHome)
+                    Text(project.isRemote ? project.location : project.path.abbreviatingHome)
                         .font(.system(size: 11.5, design: .monospaced))
                         .foregroundStyle(Theme.secondaryText)
                         .lineLimit(1)
@@ -135,7 +138,9 @@ private struct RecentProjectRow: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .contextMenu {
-            Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
+            if !project.isRemote {
+                Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
+            }
             Button("Remove from Recents") { model.forgetRecent(project) }
         }
     }

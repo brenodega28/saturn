@@ -106,7 +106,7 @@ import Testing
         #expect(recovery.orphanedDirectories.map(\.lastPathComponent) == ["stray"])
         #expect(!recovery.isClean)
 
-        try manager.deleteOrphanedDirectory(stray)
+        try await manager.deleteOrphanedDirectory(stray)
         let second = try await manager.recover()
         #expect(second.isClean)
         #expect(try await repo.branches().contains("crew/lost/two"))
@@ -116,11 +116,11 @@ import Testing
         let repo = try await TestRepository.make()
         defer { repo.delete() }
 
-        #expect(throws: WorktreeError.outsideCrewDirectory(repo.root)) {
-            try repo.manager.deleteOrphanedDirectory(repo.root)
+        await #expect(throws: WorktreeError.outsideCrewDirectory(repo.root)) {
+            try await repo.manager.deleteOrphanedDirectory(repo.root)
         }
-        #expect(throws: WorktreeError.self) {
-            try repo.manager.deleteOrphanedDirectory(repo.manager.crewDirectory)
+        await #expect(throws: WorktreeError.self) {
+            try await repo.manager.deleteOrphanedDirectory(repo.manager.crewDirectory)
         }
     }
 

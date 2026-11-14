@@ -105,9 +105,11 @@ public final class PinnedMemoryUpdater {
                 return
             }
             var started: [(AgentSession, AgentMemory)] = []
-            for session in pinned where canLaunch(session.agent, project: project) {
+            for session in pinned where await canLaunch(session.agent, project: project) {
                 let memory = AgentMemory(repository: project.url, agentName: session.agent.name)
-                try memory.prepareDirectory()
+                if !project.isRemote {
+                    try memory.prepareDirectory()
+                }
                 runtime.memoryUpdateAgents.insert(session.id)
                 updatingAgentIDs.insert(session.id)
                 session.send(prompt(for: session.agent, memory: memory))
@@ -118,21 +120,22 @@ public final class PinnedMemoryUpdater {
                 runtime.memoryUpdateAgents.remove(session.id)
                 updatingAgentIDs.remove(session.id)
                 if session.agent.readOnly, let reply = Self.memoryReply(in: lastAssistantText(session)) {
-                    try memory.write(reply)
+                    try AgentMemory(repository: project.filesRoot, agentName: session.agent.name).write(reply)
                 }
                 if session.agent.status == .failed {
                     lastError = "\(session.agent.name) couldn’t update its memory: \(session.agent.lastError ?? "unknown error")"
                 }
             }
+            if project.isRemote { runtime.remoteFilesChanged(project) }
         } catch {
             lastError = "Couldn’t update pinned memory: \(error.localizedDescription)"
         }
     }
 
-    private func canLaunch(_ agent: Agent, project: Project) -> Bool {
+    private func canLaunch(_ agent: Agent, project: Project) async -> Bool {
         let directory = agent.worktreeURL ?? (agent.readOnly ? project.url : nil)
         guard let directory else { return false }
-        return FileManager.default.fileExists(atPath: directory.path)
+        return (try? await project.fileSystem.fileExists(directory)) == true
     }
 
     private func waitForTurnEnd(_ session: AgentSession) async {

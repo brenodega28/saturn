@@ -119,14 +119,14 @@ extension AgentWorkflowDriver {
     }
 
     private func commitSpec(_ document: SpecDocument, at path: String, branch: String, runId: Int64, project: Project, git: GitClient) async throws {
-        let manager = WorktreeManager(repository: project.url, git: git)
+        let manager = WorktreeManager(project: project, git: git)
         let worktree = try manager.path(forAgent: "spec-run-\(runId)")
-        if FileManager.default.fileExists(atPath: worktree.path) {
+        if (try? await git.fileSystem.fileExists(worktree)) == true {
             _ = try? await git.run(["worktree", "remove", "--force", worktree.path], in: project.url)
         }
         let base = try await git.baseBranch(of: project.url) ?? "HEAD"
         try await manager.ensureExcluded()
-        try FileManager.default.createDirectory(at: manager.crewDirectory, withIntermediateDirectories: true)
+        try await git.fileSystem.createDirectory(manager.crewDirectory)
         try await git.run(["worktree", "add", "-b", branch, worktree.path, base], in: project.url)
         do {
             try await writeAndCommit(document, at: path, in: worktree, message: "Add spec: \(document.title)", git: git)
@@ -140,10 +140,10 @@ extension AgentWorkflowDriver {
 
     private func writeAndCommit(_ document: SpecDocument, at path: String, in worktree: URL, message: String, git: GitClient) async throws {
         let file = worktree.appending(path: path)
-        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try document.markdown.write(to: file, atomically: true, encoding: .utf8)
+        try await git.fileSystem.createDirectory(file.deletingLastPathComponent())
+        try await git.fileSystem.writeText(document.markdown, to: file)
         try await git.run(["add", "--", path], in: worktree)
-        let staged = try await git.runner.run(git.executable, ["diff", "--cached", "--quiet", "--", path], in: worktree)
+        let staged = try await git.execute(["diff", "--cached", "--quiet", "--", path], in: worktree)
         guard !staged.succeeded else { return }
         try await git.run(["-c", "user.name=Ensemble", "-c", "user.email=ensemble@localhost", "commit", "-m", message, "--", path], in: worktree)
     }
@@ -151,7 +151,7 @@ extension AgentWorkflowDriver {
     func completeSpec(for run: Run, in worktree: URL, git: GitClient) async throws {
         guard let runId = run.id, let spec = specStore.runSpec(runId: runId) else { return }
         let file = worktree.appending(path: spec.link.path)
-        let committed = (try? String(contentsOf: file, encoding: .utf8)).flatMap { try? SpecDocument(markdown: $0) } ?? spec.document
+        let committed = (try? await git.fileSystem.readText(file)).flatMap { $0 }.flatMap { try? SpecDocument(markdown: $0) } ?? spec.document
         let outputs = try runtime.database.runSteps(runId: runId).compactMap { step -> PreviousOutput? in
             guard step.status == .succeeded, let text = step.output,
                   let output = try? JSONDecoder().decode(StepOutput.self, from: Data(text.utf8)) else { return nil }
@@ -179,7 +179,7 @@ extension LeadChat {
         started.status = .inProgress
         if !started.linkedRuns.contains(runId) { started.linkedRuns.append(runId) }
         let path = SpecStore.availablePath(
-            title: started.title, folder: config.specs.folder, repository: project.url,
+            title: started.title, folder: config.specs.folder, repository: project.filesRoot,
             taken: store.pathsInUse(projectId: projectId, excludingTask: taskId)
         )
         let url = store.draftURL(projectId: projectId, taskId: taskId)

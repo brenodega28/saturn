@@ -68,6 +68,7 @@ struct DebugWorktreesView: View {
                 TableColumn("") { worktree in
                     HStack {
                         Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([worktree.path]) }
+                            .disabled(project.isRemote)
                         Button("Remove…") { pendingRemoval = worktree }
                     }
                     .disabled(isWorking)
@@ -144,6 +145,7 @@ private struct RecoverySection: View {
                     Text("Leftover folder \(directory.path.abbreviatingHome)").font(Theme.monospaced)
                     Spacer()
                     Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([directory]) }
+                        .disabled(project.isRemote)
                     Button("Delete", role: .destructive) {
                         Task { await model.deleteOrphanedDirectory(directory, in: project) }
                     }

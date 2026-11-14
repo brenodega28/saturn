@@ -216,7 +216,7 @@ private struct AgentCard: View {
         .contextMenu {
             Button("Open") { model.select(session, in: project) }
             Button(agent.isPinned ? "Unpin" : "Pin") { session.togglePin() }
-            if let worktree = agent.worktreeURL {
+            if let worktree = agent.worktreeURL, !project.isRemote {
                 Button("Reveal Worktree in Finder") { NSWorkspace.shared.activateFileViewerSelecting([worktree]) }
             }
             Divider()

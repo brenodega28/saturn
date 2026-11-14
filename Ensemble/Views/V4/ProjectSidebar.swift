@@ -10,7 +10,11 @@ struct ProjectSidebar: View {
         let _ = model.engine.runs
         let needsYouTaskIDs = model.needsYouTaskIDs()
         VStack(alignment: .leading, spacing: 10) {
-            Color.clear.frame(height: 20)
+            HStack {
+                Spacer()
+                AddProjectMenu()
+            }
+            .frame(height: 20)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(model.openProjects) { project in
@@ -116,7 +120,7 @@ private struct ProjectGroup: View {
     private var tree: some View {
         let screen = model.mainScreen
         return VStack(alignment: .leading, spacing: 1) {
-            ForEach(SidebarSection.groups, id: \.name) { group in
+            ForEach(Array(SidebarSection.groups.enumerated()), id: \.offset) { _, group in
                 if !group.name.isEmpty {
                     Text(group.name)
                         .font(.system(size: 10.5, weight: .semibold))
@@ -125,7 +129,10 @@ private struct ProjectGroup: View {
                         .accessibilityAddTraits(.isHeader)
                 }
                 ForEach(group.sections) { section in
-                    SectionRow(section: section, badge: badge(for: section), isHighlighted: section.isHighlighted(on: screen), help: help(for: section)) {
+                    SectionRow(
+                        section: section, title: section.rawValue,
+                        badge: badge(for: section), isHighlighted: section.isHighlighted(on: screen), help: help(for: section)
+                    ) {
                         activate(section)
                     }
                     if section == .chat {
@@ -153,7 +160,7 @@ private struct ProjectGroup: View {
     }
 
     private func help(for section: SidebarSection) -> String {
-        section == .chat ? "Start a new chat with the lead in \(project.name)" : section.tool?.title ?? section.rawValue
+        return section == .chat ? "Start a new chat with the lead in \(project.name)" : section.tool?.title ?? section.rawValue
     }
 
     private func badge(for section: SidebarSection) -> (count: Int, color: Color)? {
@@ -176,7 +183,7 @@ private struct ProjectGroup: View {
     }
 
     private var header: some View {
-        let location = "Local · \((project.path as NSString).abbreviatingWithTildeInPath)"
+        let location = project.isRemote ? "SSH · \(project.location)" : "Local · \((project.path as NSString).abbreviatingWithTildeInPath)"
         let attention = attentionColor
         return Button { model.expand(project) } label: {
             HStack(spacing: 8) {
@@ -185,7 +192,7 @@ private struct ProjectGroup: View {
                     .tracking(0.22)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                V4Icon(glyph: .laptop, size: 12, lineWidth: 2)
+                V4Icon(glyph: project.isRemote ? .server : .laptop, size: 12, lineWidth: 2)
                     .foregroundStyle(V4.secondary)
                     .help(location)
                     .accessibilityHidden(false)
@@ -202,7 +209,9 @@ private struct ProjectGroup: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button("Show All Chats") { model.showRequestPage(inProjectID: project.id ?? -1) }
-            Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
+            if !project.isRemote {
+                Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
+            }
             Divider()
             Button("Close Project") { model.close(project) }
         }
@@ -220,6 +229,7 @@ private struct ProjectGroup: View {
 
 private struct SectionRow: View {
     let section: SidebarSection
+    let title: String
     let badge: (count: Int, color: Color)?
     let isHighlighted: Bool
     let help: String
@@ -231,7 +241,7 @@ private struct SectionRow: View {
             HStack(spacing: 9) {
                 V4Icon(glyph: section.glyph, size: 15, lineWidth: 1.8)
                     .foregroundStyle(isHighlighted ? Color.white : V4.secondary)
-                Text(section.rawValue)
+                Text(title)
                     .font(.system(size: 13, weight: isHighlighted ? .semibold : .regular))
                     .foregroundStyle(isHighlighted ? Color.white : V4.label.opacity(0.85))
                     .lineLimit(1)
@@ -362,6 +372,32 @@ private struct RunRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Run \(title), \(status)")
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
+    }
+}
+
+private struct AddProjectMenu: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Menu {
+            Button("Open Folder…") { model.isOpenPanelPresented = true }
+            Button("Open SSH Folder…") { model.isRemoteFolderPresented = true }
+            Button("Clone Repository…") { model.isClonePresented = true }
+            Divider()
+            Button("New Project…") { model.newProject() }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(V4.secondary)
+                .frame(width: 22, height: 20)
+                .contentShape(.rect)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Add a project")
+        .accessibilityLabel("Add a project")
     }
 }
 

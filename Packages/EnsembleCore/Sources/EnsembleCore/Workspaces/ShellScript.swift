@@ -47,6 +47,61 @@ enum ShellScript {
         return .exited(signal == 0 ? (status >> 8) & 0xff : 128 + signal)
     }
 
+    static let remoteWrapper = #"""
+    if [ -z "$ENSEMBLE_SETSID" ] && command -v setsid >/dev/null 2>&1 && [ "$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')" != "$$" ]; then
+      ENSEMBLE_SETSID=1; export ENSEMBLE_SETSID; exec setsid sh -c "$0" "$0" "$@"
+    fi
+    dir=$1; pidfile=$2; script=$3; shift 3
+    umask 077
+    mkdir -p -- "$(dirname -- "$pidfile")"
+    while [ "$#" -gt 0 ]; do export "$1"; shift; done
+    echo $$ > "$pidfile"
+    cd -- "$dir" 2>/dev/null || { echo "Ensemble: $dir doesn’t exist on the host." >&2; exit 127; }
+    exec "${SHELL:-/bin/sh}" -lc "$script"
+    """#
+
+    static func runRemote(
+        _ script: String, on client: SSHClient, in directory: URL, variables: [String: String], pidFile: String,
+        log: URL, timeout: Duration, killGracePeriod: Duration
+    ) async throws -> Outcome {
+        let logDescriptor = open(log.path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        guard logDescriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(logDescriptor) }
+
+        let assignments = variables.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+        let command = ShellQuote.command(["sh", "-c", remoteWrapper, remoteWrapper, directory.path, pidFile, script] + assignments)
+        let pid = try spawn(
+            arguments: [client.executable.path] + client.arguments(for: command),
+            environment: client.runner.environment.map { "\($0.key)=\($0.value)" },
+            directory: FileManager.default.temporaryDirectory.path,
+            output: logDescriptor
+        )
+        let signalHost: @Sendable (String) async -> Void = { signal in
+            _ = try? await client.run(arguments: ["sh", "-c", RemoteAgentLaunch.killScript(signal: signal), "ensemble", pidFile])
+        }
+        let timedOut = Mutex(false)
+        let watchdog = Task {
+            try await Task.sleep(for: timeout)
+            timedOut.withLock { $0 = true }
+            await signalHost("TERM")
+            try await Task.sleep(for: killGracePeriod)
+            await signalHost("KILL")
+            kill(-pid, SIGKILL)
+        }
+        let status = await withTaskCancellationHandler {
+            await waitForExit(pid)
+        } onCancel: {
+            Task { await signalHost("KILL") }
+            kill(-pid, SIGKILL)
+        }
+        watchdog.cancel()
+        if timedOut.withLock({ $0 }) {
+            return .timedOut
+        }
+        let signal = status & 0x7f
+        return .exited(signal == 0 ? (status >> 8) & 0xff : 128 + signal)
+    }
+
     static func tail(of log: URL, lines count: Int) -> String {
         guard let text = try? String(contentsOf: log, encoding: .utf8) else { return "" }
         let lines = text.split(whereSeparator: \.isNewline).map(String.init).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }

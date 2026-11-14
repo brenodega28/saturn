@@ -127,7 +127,12 @@ public enum CorrectionEncoding: Sendable, Hashable {
 }
 
 extension AppDatabase {
-    public func encode(_ correction: Correction, as encoding: CorrectionEncoding, repository: URL, git: GitClient, now: Date = .now) async throws {
+    public func encode(
+        _ correction: Correction, as encoding: CorrectionEncoding, repository: URL, git: GitClient,
+        files: URL? = nil, sync: @Sendable () async throws -> Void = {}, now: Date = .now
+    ) async throws {
+        let commitRepository = repository
+        let repository = files ?? repository
         let paths: [String]
         switch encoding {
         case .instruction(let line):
@@ -148,7 +153,8 @@ extension AppDatabase {
             paths = ["\(ProjectConfig.directoryName)/\(ChecksConfig.fileName)"]
         }
         let subject = correction.text.count > 60 ? String(correction.text.prefix(57)) + "…" : correction.text
-        try await AgentInstructions.commit(paths, message: "Encode review correction: \(subject)", repository: repository, git: git)
+        try await sync()
+        try await AgentInstructions.commit(paths, message: "Encode review correction: \(subject)", repository: commitRepository, git: git)
         try markEncoded(correction, encoding: encoding.summary, now: now)
     }
 }

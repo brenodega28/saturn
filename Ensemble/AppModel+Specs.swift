@@ -27,7 +27,7 @@ extension AppModel {
 
     func specFiles(in project: Project) -> [SpecFile] {
         guard let id = project.id else { return [] }
-        let committed = SpecStore.files(in: project.url, config: ProjectConfigLoader.loadSpecs(repository: project.url))
+        let committed = SpecStore.files(in: project.filesRoot, config: ProjectConfigLoader.loadSpecs(repository: project.filesRoot))
         let paths = Set(committed.compactMap(\.relativePath))
         let drafts = specStore.drafts(projectId: id).filter { draft in draft.relativePath.map { !paths.contains($0) } ?? true }
         return drafts + committed

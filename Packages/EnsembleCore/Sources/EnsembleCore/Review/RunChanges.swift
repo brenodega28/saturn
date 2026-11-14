@@ -35,7 +35,8 @@ public struct RunChanges: Sendable {
         let branch = agent.branch ?? ""
         var changes = BranchChanges(agent: agent, branch: branch, base: agent.baseBranch)
         do {
-            let worktree = agent.worktreeURL.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+            var worktree = agent.worktreeURL
+            if let path = worktree, (try? await git.fileSystem.fileExists(path)) != true { worktree = nil }
             let directory = worktree ?? repository
             let base = try await resolveBase(agent.baseBranch, repository: repository)
             changes.base = base
@@ -80,7 +81,7 @@ public struct RunChanges: Sendable {
 
     public func conflictingPaths(_ ours: String, _ theirs: String, repository: URL) async throws -> [String] {
         let arguments = ["merge-tree", "--write-tree", "--name-only", "--no-messages", ours, theirs]
-        let result = try await git.runner.run(git.executable, arguments, in: repository)
+        let result = try await git.execute(arguments, in: repository)
         switch result.exitCode {
         case 0:
             return []
@@ -115,7 +116,8 @@ public struct RunChanges: Sendable {
             files[index].hasUncommittedChanges = true
         }
         for path in status.untracked where !files.contains(where: { $0.path == path }) {
-            files.append(Self.untrackedFile(path, in: worktree))
+            let data = git.isRemote ? ((try? await git.fileSystem.readData(worktree.appending(path: path))).flatMap { $0 } ?? Data()) : nil
+            files.append(Self.untrackedFile(path, in: worktree, data: data))
         }
         return files.sorted { $0.path < $1.path }
     }
@@ -140,8 +142,8 @@ public struct RunChanges: Sendable {
         return (tracked, untracked)
     }
 
-    static func untrackedFile(_ path: String, in worktree: URL) -> FileDiff {
-        let data = (try? Data(contentsOf: worktree.appending(path: path))) ?? Data()
+    static func untrackedFile(_ path: String, in worktree: URL, data fetched: Data? = nil) -> FileDiff {
+        let data = fetched ?? (try? Data(contentsOf: worktree.appending(path: path))) ?? Data()
         var file = FileDiff(oldPath: nil, newPath: path, change: .added, newMode: "100644", hasUncommittedChanges: true)
         file.isGenerated = GeneratedFiles.isGenerated(path)
         var patch = ["diff --git a/\(path) b/\(path)", "new file mode 100644"]

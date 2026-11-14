@@ -57,6 +57,7 @@ struct TurnSetup {
     var hooks: JSONValue?
     var permissions: PermissionPolicy?
     var askTools: [String] = []
+    var mcpConfiguration: String?
 }
 
 extension String {
@@ -75,6 +76,22 @@ public final class AgentRuntime {
     public var handoffTools: @MainActor (Agent) -> Set<HandoffTool> = { _ in [] }
     public var worktreePrepared: (@MainActor (WorktreePreparation) async throws -> Void)?
     public var gitProvider: @MainActor () -> GitClient? = { nil }
+    public var remoteHostProvider: @MainActor (Project) async throws -> RemoteAgentHost = { _ in throw RemoteProjectUnsupported("Running agents on the host") }
+    public var remoteFilesChanged: @MainActor (Project) -> Void = { _ in }
+
+    func hostGit(_ git: GitClient, for project: Project) -> GitClient {
+        guard let client = project.sshClient, !git.isRemote else { return git }
+        return GitClient(ssh: client)
+    }
+
+    func projectGit(_ project: Project) -> GitClient? {
+        project.sshClient.map(GitClient.init(ssh:)) ?? gitProvider()
+    }
+
+    func remoteProject(of agent: Agent) -> Project? {
+        guard let project = try? database.project(id: agent.projectId), project.isRemote else { return nil }
+        return project
+    }
     public var pluginSkills: @MainActor (Project) -> Set<String> = { _ in [] }
     @ObservationIgnored public var willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
     public var apiRetryDelays: [Duration] = [.seconds(60), .seconds(300), .seconds(900), .seconds(1800), .seconds(3600)]
@@ -167,6 +184,7 @@ public final class AgentRuntime {
         git: GitClient,
         now: Date = .now
     ) async throws -> AgentSession {
+        let git = hostGit(git, for: project)
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let task = task.trimmingCharacters(in: .whitespacesAndNewlines)
         guard providerMode != nil else { throw AgentError.providerNotChosen }
@@ -178,7 +196,7 @@ public final class AgentRuntime {
             throw AgentError.nameTaken(name)
         }
 
-        let manager = WorktreeManager(repository: project.url, git: git)
+        let manager = WorktreeManager(project: project, git: git)
         let base = try await git.baseBranch(of: project.url)
         let taskSlug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
         let worktree = try await manager.create(agent: name, slug: taskSlug.isEmpty ? "task" : taskSlug, from: base)
@@ -210,7 +228,7 @@ public final class AgentRuntime {
     }
 
     public func checkSkills(_ skills: [String], in project: Project) throws {
-        let unknown = SkillLibrary.unknownSkills(skills, in: project.url, pluginSkills: pluginSkills(project))
+        let unknown = SkillLibrary.unknownSkills(skills, in: project.filesRoot, pluginSkills: pluginSkills(project))
         guard unknown.isEmpty else { throw AgentError.unknownSkills(unknown) }
     }
 
@@ -228,6 +246,7 @@ public final class AgentRuntime {
         spawnedBy spawner: Agent? = nil,
         now: Date = .now
     ) async throws -> [AgentSession] {
+        let git = hostGit(git, for: project)
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
         let role = kind.builtInRole
@@ -240,7 +259,7 @@ public final class AgentRuntime {
         let names = try agentNames(for: base, count: count, inProject: projectId)
         let task = task.trimmingCharacters(in: .whitespacesAndNewlines)
         let baseBranch = try await git.baseBranch(of: project.url)
-        let manager = WorktreeManager(repository: project.url, git: git)
+        let manager = WorktreeManager(project: project, git: git)
         let taskSlug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
 
         var spawned: [AgentSession] = []
@@ -282,10 +301,11 @@ public final class AgentRuntime {
         return spawned
     }
 
-    func turnSetup(for agent: Agent) throws -> TurnSetup {
+    func turnSetup(for agent: Agent, remote: RemoteAgentHost? = nil) throws -> TurnSetup {
         try checkMonthlyBudget(for: agent)
         let project = try database.project(id: agent.projectId)
         let repository = project?.url
+        let files = project?.filesRoot
         let directory: URL
         if agent.readOnly, let worktree = agent.worktreeURL {
             directory = worktree
@@ -296,12 +316,12 @@ public final class AgentRuntime {
             guard let worktree = agent.worktreeURL else { throw AgentLaunchError.missingWorktree(agent.name) }
             directory = worktree
         }
-        guard FileManager.default.fileExists(atPath: directory.path) else {
+        guard remote != nil || FileManager.default.fileExists(atPath: directory.path) else {
             throw agent.readOnly ? AgentLaunchError.missingProject(agent.name) : AgentLaunchError.missingWorktree(agent.name)
         }
 
         let tools = handoffTools(agent)
-        let config = repository.map { ProjectConfigLoader.load(repository: $0) }
+        let config = files.map { ProjectConfigLoader.load(repository: $0) }
         let policy = PermissionPolicy(profile: (config?.permissions ?? PermissionsConfig()).resolve(for: agent.kind, readOnly: agent.readOnly), readOnly: agent.readOnly)
         let name = AgentNaming.displayName(of: agent, config: config)
         var prompt = agent.readOnly
@@ -309,22 +329,22 @@ public final class AgentRuntime {
             : ClaudeLaunch.systemPrompt(agentName: name, worktree: directory, branch: agent.branch, commands: policy.commands)
         if let guide = ClaudeLaunch.askGuide(policy), mcpServer != nil { prompt += "\n\n" + guide }
         let isLead = agent.kind == .lead
-        if let repository, let config, let project {
+        if let files, let config, let project {
             if let kind = agent.kind {
                 let context = RoleContext.build(
-                    kind: kind, skills: agent.skills, config: config, repository: repository, pluginSkills: pluginSkills(project)
+                    kind: kind, skills: agent.skills, config: config, repository: files, pluginSkills: pluginSkills(project)
                 ).systemPrompt
                 if !context.isEmpty { prompt += "\n\n" + context }
             }
             if isLead {
-                prompt += "\n\n" + Self.skillsGuide(SkillLibrary.skills(in: repository, pluginSkills: pluginSkills(project)))
+                prompt += "\n\n" + Self.skillsGuide(SkillLibrary.skills(in: files, pluginSkills: pluginSkills(project)))
             }
             if agent.taskId != nil {
                 prompt += "\n\n" + Self.leadChatGuide(workflows: config.workflows, defaultWorkflow: config.preferences.defaultWorkflow)
             } else if agent.runId != nil {
                 prompt += "\n\n" + Self.webToolsGuide
             }
-            if let memory = memoryPromptSection(for: agent, repository: repository) { prompt += "\n\n" + memory }
+            if let memory = memoryPromptSection(for: agent, repository: files) { prompt += "\n\n" + memory }
             if !agent.readOnly, let checks = config.checks, let guide = Self.checksGuide(checks) { prompt += "\n\n" + guide }
         }
         if mcpServer != nil, agent.taskId == nil, let spawnerID = agent.spawnedById, let spawner = try database.agent(id: spawnerID) {
@@ -336,11 +356,12 @@ public final class AgentRuntime {
 
         var additional: [URL] = []
         if agent.readOnly || isLead, let runId = agent.runId {
-            let root = realPath(of: directory) + "/"
+            let resolve: (URL) -> String = { remote == nil ? realPath(of: $0) : SSHFileSystem.normalize($0.path) }
+            let root = resolve(directory) + "/"
             additional = try database.agents(inProject: agent.projectId)
                 .filter { $0.runId == runId && $0.id != agent.id }
                 .compactMap(\.worktreeURL)
-                .filter { FileManager.default.fileExists(atPath: $0.path) && !(realPath(of: $0) + "/").hasPrefix(root) }
+                .filter { (remote != nil || FileManager.default.fileExists(atPath: $0.path)) && !(resolve($0) + "/").hasPrefix(root) }
         }
         var setup = TurnSetup(directory: directory, systemPrompt: prompt, readOnly: agent.readOnly, additionalDirectories: additional)
         setup.permissions = policy
@@ -356,15 +377,25 @@ public final class AgentRuntime {
         let hookChecks = agent.readOnly ? nil : config?.checks
         if let server = mcpServer, let agentID = agent.id {
             server.revokeAll(agent: agentID)
-            let endpoint = server.register(agent: agentID, tools: tools)
+            let registered = server.register(agent: agentID, tools: tools)
+            let endpoint = remote.map { MCPEndpoint(agentID: registered.agentID, token: registered.token, url: $0.relay(registered.url), tools: registered.tools) } ?? registered
             if !tools.isEmpty {
-                setup.extraArguments = try endpoint.launchArguments(configDirectory: paths.agentDirectory(agentID))
+                if let remote {
+                    setup.extraArguments = ["--mcp-config", remote.stateDirectory(forAgent: agentID) + "/mcp.json", "--strict-mcp-config"]
+                    setup.mcpConfiguration = endpoint.configuration.compactJSON
+                } else {
+                    setup.extraArguments = try endpoint.launchArguments(configDirectory: paths.agentDirectory(agentID))
+                }
                 setup.extraAllowedTools += endpoint.allowedTools
                 setup.systemPrompt += "\n\n" + Self.handoffGuide(tools)
             }
-            setup.hooks = Self.hookSettings(checks: hookChecks, policy: policy, url: server.hookURL(for: endpoint))
+            let hookURL = server.hookURL(for: registered)
+            setup.hooks = Self.hookSettings(checks: hookChecks, policy: policy, url: remote?.relay(hookURL) ?? hookURL)
         }
-        return try addingMemoryAccess(to: setup, for: agent, repository: repository)
+        if remote != nil {
+            return addingRemoteMemoryAccess(to: setup, for: agent, repository: repository)
+        }
+        return try addingMemoryAccess(to: setup, for: agent, repository: files)
     }
 
     static func handoffGuide(_ tools: Set<HandoffTool>) -> String {
@@ -482,9 +513,10 @@ public final class AgentRuntime {
     }
 
     public func delete(_ session: AgentSession, in project: Project, git: GitClient, deleteBranch: Bool) async throws {
+        let git = hostGit(git, for: project)
         dequeue(session)
         session.terminateForDeletion()
-        let manager = WorktreeManager(repository: project.url, git: git)
+        let manager = WorktreeManager(project: project, git: git)
         if let path = session.agent.worktreeURL,
            let worktree = try await manager.list().first(where: { $0.agent == path.lastPathComponent }) {
             await willRemoveWorktree(worktree.path)
@@ -568,6 +600,7 @@ extension AgentRuntime {
         git: GitClient,
         now: Date = .now
     ) async throws -> AgentSession {
+        let git = hostGit(git, for: project)
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
         let role = kind.builtInRole
@@ -588,7 +621,7 @@ extension AgentRuntime {
             port = try reservedPorts.removeValue(forKey: realPath(of: readOnlyWorktree.path)) ?? nextPort(forProject: projectId)
         } else if role.editsCode {
             let taskSlug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
-            let worktree = try await WorktreeManager(repository: project.url, git: git)
+            let worktree = try await WorktreeManager(project: project, git: git)
                 .create(agent: agentName, slug: taskSlug.isEmpty ? "task" : taskSlug, from: baseBranch)
             worktreePath = worktree.path.path
             branch = worktree.branch
@@ -625,10 +658,11 @@ extension AgentRuntime {
     }
 
     public func openWorktree(for session: AgentSession, in project: Project, git: GitClient) async throws {
+        let git = hostGit(git, for: project)
         let agent = session.agent
         let baseBranch = try await git.baseBranch(of: project.url)
         let taskSlug = Slug.make((agent.task.nilIfEmpty ?? "lead").split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
-        let worktree = try await WorktreeManager(repository: project.url, git: git)
+        let worktree = try await WorktreeManager(project: project, git: git)
             .create(agent: agent.name, slug: taskSlug.isEmpty ? "lead" : taskSlug, from: baseBranch)
         session.adoptWorktree(worktree, baseBranch: baseBranch, port: try nextPort(forProject: agent.projectId))
         usageDidChange()
@@ -675,14 +709,15 @@ extension AgentRuntime {
     public func reassign(
         _ session: AgentSession, toRun runId: Int64, runStepId: Int64?, planTaskId: String, task: String, skills: [String] = [], in project: Project, git: GitClient
     ) async throws {
+        let git = hostGit(git, for: project)
         let agent = session.agent
-        let manager = WorktreeManager(repository: project.url, git: git)
+        let manager = WorktreeManager(project: project, git: git)
         let base = try await git.baseBranch(of: project.url) ?? "HEAD"
         let slug = Slug.make(task.split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " ")).nilIfEmpty ?? "task"
         var branch = try manager.branchName(agent: agent.name, slug: slug)
         if try await git.hasCommit("refs/heads/\(branch)", in: project.url) { branch += "-run-\(runId)" }
         let worktree: URL
-        if let existing = agent.worktreeURL, FileManager.default.fileExists(atPath: existing.path) {
+        if let existing = agent.worktreeURL, (try? await project.fileSystem.fileExists(existing)) == true {
             let status = try await git.run(["status", "--porcelain"], in: existing)
             guard status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw WorkflowDriverError.notReady("\(agent.name) has uncommitted changes in its worktree, so it can’t take a new task.")

@@ -13,7 +13,8 @@ extension AgentRuntime {
     public static let healthWorktreeName = "health-check"
 
     public func checkHarness(of project: Project, git: GitClient) async throws -> HarnessReport {
-        let config = ProjectConfigLoader.load(repository: project.url)
+        let git = hostGit(git, for: project)
+        let config = ProjectConfigLoader.load(repository: project.filesRoot)
         let checks = config.checks?.checks ?? []
         var problems: [String] = []
         if checks.isEmpty {
@@ -25,12 +26,12 @@ extension AgentRuntime {
             return HarnessReport(setupError: nil, results: [], problems: problems, finishedAt: .now)
         }
 
-        let manager = WorktreeManager(repository: project.url, git: git)
+        let manager = WorktreeManager(project: project, git: git)
         let path = manager.crewDirectory.appending(path: Self.healthWorktreeName, directoryHint: .isDirectory)
         _ = try? await git.run(["worktree", "remove", "--force", path.path], in: project.url)
-        try? FileManager.default.removeItem(at: path)
+        try? await git.fileSystem.removeItem(path)
         try await manager.ensureExcluded()
-        try FileManager.default.createDirectory(at: manager.crewDirectory, withIntermediateDirectories: true)
+        try await git.fileSystem.createDirectory(manager.crewDirectory)
         try await git.run(["worktree", "add", "--detach", path.path, "HEAD"], in: project.url)
 
         let logs = paths.pendingWorkspaceDirectory(Self.healthWorktreeName)
@@ -47,7 +48,11 @@ extension AgentRuntime {
             }
         }
 
-        let results = await checkRunner.run(checks, in: path, variables: ["ENSEMBLE_WORKTREE": path.path, "ENSEMBLE_AGENT": Self.healthWorktreeName], logDirectory: logs.appending(path: "checks"))
+        var runner = checkRunner
+        if project.isRemote {
+            runner.remote = try await remoteHostProvider(project)
+        }
+        let results = await runner.run(checks, in: path, variables: ["ENSEMBLE_WORKTREE": path.path, "ENSEMBLE_AGENT": Self.healthWorktreeName], logDirectory: logs.appending(path: "checks"))
         _ = try? await git.run(["worktree", "remove", "--force", path.path], in: project.url)
         for result in results where !result.passed {
             problems.append("\(result.headline) on a clean checkout. Agents can’t get it green unless it passes here first: check its command, dependencies, network access or credentials.")

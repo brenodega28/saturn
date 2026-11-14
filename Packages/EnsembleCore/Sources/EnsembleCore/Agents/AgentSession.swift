@@ -289,15 +289,53 @@ public final class AgentSession: Identifiable {
     }
 
     private func launchTurn(with turn: AgentTurn, mayRestoreWorktree: Bool = true) {
+        if let project = runtime.remoteProject(of: agent) {
+            prepareRemoteLaunch(of: turn, in: project, mayRestoreWorktree: mayRestoreWorktree)
+            return
+        }
+        launchTurn(with: turn, mayRestoreWorktree: mayRestoreWorktree, remote: nil)
+    }
+
+    private func prepareRemoteLaunch(of turn: AgentTurn, in project: Project, mayRestoreWorktree: Bool) {
         latestReply = nil
         currentTurn = turn
-        guard let executable = runtime.claudeExecutable else {
+        agent.status = .working
+        agent.lastError = nil
+        persist()
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let host = try await self.runtime.remoteHostProvider(project)
+                if !self.agent.readOnly, let worktree = self.agent.worktreeURL, try await !project.fileSystem.fileExists(worktree) {
+                    if mayRestoreWorktree, self.runtime.canRestoreWorktree(of: self.agent) {
+                        self.restoreWorktree(thenLaunch: turn)
+                    } else {
+                        self.fail(AgentLaunchError.missingWorktree(self.agent.name).localizedDescription)
+                    }
+                    return
+                }
+                if self.agent.isPinned, self.runtime.memoryUpdateAgents.contains(self.id) {
+                    try await project.fileSystem.createDirectory(AgentMemory.directory(in: project.url))
+                }
+                guard self.agent.status == .working, self.handle == nil else { return }
+                self.launchTurn(with: turn, mayRestoreWorktree: mayRestoreWorktree, remote: host)
+            } catch {
+                guard self.agent.status == .working else { return }
+                self.fail(error.localizedDescription)
+            }
+        }
+    }
+
+    private func launchTurn(with turn: AgentTurn, mayRestoreWorktree: Bool, remote: RemoteAgentHost?) {
+        latestReply = nil
+        currentTurn = turn
+        guard let executable = runtime.claudeExecutable ?? remote.map({ URL(fileURLWithPath: $0.claudePath) }) else {
             fail("Claude Code isn’t available. Check Settings › Tools.")
             return
         }
         let setup: TurnSetup
         do {
-            setup = try runtime.turnSetup(for: agent)
+            setup = try runtime.turnSetup(for: agent, remote: remote)
         } catch {
             if case AgentLaunchError.missingWorktree = error, mayRestoreWorktree, runtime.canRestoreWorktree(of: agent) {
                 restoreWorktree(thenLaunch: turn)
@@ -341,7 +379,13 @@ public final class AgentSession: Identifiable {
             extraAllowedTools: setup.extraAllowedTools,
             hooks: setup.hooks,
             permissions: setup.permissions,
-            askTools: setup.askTools
+            askTools: setup.askTools,
+            remote: remote.map {
+                RemoteAgentLaunch(
+                    host: $0, stateDirectory: $0.stateDirectory(forAgent: id),
+                    mcpConfiguration: setup.mcpConfiguration, apiKey: environment["ANTHROPIC_API_KEY"]
+                )
+            }
         )
 
         do {

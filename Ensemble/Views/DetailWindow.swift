@@ -37,11 +37,12 @@ struct DetailWindow: View {
 }
 
 private struct DetailFileView: View {
+    @Environment(AppModel.self) private var model
     let project: Project
     let path: String
 
     var body: some View {
-        let document = CodeWorkspace.document(at: project.url.appending(path: path))
+        let document = project.isRemote ? model.codeBrowser(for: project).document(path) : CodeWorkspace.document(at: project.url.appending(path: path))
         VStack(alignment: .leading, spacing: 8) {
             Text(path).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.secondaryText)
             ScrollView([.vertical, .horizontal]) {
@@ -61,6 +62,7 @@ private struct DetailFileView: View {
         case .binary: "This is a binary file."
         case .tooLarge(let bytes): "This file is too large to show (\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)))."
         case .missing: "This file no longer exists."
+        case .loading: "Loading…"
         }
     }
 }

@@ -50,7 +50,7 @@ public struct ChatReader {
         if let messageID = request.messageID, !messages.contains(where: { $0.id == messageID }) {
             throw ChatReaderError.unknownMessage(messageID, requestID: taskID)
         }
-        let config = try database.project(id: task.projectId).map { ProjectConfigLoader.load(repository: $0.url) }
+        let config = try database.project(id: task.projectId).map { ProjectConfigLoader.load(repository: $0.filesRoot) }
         let text = switch request.section {
         case .overview: try overview(task, taskID: taskID, messages: messages, request: request, config: config)
         case .messages: messagesSection(taskID: taskID, messages: messages, request: request)

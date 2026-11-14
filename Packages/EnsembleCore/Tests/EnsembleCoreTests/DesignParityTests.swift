@@ -176,7 +176,7 @@ import Testing
         try await driver.keep(conflict.branch, resolving: conflict, in: run)
         let loserWorktree = try #require(second.agent.worktreeURL)
         #expect(try String(contentsOf: loserWorktree.appending(path: "README.md"), encoding: .utf8) == "hello from A\n")
-        let merge = try await harness.repo.git.runner.run(harness.repo.git.executable, ["merge-tree", "--write-tree", conflict.branch, conflict.other], in: harness.repo.root)
+        let merge = try await harness.repo.git.execute(["merge-tree", "--write-tree", conflict.branch, conflict.other], in: harness.repo.root)
         #expect(merge.succeeded)
     }
 

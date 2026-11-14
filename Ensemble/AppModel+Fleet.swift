@@ -63,7 +63,7 @@ extension AppModel {
             guard let destination = known.destination, connections[known.id] == nil else { continue }
             await connectRemote(known, destination: destination)
         }
-        if let stored = UserDefaults.standard.string(forKey: Self.activeDaemonKey).flatMap(UUID.init(uuidString:)),
+        if let stored = AppDefaults.store.string(forKey: Self.activeDaemonKey).flatMap(UUID.init(uuidString:)),
            stored != connection.id, connections[stored] != nil {
             activate(stored)
         }
@@ -175,7 +175,7 @@ extension AppModel {
         projectStates = [:]
         configs = [:]
         changesRunSelections = [:]
-        UserDefaults.standard.set(id.uuidString, forKey: Self.activeDaemonKey)
+        AppDefaults.store.set(id.uuidString, forKey: Self.activeDaemonKey)
         startRequests()
         reloadProjects()
         Task { await refreshAllProjects() }

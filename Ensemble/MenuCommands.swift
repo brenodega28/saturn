@@ -500,7 +500,7 @@ extension CommandRegistry {
 
     private func registerWindowCommands() {
         register(MenuCommand(id: "help.shortcuts", title: "Keyboard Shortcuts", menu: "Help", section: 0, order: 1, shortcut: KeyboardShortcut("/")) { _ in
-            UserDefaults.standard.set("keys", forKey: AppSettingsView.tabKey)
+            AppDefaults.store.set("keys", forKey: AppSettingsView.tabKey)
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             NSApp.activate()
         })

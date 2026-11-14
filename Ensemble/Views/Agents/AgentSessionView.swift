@@ -6,7 +6,7 @@ struct AgentSessionView: View {
     @Environment(AppModel.self) private var model
     let session: LiveAgentSession
     let project: Project
-    @AppStorage("preferredEditor") private var preferredEditor = ""
+    @AppStorage("preferredEditor", store: AppDefaults.store) private var preferredEditor = ""
     @Environment(\.isInWorkbench) private var isInWorkbench
 
     var body: some View {

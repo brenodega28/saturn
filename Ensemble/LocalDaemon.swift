@@ -72,9 +72,9 @@ enum LocalDaemon {
 
     static func clientID(_ clientPaths: AppPaths) -> UUID {
         let key = "daemon.clientID.\(clientPaths.root.path)"
-        if let stored = UserDefaults.standard.string(forKey: key).flatMap(UUID.init(uuidString:)) { return stored }
+        if let stored = AppDefaults.store.string(forKey: key).flatMap(UUID.init(uuidString:)) { return stored }
         let id = UUID()
-        UserDefaults.standard.set(id.uuidString, forKey: key)
+        AppDefaults.store.set(id.uuidString, forKey: key)
         return id
     }
 

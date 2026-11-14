@@ -64,8 +64,8 @@ extension AppModel {
     }
 
     var appearance: Appearance {
-        get { UserDefaults.standard.string(forKey: Appearance.storageKey).flatMap(Appearance.init(rawValue:)) ?? .fallback }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: Appearance.storageKey) }
+        get { AppDefaults.store.string(forKey: Appearance.storageKey).flatMap(Appearance.init(rawValue:)) ?? .fallback }
+        set { AppDefaults.store.set(newValue.rawValue, forKey: Appearance.storageKey) }
     }
 
     func chat(of agent: Agent) -> Chat? {

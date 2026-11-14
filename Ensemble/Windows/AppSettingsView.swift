@@ -9,7 +9,7 @@ enum NotificationPreferences {
     }
 
     static func isEnabled(_ kind: ChatRequestKind) -> Bool {
-        UserDefaults.standard.object(forKey: key(kind)) as? Bool ?? true
+        AppDefaults.store.object(forKey: key(kind)) as? Bool ?? true
     }
 
     static func key(_ event: ChatNotificationEvent) -> String {
@@ -17,14 +17,14 @@ enum NotificationPreferences {
     }
 
     static func isEnabled(_ event: ChatNotificationEvent) -> Bool {
-        UserDefaults.standard.object(forKey: key(event)) as? Bool ?? (event != .leadReply)
+        AppDefaults.store.object(forKey: key(event)) as? Bool ?? (event != .leadReply)
     }
 }
 
 struct AppSettingsView: View {
     static let tabKey = "settings.tab"
     let updater: Updater
-    @AppStorage(AppSettingsView.tabKey) private var tab = "general"
+    @AppStorage(AppSettingsView.tabKey, store: AppDefaults.store) private var tab = "general"
 
     var body: some View {
         TabView(selection: $tab) {
@@ -62,7 +62,7 @@ struct SettingsPane<Content: View>: View {
 }
 
 private struct GeneralSettings: View {
-    @AppStorage(Appearance.storageKey) private var appearance = Appearance.fallback
+    @AppStorage(Appearance.storageKey, store: AppDefaults.store) private var appearance = Appearance.fallback
 
     var body: some View {
         SettingsPane {
@@ -120,7 +120,7 @@ private struct NotificationSettings: View {
                     Toggle(RequestNotifier.kindTitle(kind), isOn: Binding(
                         get: { _ = revision; return NotificationPreferences.isEnabled(kind) },
                         set: {
-                            UserDefaults.standard.set($0, forKey: NotificationPreferences.key(kind))
+                            AppDefaults.store.set($0, forKey: NotificationPreferences.key(kind))
                             revision += 1
                         }
                     ))
@@ -132,7 +132,7 @@ private struct NotificationSettings: View {
                     Toggle(RequestNotifier.eventTitle(event), isOn: Binding(
                         get: { _ = revision; return NotificationPreferences.isEnabled(event) },
                         set: {
-                            UserDefaults.standard.set($0, forKey: NotificationPreferences.key(event))
+                            AppDefaults.store.set($0, forKey: NotificationPreferences.key(event))
                             revision += 1
                         }
                     ))
@@ -199,7 +199,7 @@ private struct UpdateSettings: View {
 }
 
 private struct EditorFontSettings: View {
-    @AppStorage(CodeStyle.fontSizeKey) private var size = CodeStyle.defaultFontSize
+    @AppStorage(CodeStyle.fontSizeKey, store: AppDefaults.store) private var size = CodeStyle.defaultFontSize
 
     var body: some View {
         SettingsPane {

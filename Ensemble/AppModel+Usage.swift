@@ -6,15 +6,15 @@ extension AppModel {
     static let globalMonthlyBudgetKey = "usage.globalMonthlyBudgetUSD"
 
     var globalMonthlyBudget: Double? {
-        let value = UserDefaults.standard.double(forKey: Self.globalMonthlyBudgetKey)
+        let value = AppDefaults.store.double(forKey: Self.globalMonthlyBudgetKey)
         return value > 0 ? value : nil
     }
 
     func setGlobalMonthlyBudget(_ budget: Double?) {
         if let budget, budget > 0 {
-            UserDefaults.standard.set(budget, forKey: Self.globalMonthlyBudgetKey)
+            AppDefaults.store.set(budget, forKey: Self.globalMonthlyBudgetKey)
         } else {
-            UserDefaults.standard.removeObject(forKey: Self.globalMonthlyBudgetKey)
+            AppDefaults.store.removeObject(forKey: Self.globalMonthlyBudgetKey)
         }
         checkBudgets()
     }
@@ -22,15 +22,15 @@ extension AppModel {
     static let globalWeeklyBudgetKey = "usage.globalWeeklyBudgetUSD"
 
     var globalWeeklyBudget: Double? {
-        let value = UserDefaults.standard.double(forKey: Self.globalWeeklyBudgetKey)
+        let value = AppDefaults.store.double(forKey: Self.globalWeeklyBudgetKey)
         return value > 0 ? value : nil
     }
 
     func setGlobalWeeklyBudget(_ budget: Double?) {
         if let budget, budget > 0 {
-            UserDefaults.standard.set(budget, forKey: Self.globalWeeklyBudgetKey)
+            AppDefaults.store.set(budget, forKey: Self.globalWeeklyBudgetKey)
         } else {
-            UserDefaults.standard.removeObject(forKey: Self.globalWeeklyBudgetKey)
+            AppDefaults.store.removeObject(forKey: Self.globalWeeklyBudgetKey)
         }
         checkBudgets()
     }
@@ -38,16 +38,16 @@ extension AppModel {
     static let usageResetPointKey = "usage.resetPoint"
 
     var usageResetPoint: Date? {
-        let interval = UserDefaults.standard.double(forKey: Self.usageResetPointKey)
+        let interval = AppDefaults.store.double(forKey: Self.usageResetPointKey)
         return interval > 0 ? Date(timeIntervalSince1970: interval) : nil
     }
 
     func resetUsage(at date: Date = .now) {
-        UserDefaults.standard.set(date.timeIntervalSince1970, forKey: Self.usageResetPointKey)
+        AppDefaults.store.set(date.timeIntervalSince1970, forKey: Self.usageResetPointKey)
     }
 
     func clearUsageReset() {
-        UserDefaults.standard.removeObject(forKey: Self.usageResetPointKey)
+        AppDefaults.store.removeObject(forKey: Self.usageResetPointKey)
     }
 
     func usageReport(period: UsagePeriod) -> UsageReport? {

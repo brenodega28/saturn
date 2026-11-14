@@ -8,8 +8,8 @@ struct WorkspacePanel: View {
     @State private var status: WorktreeStatus?
     @State private var errorMessage: String?
     @State private var selectedFile: ChangedFile?
-    @AppStorage("preferredEditor") private var preferredEditor = ""
-    @AppStorage("preferredTerminal") private var preferredTerminal = ""
+    @AppStorage("preferredEditor", store: AppDefaults.store) private var preferredEditor = ""
+    @AppStorage("preferredTerminal", store: AppDefaults.store) private var preferredTerminal = ""
 
     var body: some View {
         let agent = session.agent

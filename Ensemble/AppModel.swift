@@ -151,7 +151,7 @@ final class AppModel {
         self.connections = [connection.id: connection]
         self.knownDaemons = Self.loadKnownDaemons(clientPaths)
         self.clientPaths = clientPaths
-        self.providerMode = UserDefaults.standard.string(forKey: Self.providerModeKey).flatMap(ProviderMode.init(rawValue:))
+        self.providerMode = AppDefaults.store.string(forKey: Self.providerModeKey).flatMap(ProviderMode.init(rawValue:))
         self.locator = locator
         self.runner = CommandRunner(environment: locator.environment())
         self.requests = ChatRequestFeed(database: connection.database)
@@ -304,7 +304,7 @@ final class AppModel {
 
     private func migrateSettingsToDaemon() async {
         let migratedKey = "\(Self.settingsMigratedKey).\(connection.id.uuidString.lowercased())"
-        guard !UserDefaults.standard.bool(forKey: migratedKey),
+        guard !AppDefaults.store.bool(forKey: migratedKey),
               let settings = try? await send(SettingsCommands.Get()) else { return }
         if settings.providerMode == nil, let mode = providerMode {
             _ = try? await send(SettingsCommands.SetProviderMode(mode: mode))
@@ -312,7 +312,7 @@ final class AppModel {
         if settings.globalMonthlyBudgetUSD == nil, settings.globalWeeklyBudgetUSD == nil, globalMonthlyBudget != nil || globalWeeklyBudget != nil {
             _ = try? await send(SettingsCommands.SetBudgets(monthlyUSD: globalMonthlyBudget, weeklyUSD: globalWeeklyBudget))
         }
-        UserDefaults.standard.set(true, forKey: migratedKey)
+        AppDefaults.store.set(true, forKey: migratedKey)
     }
 
     func pauseAllAgents(in project: Project) {
@@ -327,7 +327,7 @@ final class AppModel {
         environment = daemonEnvironment.report
         if let mode = daemonEnvironment.providerMode, providerMode != mode {
             providerMode = mode
-            UserDefaults.standard.set(mode.rawValue, forKey: Self.providerModeKey)
+            AppDefaults.store.set(mode.rawValue, forKey: Self.providerModeKey)
         }
     }
 
@@ -335,7 +335,7 @@ final class AppModel {
 
     func chooseProvider(_ mode: ProviderMode) async {
         providerMode = mode
-        UserDefaults.standard.set(mode.rawValue, forKey: Self.providerModeKey)
+        AppDefaults.store.set(mode.rawValue, forKey: Self.providerModeKey)
         await command("Couldn’t change how agents sign in", SettingsCommands.SetProviderMode(mode: mode))
         updatePlanUsagePolling()
         await checkEnvironment()
@@ -612,13 +612,13 @@ final class AppModel {
     private static let tabsKey = "navigation.tabs"
 
     private func persistNavigation() {
-        let defaults = UserDefaults.standard
+        let defaults = AppDefaults.store
         defaults.set(try? JSONEncoder().encode(selection), forKey: Self.selectionKey)
         defaults.set(try? JSONEncoder().encode(tabs), forKey: Self.tabsKey)
     }
 
     private func restoreNavigation() {
-        let savedSelection = UserDefaults.standard.data(forKey: Self.selectionKey).flatMap { try? JSONDecoder().decode(SidebarItem?.self, from: $0) }
+        let savedSelection = AppDefaults.store.data(forKey: Self.selectionKey).flatMap { try? JSONDecoder().decode(SidebarItem?.self, from: $0) }
         tabs = [:]
         if case .project = savedSelection { selection = savedSelection } else { selection = nil }
     }

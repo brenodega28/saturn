@@ -113,7 +113,7 @@ enum NewChatFilter {
 struct ProjectCards: View {
     @Environment(AppModel.self) private var model
     let summaries: [ChatSummary]
-    @AppStorage("sidebar.openProject") private var openProjectID = -1
+    @AppStorage("sidebar.openProject", store: AppDefaults.store) private var openProjectID = -1
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {

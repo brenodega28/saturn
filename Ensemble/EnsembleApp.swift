@@ -16,6 +16,7 @@ struct EnsembleApp: App {
                     RootView()
                         .environment(model)
                         .onAppear { appDelegate.model = model }
+                        .modifier(SettingsLinkRouting())
                         .onOpenURL { url in
                             if let link = ChatLink(url: url) { model.open(link) }
                         }
@@ -149,5 +150,18 @@ struct LaunchFailureView: View {
         }
         .padding(40)
         .frame(minWidth: 520, minHeight: 300)
+    }
+}
+
+private struct SettingsLinkRouting: ViewModifier {
+    @Environment(\.openSettings) private var openSettings
+
+    func body(content: Content) -> some View {
+        content.onOpenURL { url in
+            guard url.scheme == ChatLink.scheme, url.host() == "settings" else { return }
+            let tab = url.pathComponents.dropFirst().first
+            if let tab { AppDefaults.store.set(tab, forKey: AppSettingsView.tabKey) }
+            openSettings()
+        }
     }
 }

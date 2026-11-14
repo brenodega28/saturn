@@ -5,7 +5,7 @@ import SwiftUI
 struct ChatSettingsView: View {
     static let holdChoices = [0, 1, 2, 3, 5, 10]
 
-    @AppStorage(AppModel.sendHoldSecondsKey) private var holdSeconds = AppModel.defaultSendHoldSeconds
+    @AppStorage(AppModel.sendHoldSecondsKey, store: AppDefaults.store) private var holdSeconds = AppModel.defaultSendHoldSeconds
 
     var body: some View {
         SettingsPage("Chat", subtitle: "Applies to every project and every chat with the Lead.") {

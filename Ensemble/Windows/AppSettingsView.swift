@@ -60,37 +60,9 @@ private struct SettingsPane<Content: View>: View {
 }
 
 private struct AccountsSettings: View {
-    @Environment(AppModel.self) private var model
-
     var body: some View {
         SettingsPane {
             ClaudeAccessSettings()
-            VStack(alignment: .leading, spacing: 8) {
-                Text("GitHub").font(.system(size: 13, weight: .semibold))
-                HStack(spacing: 10) {
-                    Image(systemName: "arrow.triangle.pull").font(.system(size: 16)).frame(width: 32, height: 32)
-                        .background(Theme.fill, in: .rect(cornerRadius: 8))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(model.gitHub.user.map { "Signed in as \($0.login)" } ?? "Not signed in").font(.system(size: 12.5, weight: .semibold))
-                        Text(model.gitHub.user == nil ? "Sign in from a project’s Settings › GitHub to import issues." : "\(model.gitHub.repositories.count) repositories you can reach")
-                            .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
-                    }
-                    Spacer()
-                    if model.gitHub.user != nil {
-                        Button("Sign Out") { model.gitHub.signOut() }
-                    }
-                }
-                ForEach(model.openProjects) { project in
-                    HStack {
-                        Text(project.settings.githubRepository ?? project.name).font(.system(size: 12, design: .monospaced))
-                        Spacer()
-                        Text(project.settings.githubRepository == nil ? "not watching issues" : "watching issues").font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
-                    }
-                }
-            }
-            .padding(14)
-            .background(Theme.fill, in: .rect(cornerRadius: 12))
-            .task { await model.gitHub.loadRepositories() }
         }
     }
 }

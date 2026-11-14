@@ -72,7 +72,7 @@ import Testing
         let run = try database.insert(Run(
             projectId: projectA, taskId: taskID, workflow: "small-task", workflowVersion: "2", currentStep: "review",
             status: .succeeded, costUSD: 1.5, startedAt: base, endedAt: base.addingTimeInterval(600), title: "Stop the loop",
-            workflowSnapshot: Self.snapshot, pullRequestURL: "https://github.com/acme/app/pull/42"
+            workflowSnapshot: Self.snapshot
         ), state: RunEngineState())
         let runID = try #require(run.id)
         let encoder = JSONEncoder()
@@ -121,7 +121,6 @@ import Testing
         #expect(text.contains("Login redirects forever."))
         #expect(text.contains("Lead: Lead (tech-lead, id \(f.lead.id!))"))
         #expect(text.contains("- run \(f.run.id!) · workflow small-task · status succeeded · step review"))
-        #expect(text.contains("PR https://github.com/acme/app/pull/42"))
         #expect(text.contains("Agents: Dev 1 (claude-code, id \(f.builder.id!))"))
         #expect(text.contains("Message number 0\nAttachments: Pasted text #1 · 2 lines"))
         #expect(text.contains("[message \(f.messages.last!.id!)] proposal"))
@@ -200,7 +199,6 @@ import Testing
 
         #expect(text.hasPrefix("Run \(runID) of request \(f.taskID): Stop the loop"))
         #expect(text.contains("Workflow small-task v2 · status succeeded · cost $1.50"))
-        #expect(text.contains("PR: https://github.com/acme/app/pull/42"))
         #expect(text.contains("[step 1] Build (build, agent) · iteration 1 · succeeded · outcome next · $1.00"))
         #expect(text.contains("Result: Fixed the redirect check"))
         #expect(text.contains("Agents: Dev 1 (id \(f.builder.id!))"))

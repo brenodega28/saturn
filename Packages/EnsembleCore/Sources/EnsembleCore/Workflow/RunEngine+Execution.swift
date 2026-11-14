@@ -202,11 +202,11 @@ extension RunEngine {
             let now = clock()
             row.status = .succeeded
             row.outcome = StepOutcome.done
-            row.output = encode(StepOutput(summary: finished.summary ?? finished.pullRequestURL))
+            row.output = encode(StepOutput(summary: finished.summary))
             row.endedAt = now
-            done.run.pullRequestURL = finished.pullRequestURL ?? done.run.pullRequestURL
             done.run.deliveryBranch = finished.deliveryBranch ?? done.run.deliveryBranch
             done.run.baseBranch = finished.baseBranch ?? done.run.baseBranch
+            if finished.mergedIntoBase { done.run.mergedAt = now }
             done.run.status = .succeeded
             done.run.linesChanged = size.lines
             done.run.filesChanged = size.paths.count

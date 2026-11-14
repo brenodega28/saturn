@@ -64,7 +64,7 @@ extension RunEngine {
             "durationMS": JSONValue(Int(ended.timeIntervalSince(loaded.run.startedAt) * 1000)),
             "outcome": JSONValue(loaded.run.outcome),
             "lastError": JSONValue(loaded.run.lastError),
-            "pullRequestURL": JSONValue(loaded.run.pullRequestURL),
+            "pushedAt": JSONValue(loaded.run.pushedAt.map { ISO8601DateFormatter().string(from: $0) }),
             "deliveryBranch": JSONValue(loaded.run.deliveryBranch),
             "iterationsPerStep": .object(iterations.mapValues { JSONValue($0) }),
             "rowsPerStep": .object(attempts.mapValues { JSONValue($0) }),

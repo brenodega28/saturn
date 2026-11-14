@@ -11,7 +11,7 @@ public enum WorkflowDriverError: Error, LocalizedError, Equatable {
     case missingHandoff(agent: String, tool: String)
     case mergeConflict(branch: String, files: [String])
     case unsafeMerge(String)
-    case gitHub(String)
+    case noRemote(String)
 
     public var errorDescription: String? {
         switch self {
@@ -31,7 +31,7 @@ public enum WorkflowDriverError: Error, LocalizedError, Equatable {
             "Merging \(branch) conflicts in \(files.joined(separator: ", "))."
         case .unsafeMerge(let reason):
             reason
-        case .gitHub(let reason):
+        case .noRemote(let reason):
             reason
         }
     }
@@ -55,7 +55,6 @@ enum ExpectedHandoff: Equatable {
 public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     public let runtime: AgentRuntime
     public var gitProvider: @MainActor () -> GitClient? = { nil }
-    public var gitHubProvider: @MainActor () -> GitHubClient? = { nil }
     public var willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
     public var pollInterval: Duration = .milliseconds(250)
     public var memoryUpdater: PinnedMemoryUpdater?
@@ -598,12 +597,10 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 result = FinishResult(summary: "Branches left in place; combined work is on \(deliveryBranch).", deliveryBranch: deliveryBranch, baseBranch: base)
             case .merge:
                 try await mergeIntoBase(deliveryBranch, base: base, project: project, git: git)
-                result = FinishResult(summary: "Merged \(deliveryBranch) into \(base).")
+                result = FinishResult(summary: "Merged \(deliveryBranch) into \(base).", baseBranch: base, mergedIntoBase: true)
             case .push:
                 try await git.run(["push", "-u", "origin", deliveryBranch], in: project.url)
                 result = FinishResult(summary: "Pushed \(deliveryBranch) to origin.", deliveryBranch: deliveryBranch, baseBranch: base)
-            case .pullRequest:
-                result = FinishResult(summary: "Combined work is on \(deliveryBranch), ready to open a pull request or merge into \(base).", deliveryBranch: deliveryBranch, baseBranch: base)
             }
         }
 
@@ -1095,7 +1092,6 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 let rebased = try await rebase(ref, onto: base, branch: branch, run: run, repository: repository, identity: identity, git: git)
                 try await git.run(["merge", "--ff-only", rebased], in: repository)
             }
-            try await git.run(["push", "origin", base], in: repository)
         } catch {
             try? await restore(repository, to: original, git: git)
             throw error
@@ -1105,14 +1101,15 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         return "Merged \(branch) into \(base)."
     }
 
-    public func openPullRequest(_ run: Run) async throws -> String {
+    public func pushBase(_ run: Run) async throws -> String {
         let git = try requireGit(forRun: run)
         guard let project = try runtime.database.project(id: run.projectId) else { throw WorkflowDriverError.notReady("The project is gone.") }
-        guard let branch = run.deliveryBranch, let base = run.baseBranch else {
-            throw WorkflowDriverError.notReady("This run has no delivery branch to open a pull request for.")
-        }
-        try await git.run(["push", "-u", "origin", branch], in: project.url)
-        return try await openPullRequest(run: run, project: project, branch: branch, base: base, git: git)
+        guard let base = run.baseBranch else { throw WorkflowDriverError.notReady("This run has no base branch to push.") }
+        let remote = try await git.execute(["remote", "get-url", "origin"], in: project.url)
+        guard remote.succeeded else { throw WorkflowDriverError.noRemote("\(project.name) has no origin remote to push \(base) to.") }
+        try await git.run(["push", "origin", base], in: project.url)
+        let commit = try await git.run(["rev-parse", "--short", base], in: project.url).trimmed
+        return "Pushed \(base) to origin · \(commit)"
     }
 
     private func commitIdentity(in repository: URL, git: GitClient) async throws -> [String] {
@@ -1180,43 +1177,6 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             try? await manager.remove(worktree, force: true, deleteBranch: false)
         }
         _ = try? await git.run(["branch", "-D", branch], in: repository)
-    }
-
-    private func openPullRequest(run: Run, project: Project, branch: String, base: String, git: GitClient) async throws -> String {
-        guard let client = gitHubProvider() else { throw WorkflowDriverError.gitHub("Sign in to GitHub in Settings to open pull requests.") }
-        let repository: String
-        if let configured = project.settings.githubRepository {
-            repository = configured
-        } else if let origin = try await GitHubRemote.originRepository(in: project.url, git: git) {
-            repository = origin
-        } else {
-            throw WorkflowDriverError.gitHub("\(project.name) has no GitHub origin remote.")
-        }
-        if let existing = try await client.pullRequest(forHead: branch, in: repository) {
-            return existing.htmlURL.absoluteString
-        }
-        let body = try pullRequestBody(run: run)
-        let pull = try await client.createPullRequest(NewPullRequest(title: run.title, head: branch, base: base, body: body, draft: false), in: repository)
-        return pull.htmlURL.absoluteString
-    }
-
-    private func pullRequestBody(run: Run) throws -> String {
-        guard let runId = run.id else { return "" }
-        let steps = try runtime.database.runSteps(runId: runId)
-        let decoder = JSONDecoder()
-        let outputs = steps.compactMap { step in step.output.flatMap { try? decoder.decode(StepOutput.self, from: Data($0.utf8)) } }
-        var parts = ["Delivered by Ensemble (\(run.workflow)\(run.workflowVersion.map { " v\($0)" } ?? ""))."]
-        if let plan = outputs.compactMap(\.plan).last {
-            parts.append("## Plan\n\(plan.summary)\n" + plan.tasks.map { "- \($0.title)" }.joined(separator: "\n"))
-        }
-        if let results = outputs.last(where: { !$0.taskResults.isEmpty })?.taskResults {
-            parts.append("## What was built\n" + results.map { "- **\($0.agentName ?? "Agent")**: \($0.summary)" }.joined(separator: "\n"))
-        }
-        let pins = try runtime.database.writer.read { db in try Pin.filter(Pin.Columns.runId == runId).fetchAll(db) }
-        if !pins.isEmpty {
-            parts.append("## Pins\n" + pins.map { "- `\($0.file):\($0.startLine)` \($0.title) (\($0.status.rawValue))" }.joined(separator: "\n"))
-        }
-        return parts.joined(separator: "\n\n")
     }
 
     private func cleanUp(runId: Int64, project: Project, git: GitClient) async {

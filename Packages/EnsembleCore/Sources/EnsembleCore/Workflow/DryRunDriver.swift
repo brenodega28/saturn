@@ -115,8 +115,8 @@ public final class DryRunDriver: WorkflowDriver {
         "Dry run: would \(Self.describe(method)) \(run.deliveryBranch ?? "the delivery branch") into \(run.baseBranch ?? "the base branch")."
     }
 
-    public func openPullRequest(_ run: Run) async throws -> String {
-        "Dry run: would push \(run.deliveryBranch ?? "the delivery branch") and open a pull request into \(run.baseBranch ?? "the base branch")."
+    public func pushBase(_ run: Run) async throws -> String {
+        "Dry run: would push \(run.baseBranch ?? "the base branch") to origin."
     }
 
     private func spawnStep(after stepID: String) -> WorkflowStep? {
@@ -134,7 +134,6 @@ public final class DryRunDriver: WorkflowDriver {
 
     public static func describe(_ action: EndAction) -> String {
         switch action {
-        case .pullRequest: "prepare the branch for a pull request or merge"
         case .merge: "merge into the base branch"
         case .push: "push the branch"
         case .leave: "leave the branches as they are"

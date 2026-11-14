@@ -8,7 +8,7 @@ struct ChatSettingsView: View {
     @AppStorage(AppModel.sendHoldSecondsKey) private var holdSeconds = AppModel.defaultSendHoldSeconds
 
     var body: some View {
-        SettingsPage("Chat", subtitle: "Applies to every project and every chat: agent sessions, direct messages and the lead.") {
+        SettingsPage("Chat", subtitle: "Applies to every project and every chat with the Lead.") {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Hold sent messages for").font(.system(size: 13.5, weight: .semibold))

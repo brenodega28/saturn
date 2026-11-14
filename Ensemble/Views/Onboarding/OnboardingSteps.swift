@@ -50,21 +50,6 @@ struct OnboardingProjectStep: View {
                 VStack(alignment: .leading, spacing: 12) { basics }
             }
         }
-        OnboardingSection(title: "Where tasks come from") {
-            OnboardingRow(title: "Chat", detail: "Describe a task; the lead plans it and starts a run") {
-                Text("Always on").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
-            }
-            Divider().overlay(Theme.hairline)
-            OnboardingRow(
-                title: "GitHub Issues",
-                detail: draft.scan.githubRepository.map { "\($0) · issues labelled agent-ready show up in Tasks" } ?? "No GitHub remote found. Connect one later in Settings › GitHub."
-            ) {
-                Toggle("GitHub Issues", isOn: $draft.setup.githubIssues)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .disabled(draft.scan.githubRepository == nil)
-            }
-        }
     }
 
     @ViewBuilder
@@ -182,9 +167,9 @@ struct OnboardingWorkflowStep: View {
         OnboardingSection {
             OnboardingRow(title: "When a run finishes", detail: "What Ensemble does with approved work") {
                 Picker("When a run finishes", selection: $draft.setup.endAction) {
-                    Text("Open a PR").tag(EndAction.pullRequest)
+                    Text("Merge on this Mac").tag(EndAction.merge)
                     Text("Push branch").tag(EndAction.push)
-                    Text("Keep local").tag(EndAction.leave)
+                    Text("Keep the branches").tag(EndAction.leave)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -330,7 +315,6 @@ struct OnboardingReviewStep: View {
             card("Project", step: .project, lines: [
                 ("Name", draft.name),
                 ("Branches", "\(ProjectPreferences.cleanPrefix(plan.branchPrefix))/* from \(plan.baseBranch)"),
-                ("Tasks from", plan.githubIssues ? "Chat, GitHub Issues" : "Chat"),
             ])
             card("Agents & skills", step: .skills, avatars: AgentKind.allCases.map(\.builtInRole), lines: [
                 ("Agents", AgentKind.allCases.map(\.name).joined(separator: ", ")),
@@ -398,10 +382,9 @@ struct OnboardingReviewStep: View {
 extension EndAction {
     var onboardingTitle: String {
         switch self {
-        case .pullRequest: "Open a PR"
-        case .merge: "Merge"
+        case .merge: "Merge on this Mac"
         case .push: "Push branch"
-        case .leave: "Keep local"
+        case .leave: "Keep the branches"
         }
     }
 }

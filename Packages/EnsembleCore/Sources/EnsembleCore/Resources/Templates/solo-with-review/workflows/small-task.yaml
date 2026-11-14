@@ -2,7 +2,7 @@ name: Small task
 version: 3
 description: One builder builds, checks and gates verify it, a checker reviews from a fresh context, you approve. No lead.
 trigger:
-  sources: [chat, github]
+  sources: [chat]
   labels: [small]
 budget: 5
 steps:
@@ -41,4 +41,4 @@ steps:
       approved: end
       changes_requested: build
 end:
-  action: pull_request
+  action: merge

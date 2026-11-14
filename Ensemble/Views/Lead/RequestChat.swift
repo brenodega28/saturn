@@ -209,7 +209,7 @@ struct RequestChat: View {
                     .padding(.leading, 42)
             }
         case .note:
-            DirectMessageNote(text: message.text)
+            ChatNote(text: message.text)
                 .padding(.leading, 42)
         case .permission:
             PermissionCard(card: message, project: project)
@@ -828,7 +828,7 @@ private struct FinalStateCard: View {
     let reload: () -> Void
     @State private var isChoosingMergeMethod = false
     @State private var isMerging = false
-    @State private var isOpeningPullRequest = false
+    @State private var isPushing = false
 
     var body: some View {
         let color = model.statusColor(of: run)
@@ -849,26 +849,6 @@ private struct FinalStateCard: View {
                 Text(error).font(.system(size: 13)).foregroundStyle(Theme.secondaryText).textSelection(.enabled)
             }
             HStack(spacing: 8) {
-                if let link = run.pullRequestURL, let url = URL(string: link) {
-                    Link(destination: url) { Label("Open Pull Request", systemImage: "arrow.up.forward.square") }
-                        .buttonStyle(.primaryPill)
-                        .help(link)
-                }
-                if canOpenPullRequest, let delivery = run.deliveryBranch {
-                    Button(action: openPullRequest) {
-                        if isOpeningPullRequest {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text("Opening PR…")
-                            }
-                        } else {
-                            Label("Open PR", systemImage: "arrow.triangle.pull")
-                        }
-                    }
-                    .buttonStyle(.primaryPill)
-                    .disabled(isOpeningPullRequest || isMerging)
-                    .help("Push \(delivery) and open a pull request into \(baseName)")
-                }
                 if canMerge, let delivery = run.deliveryBranch {
                     Button { isChoosingMergeMethod = true } label: {
                         if isMerging {
@@ -881,19 +861,38 @@ private struct FinalStateCard: View {
                         }
                     }
                     .buttonStyle(.pill)
-                    .disabled(isMerging || isOpeningPullRequest)
-                    .help("Merge \(delivery) into \(baseName) and push")
+                    .disabled(isMerging)
+                    .help("Merge \(delivery) into \(baseName) on this Mac")
                     .confirmationDialog("Merge \(delivery) into \(baseName)?", isPresented: $isChoosingMergeMethod, titleVisibility: .visible) {
                         ForEach(MergeMethod.allCases, id: \.self) { method in
                             Button(method.title) { merge(method) }
                         }
                         Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text("Ensemble merges locally, pushes \(baseName) to origin, and deletes \(delivery).")
+                        Text("Ensemble merges \(delivery) into \(baseName) on this Mac and deletes \(delivery). You can push \(baseName) afterwards.")
                     }
                 }
-                if run.mergedAt != nil {
-                    Label("Merged into \(baseName)", systemImage: "checkmark.circle.fill")
+                if canPush {
+                    Button(action: push) {
+                        if isPushing {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Pushing…")
+                            }
+                        } else {
+                            Label("Push to origin", systemImage: "arrow.up.circle")
+                        }
+                    }
+                    .buttonStyle(.primaryPill)
+                    .disabled(isPushing)
+                    .help("Push \(baseName) to origin")
+                }
+                if run.pushedAt != nil {
+                    Label("Pushed \(baseName) to origin", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.secondaryText)
+                } else if run.mergedAt != nil {
+                    Label("Merged into \(baseName) on this Mac", systemImage: "checkmark.circle.fill")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.secondaryText)
                 }
@@ -917,15 +916,15 @@ private struct FinalStateCard: View {
         run.status == .succeeded && run.deliveryBranch != nil && run.mergedAt == nil
     }
 
-    private var canOpenPullRequest: Bool {
-        canMerge && run.pullRequestURL == nil
+    private var canPush: Bool {
+        run.mergedAt != nil && run.pushedAt == nil
     }
 
-    private func openPullRequest() {
-        isOpeningPullRequest = true
+    private func push() {
+        isPushing = true
         Task {
-            await model.performRunAction("Couldn’t open the pull request") { try await model.engine.openPullRequest(run) }
-            isOpeningPullRequest = false
+            await model.performRunAction("Couldn’t push \(baseName)") { _ = try await model.engine.push(run) }
+            isPushing = false
             reload()
         }
     }
@@ -945,9 +944,9 @@ private struct FinalStateCard: View {
 
     private var headline: String {
         switch run.status {
+        case .succeeded where run.pushedAt != nil: "Run finished, merged and pushed"
         case .succeeded where run.mergedAt != nil: "Run finished and merged"
-        case .succeeded where run.pullRequestURL != nil: "Run finished with a pull request"
-        case .succeeded where run.deliveryBranch != nil: "Run finished, ready to open a PR or merge"
+        case .succeeded where run.deliveryBranch != nil: "Run finished, ready to merge"
         case .succeeded: "Run finished"
         case .failed: "Run failed"
         case .cancelled: "Run cancelled"
@@ -1023,7 +1022,7 @@ private struct StepRow: View {
     }
 }
 
-private struct DirectMessageNote: View {
+private struct ChatNote: View {
     let text: String
 
     var body: some View {
@@ -1038,6 +1037,6 @@ private struct DirectMessageNote: View {
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.tertiaryText)
         }
-        .accessibilityLabel("Direct message summary: \(text)")
+        .accessibilityLabel("Note: \(text)")
     }
 }

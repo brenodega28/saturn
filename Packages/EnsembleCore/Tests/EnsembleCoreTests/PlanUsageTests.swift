@@ -170,6 +170,15 @@ final class FakeUsageFetcher: Sendable {
 }
 
 @MainActor
+final class PollerClock {
+    var now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func advance(minutes: Double) {
+        now = now.addingTimeInterval(minutes * 60)
+    }
+}
+
+@MainActor
 struct PlanUsagePollerTests {
     let fetcher = FakeUsageFetcher()
     let clock = PollerClock()

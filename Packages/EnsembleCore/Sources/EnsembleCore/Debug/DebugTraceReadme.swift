@@ -106,7 +106,7 @@ enum DebugTraceReadme {
       question was asked).
     - `run_control`: `action` pause, resume, cancel, retry_step or recover, with the resulting `status`.
     - `run_finished`: `status` (succeeded, failed, cancelled), `totalCostUSD`, `durationMS`, `outcome`, `lastError`,
-      `pullRequestURL`, `deliveryBranch`, `iterationsPerStep` (highest iteration per step), `rowsPerStep` (attempts
+      `pushedAt`, `deliveryBranch`, `iterationsPerStep` (highest iteration per step), `rowsPerStep` (attempts
       per step, counting retries).
 
     ## Retention

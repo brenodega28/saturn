@@ -68,7 +68,6 @@ struct AgentsView: View {
         if sessions.isEmpty {
             EmptyState("No agents yet", message: "Workflows start agents when a run needs them. You can also spawn them yourself: pick a builder or a checker, its model and skills; each builder works in its own worktree.") {
                 Button("New Agent") { model.isNewAgentPresented = true }.buttonStyle(.primaryPill)
-                Button("Open Tasks") { model.setTab(.tasks, for: project) }.buttonStyle(.pill)
             }
             .overlay(alignment: .bottom) {
                 if worktreeCount > 0 {

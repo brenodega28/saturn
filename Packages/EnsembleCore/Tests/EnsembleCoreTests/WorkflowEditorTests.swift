@@ -94,7 +94,7 @@ struct DryRunTests {
         let report = try await DryRun.run(workflow, script: .happyPath(for: workflow))
         let build = try #require(report.steps.first { $0.stepId == "build" })
         #expect(build.summary == "Dry run: 2 stubbed agents finished.")
-        #expect(report.steps.last?.summary == "Dry run: would prepare the branch for a pull request or merge.")
+        #expect(report.steps.last?.summary == "Dry run: would merge into the base branch.")
     }
 
     @Test func outcomeOptionsAndHappyDefaults() throws {

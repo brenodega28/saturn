@@ -180,7 +180,15 @@ public final class AppDatabase: Sendable {
             }
         }
 
-        registerGitHubMigration(in: &migrator)
+        migrator.registerMigration("v5-github") { db in
+            try db.create(table: "githubWriteBack") { t in
+                t.belongsTo("run", onDelete: .cascade).notNull()
+                t.column("event", .text).notNull()
+                t.column("sentAt", .datetime).notNull()
+                t.primaryKey(["runId", "event"])
+            }
+            try db.create(index: "task_on_repository_externalNumber", on: "task", columns: ["repository", "externalNumber"])
+        }
         migrator.registerMigration("v5-review", migrate: createReviewTables)
         migrator.registerMigration("v6-workspaces") { db in
             try db.alter(table: "agent") { t in
@@ -358,6 +366,15 @@ public final class AppDatabase: Sendable {
             try db.alter(table: "permissionRequest") { t in
                 t.add(column: "taskId", .integer)
                 t.add(column: "rules", .text).notNull().defaults(to: "[]")
+            }
+        }
+        migrator.registerMigration("v23-chat-first") { db in
+            try db.execute(sql: "UPDATE task SET source = 'chat' WHERE source <> 'chat'")
+            try db.execute(sql: "DROP INDEX IF EXISTS task_on_repository_externalNumber")
+            try db.drop(table: "githubWriteBack")
+            try db.drop(table: "directMessage")
+            try db.alter(table: "run") { t in
+                t.add(column: "pushedAt", .datetime)
             }
         }
 

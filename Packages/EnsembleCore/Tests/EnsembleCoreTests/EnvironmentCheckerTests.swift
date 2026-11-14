@@ -111,11 +111,11 @@ import Testing
 
     @Test func inMemorySecretStoreRoundTrips() throws {
         let store = InMemorySecretStore()
-        try store.write("one", for: .githubToken)
-        try store.write("two", for: .githubToken)
-        #expect(try store.read(.githubToken) == "two")
-        try store.delete(.githubToken)
-        #expect(try store.read(.githubToken) == nil)
+        try store.write("one", for: .anthropicAPIKey)
+        try store.write("two", for: .anthropicAPIKey)
+        #expect(try store.read(.anthropicAPIKey) == "two")
+        try store.delete(.anthropicAPIKey)
+        #expect(try store.read(.anthropicAPIKey) == nil)
     }
 }
 

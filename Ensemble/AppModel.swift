@@ -21,7 +21,6 @@ enum SidebarDestination: Hashable {
 }
 
 enum ProjectTab: String, CaseIterable, Identifiable, Codable {
-    case tasks
     case lead
     case agents
     case changes
@@ -33,7 +32,6 @@ enum ProjectTab: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .tasks: "Tasks"
         case .lead: "Chat"
         case .agents: "Agents"
         case .changes: "Changes"
@@ -45,7 +43,6 @@ enum ProjectTab: String, CaseIterable, Identifiable, Codable {
 
     var systemImage: String {
         switch self {
-        case .tasks: "checkmark.square"
         case .lead: "bubble.left"
         case .agents: "person.2"
         case .changes: "plus.forwardslash.minus"
@@ -74,7 +71,6 @@ final class AppModel {
     let secrets: any SecretStore
     let locator: ToolLocator
     let runner: CommandRunner
-    let gitHub: GitHubIntegration
     let inbox: InboxFeed
     let inboxNotifier = InboxNotifier()
     let chatNotifications: ChatNotificationFeed
@@ -117,8 +113,6 @@ final class AppModel {
     let mainWindow = MainWindowNavigation()
     @ObservationIgnored var connectivity: ConnectivityMonitor?
     let leadChat: LeadChat
-    let directChat: DirectChat
-    var chatTargets: [Int64: ChatTarget] = [:]
     let pendingSends = PendingSends<PendingSendTarget>()
     var deliveringSends: [HeldSend] = []
 
@@ -161,8 +155,6 @@ final class AppModel {
         self.driver = driver
         self.engine = RunEngine(database: database, driver: driver)
         self.leadChat = LeadChat(runtime: agents, engine: engine, driver: driver)
-        self.directChat = DirectChat(runtime: agents)
-        self.gitHub = GitHubIntegration(engine: engine, secrets: secrets)
         self.inbox = InboxFeed(database: database)
         self.chatNotifications = ChatNotificationFeed(database: database)
         self.pendingPermissions = PendingPermissionFeed(database: database)
@@ -170,9 +162,7 @@ final class AppModel {
         driver.gitProvider = { [weak self] in self?.git }
         connectWorkspaces()
         connectAppRunners()
-        driver.gitHubProvider = { try? GitHubAuth(secrets: secrets).client() }
         restoreNavigation()
-        connectGitHub()
         CommandRegistry.shared.registerChatLinkCommands()
         planUsageActivationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
@@ -275,7 +265,6 @@ final class AppModel {
         startInbox()
         startBudgetMonitor()
         startMemoryUpdates()
-        gitHub.start()
         idleCleanup.start()
         await refreshAllProjects()
         startWeeklySummaries()

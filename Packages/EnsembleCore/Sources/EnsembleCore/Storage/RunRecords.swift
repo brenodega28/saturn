@@ -1,32 +1,8 @@
 import Foundation
 import GRDB
 
-public struct GitHubMapping: Sendable, Hashable, Codable, Identifiable {
-    public var label: String
-    public var workflow: String
-    public var autoStart: Bool
-
-    public var id: String { label }
-
-    public init(label: String, workflow: String, autoStart: Bool = false) {
-        self.label = label
-        self.workflow = workflow
-        self.autoStart = autoStart
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.label = try container.decode(String.self, forKey: .label)
-        self.workflow = try container.decode(String.self, forKey: .workflow)
-        self.autoStart = try container.decodeIfPresent(Bool.self, forKey: .autoStart) ?? false
-    }
-}
-
 public struct ProjectSettings: Sendable, Hashable, Codable {
     public var maxConcurrentAgents: Int
-    public var githubRepository: String?
-    public var githubMappings: [GitHubMapping]
-    public var githubPollMinutes: Int
     public var setupScript: String
     public var basePort: Int?
     public var idleCleanupMinutes: Int
@@ -40,9 +16,6 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
 
     public init(
         maxConcurrentAgents: Int = 4,
-        githubRepository: String? = nil,
-        githubMappings: [GitHubMapping] = [],
-        githubPollMinutes: Int = 5,
         setupScript: String = "",
         basePort: Int? = nil,
         idleCleanupMinutes: Int = 10,
@@ -60,9 +33,6 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         self.reviewCapacity = reviewCapacity
         self.setupTimeoutMinutes = setupTimeoutMinutes
         self.maxConcurrentAgents = maxConcurrentAgents
-        self.githubRepository = githubRepository
-        self.githubMappings = githubMappings
-        self.githubPollMinutes = githubPollMinutes
         self.setupScript = setupScript
         self.basePort = basePort
         self.idleCleanupMinutes = idleCleanupMinutes
@@ -74,9 +44,6 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         let defaults = ProjectSettings()
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.maxConcurrentAgents = try container.decodeIfPresent(Int.self, forKey: .maxConcurrentAgents) ?? defaults.maxConcurrentAgents
-        self.githubRepository = try container.decodeIfPresent(String.self, forKey: .githubRepository)
-        self.githubMappings = try container.decodeIfPresent([GitHubMapping].self, forKey: .githubMappings) ?? []
-        self.githubPollMinutes = try container.decodeIfPresent(Int.self, forKey: .githubPollMinutes) ?? defaults.githubPollMinutes
         self.setupScript = try container.decodeIfPresent(String.self, forKey: .setupScript) ?? ""
         self.basePort = try container.decodeIfPresent(Int.self, forKey: .basePort)
         self.idleCleanupMinutes = try container.decodeIfPresent(Int.self, forKey: .idleCleanupMinutes) ?? defaults.idleCleanupMinutes
@@ -320,7 +287,6 @@ extension ProjectTask {
         public static let projectId = Column("projectId")
         public static let status = Column("status")
         public static let source = Column("source")
-        public static let externalNumber = Column("externalNumber")
         public static let createdAt = Column("createdAt")
     }
 }

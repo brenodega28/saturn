@@ -9,7 +9,30 @@ import Testing
         let tables = try database.writer.read { db in
             try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%' ORDER BY name")
         }
-        #expect(tables == ["agent", "correction", "directMessage", "evidence", "githubWriteBack", "inboxItem", "leadMessage", "permissionRequest", "pin", "project", "reviewViewedFile", "run", "runStep", "task", "usage"])
+        #expect(tables == ["agent", "correction", "evidence", "inboxItem", "leadMessage", "permissionRequest", "pin", "project", "reviewViewedFile", "run", "runStep", "task", "usage"])
+    }
+
+    @Test func chatFirstMigrationTurnsGitHubTasksIntoChatsAndDropsGitHubAndDirectMessages() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v22-permission-chat-rules")
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO project (name, path, isOpen, createdAt, lastOpenedAt) VALUES ('p', '/tmp/p', 1, ?, ?)", arguments: [Date(), Date()])
+            try db.execute(
+                sql: "INSERT INTO task (projectId, title, source, sourceURL, externalNumber, repository, status, createdAt, updatedAt) VALUES (1, '#231 VAT rounding', 'github', 'https://github.com/acme/shop/issues/231', 231, 'acme/shop', 'incoming', ?, ?)",
+                arguments: [Date(), Date()]
+            )
+        }
+
+        let database = try AppDatabase(queue)
+
+        let task = try #require(try database.task(id: 1))
+        #expect(task.source == .chat)
+        #expect(task.title == "#231 VAT rounding")
+        let tables = try database.writer.read { db in try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'") }
+        #expect(!tables.contains("githubWriteBack"))
+        #expect(!tables.contains("directMessage"))
+        let runColumns = try database.writer.read { db in try db.columns(in: "run").map(\.name) }
+        #expect(runColumns.contains("pushedAt"))
     }
 
     @Test func reopeningAProjectUpdatesInsteadOfDuplicating() throws {

@@ -67,7 +67,6 @@ public struct ChatReader {
         } else {
             lines.append("Project: deleted (id \(task.projectId))")
         }
-        lines.append("Source: \(task.source.rawValue)" + (task.sourceURL.map { " · \($0)" } ?? ""))
         let closing = task.closedAt.map { "closed as \(task.closeReason?.title ?? "closed") at \(Self.timestamp($0))" } ?? "open"
         lines.append("Status: \(task.status.rawValue) · \(closing)")
         lines.append("Created \(Self.timestamp(task.createdAt)) · updated \(Self.timestamp(task.updatedAt))")
@@ -136,7 +135,6 @@ public struct ChatReader {
         fields.append("step \(run.currentStep ?? "none")")
         fields.append("started \(Self.timestamp(run.startedAt))")
         fields.append("ended \(run.endedAt.map(Self.timestamp) ?? "not yet")")
-        if let url = run.pullRequestURL { fields.append("PR \(url)") }
         var lines = [fields.joined(separator: " · ")]
         if !run.title.isEmpty { lines.append("  Title: \(run.title)") }
         lines.append("  Agents: " + (agents.isEmpty ? "none" : agents.map { Self.describe($0, config: config) }.joined(separator: ", ")))
@@ -165,7 +163,6 @@ public struct ChatReader {
         lines.append(summary.joined(separator: " · "))
         lines.append("Started \(Self.timestamp(run.startedAt)) · ended \(run.endedAt.map(Self.timestamp) ?? "not yet")")
         if let step = run.currentStep { lines.append("Current step: \(step)") }
-        if let url = run.pullRequestURL { lines.append("PR: \(url)") }
         if let branch = run.deliveryBranch { lines.append("Delivery branch: \(branch)" + (run.baseBranch.map { " into \($0)" } ?? "")) }
         if let error = run.lastError { lines.append("Last error: \(error)") }
         lines.append("Agents: " + (agents.isEmpty ? "none" : agents.map { Self.describe($0, config: config) }.joined(separator: ", ")))

@@ -12,12 +12,6 @@ struct ChatColumn: View {
                 RequestListView(project: project)
                     .padding(EdgeInsets(top: 4, leading: 22, bottom: 20, trailing: 20))
             }
-        } else if let session = model.directChatSession(in: project) {
-            ToolScreen(title: model.displayName(of: session.agent, in: project)) {
-                DirectChatView(session: session, project: project)
-                    .id(session.id)
-                    .padding(EdgeInsets(top: 4, leading: 22, bottom: 20, trailing: 20))
-            }
         } else {
             leadChat
         }

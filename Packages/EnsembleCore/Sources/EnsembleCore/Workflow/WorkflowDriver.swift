@@ -10,7 +10,7 @@ public protocol WorkflowDriver: AnyObject, Sendable {
     func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult
     func cancel(_ run: Run) async
     func mergeDelivery(_ run: Run, method: MergeMethod) async throws -> String
-    func openPullRequest(_ run: Run) async throws -> String
+    func pushBase(_ run: Run) async throws -> String
 }
 
 public enum MergeMethod: String, Sendable, Codable, CaseIterable {
@@ -207,14 +207,14 @@ public struct DiffInfo: Sendable, Hashable, Codable {
 }
 
 public struct FinishResult: Sendable, Hashable, Codable {
-    public var pullRequestURL: String?
     public var summary: String?
     public var deliveryBranch: String?
     public var baseBranch: String?
+    public var mergedIntoBase: Bool
 
-    public init(pullRequestURL: String? = nil, summary: String? = nil, deliveryBranch: String? = nil, baseBranch: String? = nil) {
-        self.pullRequestURL = pullRequestURL
+    public init(summary: String? = nil, deliveryBranch: String? = nil, baseBranch: String? = nil, mergedIntoBase: Bool = false) {
         self.summary = summary
+        self.mergedIntoBase = mergedIntoBase
         self.deliveryBranch = deliveryBranch
         self.baseBranch = baseBranch
     }

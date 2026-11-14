@@ -18,11 +18,11 @@ enum DetailDestination: Codable, Hashable {
 }
 
 extension ProjectTab {
-    static let sidebarOrder: [ProjectTab] = [.lead, .tasks, .agents, .workflows, .changes, .code, .settings]
+    static let sidebarOrder: [ProjectTab] = [.lead, .agents, .workflows, .changes, .code, .settings]
 }
 
 extension AppModel {
-    func newTask() {
+    func newChat() {
         guard let project = currentProject else {
             newProject()
             return
@@ -33,7 +33,6 @@ extension AppModel {
     func newChat(in project: Project) {
         showChat(in: project)
         startNewLeadRequest(in: project)
-        chooseChatTarget(.lead(leadRole(in: project).id), in: project)
         composerFocusToken += 1
     }
 
@@ -60,16 +59,10 @@ extension AppModel {
         pauseAllAgents(in: project)
     }
 
-    func message(_ session: AgentSession, in project: Project) {
+    func openAgent(_ session: AgentSession, in project: Project) {
         guard let id = project.id else { return }
         selection = .project(id)
-        if directChatSessions(in: project).contains(where: { $0.id == session.id }) {
-            showChat(in: project)
-            chooseChatTarget(.agent(session.id), in: project)
-            composerFocusToken += 1
-        } else {
-            select(session, in: project)
-        }
+        select(session, in: project)
     }
 
     func goToSection(_ index: Int) {

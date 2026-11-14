@@ -46,16 +46,6 @@ extension AppModel {
         select(agents.session(for: agent), in: project)
     }
 
-    func activeRuns(in project: Project) -> [Run] {
-        guard let id = project.id else { return [] }
-        return engine.runs.values.filter { $0.projectId == id && $0.isActive }.sorted { $0.startedAt > $1.startedAt }
-    }
-
-    func needsYouTaskCount(in project: Project, needsYouTaskIDs: Set<Int64>) -> Int {
-        guard let id = project.id else { return 0 }
-        return needsYouTaskIDs.filter { taskID in ((try? database.task(id: taskID)) ?? nil)?.projectId == id }.count
-    }
-
     func liveRun(id: Int64) -> Run? {
         engine.runs[id] ?? (try? database.run(id: id)) ?? nil
     }

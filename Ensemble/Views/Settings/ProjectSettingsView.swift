@@ -15,7 +15,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case learnedRules
     case claudeAccess
     case tools
-    case github
 
     var id: Self { self }
 
@@ -32,7 +31,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .learnedRules: "Learned rules"
         case .claudeAccess: "Claude access"
         case .tools: "Tools"
-        case .github: "GitHub"
         }
     }
 
@@ -49,7 +47,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .learnedRules: "Rules"
         case .claudeAccess: "Access"
         case .tools: "Tools"
-        case .github: "GitHub"
         }
     }
 
@@ -66,7 +63,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .learnedRules: "brain"
         case .claudeAccess: "key"
         case .tools: "wrench.and.screwdriver"
-        case .github: "arrow.triangle.pull"
         }
     }
 
@@ -83,7 +79,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .learnedRules: Color(hex: 0xBF5AF2)
         case .claudeAccess: Color(hex: 0xC23A54)
         case .tools: Color(hex: 0x48484A)
-        case .github: Color(hex: 0x48484A)
         }
     }
 }
@@ -130,7 +125,6 @@ struct SettingsContainer: View {
                 case .learnedRules: LearnedRulesView(project: project)
                 case .claudeAccess: ClaudeAccessSettings()
                 case .tools: ToolsSettings()
-                case .github: GitHubSettingsView(project: project)
                 }
             }
             .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

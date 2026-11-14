@@ -139,12 +139,6 @@ private struct RunStats: View {
                 stat("Duration", value: RunDetailFormat.duration((run.endedAt ?? context.date).timeIntervalSince(run.startedAt))) { EmptyView() }
             }
             stat("Steps", value: stepsText) { EmptyView() }
-            if let task = snapshot.task {
-                sourceStat(task)
-            }
-            if let link = run.pullRequestURL, let url = URL(string: link) {
-                linkStat("Pull request", title: Self.pullRequestTitle(link), url: url)
-            }
         }
     }
 
@@ -157,15 +151,6 @@ private struct RunStats: View {
     private var costText: String {
         guard let budget = run.budgetUSD else { return RunDetailFormat.dollars(run.costUSD) }
         return "\(RunDetailFormat.dollars(run.costUSD)) of \(RunDetailFormat.dollars(budget))"
-    }
-
-    @ViewBuilder
-    private func sourceStat(_ task: ProjectTask) -> some View {
-        if task.source == .github, let link = task.sourceURL, let url = URL(string: link) {
-            linkStat("Task", title: task.externalNumber.map { "Issue #\($0)" } ?? "GitHub issue", url: url)
-        } else {
-            stat("Task", value: task.source == .chat ? "Lead chat" : task.source.rawValue) { EmptyView() }
-        }
     }
 
     private func stat<Extra: View>(_ title: String, value: String, @ViewBuilder extra: () -> Extra) -> some View {
@@ -182,24 +167,6 @@ private struct RunStats: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func linkStat(_ title: String, title linkTitle: String, url: URL) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.tertiaryText)
-            Link(destination: url) {
-                Label(linkTitle, systemImage: "arrow.up.forward.square")
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-            }
-            .help(url.absoluteString)
-        }
-    }
-
-    static func pullRequestTitle(_ link: String) -> String {
-        guard let number = link.split(separator: "/").last, Int(number) != nil else { return "Open" }
-        return "PR #\(number)"
-    }
 }
 
 struct RunDetailControls: View {

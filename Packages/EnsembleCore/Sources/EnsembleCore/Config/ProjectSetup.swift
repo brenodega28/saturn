@@ -18,18 +18,16 @@ public struct ProjectScan: Sendable, Hashable {
     public var skillReasons: [String: String]
     public var checks: CheckSuggestions
     public var docs: [String]
-    public var githubRepository: String?
     public var baseBranch: String?
 
     public init(
         found: [DetectedTechnology] = [], skillReasons: [String: String] = [:], checks: CheckSuggestions = CheckSuggestions(checks: [], protectedPaths: [], evidence: []),
-        docs: [String] = [], githubRepository: String? = nil, baseBranch: String? = nil
+        docs: [String] = [], baseBranch: String? = nil
     ) {
         self.found = found
         self.skillReasons = skillReasons
         self.checks = checks
         self.docs = docs
-        self.githubRepository = githubRepository
         self.baseBranch = baseBranch
     }
 
@@ -44,11 +42,7 @@ public enum ProjectScanner {
     public static func scan(repository: URL, git: GitClient? = nil, files: URL? = nil) async -> ProjectScan {
         var scan = scanFiles(repository: files ?? repository)
         if let git {
-            scan.githubRepository = try? await GitHubRemote.originRepository(in: repository, git: git)
             scan.baseBranch = await defaultBranch(of: repository, git: git)
-            if let repo = scan.githubRepository {
-                scan.found.append(DetectedTechnology(name: "GitHub: \(repo)", location: "origin · \(scan.baseBranch ?? "HEAD")"))
-            }
         }
         return scan
     }
@@ -117,8 +111,6 @@ public enum ProjectScanner {
 public struct ProjectSetupPlan: Sendable, Hashable {
     public var baseBranch: String
     public var branchPrefix: String
-    public var githubRepository: String?
-    public var githubIssues: Bool
     public var skills: [String]
     public var workflows: [WorkflowDefinition]
     public var defaultWorkflow: String
@@ -135,16 +127,14 @@ public struct ProjectSetupPlan: Sendable, Hashable {
     public var docs: [String]
 
     public init(
-        baseBranch: String = "main", branchPrefix: String = ProjectPreferences.defaultBranchPrefix, githubRepository: String? = nil, githubIssues: Bool = false,
+        baseBranch: String = "main", branchPrefix: String = ProjectPreferences.defaultBranchPrefix,
         skills: [String] = [], workflows: [WorkflowDefinition] = [], defaultWorkflow: String = "feature-delivery",
-        endAction: EndAction = .pullRequest, approvePlans: Bool = true, checks: ChecksConfig? = nil,
+        endAction: EndAction = .merge, approvePlans: Bool = true, checks: ChecksConfig? = nil,
         weeklyBudgetUSD: Double? = 60, monthlyBudgetUSD: Double? = 200, perRunBudgetUSD: Double? = 8, maxConcurrentAgents: Int = 4,
         testsWithoutAsking: Bool = true, networkWithoutAsking: Bool = false, installsWithoutAsking: Bool = false, docs: [String] = []
     ) {
         self.baseBranch = baseBranch
         self.branchPrefix = branchPrefix
-        self.githubRepository = githubRepository
-        self.githubIssues = githubIssues
         self.skills = skills
         self.workflows = workflows
         self.defaultWorkflow = defaultWorkflow
@@ -164,8 +154,6 @@ public struct ProjectSetupPlan: Sendable, Hashable {
     public static func recommended(for scan: ProjectScan) -> ProjectSetupPlan {
         ProjectSetupPlan(
             baseBranch: scan.baseBranch ?? "main",
-            githubRepository: scan.githubRepository,
-            githubIssues: scan.githubRepository != nil,
             skills: scan.suggestedSkills,
             workflows: ProjectSetup.workflowCatalog,
             checks: scan.checks.checks.isEmpty ? nil : scan.checks.config,
@@ -195,7 +183,6 @@ public struct ProjectSetupPlan: Sendable, Hashable {
         settings.weeklyBudgetUSD = weeklyBudgetUSD
         settings.monthlyBudgetUSD = monthlyBudgetUSD
         settings.maxConcurrentAgents = max(1, maxConcurrentAgents)
-        settings.githubRepository = githubIssues ? githubRepository : nil
         return settings
     }
 
@@ -257,7 +244,7 @@ public enum ProjectSetup {
     version: 1
     description: Smallest path for urgent fixes. One builder fixes it, the checks still have to pass, you approve.
     trigger:
-      sources: [chat, github]
+      sources: [chat]
       labels: [hotfix]
     budget: 5
     steps:

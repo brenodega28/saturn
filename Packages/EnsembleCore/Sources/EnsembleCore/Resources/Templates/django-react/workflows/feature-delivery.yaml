@@ -2,7 +2,7 @@ name: Feature delivery
 version: 3
 description: The Lead specs the work for builders with the Django and React skills, checks and gates verify it, a checker reviews, you approve.
 trigger:
-  sources: [chat, github]
+  sources: [chat]
   labels: [feature]
 budget: 20
 steps:
@@ -58,5 +58,5 @@ steps:
         to: build
         max_loops: 3
 end:
-  action: pull_request
+  action: merge
   clean_up_worktrees: true

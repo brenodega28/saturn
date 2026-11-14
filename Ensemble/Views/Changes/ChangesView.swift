@@ -28,8 +28,8 @@ struct ChangesView: View {
                 .task(id: reloadKey(run)) { await store.load(run, in: project, model: model) }
                 .task(id: run.id) { await observePins(of: run) }
         } else {
-            EmptyState("Nothing to review", message: "Diffs across a run’s branches and the pins agents flag for you appear here before anything reaches main. Start a run from Tasks or Lead.") {
-                Button("Open Tasks") { model.setTab(.tasks, for: project) }.buttonStyle(.pill)
+            EmptyState("Nothing to review", message: "Diffs across a run’s branches and the pins agents flag for you appear here before anything reaches main. Ask the Lead in a chat to start a run.") {
+                Button("New Chat") { model.newChat(in: project) }.buttonStyle(.pill)
             }
         }
     }

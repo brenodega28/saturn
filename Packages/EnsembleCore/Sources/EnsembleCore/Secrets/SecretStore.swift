@@ -4,7 +4,6 @@ import Synchronization
 
 public enum SecretKey: String, Sendable, CaseIterable {
     case anthropicAPIKey = "anthropic-api-key"
-    case githubToken = "github-token"
 }
 
 public protocol SecretStore: Sendable {

@@ -79,7 +79,8 @@ public struct WorkflowTrigger: Sendable, Hashable, Codable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.sources = try container.decodeIfPresent([TaskSource].self, forKey: .sources) ?? [.chat]
+        let names = try container.decodeIfPresent([String].self, forKey: .sources)
+        self.sources = names.map { $0.compactMap(TaskSource.init(rawValue:)) } ?? [.chat]
         self.labels = try container.decodeIfPresent([String].self, forKey: .labels) ?? []
     }
 }
@@ -319,41 +320,49 @@ public struct CanvasPosition: Sendable, Hashable, Codable {
 }
 
 public enum EndAction: String, Sendable, Hashable, Codable, CaseIterable {
-    case pullRequest = "pull_request"
     case merge
     case push
     case leave
+
+    static let retiredPullRequest = "pull_request"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        if raw == Self.retiredPullRequest {
+            self = .merge
+            return
+        }
+        guard let action = EndAction(rawValue: raw) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unknown end action “\(raw)”."))
+        }
+        self = action
+    }
 }
 
 public struct WorkflowEnd: Sendable, Hashable, Codable {
     public var action: EndAction
     public var cleanUpWorktrees: Bool
-    public var postSummary: Bool
 
-    public init(action: EndAction = .pullRequest, cleanUpWorktrees: Bool = true, postSummary: Bool = true) {
+    public init(action: EndAction = .merge, cleanUpWorktrees: Bool = true) {
         self.action = action
         self.cleanUpWorktrees = cleanUpWorktrees
-        self.postSummary = postSummary
     }
 
     enum CodingKeys: String, CodingKey {
         case action
         case cleanUpWorktrees = "clean_up_worktrees"
-        case postSummary = "post_summary"
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.action = try container.decodeIfPresent(EndAction.self, forKey: .action) ?? .pullRequest
+        self.action = try container.decodeIfPresent(EndAction.self, forKey: .action) ?? .merge
         self.cleanUpWorktrees = try container.decodeIfPresent(Bool.self, forKey: .cleanUpWorktrees) ?? true
-        self.postSummary = try container.decodeIfPresent(Bool.self, forKey: .postSummary) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(action, forKey: .action)
         try container.encode(cleanUpWorktrees, forKey: .cleanUpWorktrees)
-        if !postSummary { try container.encode(postSummary, forKey: .postSummary) }
     }
 }
 

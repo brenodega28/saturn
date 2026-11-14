@@ -36,7 +36,7 @@ struct CanvasLayout {
         let positions = WorkflowLayout.positions(for: workflow)
         var modelNodes: [(id: String, center: CGPoint, style: NodeStyle, title: String, subtitle: String?, selection: WorkflowSelection)] = []
         if let trigger = positions[WorkflowDefinition.triggerNodeID] {
-            let title = workflow.trigger.labels.isEmpty ? "Every new task" : "Tasks labelled \(workflow.trigger.labels.joined(separator: ", "))"
+            let title = workflow.trigger.labels.isEmpty ? "Every new chat" : "Chats labelled \(workflow.trigger.labels.joined(separator: ", "))"
             modelNodes.append((WorkflowDefinition.triggerNodeID, CGPoint(x: trigger.x, y: trigger.y), .trigger(), title, nil, .trigger))
         }
         for step in workflow.steps {

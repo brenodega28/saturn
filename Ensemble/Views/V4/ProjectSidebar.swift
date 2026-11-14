@@ -38,7 +38,6 @@ struct ProjectSidebar: View {
 
 private enum SidebarSection: String, CaseIterable, Identifiable {
     case chat = "Chat"
-    case tasks = "Tasks"
     case agents = "Agents"
     case workflows = "Workflows"
     case changes = "Changes"
@@ -48,7 +47,7 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
     var id: Self { self }
 
     static let groups: [(name: String, sections: [SidebarSection])] = [
-        ("Work", [.chat, .tasks]),
+        ("Work", [.chat]),
         ("Crew", [.agents, .workflows]),
         ("Review", [.changes, .source]),
         ("", [.settings]),
@@ -57,7 +56,6 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
     var glyph: V4Glyph {
         switch self {
         case .chat: .chat
-        case .tasks: .tasks
         case .agents: .agents
         case .workflows: .workflows
         case .changes: .changes
@@ -69,7 +67,6 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
     var tool: MainTool? {
         switch self {
         case .chat: nil
-        case .tasks: .tasks
         case .agents: .agents
         case .workflows: .workflows
         case .changes: .changes
@@ -92,7 +89,6 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
 
     func badgeDescription(_ count: Int) -> String {
         switch self {
-        case .tasks: "\(count) task\(count == 1 ? "" : "s") need\(count == 1 ? "s" : "") you"
         case .agents: "\(count) agent\(count == 1 ? "" : "s")"
         case .changes: "\(count) waiting for review"
         default: "\(count)"
@@ -140,11 +136,6 @@ private struct ProjectGroup: View {
                             RequestRow(request: request, project: project, needsYouTaskIDs: needsYouTaskIDs)
                         }
                     }
-                    if section == .tasks {
-                        ForEach(model.activeRuns(in: project)) { run in
-                            RunRow(run: run, isCurrent: screen == .run(run.id ?? -1))
-                        }
-                    }
                 }
             }
         }
@@ -167,9 +158,6 @@ private struct ProjectGroup: View {
         let count: Int
         let color: Color
         switch section {
-        case .tasks:
-            count = model.needsYouTaskCount(in: project, needsYouTaskIDs: needsYouTaskIDs)
-            color = V4.orange
         case .agents:
             count = model.agentSessions(in: project).count
             color = V4.secondary
@@ -332,46 +320,6 @@ private struct RequestRow: View {
         let count = model.needsYouItems.filter { model.taskID(of: $0) == id }.count + pendingApprovals
         if count > 0 { return count }
         return model.requestNeedsYou(request, latestRun: latestRun, needsYouTaskIDs: needsYouTaskIDs) ? 1 : 0
-    }
-}
-
-private struct RunRow: View {
-    @Environment(AppModel.self) private var model
-    let run: Run
-    let isCurrent: Bool
-    @State private var isHovered = false
-
-    var body: some View {
-        let title = run.title.isEmpty ? model.requestTask(for: run)?.title ?? "Run #\(run.id ?? 0)" : run.title
-        let needsYou = model.runNeedsYou(run)
-        let status = needsYou ? model.statusLabel(of: run) : model.currentStepTitle(of: run) ?? model.statusLabel(of: run)
-        Button { model.openRunDetail(run) } label: {
-            HStack(spacing: 8) {
-                Circle().fill(model.statusColor(of: run)).frame(width: 6, height: 6).accessibilityHidden(true)
-                Text(title)
-                    .font(.system(size: 12.5, weight: isCurrent ? .semibold : .regular))
-                    .foregroundStyle(isCurrent ? Color.white : V4.label.opacity(0.8))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(status)
-                    .font(.system(size: 11))
-                    .foregroundStyle(needsYou ? V4.orangeText : V4.secondary)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-            }
-            .padding(.leading, 34)
-            .padding(.trailing, 10)
-            .frame(height: 26)
-            .background(isCurrent ? V4.selected : isHovered ? Color.white.opacity(0.05) : .clear, in: .rect(cornerRadius: 8, style: .continuous))
-            .contentShape(.rect(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .help("\(title) — \(status)")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Run \(title), \(status)")
-        .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 }
 

@@ -256,26 +256,6 @@ import Testing
         #expect(events.contains { $0["type"]?.string == "run_finished" && $0["status"]?.string == "cancelled" })
     }
 
-    @Test func directChatMessagesSitNextToTheTurnSummary() async throws {
-        let harness = try await AgentHarness.make()
-        defer { harness.cleanUp() }
-        let session = try await harness.spawn()
-        try await waitUntil { session.agent.status == .idle }
-        let chat = DirectChat(runtime: harness.runtime)
-
-        try chat.send("Also add a test", to: session)
-        try await waitUntil { chat.messages(with: session.agent).contains { $0.kind == .agent } }
-        let trace = try #require(harness.runtime.debugTrace)
-        trace.flush()
-
-        let events = try Self.events(trace.chatsDirectory.appending(path: "\(session.id)-dev-1/agent.jsonl"))
-        let chats = events.filter { $0["type"]?.string == "chat_message" }
-        #expect(chats.compactMap { $0["direction"]?.string } == ["user_to_agent", "agent_to_user"])
-        #expect(chats.first?["text"]?.string == "Also add a test")
-        #expect(chats.last?["text"]?.string == "Done")
-        #expect(events.filter { $0["type"]?.string == "turn_summary" }.count == 2)
-    }
-
     static func temporaryRoot() throws -> URL {
         let root = FileManager.default.temporaryDirectory.appending(path: "ensemble-debug-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

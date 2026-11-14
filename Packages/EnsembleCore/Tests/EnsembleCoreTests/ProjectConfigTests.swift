@@ -47,8 +47,29 @@ import Testing
             #expect(installed.workflows.allSatisfy { $0.steps.contains { $0.type == .check } && $0.steps.contains { $0.type == .gates } })
         }
         #expect(feature.step("approve")?.routes["approved"]?.to == WorkflowDefinition.endStepID)
-        #expect(feature.end.action == .pullRequest)
+        #expect(feature.end.action == .merge)
         #expect(FileManager.default.fileExists(atPath: repository.appending(path: ".ensemble/.gitignore").path))
+    }
+
+    @Test func retiredPullRequestEndsAndGitHubTriggersStillLoad() throws {
+        let workflow = try YAMLWorkflow.decode("""
+        name: Old
+        version: 3
+        trigger:
+          sources: [chat, github]
+          labels: [feature]
+        steps:
+          - id: build
+            type: agent
+            agent: builder
+        end:
+          action: pull_request
+          post_summary: true
+        """)
+
+        #expect(workflow.end.action == .merge)
+        #expect(workflow.trigger.sources == [.chat])
+        #expect(workflow.trigger.labels == ["feature"])
     }
 
     @Test func workflowsRoundTripThroughYAMLWithAgentAndModel() throws {

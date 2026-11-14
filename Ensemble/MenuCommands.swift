@@ -220,7 +220,7 @@ extension AppModel {
     }
 
     func suggestedWorkflowLabels(_ config: ProjectConfig, project: Project) -> [String] {
-        let labels = config.workflows.flatMap(\.trigger.labels) + project.settings.githubMappings.map(\.label)
+        let labels = config.workflows.flatMap(\.trigger.labels)
         return Array(Set(labels)).sorted()
     }
 }
@@ -268,7 +268,7 @@ extension CommandRegistry {
 
     private func registerFileCommands() {
         register(MenuCommand(id: "file.new-project", title: "New Project…", menu: "File", section: 0, order: 0) { $0.model.newProject() })
-        register(MenuCommand(id: "file.new-task", title: "New Chat", menu: "File", section: 0, order: 1, shortcut: KeyboardShortcut("n")) { $0.model.newTask() })
+        register(MenuCommand(id: "file.new-chat", title: "New Chat", menu: "File", section: 0, order: 1, shortcut: KeyboardShortcut("n")) { $0.model.newChat() })
         register(MenuCommand(id: "file.open", title: "Open…", menu: "File", section: 0, order: 2, shortcut: KeyboardShortcut("o")) {
             $0.model.isOpenPanelPresented = true
         })
@@ -323,14 +323,6 @@ extension CommandRegistry {
     }
 
     private func registerAgentCommands() {
-        register(MenuCommand(id: "agent.message", title: "Message…", menu: "Agent", section: 0, order: 0, shortcut: KeyboardShortcut("j"),
-                             isEnabled: { !$0.model.openProjects.isEmpty }) { context in
-            if let session = context.agentSession, let project = context.agentProject, context.target != nil {
-                context.model.message(session, in: project)
-            } else {
-                context.model.openPalette(.agents)
-            }
-        })
         register(MenuCommand(id: "agent.open", title: "Open Session", menu: "Context", section: 0, order: 1,
                              isEnabled: { $0.agentSession != nil }) { context in
             if let session = context.agentSession, let project = context.agentProject { context.model.openAgentSession(session.agent, in: project) }
@@ -427,10 +419,6 @@ extension CommandRegistry {
                              isEnabled: { context in context.run.map { ((try? context.model.database.openPinCount(runId: $0.id ?? -1)) ?? 0) > 0 || context.model.holdsForApproval($0) } ?? false }) { context in
             if let run = context.run { context.model.approveAllPins(in: run) }
         })
-        register(MenuCommand(id: "review.open-pr", title: "Open PR", menu: "Review", section: 1, order: 1,
-                             isEnabled: { $0.run?.pullRequestURL != nil }) { context in
-            if let url = context.run?.pullRequestURL.flatMap(URL.init(string:)) { NSWorkspace.shared.open(url) }
-        })
         register(MenuCommand(id: "review.encode", title: "Encode Correction…", menu: "Review", section: 2, order: 0, shortcut: KeyboardShortcut("e", modifiers: [.command, .shift]),
                              isEnabled: { $0.model.currentProject != nil }) { context in
             if let project = context.model.currentProject { context.model.openSettings(.learnedRules, in: project) }
@@ -499,7 +487,7 @@ struct ContextCommands: View {
     let groups: [[String]]
     let target: CommandTarget
 
-    static let agent = [["agent.message", "agent.open"], ["agent.pause", "agent.resume", "agent.stop", "agent.take-over", "agent.restart"], ["agent.pin"], ["agent.copy-worktree"]]
+    static let agent = [["agent.open"], ["agent.pause", "agent.resume", "agent.stop", "agent.take-over", "agent.restart"], ["agent.pin"], ["agent.copy-worktree"]]
     static let run = [["run.open", "run.checks", "run.retry-step", "run.dry-run"], ["run.pause", "run.stop-target"], ["run.copy-id"]]
     static let pin = [["review.approve-pin", "review.request-change", "review.ask-agent", "review.dismiss"], ["review.encode"], ["navigate.next-pin", "review.copy-link"]]
     static let file = [["file.open-editor"], ["file.protect"], ["file.reveal", "file.copy-path"]]

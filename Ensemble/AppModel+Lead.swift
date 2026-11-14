@@ -104,9 +104,6 @@ extension AppModel {
 
     private func showLeadChat(inProjectID id: Int64) {
         requestPageProjectIDs.remove(id)
-        if case .agent = chatTargets[id] {
-            chatTargets[id] = nil
-        }
     }
 
     func showRequestPage(inProjectID id: Int64) {
@@ -122,7 +119,6 @@ extension AppModel {
 
     func selectedOpenRequestID(inProjectID id: Int64) -> Int64? {
         guard case .request(let requestID) = leadSelections[id], let project = project(withID: id),
-              directChatSession(in: project) == nil,
               LeadRequest.partition(leadRequests(in: project)).open.contains(where: { $0.id == requestID }) else { return nil }
         return requestID
     }
@@ -173,7 +169,7 @@ extension AppModel {
                 try await leadChat.send(text, attachments: attachments, to: request, in: project)
             } else {
                 let request = try await leadChat.createRequest(text, attachments: attachments, in: project)
-                if selectedRequest(in: project) == nil, directChatSession(in: project) == nil {
+                if selectedRequest(in: project) == nil {
                     showRequest(request)
                 }
             }

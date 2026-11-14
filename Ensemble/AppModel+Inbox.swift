@@ -271,3 +271,13 @@ final class InboxNotifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 }
+
+extension AppModel {
+    func openLead(forRun runID: Int64?, in projectID: Int64) {
+        selection = .project(projectID)
+        if let runID, let run = engine.runs[runID] ?? (try? database.run(id: runID)) ?? nil {
+            showRequest(id: run.taskId, inProjectID: projectID)
+        }
+        tabs[projectID] = .lead
+    }
+}

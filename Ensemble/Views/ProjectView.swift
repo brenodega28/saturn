@@ -23,8 +23,6 @@ struct ProjectScreen: View {
     @ViewBuilder
     private func content(state: ProjectState) -> some View {
         switch tab {
-        case .tasks:
-            TasksView(project: project)
         case .lead:
             LeadView(project: project)
         case .agents:

@@ -195,27 +195,12 @@ private struct TriggerSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            InspectorHeader(kind: "Trigger", title: trigger.labels.isEmpty ? "Every new task" : "Labelled tasks", symbol: "bubble.left.fill", fill: AnyShapeStyle(Color.white.opacity(0.14)))
-            InspectorField("Starts from") {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(TaskSource.allCases, id: \.self) { source in
-                        Toggle(source.title, isOn: Binding(
-                            get: { trigger.sources.contains(source) },
-                            set: { isOn in
-                                trigger.sources.removeAll { $0 == source }
-                                if isOn { trigger.sources.append(source) }
-                                trigger.sources.sort { $0.rawValue < $1.rawValue }
-                            }
-                        ))
-                        .help("Start this workflow for new tasks from \(source.title)")
-                    }
-                }
-            }
+            InspectorHeader(kind: "Trigger", title: trigger.labels.isEmpty ? "Every new chat" : "Labelled chats", symbol: "bubble.left.fill", fill: AnyShapeStyle(Color.white.opacity(0.14)))
             InspectorField("Only for tasks labelled") {
                 TokenEditor(items: $trigger.labels, placeholder: "Add a label, e.g. hotfix", suggestions: suggestedLabels)
             }
             InspectorField("Receives") {
-                Text("A task from \(trigger.sources.isEmpty ? "nowhere yet" : trigger.sources.map(\.title).joined(separator: " or ")). \(trigger.labels.isEmpty ? "Any label matches." : "At least one of these labels must match.")")
+                Text("A request from a Lead chat. \(trigger.labels.isEmpty ? "Any label matches." : "At least one of these labels must match.")")
                     .font(.system(size: 12.5))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -239,8 +224,6 @@ private struct EndSection: View {
                 .help("What Ensemble does with the approved branches")
             }
             Toggle("Clean up worktrees", isOn: $end.cleanUpWorktrees)
-            Toggle("Post a summary back to the source", isOn: $end.postSummary)
-                .help("Comment on the GitHub issue with what was built when the run finishes")
                 .help("Remove each agent’s worktree once the run is done")
             InspectorField("Receives") {
                 Text("Every approved branch from the run.")

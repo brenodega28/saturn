@@ -186,19 +186,19 @@ enum StdinRecorder {
         #expect(Transcript(lines: [line]).entries.map(\.content) == [.user("Look at this\n[image]\n[image]")])
     }
 
-    @Test func migrationAddsAttachmentColumnsToBothMessageTables() throws {
+    @Test func migrationAddsTheAttachmentColumnToLeadMessages() throws {
         let database = try AppDatabase.inMemory()
         let columns = try database.writer.read { db in
-            try ["leadMessage", "directMessage"].map { table in try db.columns(in: table).first { $0.name == "attachments" } }
+            try ["leadMessage"].map { table in try db.columns(in: table).first { $0.name == "attachments" } }
         }
-        #expect(columns.map { $0?.type } == ["TEXT", "TEXT"])
+        #expect(columns.map { $0?.type } == ["TEXT"])
         #expect(columns.allSatisfy { $0?.isNotNull == false })
     }
 }
 
 @MainActor
 @Suite(.serialized) struct ChatAttachmentSessionTests {
-    @Test func attachmentsAreStoredAsFilesAndDecodedForBothMessageTables() async throws {
+    @Test func attachmentsAreStoredAsFilesAndDecodedForLeadMessages() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
         let store = ChatAttachmentStore(paths: harness.runtime.paths)
@@ -219,14 +219,10 @@ enum StdinRecorder {
         let task = try harness.database.insert(ProjectTask(projectId: projectId, title: "T", body: "", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now))
         try harness.database.insert(LeadMessage(projectId: projectId, taskId: task.id!, kind: .user, text: "", createdAt: .now, attachments: stored))
         try harness.database.insert(LeadMessage(projectId: projectId, taskId: task.id!, kind: .lead, text: "Hi", createdAt: .now))
-        let session = try await harness.spawn()
-        try await waitUntil { session.agent.status == .idle }
-        try harness.database.insert(DirectMessage(projectId: projectId, agentId: session.id, kind: .user, text: "Note", createdAt: .now, attachments: stored))
 
         let leadMessages = try harness.database.leadMessages(taskId: task.id!)
         #expect(leadMessages.map(\.chatAttachments) == [attachments, []])
         #expect(leadMessages[1].attachments == nil)
-        #expect(try harness.database.directMessages(agentId: session.id).first?.chatAttachments == attachments)
 
         let raw = try await harness.database.writer.read { db in try String.fetchOne(db, sql: "SELECT attachments FROM leadMessage ORDER BY id LIMIT 1") }
         #expect(raw?.contains(imageURL.lastPathComponent) == true)

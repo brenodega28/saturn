@@ -6,7 +6,6 @@ enum MainTool: String, CaseIterable, Identifiable, Hashable {
     case inbox
     case changes
     case agents
-    case tasks
     case workflows
     case code
     case usage
@@ -19,7 +18,6 @@ enum MainTool: String, CaseIterable, Identifiable, Hashable {
         case .inbox: "Inbox"
         case .changes: "Changes"
         case .agents: "Agents"
-        case .tasks: "Tasks"
         case .workflows: "Workflows"
         case .code: "Code"
         case .usage: "Usage"
@@ -32,7 +30,6 @@ enum MainTool: String, CaseIterable, Identifiable, Hashable {
         case .inbox, .usage: nil
         case .changes: .changes
         case .agents: .agents
-        case .tasks: .tasks
         case .workflows: .workflows
         case .code: .code
         case .settings: .settings
@@ -44,7 +41,6 @@ enum MainTool: String, CaseIterable, Identifiable, Hashable {
         case .lead: return nil
         case .changes: self = .changes
         case .agents: self = .agents
-        case .tasks: self = .tasks
         case .workflows: self = .workflows
         case .code: self = .code
         case .settings: self = .settings
@@ -141,7 +137,6 @@ extension AppModel {
         showChat(in: project)
         guard let id = project.id else { return }
         requestPageProjectIDs.remove(id)
-        if case .agent = chatTargets[id] { chatTargets[id] = nil }
     }
 
     func startNewChat(in project: Project) {

@@ -47,7 +47,6 @@ public struct Project: Codable, Sendable, Hashable, Identifiable, FetchableRecor
 
 public enum TaskSource: String, Codable, Sendable, CaseIterable {
     case chat
-    case github
 }
 
 public enum TaskStatus: String, Codable, Sendable, CaseIterable {
@@ -79,11 +78,8 @@ public struct ProjectTask: Codable, Sendable, Hashable, Identifiable, FetchableR
     public var title: String
     public var body: String
     public var source: TaskSource
-    public var sourceURL: String?
     public var workflow: String?
     public var status: TaskStatus
-    public var externalNumber: Int?
-    public var repository: String?
     public var labels: [String]
     public var closedAt: Date?
     public var closeReason: RequestCloseReason?
@@ -92,21 +88,17 @@ public struct ProjectTask: Codable, Sendable, Hashable, Identifiable, FetchableR
 
     public init(
         id: Int64? = nil, projectId: Int64, title: String, body: String, source: TaskSource,
-        sourceURL: String? = nil, workflow: String? = nil, status: TaskStatus, externalNumber: Int? = nil,
-        repository: String? = nil, labels: [String] = [], closedAt: Date? = nil, closeReason: RequestCloseReason? = nil,
+        workflow: String? = nil, status: TaskStatus, labels: [String] = [], closedAt: Date? = nil, closeReason: RequestCloseReason? = nil,
         createdAt: Date, updatedAt: Date
     ) {
         self.closedAt = closedAt
         self.closeReason = closeReason
-        self.externalNumber = externalNumber
-        self.repository = repository
         self.labels = labels
         self.id = id
         self.projectId = projectId
         self.title = title
         self.body = body
         self.source = source
-        self.sourceURL = sourceURL
         self.workflow = workflow
         self.status = status
         self.createdAt = createdAt
@@ -149,12 +141,12 @@ public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
     public var workflowSnapshot: String
     public var budgetUSD: Double?
     public var endAction: String?
-    public var pullRequestURL: String?
     public var lastError: String?
     public var brief: String?
     public var deliveryBranch: String?
     public var baseBranch: String?
     public var mergedAt: Date?
+    public var pushedAt: Date?
     public var linesChanged: Int?
     public var filesChanged: Int?
 
@@ -162,8 +154,8 @@ public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
         id: Int64? = nil, projectId: Int64, taskId: Int64, workflow: String, workflowVersion: String? = nil,
         currentStep: String? = nil, status: RunStatus, outcome: String? = nil, costUSD: Double = 0,
         startedAt: Date, endedAt: Date? = nil, title: String = "", workflowSnapshot: String = "",
-        budgetUSD: Double? = nil, endAction: String? = nil, pullRequestURL: String? = nil, lastError: String? = nil,
-        brief: String? = nil, deliveryBranch: String? = nil, baseBranch: String? = nil, mergedAt: Date? = nil,
+        budgetUSD: Double? = nil, endAction: String? = nil, lastError: String? = nil,
+        brief: String? = nil, deliveryBranch: String? = nil, baseBranch: String? = nil, mergedAt: Date? = nil, pushedAt: Date? = nil,
         linesChanged: Int? = nil, filesChanged: Int? = nil
     ) {
         self.linesChanged = linesChanged
@@ -172,11 +164,11 @@ public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
         self.deliveryBranch = deliveryBranch
         self.baseBranch = baseBranch
         self.mergedAt = mergedAt
+        self.pushedAt = pushedAt
         self.title = title
         self.workflowSnapshot = workflowSnapshot
         self.budgetUSD = budgetUSD
         self.endAction = endAction
-        self.pullRequestURL = pullRequestURL
         self.lastError = lastError
         self.id = id
         self.projectId = projectId

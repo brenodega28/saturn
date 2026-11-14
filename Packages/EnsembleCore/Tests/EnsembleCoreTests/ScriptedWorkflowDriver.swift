@@ -19,7 +19,7 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
     var replies: [String: [Reply]] = [:]
     var finishReplies: [Result<FinishResult, ScriptedFailure>] = []
     var mergeReplies: [Result<String, ScriptedFailure>] = []
-    var pullRequestReplies: [Result<String, ScriptedFailure>] = []
+    var pushReplies: [Result<String, ScriptedFailure>] = []
     var diff = DiffInfo()
     private(set) var agentCalls: [StepContext] = []
     private(set) var spawnCalls: [SpawnContext] = []
@@ -28,7 +28,7 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
     private(set) var diffRequests = 0
     private(set) var cancelledRuns: [Int64] = []
     private(set) var mergeCalls: [MergeMethod] = []
-    private(set) var pullRequestCalls: [Int64] = []
+    private(set) var pushCalls: [Int64] = []
 
     func script(_ stepId: String, _ replies: Reply...) {
         self.replies[stepId, default: []] += replies
@@ -66,7 +66,7 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
     func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult {
         finishCalls.append(end)
         guard !finishReplies.isEmpty else {
-            return FinishResult(summary: "Ready to open a pull request.", deliveryBranch: "crew/delivery-run-\(run.id ?? 0)", baseBranch: "main")
+            return FinishResult(summary: "Merged crew/delivery-run-\(run.id ?? 0) into main.", baseBranch: "main", mergedIntoBase: true)
         }
         return try finishReplies.removeFirst().get()
     }
@@ -81,10 +81,10 @@ final class ScriptedWorkflowDriver: WorkflowDriver {
         return try mergeReplies.removeFirst().get()
     }
 
-    func openPullRequest(_ run: Run) async throws -> String {
-        pullRequestCalls.append(run.id ?? 0)
-        guard !pullRequestReplies.isEmpty else { return "https://github.com/acme/shop/pull/\(run.id ?? 0)" }
-        return try pullRequestReplies.removeFirst().get()
+    func pushBase(_ run: Run) async throws -> String {
+        pushCalls.append(run.id ?? 0)
+        guard !pushReplies.isEmpty else { return "Pushed \(run.baseBranch ?? "") to origin · abc1234" }
+        return try pushReplies.removeFirst().get()
     }
 
     private func reply(for stepId: String) async throws -> StepResult {

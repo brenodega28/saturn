@@ -20,7 +20,7 @@ final class SpecGateDriver: WorkflowDriver {
     func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult { try await scripted.finish(run, end: end) }
     func cancel(_ run: Run) async { await scripted.cancel(run) }
     func mergeDelivery(_ run: Run, method: MergeMethod) async throws -> String { try await scripted.mergeDelivery(run, method: method) }
-    func openPullRequest(_ run: Run) async throws -> String { try await scripted.openPullRequest(run) }
+    func pushBase(_ run: Run) async throws -> String { try await scripted.pushBase(run) }
 }
 
 @MainActor

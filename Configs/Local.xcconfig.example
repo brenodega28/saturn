@@ -1,3 +1,2 @@
 SPARKLE_FEED_URL = https:/$()/updates.example.com/ensemble/appcast.xml
 SPARKLE_PUBLIC_ED_KEY = <output of Sparkle's generate_keys>
-GITHUB_CLIENT_ID = <client ID of the GitHub OAuth App with device flow enabled>

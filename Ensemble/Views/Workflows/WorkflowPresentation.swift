@@ -116,8 +116,7 @@ extension StepType {
 extension EndAction {
     var title: String {
         switch self {
-        case .pullRequest: "Prepare a pull request"
-        case .merge: "Merge to the base branch"
+        case .merge: "Merge into the base branch on this Mac"
         case .push: "Push the branch"
         case .leave: "Leave the branches"
         }
@@ -125,7 +124,6 @@ extension EndAction {
 
     var symbol: String {
         switch self {
-        case .pullRequest: "arrow.triangle.pull"
         case .merge: "arrow.triangle.merge"
         case .push: "arrow.up.circle"
         case .leave: "pause.circle"
@@ -147,7 +145,6 @@ extension TaskSource {
     var title: String {
         switch self {
         case .chat: "Lead chat"
-        case .github: "GitHub Issues"
         }
     }
 }
@@ -178,7 +175,7 @@ extension WorkflowTrigger {
     var summary: String {
         let sources = sources.map(\.title).joined(separator: " or ")
         let origin = sources.isEmpty ? "No source" : sources
-        return labels.isEmpty ? "\(origin) · every new task" : "\(origin) · labelled \(labels.joined(separator: ", "))"
+        return labels.isEmpty ? "\(origin) · every new chat" : "\(origin) · labelled \(labels.joined(separator: ", "))"
     }
 }
 

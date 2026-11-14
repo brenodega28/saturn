@@ -1,14 +1,8 @@
 import EnsembleCore
 import Foundation
 
-enum ChatTarget: Hashable {
-    case lead(String)
-    case agent(Int64)
-}
-
 enum PendingSendTarget: Hashable {
     case session(Int64)
-    case direct(Int64)
     case lead(project: Int64, request: Int64?)
 }
 
@@ -21,53 +15,8 @@ struct HeldSend: Identifiable, Hashable {
 }
 
 extension AppModel {
-    func chatTarget(in project: Project) -> ChatTarget? {
-        guard let id = project.id else { return nil }
-        switch chatTargets[id] {
-        case .agent(let agentID) where directChatSessions(in: project).contains(where: { $0.id == agentID }):
-            return .agent(agentID)
-        default:
-            return .lead(leadRole(in: project).id)
-        }
-    }
-
-    func chooseChatTarget(_ target: ChatTarget, in project: Project) {
-        guard let id = project.id else { return }
-        chatTargets[id] = target
-    }
-
     func chatLeadRole(in project: Project) -> RoleDefinition? {
-        guard case .lead = chatTarget(in: project) else { return nil }
-        return leadRole(in: project)
-    }
-
-    func directChatSession(in project: Project) -> AgentSession? {
-        guard case .agent(let agentID) = chatTarget(in: project) else { return nil }
-        return directChatSessions(in: project).first { $0.id == agentID }
-    }
-
-    func directChatSessions(in project: Project) -> [AgentSession] {
-        agentSessions(in: project).filter { $0.agent.taskId == nil && $0.agent.archivedAt == nil }
-    }
-
-    func directChatGroups(in project: Project) -> [AgentGroup] {
-        let sessions = directChatSessions(in: project)
-        return AgentGroup.make(sessions, runs: runs(for: sessions), describe: runGroupDescription)
-    }
-
-    func directMessages(with session: AgentSession) -> [DirectMessage] {
-        directChat.messages(with: session.agent)
-    }
-
-    @discardableResult
-    func sendDirectMessage(_ text: String, attachments: [ChatAttachment] = [], to session: AgentSession) -> Bool {
-        do {
-            try directChat.send(text, attachments: attachments, to: session)
-            return true
-        } catch {
-            alert = AppAlert(title: "Couldn’t send the message to \(displayName(of: session.agent))", message: error.localizedDescription)
-            return false
-        }
+        leadRole(in: project)
     }
 
     static let sendHoldSecondsKey = "chat.sendHoldSeconds"
@@ -95,13 +44,5 @@ extension AppModel {
 
     func holdSessionMessage(_ text: String, to session: AgentSession) {
         holdSend(PendingMessage(text: text), to: .session(session.id)) { session.send($0.text) }
-    }
-
-    func holdDirectMessage(_ message: PendingMessage, to session: AgentSession) {
-        let target = PendingSendTarget.direct(session.id)
-        holdSend(message, to: target) { [weak self] held in
-            guard let self, !sendDirectMessage(held.text, attachments: held.attachments, to: session) else { return }
-            pendingSends.returnToComposer(held, for: target)
-        }
     }
 }

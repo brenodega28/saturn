@@ -131,7 +131,7 @@ struct OnboardingView: View {
 
     private var lede: String {
         switch step {
-        case .project: "Ensemble scanned the folder. Check the basics and pick where tasks come from."
+        case .project: "Ensemble scanned the folder. Check the basics."
         case .skills: "One Lead chats, plans and reviews. Builders write code in their own worktrees; checkers review and test from a fresh context. Expertise comes from skills the Lead gives each agent."
         case .workflow: "Every workflow ends the same way: checks, gates and an AI review that only comments, then your approval. Pick the default path."
         case .rails: "Ensemble runs these itself, outside the agent. Nothing reaches you until they pass. Limits and permissions apply to every agent."

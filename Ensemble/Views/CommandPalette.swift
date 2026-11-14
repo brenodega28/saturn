@@ -198,13 +198,13 @@ struct CommandPalette: View {
     }
 
     private var placeholder: String {
-        model.paletteMode == .agents ? "Message an agent" : "Search runs, agents, files, or run a command"
+        model.paletteMode == .agents ? "Go to an agent" : "Search runs, agents, files, or run a command"
     }
 
     private var emptyMessage: String {
         if model.paletteMode == .agents { return "No agents match “\(searchText)”." }
         if isCommandsOnly || model.currentProject == nil { return "No matching commands." }
-        return "No matches. Press ↵ to send “\(searchText)” to the lead as a new task."
+        return "No matches. Press ↵ to send “\(searchText)” to the Lead as a new chat."
     }
 
     private var results: [PaletteGroup] {
@@ -259,10 +259,7 @@ struct CommandPalette: View {
         let lead: RoleDefinition? = model.leadRole(in: project)
         let config = model.config(for: project)
         var commands = [
-            PaletteCommand(id: "new-task", title: "New task in Chat", meta: lead.map { "to \($0.name)" } ?? "", glyph: .symbol("plus"), tint: action, shortcut: "⌘N") { model.newTask() },
-            PaletteCommand(id: "message", title: "Message an agent…", meta: "Chat", glyph: .symbol("arrow.right"), tint: action, shortcut: "⌘J") {
-                DispatchQueue.main.async { model.openPalette(.agents) }
-            },
+            PaletteCommand(id: "new-chat", title: "New chat", meta: lead.map { "with \($0.name)" } ?? "", glyph: .symbol("plus"), tint: action, shortcut: "⌘N") { model.newChat() },
             PaletteCommand(id: "encode", title: "Encode a correction…", meta: "AGENTS.md, check or protected path", glyph: .symbol("arrow.triangle.2.circlepath"), tint: action) {
                 model.openSettings(.learnedRules, in: project)
             },
@@ -296,7 +293,7 @@ struct CommandPalette: View {
                         id: "agent-\(session.id)", title: model.displayName(of: session.agent, in: project), meta: detail,
                         keywords: role?.name ?? "", glyph: .role(role),
                         newWindow: project.id.map { .agent(project: $0, agent: session.id) }
-                    ) { model.message(session, in: project) }
+                    ) { model.openAgent(session, in: project) }
                 }
         }
     }
@@ -390,7 +387,6 @@ struct CommandPalette: View {
 extension ProjectTab {
     var paletteSymbol: String {
         switch self {
-        case .tasks: "checklist"
         case .lead: "bubble.left.and.bubble.right"
         case .agents: "person.2"
         case .changes: "arrow.triangle.branch"

@@ -220,7 +220,6 @@ import Testing
         let engine: RunEngine
         let origin: URL
         let run: Run
-        let gitHub: HTTPStub
 
         var git: GitClient { harness.repo.git }
         var root: URL { harness.repo.root }
@@ -279,13 +278,10 @@ import Testing
             try await git.run(["push", "-u", "origin", MergeSetup.branch], in: root)
         }
 
-        let gitHub = HTTPStub()
         let driver = AgentWorkflowDriver(runtime: harness.runtime)
         driver.gitProvider = { harness.repo.git }
-        driver.gitHubProvider = { GitHubClient(token: "tok", session: gitHub.session) }
         let engine = RunEngine(database: harness.database, driver: driver)
         let projectId = try #require(harness.project.id)
-        try harness.database.updateSettings(ProjectSettings(githubRepository: "octo/widgets"), forProject: projectId)
         let now = Date()
         let task = try harness.database.insert(ProjectTask(
             projectId: projectId, title: MergeSetup.title, body: "", source: .chat, status: .done, createdAt: now, updatedAt: now
@@ -295,14 +291,12 @@ import Testing
             startedAt: now, endedAt: now, title: MergeSetup.title,
             deliveryBranch: MergeSetup.branch, baseBranch: "main"
         ), state: RunEngineState())
-        return MergeSetup(harness: harness, driver: driver, engine: engine, origin: origin, run: run, gitHub: gitHub)
+        return MergeSetup(harness: harness, driver: driver, engine: engine, origin: origin, run: run)
     }
 
-    @Test func aPullRequestEndLeavesTheDeliveryBranchWithoutOpeningAPullRequest() async throws {
-        let setup = try await makeSetup(endAction: .pullRequest)
+    @Test func aLeaveEndKeepsTheDeliveryBranchAndLeavesMainAlone() async throws {
+        let setup = try await makeSetup(endAction: .leave)
         defer { setup.harness.cleanUp() }
-        let gitHub = HTTPStub()
-        setup.driver.gitHubProvider = { GitHubClient(token: "tok", session: gitHub.session) }
         let run = try startRun(setup)
         try await waitForHold(setup, run: run, .planApproval)
         let planStep = try setup.harness.database.runSteps(runId: run.id!).first { $0.stepId == "plan" }
@@ -316,9 +310,8 @@ import Testing
 
         let finished = try #require(try setup.harness.database.run(id: run.id!))
         let delivery = try #require(finished.deliveryBranch)
-        #expect(finished.pullRequestURL == nil)
         #expect(finished.baseBranch == "main")
-        #expect(gitHub.requests.isEmpty)
+        #expect(finished.mergedAt == nil)
         #expect(try await setup.harness.repo.git.hasCommit("refs/heads/\(delivery)", in: setup.harness.repo.root))
         #expect(try await setup.harness.repo.git.run(["rev-parse", "main"], in: setup.harness.repo.root) == mainBefore)
         let delivered = try await setup.harness.repo.git.run(["ls-tree", "--name-only", delivery], in: setup.harness.repo.root)
@@ -327,51 +320,46 @@ import Testing
         #expect(try await setup.harness.repo.manager.list().isEmpty)
     }
 
-    @Test func openPullRequestPushesTheDeliveryBranchAndRecordsTheURL() async throws {
-        let setup = try await makeMergeSetup(pushDelivery: false)
-        defer { setup.harness.cleanUp() }
-        setup.gitHub.enqueue(.json("[]"), .json(201, GitHubFixtures.pullRequest(head: MergeSetup.branch)))
-
-        try await setup.engine.openPullRequest(setup.run)
-
-        #expect(try await setup.originBranchExists())
-        #expect(setup.gitHub.requests.map(\.method) == ["GET", "POST"])
-        let body = try #require(setup.gitHub.requests.last?.jsonBody())
-        #expect(body["head"] as? String == MergeSetup.branch)
-        #expect(body["base"] as? String == "main")
-        let run = try #require(try setup.harness.database.run(id: setup.run.id!))
-        #expect(run.pullRequestURL == "https://github.com/octo/widgets/pull/9")
-        #expect(run.mergedAt == nil)
-    }
-
-    @Test func openPullRequestReusesAnExistingPullRequestForTheBranch() async throws {
+    @Test func pushSendsTheMergedBaseBranchToOrigin() async throws {
         let setup = try await makeMergeSetup()
         defer { setup.harness.cleanUp() }
-        setup.gitHub.enqueue(.json("[\(GitHubFixtures.pullRequest(number: 4, head: MergeSetup.branch))]"))
+        try await setup.engine.mergeDelivery(setup.run, method: .mergeCommit)
+        let merged = try #require(try setup.harness.database.run(id: setup.run.id!))
 
-        let url = try await setup.driver.openPullRequest(setup.run)
+        let summary = try await setup.engine.push(merged)
 
-        #expect(url == "https://github.com/octo/widgets/pull/4")
-        #expect(setup.gitHub.requests.map(\.method) == ["GET"])
+        let head = try await setup.head()
+        #expect(try await setup.originHead() == head)
+        #expect(summary == "Pushed main to origin · \(head.prefix(summary.count - "Pushed main to origin · ".count))")
+        #expect(try setup.harness.database.run(id: setup.run.id!)?.pushedAt != nil)
+    }
+
+    @Test func pushFailsClearlyWithoutAnOriginRemote() async throws {
+        let setup = try await makeMergeSetup()
+        defer { setup.harness.cleanUp() }
+        try await setup.engine.mergeDelivery(setup.run, method: .squash)
+        try await setup.git.run(["remote", "remove", "origin"], in: setup.root)
+        let merged = try #require(try setup.harness.database.run(id: setup.run.id!))
+
+        await #expect(throws: WorkflowDriverError.self) { try await setup.engine.push(merged) }
+        #expect(try setup.harness.database.run(id: setup.run.id!)?.pushedAt == nil)
     }
 
     @Test(arguments: MergeMethod.allCases)
-    func mergeNowLandsTheDeliveryOnBaseAndOrigin(method: MergeMethod) async throws {
+    func mergeNowLandsTheDeliveryOnBaseLocally(method: MergeMethod) async throws {
         let setup = try await makeMergeSetup()
         defer { setup.harness.cleanUp() }
         let elsewhere = try await setup.pushFromAnotherClone(file: "other.txt", contents: "from elsewhere\n")
 
         try await setup.engine.mergeDelivery(setup.run, method: method)
 
-        let head = try await setup.head()
-        #expect(try await setup.originHead() == head)
+        #expect(try await setup.originHead() == elsewhere)
         #expect(try await setup.git.currentBranch(in: setup.root) == "main")
         #expect(try await setup.git.run(["status", "--porcelain", "--untracked-files=no"], in: setup.root).isEmpty)
         #expect(try await setup.git.run(["merge-base", "--is-ancestor", elsewhere, "HEAD"], in: setup.root).isEmpty)
         #expect(try await setup.git.run(["show", "HEAD:delivery.txt"], in: setup.root) == "one\ntwo\n")
         #expect(try await setup.git.run(["show", "HEAD:README.md"], in: setup.root) == "hello\nfrom the builder\n")
         #expect(try await setup.git.run(["show", "HEAD:other.txt"], in: setup.root) == "from elsewhere\n")
-        #expect(try await setup.git.run(["show", "main:delivery.txt"], in: setup.origin) == "one\ntwo\n")
 
         let parents = try await setup.git.run(["rev-list", "--parents", "-n", "1", "HEAD"], in: setup.root).split(separator: " ").count - 1
         let added = try await setup.git.run(["rev-list", "--count", "\(elsewhere)..HEAD"], in: setup.root).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -396,8 +384,7 @@ import Testing
         let run = try #require(try setup.harness.database.run(id: setup.run.id!))
         #expect(run.mergedAt != nil)
         #expect(run.outcome == "Merged \(MergeSetup.branch) into main.")
-        #expect(run.pullRequestURL == nil)
-        #expect(setup.gitHub.requests.isEmpty)
+        #expect(run.pushedAt == nil)
     }
 
     @Test func mergeNowWorksForADeliveryBranchThatWasNeverPushed() async throws {
@@ -406,12 +393,9 @@ import Testing
 
         try await setup.engine.mergeDelivery(setup.run, method: .squash)
 
-        #expect(try await setup.originHead() == setup.head())
-        #expect(try await setup.git.run(["show", "main:delivery.txt"], in: setup.origin) == "one\ntwo\n")
+        #expect(try await setup.git.run(["show", "main:delivery.txt"], in: setup.root) == "one\ntwo\n")
         #expect(try await !setup.localBranchExists())
         #expect(try await !setup.originBranchExists())
-        #expect(setup.gitHub.requests.isEmpty)
-        #expect(try setup.harness.database.run(id: setup.run.id!)?.pullRequestURL == nil)
     }
 
     @Test func mergeNowRefusesWhenBaseIsNotCheckedOut() async throws {
@@ -475,7 +459,7 @@ import Testing
 
         #expect(summary == "Merged \(MergeSetup.branch) into main.")
         #expect(try await setup.git.run(["show", "HEAD:delivery.txt"], in: setup.root) == "one\ntwo\n")
-        #expect(try await setup.originHead() == setup.head())
+        #expect(try await setup.originHead() != setup.head())
         #expect(try await !setup.originBranchExists())
         #expect(try await !setup.git.hasCommit("refs/remotes/origin/\(MergeSetup.branch)", in: setup.root))
     }

@@ -369,21 +369,31 @@ public final class RunEngine {
     }
 
     public func recover() throws {
+        var failures: [String] = []
         for run in try database.runs(status: [.pending, .running, .interrupted]) {
             guard let runID = run.id, drivers[runID] == nil else { continue }
-            try interruptInFlightSteps(runID: runID)
-            var loaded = try load(run)
-            loaded.run.status = loaded.state.hold == nil ? .running : .waitingOnYou
-            try commit(loaded)
-            #if DEBUG
-            traceControl(loaded.run, action: "recover")
-            #endif
-            launch(runID)
+            do {
+                try interruptInFlightSteps(runID: runID)
+                var loaded = try load(run)
+                loaded.run.status = loaded.state.hold == nil ? .running : .waitingOnYou
+                try commit(loaded)
+                #if DEBUG
+                traceControl(loaded.run, action: "recover")
+                #endif
+                launch(runID)
+            } catch {
+                failures.append("“\(run.title.isEmpty ? run.workflow : run.title)”: \(error.localizedDescription)")
+            }
         }
         for run in try database.runs(status: [.waitingOnYou, .paused]) {
             guard let runID = run.id else { continue }
-            refresh(run, state: try database.engineState(runId: runID))
+            do {
+                refresh(run, state: try database.engineState(runId: runID))
+            } catch {
+                failures.append("“\(run.title.isEmpty ? run.workflow : run.title)”: \(error.localizedDescription)")
+            }
         }
+        guard failures.isEmpty else { throw RunEngineError.invalidState("Couldn’t recover \(failures.joined(separator: "; "))") }
     }
 
     @discardableResult

@@ -11,8 +11,7 @@ extension AppModel {
     func openChanges(for run: Run) {
         guard let runID = run.id else { return }
         changesRunSelections[run.projectId] = runID
-        selection = .project(run.projectId)
-        tabs[run.projectId] = .changes
+        showPage(.tool(.changes, projectID: run.projectId))
     }
 
     func holdsForApproval(_ run: Run) -> Bool {

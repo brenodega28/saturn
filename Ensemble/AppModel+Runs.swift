@@ -22,8 +22,7 @@ extension AppModel {
     }
 
     func openRunDetail(runID: Int64, in projectID: Int64) {
-        runDetailIDs[projectID] = runID
-        selection = .project(projectID)
+        showPage(.run(runID))
     }
 
     func runDetailID(in project: Project) -> Int64? {
@@ -31,19 +30,18 @@ extension AppModel {
     }
 
     func closeRunDetail(in project: Project) {
-        guard let id = project.id else { return }
-        runDetailIDs[id] = nil
+        guard let page = activePage, case .run = page.kind else { return }
+        pages.close(page.id)
     }
 
     func openRunInLead(_ run: Run) {
-        runDetailIDs[run.projectId] = nil
         showRun(run)
     }
 
     func openAgentSession(_ agent: Agent, in project: Project) {
-        guard let projectID = project.id else { return }
-        runDetailIDs[projectID] = nil
-        select(connection.session(for: agent), in: project)
+        guard let projectID = project.id, let agentID = agent.id else { return }
+        selectedAgents[projectID] = agentID
+        showPage(.agent(agentID))
     }
 
     func liveRun(id: Int64) -> Run? {

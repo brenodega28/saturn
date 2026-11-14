@@ -32,6 +32,6 @@ extension AppModel {
             Task { try? await syncRemoteFiles(project) }
         }
         selection = .project(id)
-        setTab(.lead, for: project)
+        showChat(in: project)
     }
 }

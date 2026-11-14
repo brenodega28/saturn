@@ -18,6 +18,9 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     from: 2.10.0
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: 1.18.0
 
 targets:
   Ensemble:
@@ -55,6 +58,7 @@ targets:
       - package: EnsembleCore
       - package: EnsembleUI
       - package: Sparkle
+      - package: SwiftTerm
     entitlements:
       path: Ensemble/Ensemble.entitlements
       properties:

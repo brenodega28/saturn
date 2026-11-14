@@ -59,6 +59,10 @@ final class CodeBrowser {
         return browser
     }
 
+    static func standalone(for project: Project, model: AppModel) -> CodeBrowser {
+        CodeBrowser(project: project, model: model)
+    }
+
     let project: Project
     @ObservationIgnored private unowned let model: AppModel
 
@@ -112,6 +116,18 @@ final class CodeBrowser {
             finderQuery = ""
         }
         await reload()
+    }
+
+    func show(file absolutePath: String, line: Int? = nil) async {
+        sources = model.codeSources(for: project)
+        let path = (absolutePath as NSString).standardizingPath
+        let match = sources
+            .filter { path.hasPrefix(($0.root.path as NSString).standardizingPath + "/") }
+            .max { $0.root.path.count < $1.root.path.count } ?? sources.first
+        guard let match else { return }
+        if match.id != source?.id || snapshot == nil { await select(match) }
+        let root = (match.root.path as NSString).standardizingPath + "/"
+        open(path.hasPrefix(root) ? String(path.dropFirst(root.count)) : absolutePath, line: line)
     }
 
     func reload() async {

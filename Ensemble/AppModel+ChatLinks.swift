@@ -17,11 +17,7 @@ extension AppModel {
         guard let projectID = project.id else { return }
         let messageIDs = Set(((try? database.leadMessages(taskId: link.requestID)) ?? []).compactMap(\.id))
         chatHighlight = ChatLink(requestID: link.requestID, messageID: link.messageID.flatMap { messageIDs.contains($0) ? $0 : nil })
-        mainWindow.spec = nil
-        runDetailIDs[projectID] = nil
         showRequest(id: link.requestID, inProjectID: projectID)
-        selection = .project(projectID)
-        tabs[projectID] = .lead
     }
 
     func copyLink(to task: Chat, message: LeadMessage? = nil) {
@@ -30,7 +26,7 @@ extension AppModel {
     }
 
     var chatRequestForLink: Chat? {
-        currentProject.flatMap(selectedRequest(in:))
+        focusedChat
     }
 
     func copyLinkToSelectedChat() {

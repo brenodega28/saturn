@@ -8,6 +8,20 @@ struct ChatCard: View {
     let chat: Chat
 
     var body: some View {
+        ChatCardRows(project: project, chat: chat)
+            .padding(6)
+            .frame(width: Tokens.Size.chatCard, alignment: .leading)
+            .background(Tokens.card, in: .rect(cornerRadius: Tokens.Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.Radius.card, style: .continuous).strokeBorder(Tokens.hair2))
+    }
+}
+
+struct ChatCardRows: View {
+    @Environment(AppModel.self) private var model
+    let project: Project
+    let chat: Chat
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             MachineRow(project: project)
             WorktreeButton(project: project)
@@ -16,10 +30,6 @@ struct ChatCard: View {
             ChangesRow(project: project, chat: chat)
             ChecksRow(project: project, chat: chat)
         }
-        .padding(6)
-        .frame(width: Tokens.Size.chatCard, alignment: .leading)
-        .background(Tokens.card, in: .rect(cornerRadius: Tokens.Radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Tokens.Radius.card, style: .continuous).strokeBorder(Tokens.hair2))
         .font(.system(size: 13.5))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("This chat’s project and app")

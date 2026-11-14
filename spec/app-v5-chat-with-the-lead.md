@@ -178,7 +178,8 @@ Each phase ends with the app building, tests passing and the app usable.
     - **⌘K palette:**
         - Recent chats, chat results with snippets, and commands: New chat, Add project, Run the app ⌘R, Stop the app ⌘., Open Changes ⇧⌘C, Go to file ⌘P, Settings ⌘,, Switch appearance.
         - No results offers "Ask the Lead about …" and "Search closed chats only".
-7. **Transcript and composer.**
+7. **Transcript and composer (done, with gaps).**
+    - Not built yet: the inline spec editor (Edit first opens the spec screen), collapsed older spec versions with New/Changed tags, the Lead's collapsible tool steps inside the transcript, the thinking timer, the 380 px worker panel (Open shows the agent's session), "Hand it to the Lead" and "Let the Lead try another way" on stuck cards, and "Always in this project" on permissions (answers stay scoped to the chat).
     - **New chat:** "What should we build?" with project and workflow chips and three starters: Fix a bug, Build a feature, Understand the code.
     - **The Lead:** header "Lead · <model>". States: thinking (with a timer), streaming (with collapsible tool steps), and working (live tool rows and a skeleton spec card).
     - **Spec card:**

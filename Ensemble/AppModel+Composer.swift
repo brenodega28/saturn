@@ -102,3 +102,11 @@ extension AppModel {
         return files
     }
 }
+
+extension AppModel {
+    func commitsAhead(of run: Run) async -> Int? {
+        guard let base = run.baseBranch, let project = project(withID: run.projectId), let git = git(for: project) else { return nil }
+        guard let output = try? await git.run(["rev-list", "--count", "origin/\(base)..\(base)"], in: project.url) else { return nil }
+        return Int(output.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+}

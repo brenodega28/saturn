@@ -104,6 +104,7 @@ final class AppModel {
     var isRunMenuOpen = false
     var isNewChatPickerShown = false
     var isAppOutputShown = false
+    var composerPrefill: String?
     var pendingChatDeletion: Chat?
     var newChatOptionsByProject: [Int64: NewChatOptions] = [:]
     var projectFileLists: [Int64: [String]] = [:]

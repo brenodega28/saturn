@@ -361,6 +361,7 @@ public final class RunEngine {
         let summary = try await driver.pushBase(current)
         guard var pushed = try database.run(id: runID) else { throw RunEngineError.runNotFound }
         pushed.pushedAt = clock()
+        pushed.outcome = [pushed.outcome, summary].compactMap(\.self).filter { !$0.isEmpty }.joined(separator: "\n")
         let updated = pushed
         try await database.writer.write { db in try updated.update(db) }
         refresh(updated, state: try database.engineState(runId: runID))

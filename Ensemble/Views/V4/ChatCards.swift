@@ -49,24 +49,23 @@ struct PermissionCard: View {
         let name = agent.map { model.displayName(of: $0, in: project) } ?? card.title ?? "An agent"
         let status = card.permissionStatus ?? .pending
         HStack(alignment: .top, spacing: 12) {
-            LeadAvatar(appearance: agent.map { RoleAppearance(role: model.role(for: $0, in: project)) })
             VStack(alignment: .leading, spacing: 8) {
-                Text("\(Text("Permission").fontWeight(.semibold).foregroundStyle(V4.orangeText)) · \(name) \(request)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(V4.label.opacity(0.75))
+                Text("\(Text("Permission").fontWeight(.semibold).foregroundStyle(Tokens.need)) · \(name) \(request)")
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(Tokens.text)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(card.text)
-                    .font(V4.monospaced(12))
-                    .foregroundStyle(.white)
+                    .font(Tokens.mono(12.5))
+                    .foregroundStyle(Tokens.text)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 6)
-                    .background(V4.code, in: .rect(cornerRadius: 8, style: .continuous))
+                    .background(Tokens.code, in: .rect(cornerRadius: 8, style: .continuous))
                 if !rules.isEmpty {
                     Text("Covers \(rules.map { "`\($0)`" }.joined(separator: ", "))")
                         .font(.system(size: 12))
-                        .foregroundStyle(V4.label.opacity(0.75))
+                        .foregroundStyle(Tokens.text2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let reason {
@@ -77,23 +76,26 @@ struct PermissionCard: View {
                 }
                 if status == .pending {
                     HStack(spacing: 8) {
-                        Button("Allow") { model.answerPermission(card, decision: .allow) }
-                            .buttonStyle(V4Pill(kind: .orange, height: 28, horizontalPadding: 12))
+                        Button("Allow in this chat") { model.answerPermission(card, decision: .allow) }
+                            .buttonStyle(PrimaryPillStyle())
                             .help("Let the lead and every worker in this chat run this and similar commands without asking again")
                         Button("Deny") { model.answerPermission(card, decision: .deny) }
-                            .buttonStyle(V4Pill(kind: .deny, height: 28, horizontalPadding: 12))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Tokens.danger)
+                            .font(.system(size: 13.5))
+                            .padding(.horizontal, 8)
                             .help("Tell the agent to find another way; similar commands stay denied in this chat")
                     }
                 } else {
                     Text(status.title)
                         .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(status == .denied ? V4.denied : V4.greenText)
+                        .foregroundStyle(status == .denied ? Tokens.stuck : Tokens.done)
                 }
             }
-            .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
+            .padding(EdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 18))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(V4.orange.opacity(0.08), in: .rect(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(V4.orange.opacity(0.35)))
+            .background(Tokens.needBackground, in: .rect(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Tokens.needLine))
         }
         .task(id: card.permissionRequestId) {
             let request = card.permissionRequestId.flatMap { try? model.database.permissionRequest(id: $0) }
@@ -126,79 +128,88 @@ struct SpecCard: View {
     let startHelp: String
 
     var body: some View {
-        let state = Phase(proposal.status)
+        let state = Phase(proposal.status, rejected: document.status == .rejected)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Text("Spec · \(document.title)")
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                if let path = spec.relativePath {
-                    Text(path)
-                        .font(V4.monospaced(11))
-                        .foregroundStyle(V4.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                }
-                Spacer(minLength: 8)
+                Text("Spec · \(document.title)").font(.system(size: 14, weight: .semibold)).foregroundStyle(Tokens.text).lineLimit(1)
                 Text(badge(state))
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(state.badgeForeground)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(state.color)
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(state.badgeBackground, in: Capsule())
+                    .frame(height: 20)
+                    .background(state.background, in: Capsule())
                     .fixedSize()
+                Spacer(minLength: 8)
+                if let path = spec.relativePath {
+                    Text(path).font(Tokens.mono(11.5)).foregroundStyle(Tokens.text2).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1) }
+            .padding(.bottom, 6)
             ForEach(rows, id: \.title) { row in
                 HStack(alignment: .top, spacing: 14) {
-                    Text(row.title)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(V4.secondary)
-                        .frame(width: 96, alignment: .leading)
+                    Text(row.title).font(.system(size: 12.5)).foregroundStyle(Tokens.text2).frame(width: 92, alignment: .leading)
                     VStack(alignment: .leading, spacing: 3) {
                         ForEach(Array(row.lines.enumerated()), id: \.offset) { _, line in
                             Text(line)
-                                .font(row.isMonospaced ? V4.monospaced(12) : .system(size: 13))
-                                .lineSpacing(row.isMonospaced ? 4 : 3)
+                                .font(row.isMonospaced ? Tokens.mono(12.5) : .system(size: 14))
+                                .foregroundStyle(Tokens.text)
+                                .lineSpacing(3)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.04)).frame(height: 1) }
+                .padding(.vertical, 6)
+            }
+            if !document.workers.isEmpty {
+                HStack(spacing: 10) {
+                    Text(state == .approved ? "Started" : "On approval I’ll start").foregroundStyle(Tokens.text2)
+                    HStack(spacing: -5) {
+                        ForEach(Array(document.workers.prefix(4).enumerated()), id: \.offset) { _, worker in
+                            RobotFace(kind: RobotFace.Kind(icon: model.config(for: project).role(worker.role)?.icon ?? worker.role), size: 18)
+                                .background(Tokens.raised, in: .rect(cornerRadius: 6))
+                        }
+                    }
+                    Text(ListFormatter.localizedString(byJoining: document.workers.map(\.name))).foregroundStyle(Tokens.text).lineLimit(2)
+                }
+                .font(.system(size: 13))
+                .padding(.top, 10)
+                .padding(.bottom, 2)
+                .overlay(alignment: .top) { Rectangle().fill(Tokens.hair).frame(height: 1).padding(.top, 4) }
             }
             HStack(spacing: 8) {
-                Spacer(minLength: 0)
                 switch state {
                 case .pending:
-                    Button("Edit spec") { model.openSpec(spec, in: project) }
-                        .buttonStyle(V4Pill(kind: .secondary))
-                        .help("Open the draft to read and edit it; the lead reads your edits on its next turn")
                     Button("Approve & start") { model.startProposal(proposal, in: project) }
-                        .buttonStyle(V4Pill(kind: .primary, horizontalPadding: 16))
+                        .buttonStyle(PrimaryPillStyle())
                         .disabled(!canStart)
                         .help(startHelp)
+                    Button("Edit first") { model.openSpec(spec, in: project) }
+                        .buttonStyle(SecondaryPillStyle())
+                        .help("Open the spec to edit it; the Lead reads your edits before it starts anyone")
+                    Button("Reject…") { model.rejectProposal(proposal) }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Tokens.danger)
+                        .font(.system(size: 13.5))
+                        .padding(.horizontal, 8)
+                        .help("Reject this spec; tell the Lead why in your next message")
                 case .approved:
-                    Button("View spec") { model.openSpec(spec, in: project) }
-                        .buttonStyle(V4Pill(kind: .quiet))
-                    V4StatusPill(text: "Approved · run starting", foreground: V4.greenText, background: V4.green.opacity(0.15))
+                    statusPill("Approved · \(document.workers.count) worker\(document.workers.count == 1 ? "" : "s") starting", color: Tokens.done, background: Tokens.doneBackground)
+                    Button("View spec") { model.openSpec(spec, in: project) }.buttonStyle(.plain).foregroundStyle(Tokens.link)
+                case .rejected:
+                    Text("Rejected by you · tell the Lead why in your next message").font(.system(size: 13)).foregroundStyle(Tokens.text2)
                 case .dismissed:
-                    V4StatusPill(text: "Dismissed", foreground: V4.secondary, background: Color.white.opacity(0.06))
+                    statusPill("Dismissed", color: Tokens.text2, background: Tokens.fill)
                 }
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1) }
+            .padding(.top, 10)
         }
-        .background(Color.white.opacity(0.045), in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(state.border))
-        .clipShape(.rect(cornerRadius: 16, style: .continuous))
+        .padding(EdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 18))
+        .background(Tokens.raised, in: .rect(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Tokens.hair2))
+        .opacity(state == .rejected ? 0.6 : 1)
         .contextMenu {
             Button("Open Spec") { model.openSpec(spec, in: project) }
             if state == .pending {
@@ -209,12 +220,23 @@ struct SpecCard: View {
         .accessibilityLabel("Spec \(document.title)")
     }
 
+    private func statusPill(_ text: String, color: Color, background: Color) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(background, in: Capsule())
+    }
+
     private enum Phase {
         case pending
         case approved
         case dismissed
+        case rejected
 
-        init(_ status: ProposalStatus?) {
+        init(_ status: ProposalStatus?, rejected: Bool) {
+            if rejected { self = .rejected; return }
             switch status {
             case .started: self = .approved
             case .dismissed: self = .dismissed
@@ -222,36 +244,29 @@ struct SpecCard: View {
             }
         }
 
-        var border: Color {
+        var color: Color {
             switch self {
-            case .pending: V4.orange.opacity(0.35)
-            case .approved: V4.green.opacity(0.3)
-            case .dismissed: Color.white.opacity(0.08)
+            case .pending: Tokens.need
+            case .approved: Tokens.done
+            case .dismissed, .rejected: Tokens.text2
             }
         }
 
-        var badgeForeground: Color {
+        var background: Color {
             switch self {
-            case .pending: V4.orangeText
-            case .approved: V4.greenText
-            case .dismissed: V4.secondary
-            }
-        }
-
-        var badgeBackground: Color {
-            switch self {
-            case .pending: V4.orange.opacity(0.18)
-            case .approved: V4.green.opacity(0.15)
-            case .dismissed: Color.white.opacity(0.06)
+            case .pending: Tokens.needBackground
+            case .approved: Tokens.doneBackground
+            case .dismissed, .rejected: Tokens.fill
             }
         }
     }
 
     private func badge(_ state: Phase) -> String {
         switch state {
-        case .pending: "\(document.status.title) · needs approval"
-        case .approved: "Approved"
-        case .dismissed: "Dismissed"
+        case .pending: "v\(document.version) · needs approval"
+        case .approved: "v\(document.version) · approved"
+        case .dismissed: "v\(document.version) · dismissed"
+        case .rejected: "v\(document.version) · rejected"
         }
     }
 

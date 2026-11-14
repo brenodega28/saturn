@@ -23,23 +23,23 @@ struct HoldCard: View {
         case .approval:
             ApprovalCard(run: run, title: hold.message, detail: timeline.holdItem?.body, reload: reload)
         case .loopLimit:
-            DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
+            DecisionCard(title: hold.message, detail: timeline.holdItem?.body, isStuck: true) {
                 DecisionButtons(
-                    primary: ("Continue Once More", "Allow one more loop back, then ask again"),
-                    secondary: ("Fail Run", "Stop the run here"),
+                    primary: ("Allow another round", "Allow one more loop back, then ask again"),
+                    secondary: ("Stop here", "Stop the run here"),
                     failureTitle: "Couldn’t resolve the loop limit",
                     reload: reload
                 ) { engine, continueOnce in try engine.resolveLoopLimit(run, continueOnce: continueOnce) }
             }
         case .runBudget:
-            DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
+            DecisionCard(title: hold.message, detail: timeline.holdItem?.body, isStuck: true) {
                 RaiseBudgetControls(run: run, reload: reload)
             }
         case .stepBudget:
             DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
                 DecisionButtons(
-                    primary: ("Continue", "Keep the step’s result and carry on"),
-                    secondary: ("Stop", "Fail the run here"),
+                    primary: ("Keep going", "Keep the step’s result and carry on"),
+                    secondary: ("Stop here", "Fail the run here"),
                     failureTitle: "Couldn’t resolve the budget",
                     reload: reload
                 ) { engine, proceed in try engine.resolveBudget(run, proceed: proceed) }
@@ -47,8 +47,8 @@ struct HoldCard: View {
         case .gates:
             DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
                 DecisionButtons(
-                    primary: ("Continue", "Accept these findings, including any new dependencies, and carry on"),
-                    secondary: ("Send Back", "Send the findings to the authors to fix"),
+                    primary: ("Allow and continue", "Accept these findings, including any new dependencies, and carry on"),
+                    secondary: ("Ask for an alternative", "Send the findings back to the authors to fix"),
                     failureTitle: "Couldn’t resolve the gate findings",
                     reload: reload
                 ) { engine, proceed in try engine.resolveGates(run, proceed: proceed) }
@@ -56,10 +56,10 @@ struct HoldCard: View {
         case .stepFailed where hold.isChecksExhausted(in: run.snapshotWorkflow):
             ChecksExhaustedCard(run: run, project: project, rounds: run.checkRounds(at: hold.stepId, in: project), reload: reload)
         case .stepFailed, .timedOut:
-            DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
+            DecisionCard(title: hold.message, detail: timeline.holdItem?.body, isStuck: true) {
                 DecisionButtons(
                     primary: ("Retry", "Run the step again"),
-                    secondary: ("Fail Run", "Stop the run here"),
+                    secondary: ("Stop here", "Stop the run here"),
                     failureTitle: "Couldn’t resolve the failure",
                     reload: reload
                 ) { engine, retry in try engine.resolveFailure(run, retry: retry) }
@@ -71,25 +71,25 @@ struct HoldCard: View {
 struct DecisionCard<Actions: View>: View {
     let title: String
     let detail: String?
-    var tint: Color = Theme.warning
+    var isStuck = false
     @ViewBuilder let actions: Actions
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.system(size: 14, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+            Text(title).font(.system(size: 14.5, weight: .semibold)).foregroundStyle(Tokens.text).fixedSize(horizontal: false, vertical: true)
             if let detail, !detail.isEmpty, detail != title {
                 Text(detail)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.secondaryText)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(Tokens.text2)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
             actions
         }
-        .padding(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+        .padding(EdgeInsets(top: 14, leading: 18, bottom: 14, trailing: 18))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.09), in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(tint.opacity(0.24)))
+        .background(isStuck ? Tokens.stuckBackground : Tokens.needBackground, in: .rect(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(isStuck ? Tokens.stuckLine : Tokens.needLine))
     }
 }
 
@@ -104,10 +104,10 @@ private struct DecisionButtons: View {
     var body: some View {
         HStack(spacing: 8) {
             Button(primary.title) { decide(true) }
-                .buttonStyle(PillButtonStyle(.primary, height: 30))
+                .buttonStyle(PrimaryPillStyle())
                 .help(primary.help)
             Button(secondary.title) { decide(false) }
-                .buttonStyle(PillButtonStyle(height: 30))
+                .buttonStyle(SecondaryPillStyle())
                 .help(secondary.help)
         }
     }
@@ -170,14 +170,16 @@ private struct ApprovalCard: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    Button("Approve") { resolve(approved: true) }
-                        .buttonStyle(PillButtonStyle(.primary, height: 30))
-                        .help("Approve and move to the next step")
-                    Button("Request Changes") { isRequestingChanges = true }
-                        .buttonStyle(PillButtonStyle(height: 30))
+                    Button("Approve & merge into \(run.baseBranch ?? "main")") { resolve(approved: true) }
+                        .buttonStyle(PrimaryPillStyle())
+                        .help("Approve the work; the run then merges it on this Mac")
+                    Button("Request changes") { isRequestingChanges = true }
+                        .buttonStyle(SecondaryPillStyle())
                         .help("Send the work back with a note")
-                    Button("Review Changes") { model.openChanges(for: run) }
-                        .buttonStyle(PillButtonStyle(height: 30))
+                    Button("Open in Changes →") { model.openChanges(for: run) }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Tokens.link)
+                        .font(.system(size: 13.5))
                         .help("Open the run’s diffs in Changes")
                 }
             }

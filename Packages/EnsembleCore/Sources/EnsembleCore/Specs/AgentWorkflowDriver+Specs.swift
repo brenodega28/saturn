@@ -50,6 +50,22 @@ extension AgentWorkflowDriver {
             """
     }
 
+    public func rejectSpec(projectId: Int64, taskId: Int64) throws {
+        let store = specStore
+        let url = store.draftURL(projectId: projectId, taskId: taskId)
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        var document = try SpecDocument(markdown: text)
+        document.status = .rejected
+        try store.write(document, to: url)
+        store.markSeen(url)
+    }
+
+    func rejectionNote(projectId: Int64, taskId: Int64) -> String? {
+        let url = specStore.draftURL(projectId: projectId, taskId: taskId)
+        guard let text = try? String(contentsOf: url, encoding: .utf8), let document = try? SpecDocument(markdown: text), document.status == .rejected else { return nil }
+        return "Ensemble note (not written by the user): the user rejected spec v\(document.version) “\(document.title)”. This message says why. Write the next version with `\(HandoffTool.draftSpec.qualifiedName)` before proposing a run."
+    }
+
     func specEditNote(projectId: Int64, taskId: Int64) -> String? {
         let store = specStore
         let url = store.draftURL(projectId: projectId, taskId: taskId)

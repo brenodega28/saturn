@@ -62,7 +62,10 @@ public final class LeadChat {
         #if DEBUG
         runtime.debugTrace?.chatMessage(body, direction: "user_to_agent", chat: "lead", agent: session.agent, at: now)
         #endif
-        let notes = [driver.specEditNote(projectId: task.projectId, taskId: taskId), try workflowNote(taskId: taskId), try statusNote(taskId: taskId)].compactMap(\.self)
+        let notes = [
+            driver.specEditNote(projectId: task.projectId, taskId: taskId), driver.rejectionNote(projectId: task.projectId, taskId: taskId),
+            try workflowNote(taskId: taskId), try statusNote(taskId: taskId),
+        ].compactMap(\.self)
         let status = notes.isEmpty ? "" : (prompt.isEmpty ? "" : "\n\n---\n") + notes.joined(separator: "\n\n---\n")
         session.send(prompt + status, images: attachments.filter(\.isImage))
     }
@@ -149,6 +152,11 @@ public final class LeadChat {
         started.runId = run.id
         try database.save(started)
         return run
+    }
+
+    public func reject(_ proposal: LeadMessage) throws {
+        try dismiss(proposal)
+        try driver.rejectSpec(projectId: proposal.projectId, taskId: proposal.taskId)
     }
 
     public func dismiss(_ proposal: LeadMessage) throws {

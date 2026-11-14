@@ -113,6 +113,35 @@ final class SpecGateDriver: WorkflowDriver {
         #expect(try await mainCheckoutStatus(setup).isEmpty)
     }
 
+    @Test func rejectingASpecTellsTheLeadAndTheNextDraftIsANewVersion() async throws {
+        let (setup, chat) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let task = try await chat.createRequest("CHAT hi", in: setup.project)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+        let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
+        _ = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
+        let proposal = try setup.harness.database.insert(LeadMessage(
+            projectId: setup.project.id!, taskId: task.id!, kind: .proposal, text: "Brief", workflow: "feature-delivery", title: "Alpha", status: .open, createdAt: .now
+        ))
+
+        try chat.reject(proposal)
+
+        let url = draftURL(setup, task)
+        #expect(try SpecDocument(markdown: String(contentsOf: url, encoding: .utf8)).status == .rejected)
+        #expect(messages(setup, task).first { $0.id == proposal.id }?.status == .dismissed)
+        try await chat.send("CHAT not like this, use one file", to: task, in: setup.project)
+        try await waitUntil { messages(setup, task).filter { $0.kind == .lead }.count == 2 }
+        let sent = setup.harness.runtime.session(for: leadAgent)?.transcript.entries.compactMap { entry -> String? in
+            if case .user(let text) = entry.content { return text }
+            return nil
+        } ?? []
+        #expect(sent.last?.contains("the user rejected spec v1 “Alpha and beta files”") == true)
+
+        _ = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
+        let next = try SpecDocument(markdown: String(contentsOf: url, encoding: .utf8))
+        #expect(next.status == .draft && next.version == 2)
+    }
+
     @Test func startingTheProposalCommitsTheSpecOnTheRunBranchAndSeedsThePlan() async throws {
         let (setup, chat) = try await makeChat()
         defer { setup.harness.cleanUp() }

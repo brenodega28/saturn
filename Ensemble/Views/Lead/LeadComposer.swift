@@ -22,6 +22,12 @@ struct LeadComposer: View {
         .cancelsHeldSendOnEscape(for: sendTarget)
         .restoresReturnedSends(for: sendTarget, perform: restore)
         .task(id: project.id) { files = await model.projectFiles(project) }
+        .onChange(of: model.composerPrefill, initial: true) { _, prefill in
+            guard let prefill, request == nil else { return }
+            text = prefill
+            model.composerPrefill = nil
+            model.composerFocusToken += 1
+        }
     }
 
     @ViewBuilder

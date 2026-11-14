@@ -203,6 +203,16 @@ extension AppModel {
         }
     }
 
+    func rejectProposal(_ proposal: LeadMessage) {
+        do {
+            try leadChat.reject(proposal)
+            leadChatRevision += 1
+            composerFocusToken += 1
+        } catch {
+            alert = AppAlert(title: "Couldn’t reject the spec", message: error.localizedDescription)
+        }
+    }
+
     func dismissProposal(_ proposal: LeadMessage) {
         do {
             try leadChat.dismiss(proposal)

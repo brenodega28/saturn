@@ -87,9 +87,67 @@ struct NewRequestIntro: View {
                         .buttonStyle(.primaryPill)
                 }
             } else {
-                EmptyState("Talk to the Lead", message: "Ask a question or describe what you need. The Lead answers here, proposes a run when there’s work to do, then plans and reviews it.")
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("What should we build?")
+                        .font(.system(size: 30, weight: .heavy).width(.expanded))
+                        .foregroundStyle(Tokens.text)
+                    Text("Describe it in your own words. The Lead writes a spec for you to approve, then starts the workers.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Tokens.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(NewChatStarter.allCases) { starter in
+                            Button { model.composerPrefill = starter.prompt } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(starter.title).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Tokens.text)
+                                    Text(starter.detail).font(.system(size: 12.5)).foregroundStyle(Tokens.text2).fixedSize(horizontal: false, vertical: true)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(Tokens.raised, in: .rect(cornerRadius: 12, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tokens.hair2))
+                                .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxWidth: Tokens.Size.transcript)
+                .padding(28)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+enum NewChatStarter: String, CaseIterable, Identifiable {
+    case bug
+    case feature
+    case understand
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .bug: "Fix a bug"
+        case .feature: "Build a feature"
+        case .understand: "Understand the code"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .bug: "Say what goes wrong and how to see it."
+        case .feature: "Describe what it should do and who it’s for."
+        case .understand: "Ask how something works; nothing changes."
+        }
+    }
+
+    var prompt: String {
+        switch self {
+        case .bug: "Fix a bug: "
+        case .feature: "Build a feature: "
+        case .understand: "Explain how "
+        }
     }
 }

@@ -44,10 +44,8 @@ struct RequestChat: View {
                         RequestBubble(held: send, onCancel: model.cancelHeldSend)
                             .id(send.id.uuidString)
                     }
-                    if !working.isEmpty {
-                        WorkingAgentsRow(sessions: working, project: project)
-                            .id(Self.workingID)
-                    }
+                    WorkerRoster(chat: task, project: project)
+                        .id(Self.workingID)
                     if isThinking {
                         ThinkingRow(role: data?.leadRole, name: data?.leadName ?? "Lead", session: session)
                             .id(Self.thinkingID)
@@ -172,10 +170,8 @@ struct RequestChat: View {
             AnsweredQuestion(item: question)
         case .runEnded(let run):
             FinalStateCard(run: run, reload: reload)
-                .padding(.leading, 42)
         case .openQuestion(let question):
             QuestionCard(item: question, project: project, reload: reload)
-                .padding(.leading, 42)
         case .hold(let run):
             let current = live(run)
             if let hold = run.id.flatMap({ model.engine.holds[$0] }), let timeline = run.id.flatMap({ data.timelines[$0] }) {
@@ -186,7 +182,6 @@ struct RequestChat: View {
             }
         case .notice(let request):
             ChatRequestCard(item: request)
-                .padding(.leading, 42)
         }
     }
 
@@ -208,14 +203,11 @@ struct RequestChat: View {
                     canStart: !hasActiveRun && !task.isClosed && workflow != nil,
                     startHelp: ProposalCard.startHelp(hasActiveRun: hasActiveRun, isRequestClosed: task.isClosed)
                 )
-                .padding(.leading, 42)
             } else {
                 ProposalCard(proposal: message, project: project, hasActiveRun: hasActiveRun, isRequestClosed: task.isClosed)
-                    .padding(.leading, 42)
             }
         case .note:
             ChatNote(text: message.text)
-                .padding(.leading, 42)
         case .permission:
             PermissionCard(card: message, project: project)
         }
@@ -270,131 +262,12 @@ struct ThinkingRow: View {
         let activity = session.map { TranscriptLayout.activity($0.transcript.entries, live: $0.transcript.liveEntry) } ?? .working
         let root = session.flatMap { $0.transcript.session?.cwd ?? $0.agent.worktreePath }
         HStack(alignment: activity.isReply ? .top : .center, spacing: 12) {
-            LeadAvatar(appearance: RoleAppearance(role: role))
+            RobotFace(kind: role.map { RobotFace.Kind(icon: $0.icon) } ?? .lead, size: 20, lookingAside: true)
             SessionActivityView(activity: activity, name: name, root: root)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .animation(.snappy(duration: 0.2), value: activity.phase)
         }
         .accessibilityElement(children: activity.isReply ? .contain : .combine)
-    }
-}
-
-private struct WorkingAgentsRow: View {
-    @Environment(AppModel.self) private var model
-    let sessions: [AgentSession]
-    let project: Project
-
-    var body: some View {
-        if sessions.count == 1, let session = sessions.first {
-            Button { model.openAgentSession(session.agent, in: project) } label: {
-                BackgroundAgentRow(session: session, role: model.role(for: session.agent, in: project), name: model.displayName(of: session.agent, in: project))
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .help("Open \(model.displayName(of: session.agent, in: project))’s session")
-        } else {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.secondaryText)
-                    .frame(width: 30, height: 30)
-                    .background(Color.white.opacity(0.06), in: Circle())
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("\(sessions.count) agents working")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.secondaryText)
-                        .frame(minHeight: 30)
-                        .accessibilityAddTraits(.isHeader)
-                    ForEach(sessions) { session in
-                        let name = model.displayName(of: session.agent, in: project)
-                        Button { model.openAgentSession(session.agent, in: project) } label: {
-                            BackgroundAgentLine(session: session, role: model.role(for: session.agent, in: project), name: name)
-                                .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Open \(name)’s session")
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .accessibilityElement(children: .contain)
-        }
-    }
-}
-
-private struct BackgroundAgentRow: View {
-    let session: AgentSession
-    let role: RoleDefinition?
-    let name: String
-
-    var body: some View {
-        let activity = TranscriptLayout.activity(session.transcript.entries, live: session.transcript.liveEntry)
-        let root = session.transcript.session?.cwd ?? session.agent.worktreePath
-        HStack(alignment: .top, spacing: 12) {
-            RoleBadge(role: role, size: 30)
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 4) {
-                    Text(name).fontWeight(.semibold).foregroundStyle(.white)
-                    Text(session.agent.runId == nil ? "· working in the background" : "· working on the run").foregroundStyle(Theme.secondaryText)
-                }
-                .font(.system(size: 12))
-                SessionActivityView(activity: activity, name: name, root: root)
-                    .animation(.snappy(duration: 0.2), value: activity.phase)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .accessibilityElement(children: activity.isReply ? .contain : .combine)
-    }
-}
-
-private struct BackgroundAgentLine: View {
-    let session: AgentSession
-    let role: RoleDefinition?
-    let name: String
-
-    var body: some View {
-        let activity = TranscriptLayout.activity(session.transcript.entries, live: session.transcript.liveEntry)
-        let root = session.transcript.session?.cwd ?? session.agent.worktreePath
-        HStack(spacing: 8) {
-            RoleBadge(role: role, size: 18)
-            Text(name)
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(.white)
-                .fixedSize()
-            compactActivity(activity, root: root)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .animation(.snappy(duration: 0.2), value: activity.phase)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(name): \(activity.summary(relativeTo: root))")
-    }
-
-    @ViewBuilder
-    private func compactActivity(_ activity: SessionActivity, root: String?) -> some View {
-        HStack(spacing: 6) {
-            ProgressView().controlSize(.mini)
-            switch activity {
-            case .tool(let tool):
-                Text(tool.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.link)
-                Text(tool.target(relativeTo: root))
-                    .font(.system(size: 11.5, design: .monospaced))
-                    .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if let start = tool.startedAt { ElapsedLabel(start: start) }
-            case .replying(let text):
-                Text(text.split(whereSeparator: \.isNewline).last.map(String.init) ?? text)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            case .thinking:
-                Text("Thinking…").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
-            case .working:
-                Text("Working…").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
-            }
-        }
     }
 }
 
@@ -505,7 +378,6 @@ private struct StepEvent: View {
             .padding(.vertical, 2)
             .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.hairline))
-            .padding(.leading, 42)
     }
 }
 
@@ -538,7 +410,6 @@ private struct AnsweredQuestion: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.hairline))
-        .padding(.leading, 42)
     }
 }
 
@@ -569,13 +440,13 @@ struct RequestBubble: View {
             }
             if !text.isEmpty {
                 Text(Self.linked(text))
-                    .font(.system(size: 14))
-                    .lineSpacing(3)
-                    .foregroundStyle(.white)
+                    .font(.system(size: 14.5))
+                    .lineSpacing(4)
+                    .foregroundStyle(Tokens.text)
                     .textSelection(.enabled)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Theme.accent.opacity(0.85), in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 20, bottomTrailingRadius: 6, topTrailingRadius: 20, style: .continuous))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Tokens.bubble, in: .rect(cornerRadius: 14, style: .continuous))
                     .accessibilityLabel("You: \(text)")
             }
             if let onCancel {
@@ -591,7 +462,7 @@ struct RequestBubble: View {
             }
         }
         .help(date.formatted(date: .abbreviated, time: .shortened))
-        .frame(maxWidth: 593, alignment: .trailing)
+        .frame(maxWidth: Tokens.Size.transcript * 0.8, alignment: .trailing)
         .frame(maxWidth: .infinity, alignment: .trailing)
         .accessibilityElement(children: attachments.isEmpty && onCancel == nil ? .combine : .contain)
     }
@@ -599,7 +470,7 @@ struct RequestBubble: View {
     private static func linked(_ text: String) -> AttributedString {
         var linked = MarkdownText.linkingChatLinks(AttributedString(text))
         for run in linked.runs where run.link != nil {
-            linked[run.range].foregroundColor = .white
+            linked[run.range].foregroundColor = Tokens.link
             linked[run.range].underlineStyle = .single
         }
         return linked
@@ -676,25 +547,30 @@ private struct SentImage: View {
 }
 
 struct LeadBubble<Content: View>: View {
+    @Environment(AppModel.self) private var model
     let role: RoleDefinition?
     let name: String
     let date: Date
     @ViewBuilder let content: Content
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            LeadAvatar(appearance: RoleAppearance(role: role))
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 4) {
-                    Text(name).fontWeight(.semibold).foregroundStyle(.white)
-                    Text("· \(date.formatted(date: .omitted, time: .shortened))").foregroundStyle(V4.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                RobotFace(kind: role.map { RobotFace.Kind(icon: $0.icon) } ?? .lead, size: 20)
+                Text(name).fontWeight(.semibold).foregroundStyle(Tokens.text)
+                if let modelName = role?.model.modelTitle {
+                    Text("· \(modelName)").foregroundStyle(Tokens.text2)
                 }
-                .font(.system(size: 12))
-                .help(date.formatted(date: .abbreviated, time: .shortened))
-                content
+                Text("· \(date.formatted(date: .omitted, time: .shortened))").foregroundStyle(Tokens.text3)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(.system(size: 13))
+            .help(date.formatted(date: .abbreviated, time: .shortened))
+            content
+                .font(.system(size: 14.5))
+                .lineSpacing(5)
+                .foregroundStyle(Tokens.text)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -804,6 +680,7 @@ private struct FinalStateCard: View {
     @State private var isChoosingMergeMethod = false
     @State private var isMerging = false
     @State private var isPushing = false
+    @State private var ahead: Int?
 
     var body: some View {
         let color = model.statusColor(of: run)
@@ -822,6 +699,11 @@ private struct FinalStateCard: View {
             }
             if run.status == .failed, let error = run.lastError {
                 Text(error).font(.system(size: 13)).foregroundStyle(Theme.secondaryText).textSelection(.enabled)
+            }
+            if canPush, let ahead, ahead > 0 {
+                Text("\(baseName) is \(ahead) commit\(ahead == 1 ? "" : "s") ahead of origin")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Tokens.text2)
             }
             HStack(spacing: 8) {
                 if canMerge, let delivery = run.deliveryBranch {
@@ -871,6 +753,12 @@ private struct FinalStateCard: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.secondaryText)
                 }
+                if run.mergedAt != nil, let chat = model.requestTask(for: run), !chat.isClosed, let project = model.project(withID: run.projectId) {
+                    Button(run.pushedAt != nil ? "Close chat as done" : "Close chat") {
+                        Task { await model.closeRequest(chat, as: .done, in: project) }
+                    }
+                    .buttonStyle(SecondaryPillStyle())
+                }
                 if run.status == .failed {
                     Button {
                         model.performRunAction("Couldn’t retry the step") { try model.engine.retryStep(run) }
@@ -880,6 +768,9 @@ private struct FinalStateCard: View {
                         .help("Run the failed step again")
                 }
             }
+        }
+        .task(id: "\(run.mergedAt?.timeIntervalSince1970 ?? 0)-\(run.pushedAt?.timeIntervalSince1970 ?? 0)") {
+            ahead = canPush ? await model.commitsAhead(of: run) : nil
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

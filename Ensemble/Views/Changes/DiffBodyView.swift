@@ -9,14 +9,14 @@ enum DiffPalette {
     static let removedGutter = Color(red: 248 / 255, green: 81 / 255, blue: 73 / 255).opacity(0.22)
     static let addedSign = Color(hex: 0x4BD97B)
     static let removedSign = Color(hex: 0xFF7A85)
-    static let emptySide = Color.white.opacity(0.025)
+    static let emptySide = Tokens.hover
     static let hunkText = Color(red: 160 / 255, green: 190 / 255, blue: 1).opacity(0.85)
     static let hunkBackground = Color(red: 56 / 255, green: 139 / 255, blue: 253 / 255).opacity(0.08)
     static let pin = Color(hex: 0xFFD60A)
     static let pinTitle = Color(hex: 0xFFE266)
-    static let pinCard = Color(hex: 0x24231C)
-    static let lineNumber = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.45)
-    static let cardBackground = Color(hex: 0x141417)
+    static let pinCard = Color.adaptive(dark: 0x24231C, light: 0xFFF8E1)
+    static let lineNumber = Tokens.text3
+    static let cardBackground = Tokens.code
     static let conflict = Color(hex: 0xFF8A80)
     static let selection = Color(red: 56 / 255, green: 139 / 255, blue: 253 / 255).opacity(0.2)
 
@@ -138,7 +138,7 @@ struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
         case .pair(let left, let right):
             HStack(alignment: .top, spacing: 0) {
                 splitSide(left, isLeft: true)
-                Rectangle().fill(Color.white.opacity(0.07)).frame(width: 1)
+                Rectangle().fill(Tokens.hair).frame(width: 1)
                 splitSide(right, isLeft: false)
             }
             .fixedSize(horizontal: false, vertical: true)

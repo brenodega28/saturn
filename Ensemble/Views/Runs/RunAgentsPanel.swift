@@ -20,7 +20,7 @@ struct RunAgentsPanel: View {
                 ForEach(snapshot.agents) { agent in
                     RunAgentRow(agent: agent, stepTitle: stepTitle(for: agent), project: project)
                     if agent.id != snapshot.agents.last?.id {
-                        Divider().overlay(Color.white.opacity(0.05))
+                        Divider().overlay(Tokens.hair)
                     }
                 }
             }

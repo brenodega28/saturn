@@ -106,7 +106,7 @@ struct LibraryPanel: View {
                         }
                         .font(.system(size: 12, weight: tab == candidate ? .semibold : .regular))
                         .frame(maxWidth: .infinity, minHeight: 26)
-                        .background(tab == candidate ? Color.white.opacity(0.12) : .clear, in: .rect(cornerRadius: 7, style: .continuous))
+                        .background(tab == candidate ? Tokens.fill2 : .clear, in: .rect(cornerRadius: 7, style: .continuous))
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -114,7 +114,7 @@ struct LibraryPanel: View {
                 }
             }
             .padding(3)
-            .background(Color.white.opacity(0.05), in: .rect(cornerRadius: 9, style: .continuous))
+            .background(Tokens.hover, in: .rect(cornerRadius: 9, style: .continuous))
             .padding(12)
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Theme.tertiaryText)
@@ -155,8 +155,8 @@ struct LibraryPanel: View {
             .padding(14)
         }
         .frame(width: 460)
-        .background(Color(hex: 0x2C2C32, opacity: 0.97), in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
+        .background(Tokens.menu, in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Tokens.hair2))
         .shadow(color: .black.opacity(0.55), radius: 30, y: 16)
         .onExitCommand(perform: dismiss)
         .accessibilityElement(children: .contain)

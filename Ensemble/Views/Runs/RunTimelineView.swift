@@ -29,7 +29,7 @@ struct RunTimelineView: View {
                         )
                     )
                     if entry.id != entries.last?.id {
-                        Divider().overlay(Color.white.opacity(0.05))
+                        Divider().overlay(Tokens.hair)
                     }
                 }
             }

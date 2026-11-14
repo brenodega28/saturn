@@ -96,7 +96,7 @@ struct CriteriaList: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.04), in: .rect(cornerRadius: 10, style: .continuous))
+        .background(Tokens.hover, in: .rect(cornerRadius: 10, style: .continuous))
     }
 
     static func symbol(_ status: CriterionResult.Status) -> String {
@@ -151,7 +151,7 @@ struct EvidenceCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.04), in: .rect(cornerRadius: 14, style: .continuous))
+        .background(Tokens.hover, in: .rect(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder

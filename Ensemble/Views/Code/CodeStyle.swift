@@ -3,7 +3,7 @@ import EnsembleUI
 import SwiftUI
 
 enum CodeStyle {
-    static let background = Color(hex: 0x141416)
+    static let background = Tokens.code
     static let fontSizeKey = "editor.fontSize"
     static let defaultFontSize = 12.5
 
@@ -20,16 +20,16 @@ enum CodeStyle {
 
     static func color(_ kind: CodeToken.Kind) -> Color {
         switch kind {
-        case .plain: Color(hex: 0xE4E4E7)
-        case .keyword: Color(hex: 0xFF7AB2)
-        case .string: Color(hex: 0xFF8170)
-        case .comment: Color(hex: 0x7F8C98)
-        case .number: Color(hex: 0xD9C97C)
-        case .function: Color(hex: 0x4EB0CC)
-        case .type: Color(hex: 0xDABAFF)
-        case .decorator: Color(hex: 0xB281EB)
-        case .heading: .white
-        case .punctuation: Color(hex: 0xE4E4E7).opacity(0.75)
+        case .plain: Tokens.text
+        case .keyword: Color.adaptive(dark: 0xFF7AB2, light: 0xAD3DA4)
+        case .string: Color.adaptive(dark: 0xFF8170, light: 0xC41A16)
+        case .comment: Color.adaptive(dark: 0x7F8C98, light: 0x5D6C79)
+        case .number: Color.adaptive(dark: 0xD9C97C, light: 0x1C00CF)
+        case .function: Color.adaptive(dark: 0x4EB0CC, light: 0x326D74)
+        case .type: Color.adaptive(dark: 0xDABAFF, light: 0x703DAA)
+        case .decorator: Color.adaptive(dark: 0xB281EB, light: 0x643820)
+        case .heading: Tokens.text
+        case .punctuation: Tokens.text2
         }
     }
 
@@ -88,10 +88,10 @@ struct FileBadge: View {
         case "py": return ("PY", Color(hex: 0x7DB6FF), Color(red: 75 / 255, green: 139 / 255, blue: 190 / 255).opacity(0.25))
         case "ts", "tsx", "js", "jsx": return (ext.uppercased(), Color(hex: 0x5CCBF5), Color(red: 92 / 255, green: 203 / 255, blue: 245 / 255).opacity(0.2))
         case "swift": return ("SW", Color(hex: 0xFF8A5C), Color(hex: 0xFF8A5C).opacity(0.18))
-        case "md": return ("MD", Color.white.opacity(0.8), Color.white.opacity(0.1))
+        case "md": return ("MD", Color.white.opacity(0.8), Tokens.fill2)
         case "toml", "yml", "yaml", "json": return (ext.prefix(4).uppercased(), Color(hex: 0xE0A878), Color(red: 192 / 255, green: 138 / 255, blue: 90 / 255).opacity(0.22))
-        case "": return ("•", Color.white.opacity(0.7), Color.white.opacity(0.1))
-        default: return (String(ext.prefix(3)).uppercased(), .white, Color.white.opacity(0.1))
+        case "": return ("•", Color.white.opacity(0.7), Tokens.fill2)
+        default: return (String(ext.prefix(3)).uppercased(), .white, Tokens.fill2)
         }
     }
 }

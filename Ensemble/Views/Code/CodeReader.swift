@@ -39,7 +39,7 @@ struct CodeReader: View {
                             ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         if proxy.size.width >= 640, !symbols.isEmpty, markdownMode != .rendered {
-                            Divider().overlay(Color.white.opacity(0.05))
+                            Divider().overlay(Tokens.hair)
                             CodeOutlineList(browser: browser, symbols: symbols, current: current)
                                 .frame(width: 200)
                         }
@@ -121,7 +121,7 @@ private struct CodeTabStrip: View {
                     .overlay(alignment: .top) {
                         if isActive { Rectangle().fill(Theme.accent).frame(height: 2) }
                     }
-                    .overlay(alignment: .trailing) { Rectangle().fill(Color.white.opacity(0.05)).frame(width: 1) }
+                    .overlay(alignment: .trailing) { Rectangle().fill(Tokens.hair).frame(width: 1) }
                     .accessibilityElement(children: .contain)
                     .accessibilityAddTraits(isActive ? .isSelected : [])
                 }
@@ -130,8 +130,8 @@ private struct CodeTabStrip: View {
         .scrollIndicators(.hidden)
         .frame(height: 38)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.02))
-        .overlay(alignment: .bottom) { Divider().overlay(Color.white.opacity(0.06)) }
+        .background(Tokens.hover)
+        .overlay(alignment: .bottom) { Divider().overlay(Tokens.hair) }
     }
 }
 
@@ -173,7 +173,7 @@ private struct FileBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .overlay(alignment: .bottom) { Divider().overlay(Color.white.opacity(0.05)) }
+        .overlay(alignment: .bottom) { Divider().overlay(Tokens.hair) }
     }
 
     private func actions(compact: Bool) -> some View {
@@ -211,7 +211,7 @@ private struct FileBar: View {
                     .foregroundStyle(Theme.secondaryText)
                     .padding(.horizontal, 10)
                     .frame(height: 26)
-                    .background(Color.white.opacity(0.06), in: Capsule())
+                    .background(Tokens.fill, in: Capsule())
             }
             Button { browser.presentFinder() } label: {
                 HStack(spacing: 4) {
@@ -221,8 +221,8 @@ private struct FileBar: View {
                 .font(.system(size: 12))
                 .padding(.horizontal, 12)
                 .frame(height: 28)
-                .background(Color.white.opacity(0.08), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1)))
+                .background(Tokens.fill, in: Capsule())
+                .overlay(Capsule().strokeBorder(Tokens.hair2))
             }
             .buttonStyle(.plain)
             .help("Go to file")
@@ -365,7 +365,7 @@ private struct CodeOutlineList: View {
                         .padding(.leading, 8 + CGFloat(symbol.depth) * 12)
                         .padding(.trailing, 8)
                         .frame(height: 26)
-                        .background(symbol == current ? Color.white.opacity(0.08) : .clear, in: .rect(cornerRadius: 7, style: .continuous))
+                        .background(symbol == current ? Tokens.fill : .clear, in: .rect(cornerRadius: 7, style: .continuous))
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -411,7 +411,7 @@ private struct CodeStatusBar: View {
         .foregroundStyle(Theme.secondaryText)
         .padding(.horizontal, 14)
         .frame(height: 28)
-        .background(Color.white.opacity(0.02))
-        .overlay(alignment: .top) { Divider().overlay(Color.white.opacity(0.06)) }
+        .background(Tokens.hover)
+        .overlay(alignment: .top) { Divider().overlay(Tokens.hair) }
     }
 }

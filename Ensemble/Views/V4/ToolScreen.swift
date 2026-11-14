@@ -142,10 +142,10 @@ struct MiddleColumn: View {
                 } label: {
                     Text(item == .usage ? "Usage" : "Quality")
                         .font(.system(size: 11.5, weight: isOn ? .semibold : .regular))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Tokens.text)
                         .padding(.horizontal, 8)
                         .frame(height: 22)
-                        .background(isOn ? Color.white.opacity(0.16) : .clear, in: .rect(cornerRadius: 6, style: .continuous))
+                        .background(isOn ? Tokens.fill2 : .clear, in: .rect(cornerRadius: 6, style: .continuous))
                         .contentShape(.rect(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
@@ -153,6 +153,6 @@ struct MiddleColumn: View {
             }
         }
         .padding(2)
-        .background(Color.white.opacity(0.06), in: .rect(cornerRadius: 8, style: .continuous))
+        .background(Tokens.fill, in: .rect(cornerRadius: 8, style: .continuous))
     }
 }

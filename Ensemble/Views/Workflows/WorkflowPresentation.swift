@@ -17,11 +17,11 @@ struct NodeStyle {
     let tag: String?
 
     static func trigger() -> NodeStyle {
-        NodeStyle(shape: .pill, size: CGSize(width: 220, height: 38), symbol: "bubble.left.fill", fill: AnyShapeStyle(Color.white.opacity(0.14)), kind: "Trigger", tag: nil)
+        NodeStyle(shape: .pill, size: CGSize(width: 220, height: 38), symbol: "bubble.left.fill", fill: AnyShapeStyle(Tokens.fill2), kind: "Trigger", tag: nil)
     }
 
     static func end(_ end: WorkflowEnd) -> NodeStyle {
-        NodeStyle(shape: .pill, size: CGSize(width: 190, height: 40), symbol: end.action.symbol, fill: AnyShapeStyle(Color.white.opacity(0.14)), kind: "End", tag: nil)
+        NodeStyle(shape: .pill, size: CGSize(width: 190, height: 40), symbol: end.action.symbol, fill: AnyShapeStyle(Tokens.fill2), kind: "End", tag: nil)
     }
 
     static func step(_ step: WorkflowStep, role: RoleDefinition?) -> NodeStyle {

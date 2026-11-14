@@ -16,7 +16,7 @@ struct WorkflowCanvas: View {
                 .scaleEffect(zoom, anchor: .topLeading)
                 .frame(width: layout.size.width * zoom, height: layout.size.height * zoom, alignment: .topLeading)
         }
-        .background(Color(hex: 0x141417))
+        .background(Tokens.code)
         .clipShape(.rect(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(isDropTargeted ? Theme.accent : Theme.hairline, lineWidth: isDropTargeted ? 2 : 1))
         .overlay(alignment: .bottom) { toolbar.padding(.bottom, 14) }
@@ -56,10 +56,10 @@ struct WorkflowCanvas: View {
             .accessibilityLabel("Zoom in")
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.white)
+        .foregroundStyle(Tokens.text)
         .padding(4)
         .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.1)))
+        .overlay(Capsule().strokeBorder(Tokens.hair2))
         .shadow(color: .black.opacity(0.4), radius: 15, y: 10)
     }
 }
@@ -248,8 +248,8 @@ private struct EdgeLabel: View {
             .fixedSize()
             .padding(.horizontal, 8)
             .frame(height: 20)
-            .background(Color(hex: 0x1F1F24), in: Capsule())
-            .overlay(Capsule().strokeBorder(isLoopBack ? color.opacity(0.35) : Color.white.opacity(0.1)))
+            .background(Tokens.menu, in: Capsule())
+            .overlay(Capsule().strokeBorder(isLoopBack ? color.opacity(0.35) : Tokens.hair2))
     }
 }
 
@@ -258,7 +258,7 @@ private struct ConnectHandle: View {
 
     var body: some View {
         Circle()
-            .fill(isHovering ? Theme.accent : Color(hex: 0x3A3A42))
+            .fill(isHovering ? Theme.accent : Tokens.fill2)
             .overlay(Circle().strokeBorder(Color.white.opacity(0.5), lineWidth: 1))
             .frame(width: 12, height: 12)
             .frame(width: 22, height: 22)
@@ -335,15 +335,15 @@ struct WorkflowNodeView: View {
 
     private var background: Color {
         switch style.shape {
-        case .gate: Color(hex: 0x2B2617)
-        case .pill: Color(hex: 0x25252B)
-        case .card: Color(hex: 0x222227)
+        case .gate: Color.adaptive(dark: 0x2B2617, light: 0xFFF6DD)
+        case .pill: Tokens.raised
+        case .card: Tokens.raised
         }
     }
 
     private var ring: Color {
         if isSelected { return Theme.accent }
         if let visits, visits > 0 { return Theme.success }
-        return style.shape == .gate ? Color(hex: 0xFFC24A, opacity: 0.45) : Color.white.opacity(0.12)
+        return style.shape == .gate ? Color(hex: 0xFFC24A, opacity: 0.45) : Tokens.fill2
     }
 }

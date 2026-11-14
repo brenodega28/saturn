@@ -12,9 +12,9 @@ struct QuestionCard: View {
         let agent = item.agentId.flatMap { model.agent(id: $0) }
         let name = agent.map { model.displayName(of: $0, in: project) }
         VStack(alignment: .leading, spacing: 8) {
-            Text("\(Text("Question").fontWeight(.semibold).foregroundStyle(V4.orangeText)) · \(item.title)")
+            Text("\(Text("Question").fontWeight(.semibold).foregroundStyle(Tokens.need)) · \(item.title)")
                 .font(.system(size: 12))
-                .foregroundStyle(V4.label.opacity(0.75))
+                .foregroundStyle(Tokens.text)
                 .fixedSize(horizontal: false, vertical: true)
             QuestionFormView(form: QuestionForm(item: item), recipient: name, quickAnswers: true, send: send) {
                 if let agent {
@@ -27,8 +27,8 @@ struct QuestionCard: View {
         }
         .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(V4.orange.opacity(0.08), in: .rect(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(V4.orange.opacity(0.35)))
+        .background(Tokens.needBackground, in: .rect(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Tokens.needLine))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Question: \(item.title)")
     }

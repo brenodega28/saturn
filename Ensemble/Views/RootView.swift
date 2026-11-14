@@ -60,8 +60,8 @@ struct Backdrop: View {
     var body: some View {
         ZStack {
             Theme.canvas
-            RadialGradient(colors: [Color(hex: 0x1D2A4A), .clear], center: UnitPoint(x: 0.12, y: 0.08), startRadius: 0, endRadius: 700)
-            RadialGradient(colors: [Color(hex: 0x3A1F3F), .clear], center: UnitPoint(x: 0.92, y: 0.9), startRadius: 0, endRadius: 600)
+            RadialGradient(colors: [Color.adaptive(dark: 0x1D2A4A, light: 0xCFE0FF), .clear], center: UnitPoint(x: 0.12, y: 0.08), startRadius: 0, endRadius: 700)
+            RadialGradient(colors: [Color.adaptive(dark: 0x3A1F3F, light: 0xF3D9F1), .clear], center: UnitPoint(x: 0.92, y: 0.9), startRadius: 0, endRadius: 600)
         }
         .ignoresSafeArea()
     }

@@ -68,8 +68,8 @@ struct WorkflowInspector: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.06)))
+        .background(Tokens.hover, in: .rect(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Tokens.hair))
     }
 }
 
@@ -128,7 +128,7 @@ struct InspectorTextEditor: View {
             .padding(8)
             .frame(minHeight: 96)
             .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Tokens.hair2))
             .accessibilityLabel(title)
     }
 }
@@ -195,7 +195,7 @@ private struct TriggerSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            InspectorHeader(kind: "Trigger", title: trigger.labels.isEmpty ? "Every new chat" : "Labelled chats", symbol: "bubble.left.fill", fill: AnyShapeStyle(Color.white.opacity(0.14)))
+            InspectorHeader(kind: "Trigger", title: trigger.labels.isEmpty ? "Every new chat" : "Labelled chats", symbol: "bubble.left.fill", fill: AnyShapeStyle(Tokens.fill2))
             InspectorField("Only for tasks labelled") {
                 TokenEditor(items: $trigger.labels, placeholder: "Add a label, e.g. hotfix", suggestions: suggestedLabels)
             }
@@ -213,7 +213,7 @@ private struct EndSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            InspectorHeader(kind: "End", title: end.action.title, symbol: end.action.symbol, fill: AnyShapeStyle(Color.white.opacity(0.14)))
+            InspectorHeader(kind: "End", title: end.action.title, symbol: end.action.symbol, fill: AnyShapeStyle(Tokens.fill2))
             InspectorField("When the run finishes") {
                 Picker("When the run finishes", selection: $end.action) {
                     ForEach(EndAction.allCases, id: \.self) { action in

@@ -43,7 +43,7 @@ private struct RequestHistory: View {
             ForEach(items) { item in
                 RequestHistoryRow(item: item, agentName: item.agentId.flatMap { id in agents.first { $0.id == id }?.name })
                 if item.id != items.last?.id {
-                    Divider().overlay(Color.white.opacity(0.05))
+                    Divider().overlay(Tokens.hair)
                 }
             }
         }

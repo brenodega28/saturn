@@ -88,7 +88,7 @@ struct UsageView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.05), in: .rect(cornerRadius: 12, style: .continuous))
+        .background(Tokens.hover, in: .rect(cornerRadius: 12, style: .continuous))
     }
 
     private var estimateNote: some View {
@@ -127,7 +127,7 @@ struct UsageView: View {
                 }
             }
             ForEach(model.openProjects) { project in
-                Divider().overlay(Color.white.opacity(0.06))
+                Divider().overlay(Tokens.hair)
                 ProjectBudgetEditor(project: project, period: budgetPeriod)
             }
         }

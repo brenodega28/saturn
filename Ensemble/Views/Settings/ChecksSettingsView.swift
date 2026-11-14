@@ -181,7 +181,7 @@ private struct CheckRow: View {
                 .font(.system(size: 10.5, weight: .semibold))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Color.white.opacity(0.1), in: .capsule)
+                .background(Tokens.fill2, in: .capsule)
             VStack(alignment: .leading, spacing: 2) {
                 Text(check.name).font(.system(size: 13, weight: .medium))
                 Text(check.command).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.secondaryText).textSelection(.enabled)

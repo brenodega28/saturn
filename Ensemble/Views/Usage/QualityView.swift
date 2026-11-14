@@ -73,7 +73,7 @@ struct QualityView: View {
             }
         }
         .padding(.vertical, 6)
-        .overlay(alignment: .bottom) { if header { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) } }
+        .overlay(alignment: .bottom) { if header { Rectangle().fill(Tokens.hair).frame(height: 1) } }
     }
 
     static func percent(_ value: Double) -> String {

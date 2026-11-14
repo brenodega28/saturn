@@ -160,7 +160,7 @@ struct ChangesToolbar: View {
     }
 
     private var divider: some View {
-        Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 20).padding(.horizontal, 4).accessibilityHidden(true)
+        Rectangle().fill(Tokens.hair2).frame(width: 1, height: 20).padding(.horizontal, 4).accessibilityHidden(true)
     }
 
     private var runChips: some View {
@@ -247,12 +247,12 @@ struct ChipButton<Label: View>: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 7) { label() }
-                .foregroundStyle(.white)
+                .foregroundStyle(Tokens.text)
                 .padding(.leading, height < 32 ? 4 : 12)
                 .padding(.trailing, height < 32 ? 10 : 12)
                 .frame(height: height)
                 .background(isSelected ? Theme.accent.opacity(0.16) : Color.white.opacity(height < 32 ? 0 : 0.05), in: Capsule())
-                .overlay(Capsule().strokeBorder(isSelected ? Theme.accent : Color.white.opacity(0.08), lineWidth: 1.5))
+                .overlay(Capsule().strokeBorder(isSelected ? Theme.accent : Tokens.hair, lineWidth: 1.5))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -391,7 +391,7 @@ struct UnplacedPinsCard: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.04))
+                .background(Tokens.hover)
             ForEach(pins) { pin in
                 Text("\(pin.file):\(pin.sideLineLabel)")
                     .font(.system(size: 12, design: .monospaced))
@@ -410,7 +410,7 @@ struct UnplacedPinsCard: View {
         }
         .background(DiffPalette.cardBackground, in: .rect(cornerRadius: 16, style: .continuous))
         .clipShape(.rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.09)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Tokens.hair2))
         .id("unplaced-pins")
     }
 }

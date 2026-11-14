@@ -55,7 +55,7 @@ struct CommandPalette: View {
                         .foregroundStyle(Theme.secondaryText)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.1), in: .rect(cornerRadius: 5))
+                        .background(Tokens.fill2, in: .rect(cornerRadius: 5))
                 }
                 .padding(.horizontal, 18)
                 .frame(height: 56)

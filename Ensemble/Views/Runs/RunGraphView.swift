@@ -187,7 +187,7 @@ struct RunGraphView: View {
 
     private func edgeColor(_ edge: RunGraph.Edge) -> Color {
         if edge.isLoopBack { return edge.timesTaken > 0 ? Theme.warning : Theme.warning.opacity(0.35) }
-        return edge.timesTaken > 0 ? Theme.success.opacity(0.85) : Color.white.opacity(0.22)
+        return edge.timesTaken > 0 ? Theme.success.opacity(0.85) : Tokens.fill2
     }
 }
 
@@ -220,7 +220,7 @@ private struct RunGraphNode: View {
             }
         }
         .padding(.horizontal, 8)
-        .background(Color(hex: 0x232328), in: .rect(cornerRadius: node.isEnd ? 22 : 11, style: .continuous))
+        .background(Tokens.raised, in: .rect(cornerRadius: node.isEnd ? 22 : 11, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: node.isEnd ? 22 : 11, style: .continuous)
                 .strokeBorder(node.state == .upcoming ? Theme.hairline : color.opacity(node.state.isLive ? 1 : 0.45), lineWidth: node.state.isLive ? 1.6 : 1)

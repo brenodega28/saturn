@@ -240,7 +240,7 @@ struct CodeBlockView: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 28)
-            .background(Color.white.opacity(0.04))
+            .background(Tokens.hover)
             ScrollView(.horizontal) {
                 Text(Self.highlighted(code, language: codeLanguage))
                     .font(CodeStyle.codeFont)

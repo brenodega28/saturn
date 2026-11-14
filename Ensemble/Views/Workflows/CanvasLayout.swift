@@ -189,6 +189,6 @@ struct CanvasLayout {
     private static func color(for edge: WorkflowEdge) -> Color {
         if edge.outcome == StepOutcome.failed { return Color(hex: 0xFF6B88) }
         if edge.isLoopBack { return Theme.warning }
-        return Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.45)
+        return Tokens.text3
     }
 }

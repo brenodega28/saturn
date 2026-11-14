@@ -526,7 +526,7 @@ private struct StepPalette: View {
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(type.paletteColor)
                         .frame(width: 22, height: 22)
-                        .background(Color.white.opacity(0.08), in: .rect(cornerRadius: 7, style: .continuous))
+                        .background(Tokens.fill, in: .rect(cornerRadius: 7, style: .continuous))
                         .accessibilityHidden(true)
                 } title: {
                     Text(type.paletteTitle)
@@ -560,7 +560,7 @@ private struct PaletteRow<Icon: View, Title: View, Trailing: View>: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 34)
-            .background(Color.white.opacity(0.035), in: .rect(cornerRadius: 9, style: .continuous))
+            .background(Tokens.hover, in: .rect(cornerRadius: 9, style: .continuous))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -570,7 +570,7 @@ private struct PaletteRow<Icon: View, Title: View, Trailing: View>: View {
                 title.font(.system(size: 13))
             }
             .padding(8)
-            .background(Color(hex: 0x2A2A30), in: .rect(cornerRadius: 9))
+            .background(Tokens.menu, in: .rect(cornerRadius: 9))
         }
         .help(help)
     }

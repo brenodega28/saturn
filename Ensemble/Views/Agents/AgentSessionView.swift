@@ -19,8 +19,7 @@ struct AgentSessionView: View {
                     }
                     StatusBanner(session: session)
                     TranscriptView(session: session)
-                    Composer(session: session)
-                        .disabled(model.agents.isSettingUp(session))
+                    ReadOnlyNote(session: session, project: project)
                 }
                 .frame(maxWidth: .infinity)
                 if !isInWorkbench {
@@ -154,67 +153,24 @@ private struct StatusBanner: View {
     }
 }
 
-private struct Composer: View {
+private struct ReadOnlyNote: View {
     @Environment(AppModel.self) private var model
     let session: AgentSession
-    @State private var text = ""
-    @FocusState private var isFocused: Bool
+    let project: Project
 
     var body: some View {
-        let sendTarget = PendingSendTarget.session(session.id)
-        VStack(alignment: .leading, spacing: 8) {
-            if !session.queuedMessages.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "clock").font(.system(size: 11))
-                    Text("\(session.queuedMessages.count) queued for when this turn ends")
-                }
-                .font(.system(size: 11.5))
-                .foregroundStyle(Theme.secondaryText)
+        let chat = model.chat(of: session.agent)
+        HStack(spacing: 10) {
+            Text("Workers take instructions from the Lead. To change what \(model.displayName(of: session.agent, in: project)) does, tell the Lead in the chat.")
+                .font(.system(size: 13))
+                .foregroundStyle(Tokens.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            if let chat {
+                Button("Open the chat") { model.openChat(chat) }.buttonStyle(SecondaryPillStyle())
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Message \(model.displayName(of: session.agent))", text: $text, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13.5))
-                    .lineLimit(1...6)
-                    .focused($isFocused)
-                    .onKeyPress(.return, phases: .down) { press in
-                        guard !press.modifiers.contains(.shift) else { return .ignored }
-                        send()
-                        return .handled
-                    }
-                    .task(id: session.id) { isFocused = true }
-                    .padding(.vertical, 6)
-                Button(action: send) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 30, height: 30)
-                        .background(Theme.accent, in: Circle())
-                        .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .keyboardShortcut(.return, modifiers: .command)
-                .accessibilityLabel("Send")
-            }
-            .padding(.leading, 14)
-            .padding(.trailing, 6)
-            .padding(.vertical, 4)
-            .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
         }
-        .cancelsHeldSendOnEscape(for: sendTarget)
-        .restoresReturnedSends(for: sendTarget, perform: restore)
-    }
-
-    private func send() {
-        let message = text
-        guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        text = ""
-        model.holdSessionMessage(message, to: session)
-    }
-
-    private func restore(_ message: PendingMessage) {
-        text = PendingMessage(text: text).appending(message).text
-        isFocused = true
+        .padding(12)
+        .background(Tokens.fill, in: .rect(cornerRadius: 12, style: .continuous))
     }
 }

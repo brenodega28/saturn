@@ -225,7 +225,9 @@ Each phase ends with the app building, tests passing and the app usable.
     - Dock badge and a menu bar item with the count of chats that need you.
     - Notifications once per ask, grouped by chat. Approve and Allow work from the notification without opening the app. Only asks, failures and finished work notify; Focus modes apply.
     - A Chat menu in the app's menu bar.
-9. **Restyle the secondary screens and first run** in both themes:
+9. **Restyle the secondary screens and first run** in both themes (partly done):
+    - Done: every screen's translucent fills, hairlines, panels, diff and code colours now come from tokens with a light value; the stepped Welcome (Claude CLI → Appearance → Add your first project); the read-only Agent session that points you to the chat.
+    - Not done: the screen-specific layouts (Agents filters and "You talk to this one", Changes groups, Usage stats, the project settings pages, onboarding steps, Clone and SSH sheets as drawn), and a visual check of light mode. Appearance stays Dark by default until light mode has been looked at.
     - Agents (filters, the Lead tagged "You talk to this one") and the New agent sheet.
     - Read-only Agent session.
     - Workflows editor.

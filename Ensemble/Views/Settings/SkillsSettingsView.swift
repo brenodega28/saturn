@@ -215,7 +215,7 @@ private struct SkillChip: View {
         .padding(.horizontal, 8)
         .frame(height: 24)
         .background(isMissing ? Theme.warning.opacity(0.1) : Color.black.opacity(0.25), in: .rect(cornerRadius: 7, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(isMissing ? Theme.warning.opacity(0.4) : Color.white.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(isMissing ? Theme.warning.opacity(0.4) : Tokens.hair2))
         .help(isMissing ? "\(name) isn’t in .claude/skills or an installed plugin" : name)
     }
 }

@@ -112,7 +112,7 @@ struct NewAgentSheet: View {
                     .focused($isTaskFocused)
                     .padding(10)
                     .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Tokens.hair2))
                     .contentShape(.rect)
                     .onTapGesture { isTaskFocused = true }
                     .labelsHidden()
@@ -137,7 +137,7 @@ struct NewAgentSheet: View {
                             .padding(.leading, 4)
                             .padding(.trailing, 10)
                             .frame(height: 26)
-                            .background(Color.white.opacity(0.08), in: Capsule())
+                            .background(Tokens.fill, in: Capsule())
                         }
                     }
                 }
@@ -277,7 +277,7 @@ struct CountStepper: View {
         }
         .padding(.horizontal, 3)
         .frame(height: 36)
-        .background(Color.white.opacity(0.07), in: Capsule())
+        .background(Tokens.fill, in: Capsule())
         .overlay(Capsule().strokeBorder(Theme.hairline))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("How many")

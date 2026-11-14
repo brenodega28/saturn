@@ -85,7 +85,7 @@ struct LearnedRulesView: View {
                 }
             }
             if !encoded.isEmpty {
-                Divider().overlay(Color.white.opacity(0.06))
+                Divider().overlay(Tokens.hair)
                 Text("Encoded").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
                 ForEach(encoded) { correction in
                     VStack(alignment: .leading, spacing: 2) {

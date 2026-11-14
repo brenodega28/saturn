@@ -298,7 +298,7 @@ struct OnboardingRailsStep: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(isOn ? Theme.accent.opacity(0.12) : .clear, in: .rect(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isOn ? Theme.accent.opacity(0.5) : Color.white.opacity(0.12)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(isOn ? Theme.accent.opacity(0.5) : Tokens.hair2))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isOn ? .isSelected : [])
@@ -405,7 +405,7 @@ struct OnboardingSection<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.035), in: .rect(cornerRadius: 16, style: .continuous))
+        .background(Tokens.hover, in: .rect(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
     }
 }

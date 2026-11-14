@@ -245,7 +245,7 @@ private struct FolderNavigator<Field: Hashable>: View {
             }
             .frame(height: 240)
             .background(Color.black.opacity(0.18), in: .rect(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Tokens.hair))
             .overlay { placeholder(isEmpty: entries.isEmpty) }
             .onChange(of: browser.highlighted) {
                 if let entry = browser.highlightedEntry { proxy.scrollTo(entry.id) }
@@ -297,7 +297,7 @@ private struct FolderRow: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 26)
-            .background(isHighlighted ? Theme.link.opacity(0.22) : isHovered ? Color.white.opacity(0.06) : .clear, in: .rect(cornerRadius: 6, style: .continuous))
+            .background(isHighlighted ? Theme.link.opacity(0.22) : isHovered ? Tokens.fill : .clear, in: .rect(cornerRadius: 6, style: .continuous))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

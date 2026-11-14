@@ -34,7 +34,7 @@ struct FileCard: View {
         .clipShape(.rect(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(path.isConflicted ? Theme.danger.opacity(0.45) : Color.white.opacity(0.09))
+                .strokeBorder(path.isConflicted ? Theme.danger.opacity(0.45) : Tokens.hair2)
         )
     }
 
@@ -92,8 +92,8 @@ struct FileCard: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color.white.opacity(0.04))
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1) }
+        .background(Tokens.hover)
+        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.hair).frame(height: 1) }
     }
 
     private var displayPath: String {
@@ -146,7 +146,7 @@ struct FileCard: View {
         .padding(.horizontal, 12)
         .frame(height: 28)
         .background(isViewed ? Theme.success.opacity(0.14) : .clear, in: .rect(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tokens.hair2))
         .help("Mark as viewed. It stays viewed until the diff changes.")
     }
 
@@ -326,7 +326,7 @@ struct ReviewerNotes: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.accent.opacity(0.06))
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1) }
+        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.hair).frame(height: 1) }
     }
 }
 
@@ -349,7 +349,7 @@ struct BranchHeader: View {
         .font(.system(size: 12))
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color.white.opacity(0.05))
+        .background(Tokens.hover)
     }
 }
 

@@ -354,8 +354,8 @@ struct ProposalCard: View {
         }
         .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.045), in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(proposal.status == .open ? V4.blue.opacity(0.35) : Color.white.opacity(0.08)))
+        .background(Tokens.hover, in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(proposal.status == .open ? V4.blue.opacity(0.35) : Tokens.hair))
     }
 
     @ViewBuilder
@@ -376,7 +376,7 @@ private struct StepEvent: View {
         StepRow(entry: entry, needsYou: needsYou)
             .padding(.horizontal, 14)
             .padding(.vertical, 2)
-            .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 12, style: .continuous))
+            .background(Tokens.hover, in: .rect(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.hairline))
     }
 }
@@ -408,7 +408,7 @@ private struct AnsweredQuestion: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 12, style: .continuous))
+        .background(Tokens.hover, in: .rect(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.hairline))
     }
 }

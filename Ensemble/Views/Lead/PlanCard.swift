@@ -46,7 +46,7 @@ struct PlanCard: View {
                     task: task, number: index + 1, isFirst: index == 0, isLast: index == plan.tasks.count - 1,
                     installedSkills: installed, plan: $plan
                 )
-                .overlay(alignment: .top) { Divider().overlay(Color.white.opacity(0.05)) }
+                .overlay(alignment: .top) { Divider().overlay(Tokens.hair) }
             }
             if plan.tasks.isEmpty {
                 Text("Every task was removed. Ask for a new plan.")
@@ -55,7 +55,7 @@ struct PlanCard: View {
                     .padding(16)
             }
             footer
-                .overlay(alignment: .top) { Divider().overlay(Color.white.opacity(0.06)) }
+                .overlay(alignment: .top) { Divider().overlay(Tokens.hair) }
         }
         .background(Theme.fill, in: .rect(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.warning.opacity(0.35)))
@@ -201,7 +201,7 @@ private struct PlanTaskRow: View {
             .padding(.trailing, 10)
             .frame(width: 260, height: 28)
             .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tokens.hair2))
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -230,7 +230,7 @@ struct PlanSpecView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.04), in: .rect(cornerRadius: 12, style: .continuous))
+        .background(Tokens.hover, in: .rect(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder

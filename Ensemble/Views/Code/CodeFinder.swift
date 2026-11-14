@@ -10,26 +10,26 @@ struct CodeFinder: View {
         let results = browser.finderResults
         let selected = results.indices.contains(browser.finderSelection) ? results[browser.finderSelection] : nil
         ZStack(alignment: .top) {
-            Color(red: 8 / 255, green: 9 / 255, blue: 12 / 255).opacity(0.55)
+            Tokens.scrim
                 .onTapGesture { browser.isFinderPresented = false }
                 .accessibilityHidden(true)
             VStack(spacing: 0) {
                 header(count: results.count)
-                Divider().overlay(Color.white.opacity(0.08))
+                Divider().overlay(Tokens.hair)
                 HStack(spacing: 0) {
                     resultList(results)
                         .frame(minWidth: 260, idealWidth: 400, maxWidth: 400)
-                    Divider().overlay(Color.white.opacity(0.07))
+                    Divider().overlay(Tokens.hair)
                     preview(selected)
                 }
                 .frame(height: 460)
-                Divider().overlay(Color.white.opacity(0.08))
+                Divider().overlay(Tokens.hair)
                 footer
             }
             .frame(maxWidth: 1040)
             .background(.ultraThinMaterial, in: .rect(cornerRadius: 22, style: .continuous))
-            .background(Color(red: 36 / 255, green: 37 / 255, blue: 42 / 255).opacity(0.9), in: .rect(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
+            .background(Tokens.menu, in: .rect(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Tokens.hair2))
             .shadow(color: .black.opacity(0.6), radius: 50, y: 40)
             .padding(EdgeInsets(top: 40, leading: 24, bottom: 24, trailing: 24))
             .accessibilityElement(children: .contain)
@@ -61,7 +61,7 @@ struct CodeFinder: View {
                         .foregroundStyle(isOn ? .white : Theme.secondaryText)
                         .padding(.horizontal, 12)
                         .frame(height: 28)
-                        .background(isOn ? Color.white.opacity(0.14) : .clear, in: Capsule())
+                        .background(isOn ? Tokens.fill2 : .clear, in: Capsule())
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -94,7 +94,7 @@ struct CodeFinder: View {
                     .foregroundStyle(Theme.secondaryText)
                     .padding(.horizontal, 8)
                     .frame(height: 26)
-                    .background(Color.white.opacity(0.1), in: .rect(cornerRadius: 6, style: .continuous))
+                    .background(Tokens.fill2, in: .rect(cornerRadius: 6, style: .continuous))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close")
@@ -173,7 +173,7 @@ struct CodeFinder: View {
                     .truncationMode(.head)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                Divider().overlay(Color.white.opacity(0.06))
+                Divider().overlay(Tokens.hair)
                 ScrollView([.vertical, .horizontal]) {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(lines.dropFirst(start).prefix(40).enumerated()), id: \.offset) { offset, text in

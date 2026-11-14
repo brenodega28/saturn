@@ -145,7 +145,7 @@ struct ProportionBar: View {
 
     var body: some View {
         Capsule()
-            .fill(Color.white.opacity(0.1))
+            .fill(Tokens.fill2)
             .frame(height: height)
             .overlay(alignment: .leading) {
                 GeometryReader { proxy in

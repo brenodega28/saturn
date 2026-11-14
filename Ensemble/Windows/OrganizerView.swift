@@ -183,8 +183,8 @@ struct OrganizerView: View {
                 .font(.system(size: 12, weight: isOn ? .semibold : .regular))
                 .padding(.horizontal, 12)
                 .frame(height: 26)
-                .background(isOn ? Theme.accent.opacity(0.22) : Color.white.opacity(0.06), in: .capsule)
-                .overlay(Capsule().strokeBorder(isOn ? Theme.accent : Color.white.opacity(0.08)))
+                .background(isOn ? Theme.accent.opacity(0.22) : Tokens.fill, in: .capsule)
+                .overlay(Capsule().strokeBorder(isOn ? Theme.accent : Tokens.hair))
                 .contentShape(.capsule)
         }
         .buttonStyle(.plain)

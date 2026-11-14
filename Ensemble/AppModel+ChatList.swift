@@ -68,6 +68,12 @@ extension AppModel {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: Appearance.storageKey) }
     }
 
+    func chat(of agent: Agent) -> Chat? {
+        if let chatID = agent.taskId { return try? database.task(id: chatID) }
+        guard let runID = agent.runId, let run = liveRun(id: runID) else { return nil }
+        return try? database.task(id: run.taskId)
+    }
+
     func requestNewChat() {
         switch openProjects.count {
         case 0: isOpenPanelPresented = true

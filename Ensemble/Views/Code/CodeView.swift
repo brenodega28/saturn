@@ -11,12 +11,12 @@ struct CodeView: View {
         HStack(spacing: 0) {
             CodeExplorer(browser: browser)
                 .frame(width: 264)
-            Divider().overlay(Color.white.opacity(0.06))
+            Divider().overlay(Tokens.hair)
             CodeReader(browser: browser, project: project)
         }
         .background(CodeStyle.background)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18, style: .continuous))
-        .overlay(UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.07)))
+        .overlay(UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18, style: .continuous).strokeBorder(Tokens.hair))
         .overlay {
             if browser.isFinderPresented {
                 CodeFinder(browser: browser)
@@ -54,14 +54,14 @@ struct CodeExplorer: View {
                     .padding(.horizontal, 9)
                     .frame(height: 30)
                     .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 9, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.white.opacity(0.06)))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Tokens.hair))
                     Button { browser.presentFinder() } label: {
                         Text("⌘P")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(Theme.secondaryText)
                             .frame(height: 30)
                             .padding(.horizontal, 9)
-                            .background(Color.white.opacity(0.06), in: .rect(cornerRadius: 9, style: .continuous))
+                            .background(Tokens.fill, in: .rect(cornerRadius: 9, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .help("Go to file")
@@ -82,9 +82,9 @@ struct CodeExplorer: View {
             .foregroundStyle(Theme.secondaryText)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .overlay(alignment: .top) { Divider().overlay(Color.white.opacity(0.06)) }
+            .overlay(alignment: .top) { Divider().overlay(Tokens.hair) }
         }
-        .background(Color.white.opacity(0.025))
+        .background(Tokens.hover)
     }
 }
 
@@ -120,8 +120,8 @@ private struct SourcePicker: View {
             .padding(.leading, 6)
             .padding(.trailing, 10)
             .frame(height: 34)
-            .background(Color.white.opacity(0.05), in: .rect(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.08)))
+            .background(Tokens.hover, in: .rect(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Tokens.hair))
             .contentShape(.rect)
         }
         .menuStyle(.button)
@@ -147,7 +147,7 @@ private struct SourceSwatch: View {
                     .help(AgentNaming.displayName(of: agent))
             } else {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color.white.opacity(0.1))
+                    .fill(Tokens.fill2)
                     .overlay { Image(systemName: "folder").font(.system(size: 10)).foregroundStyle(Theme.link) }
             }
         }

@@ -86,7 +86,7 @@ struct QuestionFormView<Accessory: View>: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(isSelected ? Theme.accent.opacity(0.16) : Color.white.opacity(0.06), in: .rect(cornerRadius: 9, style: .continuous))
+                    .background(isSelected ? Theme.accent.opacity(0.16) : Tokens.fill, in: .rect(cornerRadius: 9, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(isSelected ? Theme.accent.opacity(0.7) : Theme.hairline))
                     .contentShape(.rect(cornerRadius: 9))
                 }
@@ -168,7 +168,7 @@ struct QuestionFormView<Accessory: View>: View {
 
     private func segmentColor(_ index: Int) -> Color {
         if index == step { return Theme.accent }
-        return isAnswered(index) ? Theme.accent.opacity(0.45) : Color.white.opacity(0.14)
+        return isAnswered(index) ? Theme.accent.opacity(0.45) : Tokens.fill2
     }
 
     private func go(to index: Int) {

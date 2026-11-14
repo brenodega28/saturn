@@ -41,8 +41,4 @@ extension AppModel {
     func cancelHeldSend(_ held: HeldSend) {
         pendingSends.cancel(held.id)
     }
-
-    func holdSessionMessage(_ text: String, to session: AgentSession) {
-        holdSend(PendingMessage(text: text), to: .session(session.id)) { session.send($0.text) }
-    }
 }

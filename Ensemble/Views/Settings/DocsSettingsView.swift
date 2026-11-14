@@ -155,7 +155,7 @@ struct DocsSettingsView: View {
                         .padding(8)
                         .frame(minHeight: 110)
                         .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Tokens.hair2))
                         .accessibilityLabel("Prompt")
                 }
             }
@@ -202,7 +202,7 @@ struct DocsSettingsView: View {
                 .padding(.horizontal, 10)
                 .frame(height: 26)
                 .background(readerChoice == choice ? Theme.accent.opacity(0.16) : Color.clear, in: Capsule())
-                .overlay(Capsule().strokeBorder(readerChoice == choice ? Theme.accent : Color.white.opacity(0.1)))
+                .overlay(Capsule().strokeBorder(readerChoice == choice ? Theme.accent : Tokens.hair2))
             } else {
                 Button(choice.title) { readerChoice = choice }
                     .buttonStyle(.plain)
@@ -210,7 +210,7 @@ struct DocsSettingsView: View {
                     .padding(.horizontal, 10)
                     .frame(height: 26)
                     .background(readerChoice == choice ? Theme.accent.opacity(0.16) : Color.clear, in: Capsule())
-                    .overlay(Capsule().strokeBorder(readerChoice == choice ? Theme.accent : Color.white.opacity(0.1)))
+                    .overlay(Capsule().strokeBorder(readerChoice == choice ? Theme.accent : Tokens.hair2))
                     .accessibilityAddTraits(readerChoice == choice ? .isSelected : [])
             }
         }

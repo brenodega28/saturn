@@ -47,7 +47,7 @@ struct FirstRunView: View {
             .padding(28)
             .frame(maxWidth: 640)
             .background(Theme.windowBackground, in: .rect(cornerRadius: 26, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.white.opacity(0.09)))
+            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Tokens.hair2))
             .shadow(color: .black.opacity(0.55), radius: 40, y: 30)
             .padding(.vertical, 80)
             .padding(.horizontal, 24)

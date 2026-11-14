@@ -207,7 +207,7 @@ private struct AgentCard: View {
                 PinButton(session: session)
             }
             .padding(.top, 4)
-            .overlay(alignment: .top) { Divider().overlay(Color.white.opacity(0.06)) }
+            .overlay(alignment: .top) { Divider().overlay(Tokens.hair) }
         }
         .padding(16)
         .card()

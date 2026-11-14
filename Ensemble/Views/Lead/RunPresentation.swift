@@ -68,7 +68,7 @@ extension RunTimeline.StageState {
         case .current: Theme.accent
         case .waiting: Theme.warning
         case .failed: Theme.danger
-        case .upcoming: Color.white.opacity(0.12)
+        case .upcoming: Tokens.fill2
         }
     }
 

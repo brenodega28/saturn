@@ -43,7 +43,7 @@ struct OnboardingView: View {
         }
         .padding(8)
         .background(Theme.windowBackground, in: .rect(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.white.opacity(0.09)))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Tokens.hair2))
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Backdrop())
@@ -94,7 +94,7 @@ struct OnboardingView: View {
             HStack(spacing: 6) {
                 ForEach(OnboardingStep.allCases) { item in
                     Capsule()
-                        .fill(item.rawValue < step.rawValue ? Theme.success : item == step ? Theme.accent : Color.white.opacity(0.12))
+                        .fill(item.rawValue < step.rawValue ? Theme.success : item == step ? Theme.accent : Tokens.fill2)
                         .frame(width: item == step ? 22 : 8, height: 6)
                 }
             }
@@ -215,7 +215,7 @@ private struct OnboardingNavigator: View {
         .padding(EdgeInsets(top: 14, leading: 12, bottom: 16, trailing: 12))
         .frame(width: 252, alignment: .topLeading)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(hex: 0x303036, opacity: 0.62), in: .rect(cornerRadius: 18, style: .continuous))
+        .background(Tokens.raised, in: .rect(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.hairline))
     }
 
@@ -231,7 +231,7 @@ private struct OnboardingNavigator: View {
                     if !isDone && !isCurrent { Circle().strokeBorder(Theme.secondaryText, lineWidth: 1.5) }
                     Text(isDone ? "✓" : "\(item.rawValue + 1)")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(isDone ? Color(hex: 0x0B1A10) : isCurrent ? .white : Theme.secondaryText)
+                        .foregroundStyle(isDone ? Color(hex: 0x0B1A10) : isCurrent ? Tokens.text : Theme.secondaryText)
                 }
                 .frame(width: 22, height: 22)
                 VStack(alignment: .leading, spacing: 1) {

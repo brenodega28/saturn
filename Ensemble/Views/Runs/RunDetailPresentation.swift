@@ -117,9 +117,9 @@ struct StepGlyph: View {
         } else {
             Image(systemName: type?.runSymbol ?? "flag.checkered")
                 .font(.system(size: size * 0.45, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Tokens.text)
                 .frame(width: size, height: size)
-                .background(Color.white.opacity(0.14), in: .rect(cornerRadius: size * 0.3, style: .continuous))
+                .background(Tokens.fill2, in: .rect(cornerRadius: size * 0.3, style: .continuous))
                 .accessibilityHidden(true)
         }
     }

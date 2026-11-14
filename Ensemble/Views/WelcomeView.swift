@@ -13,7 +13,7 @@ struct WelcomeView: View {
             }
             .padding(8)
             .background(Theme.windowBackground, in: .rect(cornerRadius: 26, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.white.opacity(0.09)))
+            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Tokens.hair2))
             .shadow(color: .black.opacity(0.55), radius: 40, y: 30)
             .frame(maxWidth: 940)
             .padding(.horizontal, 24)
@@ -23,36 +23,58 @@ struct WelcomeView: View {
         .background(Backdrop())
     }
 
-    private var launcher: some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 14) {
-                AppMark(size: 96)
-                VStack(spacing: 4) {
-                    Text("Ensemble").font(.system(size: 26, weight: .bold)).kerning(-0.5)
-                    Text("Agents propose. Rails verify. You approve.").foregroundStyle(Theme.secondaryText)
-                }
-            }
-            .padding(.top, 30)
+    @AppStorage(Appearance.storageKey) private var appearance = Appearance.fallback
 
-            VStack(spacing: 8) {
-                LauncherButton(title: "Open Folder…", systemImage: "folder", shortcut: "⌘O", isPrimary: true) {
-                    model.isOpenPanelPresented = true
+    private var launcher: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 6) {
+                AppMark(size: 56)
+                Text("Ensemble").font(.system(size: 34, weight: .heavy).width(.expanded)).foregroundStyle(Tokens.text)
+                Text("Agentic development, done right. Agents propose, checks verify, you approve.")
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(Tokens.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            WelcomeStep(number: 1, title: "Claude CLI", isDone: model.environment?.claude.isOK == true) {
+                Text(claudeLine).font(.system(size: 12.5)).foregroundStyle(Tokens.text2).fixedSize(horizontal: false, vertical: true)
+            }
+            WelcomeStep(number: 2, title: "Appearance", isDone: true) {
+                Picker("Appearance", selection: $appearance) {
+                    ForEach(Appearance.allCases) { Text($0.title).tag($0) }
                 }
-                LauncherButton(title: "Open SSH Folder…", systemImage: "network", shortcut: "", isPrimary: false) {
-                    model.isRemoteFolderPresented = true
-                }
-                LauncherButton(title: "Clone Repository…", systemImage: "arrow.triangle.branch", shortcut: "⇧⌘O", isPrimary: false) {
-                    model.isClonePresented = true
-                }
-                LauncherButton(title: "New Project", systemImage: "plus.rectangle.on.folder", shortcut: "⌘N", isPrimary: false) {
-                    model.newProject()
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+            WelcomeStep(number: 3, title: "Add your first project", isDone: false) {
+                VStack(spacing: 8) {
+                    LauncherButton(title: "Folder on this Mac…", systemImage: "folder", shortcut: "⌘O", isPrimary: true) {
+                        model.isOpenPanelPresented = true
+                    }
+                    LauncherButton(title: "SSH host…", systemImage: "network", shortcut: "", isPrimary: false) {
+                        model.isRemoteFolderPresented = true
+                    }
+                    LauncherButton(title: "Clone a repository…", systemImage: "arrow.triangle.branch", shortcut: "⇧⌘O", isPrimary: false) {
+                        model.isClonePresented = true
+                    }
+                    LauncherButton(title: "New project", systemImage: "plus.rectangle.on.folder", shortcut: "⌘N", isPrimary: false) {
+                        model.newProject()
+                    }
                 }
             }
         }
-        .padding(EdgeInsets(top: 14, leading: 18, bottom: 22, trailing: 18))
-        .frame(width: 320)
+        .padding(EdgeInsets(top: 22, leading: 22, bottom: 22, trailing: 22))
+        .frame(width: 340)
         .frame(minHeight: 420, alignment: .top)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18, style: .continuous))
+        .background(Tokens.raised, in: .rect(cornerRadius: 18, style: .continuous))
+    }
+
+    private var claudeLine: String {
+        switch model.environment?.claude {
+        case .found(let path, let version): "Found claude \(version) at \((path.path as NSString).abbreviatingWithTildeInPath)"
+        case .broken(_, let message): message
+        case .missing, nil: "Not found yet. Install Claude Code, then reopen Ensemble."
+        }
     }
 
     private var recents: some View {
@@ -132,7 +154,7 @@ private struct RecentProjectRow: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(isHovered ? Color.white.opacity(0.06) : .clear, in: .rect(cornerRadius: 14, style: .continuous))
+            .background(isHovered ? Tokens.fill : .clear, in: .rect(cornerRadius: 14, style: .continuous))
             .contentShape(.rect(cornerRadius: 14))
         }
         .buttonStyle(.plain)
@@ -162,5 +184,33 @@ extension Date {
             return formatted(.dateTime.weekday(.wide))
         }
         return formatted(.dateTime.month(.abbreviated).day())
+    }
+}
+
+private struct WelcomeStep<Content: View>: View {
+    let number: Int
+    let title: String
+    let isDone: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle().fill(isDone ? Tokens.doneBackground : Tokens.fill)
+                if isDone {
+                    Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Tokens.done)
+                } else {
+                    Text("\(number)").font(.system(size: 11, weight: .bold)).foregroundStyle(Tokens.text2)
+                }
+            }
+            .frame(width: 22, height: 22)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Tokens.text)
+                content
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Step \(number): \(title)")
     }
 }

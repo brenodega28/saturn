@@ -167,6 +167,7 @@ public final class AgentRuntime {
         git: GitClient,
         now: Date = .now
     ) async throws -> AgentSession {
+        try RemoteProjectUnsupported.check(project, "Spawning agents")
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let task = task.trimmingCharacters(in: .whitespacesAndNewlines)
         guard providerMode != nil else { throw AgentError.providerNotChosen }
@@ -228,6 +229,7 @@ public final class AgentRuntime {
         spawnedBy spawner: Agent? = nil,
         now: Date = .now
     ) async throws -> [AgentSession] {
+        try RemoteProjectUnsupported.check(project, "Spawning agents")
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
         let role = kind.builtInRole
@@ -636,6 +638,7 @@ extension AgentRuntime {
     }
 
     public func createLeadAgent(in project: Project, taskId: Int64, now: Date = .now) throws -> AgentSession {
+        try RemoteProjectUnsupported.check(project, "The Lead")
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
         let role = AgentKind.lead.builtInRole

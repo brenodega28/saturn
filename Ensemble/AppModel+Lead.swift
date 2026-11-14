@@ -70,7 +70,7 @@ extension AppModel {
 
     func deleteAgentsOfClosedRequests() async {
         guard let git else { return }
-        for project in openProjects {
+        for project in openProjects where !project.isRemote {
             await leadChat.deleteAgentsOfClosedRequests(in: project, git: git)
         }
     }

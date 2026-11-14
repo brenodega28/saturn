@@ -335,6 +335,25 @@ public final class AppDatabase: Sendable {
                 t.add(column: "capability", .text)
             }
         }
+        migrator.registerMigration("v21-remote-projects") { db in
+            try db.create(table: "project_new") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull()
+                t.column("path", .text).notNull()
+                t.column("host", .text)
+                t.column("isOpen", .boolean).notNull().defaults(to: false)
+                t.column("createdAt", .datetime).notNull()
+                t.column("lastOpenedAt", .datetime).notNull().indexed()
+                t.column("settings", .text).notNull().defaults(to: "{}")
+            }
+            try db.execute(sql: """
+                INSERT INTO project_new (id, name, path, isOpen, createdAt, lastOpenedAt, settings)
+                SELECT id, name, path, isOpen, createdAt, lastOpenedAt, settings FROM project
+                """)
+            try db.drop(table: "project")
+            try db.rename(table: "project_new", to: "project")
+            try db.execute(sql: "CREATE UNIQUE INDEX project_location ON project (ifnull(host, ''), path)")
+        }
 
         return migrator
     }

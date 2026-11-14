@@ -139,6 +139,8 @@ final class AppModel {
     var isPalettePresented = false
     var isClonePresented = false
     var isOpenPanelPresented = false
+    var isRemoteFolderPresented = false
+    var remoteStatuses: [Int64: RemoteProjectStatus] = [:]
     var alert: AppAlert?
     var chatHighlight: ChatLink?
 
@@ -354,7 +356,7 @@ final class AppModel {
     }
 
     func config(for project: Project) -> ProjectConfig {
-        guard let id = project.id else { return ProjectConfig() }
+        guard let id = project.id, !project.isRemote else { return ProjectConfig() }
         if let config = configs[id] { return config }
         return ProjectConfigLoader.load(repository: project.url)
     }
@@ -366,6 +368,10 @@ final class AppModel {
 
     func reloadConfig(for project: Project) {
         guard let id = project.id else { return }
+        guard !project.isRemote else {
+            configs[id] = ProjectConfig()
+            return
+        }
         let config = ProjectConfigLoader.load(repository: project.url)
         configs[id] = config
         reportMigration(RoleMigration.takeNotices(for: project.url), in: project)
@@ -505,6 +511,7 @@ final class AppModel {
         guard let id = project.id else { return }
         perform("Couldn’t close \(project.name)") { try database.closeProject(id: id) }
         projectStates[id] = nil
+        remoteStatuses[id] = nil
         if let runner = appRunners[id] { Task { await runner.stop() } }
         reloadProjects()
         if selection == .project(id) {
@@ -525,6 +532,10 @@ final class AppModel {
     }
 
     func refresh(_ project: Project) async {
+        if project.isRemote {
+            await refreshRemote(project)
+            return
+        }
         guard let id = project.id, let git else { return }
         guard FileManager.default.fileExists(atPath: project.path) else {
             alert = AppAlert(title: "\(project.name) is missing", message: "\(project.path) no longer exists. It has been closed.")
@@ -540,6 +551,21 @@ final class AppModel {
             _ = try? CheckSetupNotice.postIfNeeded(for: project, config: config(for: project), database: database)
         } catch {
             alert = AppAlert(title: "Couldn’t read worktrees for \(project.name)", message: error.localizedDescription)
+        }
+    }
+
+    func refreshRemote(_ project: Project) async {
+        guard let id = project.id, let destination = project.host else { return }
+        configs[id] = ProjectConfig()
+        remoteStatuses[id, default: RemoteProjectStatus()].isConnecting = true
+        let host = remoteHost(destination)
+        do {
+            let info = try await host.probe()
+            let branch = try await host.currentBranch(in: project.path)
+            projectStates[id] = ProjectState(branch: branch)
+            remoteStatuses[id] = RemoteProjectStatus(info: info)
+        } catch {
+            remoteStatuses[id] = RemoteProjectStatus(info: remoteStatuses[id]?.info, error: error.localizedDescription)
         }
     }
 

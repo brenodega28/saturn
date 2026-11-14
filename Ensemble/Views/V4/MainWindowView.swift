@@ -11,17 +11,21 @@ struct MainWindowView: View {
             HStack(spacing: 8) {
                 ProjectSidebar()
                     .overlay { RunMenuDismissal() }
-                VStack(spacing: 8) {
-                    if let project = model.currentProject {
-                        RunBar(project: project)
-                            .zIndex(1)
+                if let project = model.currentProject, project.isRemote, model.mainScreen.isProjectScoped {
+                    RemoteProjectView(project: project)
+                } else {
+                    VStack(spacing: 8) {
+                        if let project = model.currentProject {
+                            RunBar(project: project)
+                                .zIndex(1)
+                        }
+                        HStack(spacing: 8) {
+                            MiddleColumn()
+                                .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                            LogColumn()
+                        }
+                        .overlay { RunMenuDismissal() }
                     }
-                    HStack(spacing: 8) {
-                        MiddleColumn()
-                            .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
-                        LogColumn()
-                    }
-                    .overlay { RunMenuDismissal() }
                 }
             }
             .padding(8)
@@ -62,5 +66,12 @@ private struct RunMenuDismissal: View {
                 .onTapGesture { model.isRunMenuOpen = false }
                 .accessibilityHidden(true)
         }
+    }
+}
+
+private extension MainScreen {
+    var isProjectScoped: Bool {
+        if case .tool(let tool) = self { return tool.projectTab != nil }
+        return true
     }
 }

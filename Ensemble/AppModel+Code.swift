@@ -17,6 +17,7 @@ struct CodeSource: Identifiable, Hashable {
 
 extension AppModel {
     func codeSources(for project: Project) -> [CodeSource] {
+        guard !project.isRemote else { return [] }
         let projectSource = CodeSource(
             id: CodeSource.projectID, title: "Project checkout", branch: state(for: project).branch,
             root: project.url, baseBranch: nil, agent: nil, role: nil

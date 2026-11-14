@@ -84,7 +84,7 @@ public final class GitHubPoller {
     }
 
     public static func isConfigured(_ project: Project) -> Bool {
-        guard let repository = project.settings.githubRepository, !repository.isEmpty else { return false }
+        guard !project.isRemote, let repository = project.settings.githubRepository, !repository.isEmpty else { return false }
         return !activeMappings(project).isEmpty
     }
 

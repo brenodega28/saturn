@@ -23,6 +23,9 @@ struct RootView: View {
             .sheet(isPresented: $model.isClonePresented) {
                 CloneRepositorySheet()
             }
+            .sheet(isPresented: $model.isRemoteFolderPresented) {
+                RemoteFolderSheet()
+            }
             .overlay {
                 if model.isPalettePresented {
                     CommandPalette()

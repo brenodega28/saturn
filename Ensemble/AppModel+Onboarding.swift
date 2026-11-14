@@ -3,7 +3,7 @@ import Foundation
 
 extension AppModel {
     func needsOnboarding(_ project: Project) -> Bool {
-        !hasConfig(project)
+        !project.isRemote && !hasConfig(project)
     }
 
     var onboardingProject: Project? {
@@ -12,7 +12,7 @@ extension AppModel {
     }
 
     func finishOnboarding(_ project: Project, plan: ProjectSetupPlan, name: String, createAgentsFile: Bool) {
-        guard let id = project.id else { return }
+        guard let id = project.id, !project.isRemote else { return }
         do {
             try plan.apply(to: project.url)
             if createAgentsFile, !AgentInstructions.status(repository: project.url).hasAgentsFile {

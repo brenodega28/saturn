@@ -10,7 +10,11 @@ struct ProjectSidebar: View {
         let _ = model.engine.runs
         let needsYouTaskIDs = model.needsYouTaskIDs()
         VStack(alignment: .leading, spacing: 10) {
-            Color.clear.frame(height: 20)
+            HStack {
+                Spacer()
+                AddProjectMenu()
+            }
+            .frame(height: 20)
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(model.openProjects) { project in
@@ -105,7 +109,7 @@ private struct ProjectGroup: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             header
-            if isOpen {
+            if isOpen, !project.isRemote {
                 tree
             }
         }
@@ -176,7 +180,7 @@ private struct ProjectGroup: View {
     }
 
     private var header: some View {
-        let location = "Local · \((project.path as NSString).abbreviatingWithTildeInPath)"
+        let location = project.isRemote ? "SSH · \(project.location)" : "Local · \((project.path as NSString).abbreviatingWithTildeInPath)"
         let attention = attentionColor
         return Button { model.expand(project) } label: {
             HStack(spacing: 8) {
@@ -185,7 +189,7 @@ private struct ProjectGroup: View {
                     .tracking(0.22)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                V4Icon(glyph: .laptop, size: 12, lineWidth: 2)
+                V4Icon(glyph: project.isRemote ? .server : .laptop, size: 12, lineWidth: 2)
                     .foregroundStyle(V4.secondary)
                     .help(location)
                     .accessibilityHidden(false)
@@ -202,7 +206,9 @@ private struct ProjectGroup: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button("Show All Chats") { model.showRequestPage(inProjectID: project.id ?? -1) }
-            Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
+            if !project.isRemote {
+                Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
+            }
             Divider()
             Button("Close Project") { model.close(project) }
         }
@@ -362,6 +368,32 @@ private struct RunRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Run \(title), \(status)")
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
+    }
+}
+
+private struct AddProjectMenu: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Menu {
+            Button("Open Folder…") { model.isOpenPanelPresented = true }
+            Button("Open SSH Folder…") { model.isRemoteFolderPresented = true }
+            Button("Clone Repository…") { model.isClonePresented = true }
+            Divider()
+            Button("New Project…") { model.newProject() }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(V4.secondary)
+                .frame(width: 22, height: 20)
+                .contentShape(.rect)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Add a project")
+        .accessibilityLabel("Add a project")
     }
 }
 

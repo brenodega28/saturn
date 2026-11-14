@@ -272,7 +272,8 @@ extension CommandRegistry {
         register(MenuCommand(id: "file.open", title: "Open…", menu: "File", section: 0, order: 2, shortcut: KeyboardShortcut("o")) {
             $0.model.isOpenPanelPresented = true
         })
-        register(MenuCommand(id: "file.clone", title: "Clone…", menu: "File", section: 0, order: 3) { $0.model.isClonePresented = true })
+        register(MenuCommand(id: "file.open-ssh", title: "Open SSH Folder…", menu: "File", section: 0, order: 3) { $0.model.isRemoteFolderPresented = true })
+        register(MenuCommand(id: "file.clone", title: "Clone…", menu: "File", section: 0, order: 4) { $0.model.isClonePresented = true })
         register(MenuCommand(id: "file.close-project", title: "Close Project", menu: "File", section: 1, order: 0, shortcut: KeyboardShortcut("w", modifiers: [.command, .shift]),
                              isEnabled: { $0.model.currentProject != nil }) { context in
             if let project = context.model.currentProject { context.model.close(project) }

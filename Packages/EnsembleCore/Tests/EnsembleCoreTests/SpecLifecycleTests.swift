@@ -68,6 +68,7 @@ final class SpecGateDriver: WorkflowDriver {
         #expect(url.path.hasPrefix(setup.harness.data.path))
         let first = try SpecDocument(markdown: String(contentsOf: url, encoding: .utf8))
         #expect(first.title == "Alpha and beta files" && first.status == .draft && first.owner == "Sam")
+        #expect(first.version == 1 && first.workers.isEmpty)
         #expect(first.acceptanceCriteria.map(\.text) == ["alpha.txt exists", "beta.txt exists"])
         #expect(try await mainCheckoutStatus(setup).isEmpty)
 
@@ -75,8 +76,11 @@ final class SpecGateDriver: WorkflowDriver {
         revised.title = "Alpha, beta and gamma"
         revised.owner = nil
         revised.acceptanceCriteria.append("gamma.txt exists")
+        revised.workers = [SpecWorker(role: "builder", name: "Claude Code 1")]
         _ = try await setup.driver.receive(.draftSpec(revised), from: leadAgent.id!)
         let second = try SpecDocument(markdown: String(contentsOf: url, encoding: .utf8))
+        #expect(second.version == 2)
+        #expect(second.workers == [SpecWorker(role: "builder", name: "Claude Code 1")])
         #expect(second.title == "Alpha, beta and gamma" && second.owner == "Sam" && second.created == first.created)
         #expect(second.acceptanceCriteria.count == 3)
         let drafts = SpecStore(paths: setup.harness.runtime.paths).drafts(projectId: setup.project.id!)

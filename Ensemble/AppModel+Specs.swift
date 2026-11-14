@@ -10,6 +10,7 @@ extension SpecStatus {
         case .approved: Theme.paused
         case .inProgress: Theme.warning
         case .done: Theme.successText
+        case .rejected: Theme.danger
         }
     }
 }

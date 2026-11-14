@@ -378,6 +378,13 @@ public final class AppDatabase: Sendable {
             }
         }
         migrator.registerMigration("v24-chat-requests", migrate: moveInboxIntoChats)
+        migrator.registerMigration("v25-chat-state") { db in
+            try db.alter(table: "task") { t in
+                t.add(column: "viewedAt", .datetime)
+                t.add(column: "leadModel", .text)
+                t.add(column: "leadEffort", .text)
+            }
+        }
 
         return migrator
     }

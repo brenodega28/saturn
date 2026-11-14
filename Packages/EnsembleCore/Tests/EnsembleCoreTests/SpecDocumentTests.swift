@@ -18,7 +18,7 @@ import Testing
     @Test func serializesTheTemplateAndRoundTrips() throws {
         let document = sample()
         let markdown = document.markdown
-        #expect(markdown.hasPrefix("---\ntitle: \"Refunds API: partial\"\nstatus: in-progress\nowner: Sam\nlinked_runs: [12, 14]\ncreated: 2026-10-28\n---\n"))
+        #expect(markdown.hasPrefix("---\ntitle: \"Refunds API: partial\"\nstatus: in-progress\nversion: 1\nowner: Sam\nlinked_runs: [12, 14]\ncreated: 2026-10-28\n---\n"))
         #expect(markdown.contains("## Summary\n\nLet support staff refund part of an order.\n\nRefunds never exceed what was captured.\n\n## Interfaces\n\n- POST /refunds {order_id, amount}\n- Refund.partial(amount:)"))
         #expect(markdown.contains("## Out of scope\n\n- Refunds in other currencies"))
         #expect(markdown.contains("## Acceptance criteria\n\n- [x] A refund over the captured total is rejected\n- [ ] Partial refunds show in the order history"))
@@ -28,6 +28,41 @@ import Testing
         #expect(parsed == document)
         #expect(parsed.markdown == markdown)
         #expect(parsed.checkedCount == 1)
+    }
+
+    @Test func workersAndTheVersionRoundTrip() throws {
+        var document = sample()
+        document.version = 3
+        document.workers = [SpecWorker(role: "backend", name: "Django Dev 1"), SpecWorker(role: "review", name: "Reviewer: strict")]
+
+        let markdown = document.markdown
+
+        #expect(markdown.contains("version: 3\nworkers:\n  - {role: backend, name: Django Dev 1}\n  - {role: review, name: \"Reviewer: strict\"}\n"))
+        let parsed = try SpecDocument(markdown: markdown)
+        #expect(parsed.version == 3)
+        #expect(parsed.workers == document.workers)
+        #expect(parsed.extraFrontMatter.isEmpty)
+    }
+
+    @Test func workersWrittenByHandAsNamesOrBlockMapsAreRead() throws {
+        let parsed = try SpecDocument(markdown: """
+            ---
+            title: Order export CSV
+            workers:
+              - React Dev
+              - role: backend
+                name: Django Dev 1
+            ---
+            """)
+        #expect(parsed.workers == [SpecWorker(role: "", name: "React Dev"), SpecWorker(role: "backend", name: "Django Dev 1")])
+        #expect(parsed.version == 1)
+        #expect(SpecStatus(lenient: "rejected") == .rejected)
+    }
+
+    @Test func aDraftRequestCarriesItsWorkers() throws {
+        let json = #"{"title": "CSV", "summary": "s", "acceptance_criteria": ["a"], "workers": [{"role": "frontend", "name": " React Dev "}, {"role": "x", "name": ""}]}"#
+        let request = try JSONDecoder().decode(SpecDraftRequest.self, from: Data(json.utf8))
+        #expect(request.workers == [SpecWorker(role: "frontend", name: "React Dev")])
     }
 
     @Test func mapsToThePlanSpec() {

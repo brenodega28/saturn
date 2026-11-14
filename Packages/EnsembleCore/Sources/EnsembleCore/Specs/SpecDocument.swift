@@ -6,6 +6,7 @@ public enum SpecStatus: String, Sendable, Hashable, Codable, CaseIterable {
     case approved
     case inProgress = "in-progress"
     case done
+    case rejected
 
     public init(lenient text: String) {
         let key = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -19,7 +20,28 @@ public enum SpecStatus: String, Sendable, Hashable, Codable, CaseIterable {
         case .approved: "Approved"
         case .inProgress: "In progress"
         case .done: "Done"
+        case .rejected: "Rejected"
         }
+    }
+}
+
+public struct SpecWorker: Sendable, Hashable, Codable {
+    public var role: String
+    public var name: String
+
+    public init(role: String, name: String) {
+        self.role = role
+        self.name = name
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case role, name
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.role = try container.decode(String.self, forKey: .role).trimmingCharacters(in: .whitespacesAndNewlines)
+        self.name = try container.decode(String.self, forKey: .name).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -58,6 +80,8 @@ public enum SpecDocumentError: Error, LocalizedError, Equatable {
 public struct SpecDocument: Sendable, Hashable {
     public var title: String
     public var status: SpecStatus
+    public var version: Int
+    public var workers: [SpecWorker]
     public var owner: String
     public var linkedRuns: [Int64]
     public var created: Date
@@ -71,12 +95,14 @@ public struct SpecDocument: Sendable, Hashable {
     public var extraFrontMatter: String
 
     public init(
-        title: String, status: SpecStatus = .draft, owner: String = "", linkedRuns: [Int64] = [], created: Date = .now,
+        title: String, status: SpecStatus = .draft, version: Int = 1, workers: [SpecWorker] = [], owner: String = "", linkedRuns: [Int64] = [], created: Date = .now,
         summary: String = "", interfaces: [String] = [], outOfScope: [String] = [], acceptanceCriteria: [SpecCriterion] = [],
         verification: String = "", preamble: String = "", extraSections: [SpecSection] = [], extraFrontMatter: String = ""
     ) {
         self.title = title
         self.status = status
+        self.version = max(1, version)
+        self.workers = workers
         self.owner = owner
         self.linkedRuns = linkedRuns
         self.created = Self.day(of: created)
@@ -104,7 +130,7 @@ public struct SpecDocument: Sendable, Hashable {
         }
     }
 
-    static let knownKeys: Set<String> = ["title", "status", "owner", "linked_runs", "created"]
+    static let knownKeys: Set<String> = ["title", "status", "version", "workers", "owner", "linked_runs", "created"]
 
     public init(markdown: String) throws {
         let (frontMatter, body) = Self.splitFrontMatter(markdown)
@@ -138,6 +164,8 @@ public struct SpecDocument: Sendable, Hashable {
         self.init(
             title: title,
             status: Self.string(fields["status"]).map(SpecStatus.init(lenient:)) ?? .draft,
+            version: Self.string(fields["version"]).flatMap { Int($0) } ?? 1,
+            workers: Self.workers(fields["workers"]),
             owner: Self.string(fields["owner"]) ?? "",
             linkedRuns: Self.runIDs(fields["linked_runs"]),
             created: Self.date(fields["created"]) ?? Self.day(of: .now),
@@ -156,10 +184,15 @@ public struct SpecDocument: Sendable, Hashable {
         var front = [
             "title: \(Self.yamlScalar(title))",
             "status: \(status.rawValue)",
+            "version: \(version)",
             "owner: \(Self.yamlScalar(owner))",
             "linked_runs: [\(linkedRuns.map(String.init).joined(separator: ", "))]",
             "created: \(Self.dayFormatter.string(from: created))",
         ]
+        if !workers.isEmpty {
+            let lines = ["workers:"] + workers.map { "  - {role: \(Self.yamlScalar($0.role)), name: \(Self.yamlScalar($0.name))}" }
+            front.insert(contentsOf: lines, at: 3)
+        }
         let extraFront = extraFrontMatter.trimmingCharacters(in: .newlines)
         if !extraFront.isEmpty { front.append(extraFront) }
 
@@ -288,6 +321,16 @@ public struct SpecDocument: Sendable, Hashable {
         case let date as Date: dayFormatter.string(from: date)
         case let flag as Bool: String(flag)
         default: nil
+        }
+    }
+
+    private static func workers(_ value: Any?) -> [SpecWorker] {
+        guard let items = value as? [Any] else { return [] }
+        return items.compactMap { item in
+            if let map = item as? [String: Any], let name = string(map["name"])?.nilIfEmpty {
+                return SpecWorker(role: string(map["role"]) ?? "", name: name)
+            }
+            return string(item)?.nilIfEmpty.map { SpecWorker(role: "", name: $0) }
         }
     }
 

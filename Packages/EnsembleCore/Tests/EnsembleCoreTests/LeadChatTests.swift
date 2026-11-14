@@ -59,6 +59,22 @@ import Testing
         ).arguments
     }
 
+    @Test func theLeadModelChosenForAChatIsUsedOnTheNextTurn() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let task = try await chat.createRequest("CHAT hi", in: setup.project)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+
+        try chat.setLead(model: "sonnet", effort: .low, for: task)
+        try await chat.send("CHAT again", to: try #require(try setup.harness.database.task(id: task.id!)), in: setup.project)
+        try await waitUntil { messages(setup, task).filter { $0.kind == .lead }.count == 2 }
+
+        let agent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
+        #expect(agent.model == "sonnet")
+        #expect(try setup.harness.database.task(id: task.id!)?.leadEffort == .low)
+        #expect(setup.harness.launches().last?.contains("sonnet") == true)
+    }
+
     @Test func theChatLeadMayFetchAndSearchTheWebAlongsideItsHandoffTools() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }

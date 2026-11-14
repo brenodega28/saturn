@@ -70,6 +70,7 @@ final class AppModel {
     let locator: ToolLocator
     let runner: CommandRunner
     let requests: ChatRequestFeed
+    let stallReporter: StallReporter
     let requestNotifier = RequestNotifier()
     let chatNotifications: ChatNotificationFeed
     let pendingPermissions: PendingPermissionFeed
@@ -154,6 +155,7 @@ final class AppModel {
         self.engine = RunEngine(database: database, driver: driver)
         self.leadChat = LeadChat(runtime: agents, engine: engine, driver: driver)
         self.requests = ChatRequestFeed(database: database)
+        self.stallReporter = StallReporter(database: database)
         self.chatNotifications = ChatNotificationFeed(database: database)
         self.pendingPermissions = PendingPermissionFeed(database: database)
         self.idleCleanup = IdleCleanupScheduler(runtime: agents)
@@ -259,6 +261,7 @@ final class AppModel {
         await deleteAgentsOfClosedRequests()
         startRequests()
         startBudgetMonitor()
+        startStallWatch()
         startMemoryUpdates()
         idleCleanup.start()
         await refreshAllProjects()

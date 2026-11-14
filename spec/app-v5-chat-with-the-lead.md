@@ -135,7 +135,7 @@ Each phase ends with the app building, tests passing and the app usable.
     - A request with no chat (an agent spawned by hand, a setup notice) goes to the project's most recent open chat, or starts a new chat titled after the request.
     - Migration copies open inbox items into requests, then drops the `inboxItem` table. Delete the Inbox UI.
 3. **Remove the log column, status bar and top run bar (done).** Move the app-runner state that `RunBar` reads into a model the chat card can use, with a port per worktree and captured output per process.
-4. **Core state for v5 (no UI).**
+4. **Core state for v5 (done).**
     - Rename `ProjectTask` to `Chat` across the code.
     - Chats can be renamed, marked done, dropped, reopened (worktrees come back if they still exist) and deleted.
     - `ChatStage`, worked out from the chat, its runs, its open requests and the current workflow step:
@@ -145,11 +145,12 @@ Each phase ends with the app building, tests passing and the app usable.
         - In review: a review step is active, or the review is waiting for you.
         - Done: merged or closed.
         - Closed chats also record Done or Dropped.
-    - Worker statuses are separate from the stage: working, waiting on you, queued, idle, done, stopped, stuck. A worker with no output for the step's limit (default 10 min) is stuck and the Lead is told.
+    - Worker statuses are separate from the stage: working, waiting on you, queued, idle, done, stopped, stuck. A worker with no output for the step's limit (default 10 min, or the step's timeout if shorter) is stuck, and a "stuck" request is posted in its chat, so you are told and the chat shows as Stuck.
     - For each chat: its workers with a status line each, lines added and removed across its branches, a checks summary per check (format, lint, typecheck, tests, build) and round, and its worktrees.
     - An "unread" marker per chat that clears when you open it. The needs-you count clears when you answer, not when you look.
     - Spec front matter gains `workers:` (role and display name per worker, in start order) and a version number. The parser, the Lead's prompt and spec validation handle it. Saving an edited spec makes a new version; the Lead reads your edits before starting anyone. Rejecting a spec records it, and your next message is the reason.
-    - The Lead's model and effort (Low, Medium, High) per chat, and a queue for messages sent while the Lead works.
+    - The Lead's model and effort (Low, Medium, High) per chat. The model is applied to the Lead's next turn; the effort is stored and applied once the Claude CLI flag for it is confirmed. Messages sent while the Lead works already queue on its session.
+    - Chats with no stage of their own (no run, no request, Lead quiet) are Idle.
 5. **Theme and avatars.**
     - Replace `V4Style` with the tokens above, each with a dark and a light value.
     - Remove the forced `.preferredColorScheme(.dark)`. Appearance (Dark, Light, System) lives in Settings › General.

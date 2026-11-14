@@ -19,7 +19,7 @@ public final class LeadChat {
     public let runtime: AgentRuntime
     public let engine: RunEngine
     public let driver: AgentWorkflowDriver
-    private var database: AppDatabase { runtime.database }
+    var database: AppDatabase { runtime.database }
 
     public init(runtime: AgentRuntime, engine: RunEngine, driver: AgentWorkflowDriver) {
         self.runtime = runtime
@@ -173,7 +173,9 @@ public final class LeadChat {
     private func leadSession(for task: Chat, in project: Project) throws -> AgentSession {
         if let session = leadSession(for: task) { return session }
         guard let taskId = task.id else { throw AgentError.emptyTask }
-        return try runtime.createLeadAgent(in: project, taskId: taskId)
+        let session = try runtime.createLeadAgent(in: project, taskId: taskId)
+        if let model = task.leadModel { session.setModel(model) }
+        return session
     }
 
     func statusNote(taskId: Int64) throws -> String? {

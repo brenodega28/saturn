@@ -33,6 +33,7 @@ public final class AgentSession: Identifiable {
     public private(set) var queuedTurns: [AgentTurn] = []
     public private(set) var waitingTurn: AgentTurn?
     public private(set) var apiRetry: APIRetry?
+    public private(set) var lastOutputAt: Date?
     @ObservationIgnored private var deferredTurn: AgentTurn?
     @ObservationIgnored private var currentTurn: AgentTurn?
     @ObservationIgnored private var apiErrorInProcess: ClaudeAPIError?
@@ -133,6 +134,12 @@ public final class AgentSession: Identifiable {
 
     public func pause() {
         requestStop(.paused)
+    }
+
+    public func setModel(_ model: String) {
+        guard agent.model != model else { return }
+        agent.model = model
+        persist()
     }
 
     public func stop() {
@@ -403,6 +410,7 @@ public final class AgentSession: Identifiable {
             runtime.debugTrace?.launched(launch, turn: turn, agent: agent)
             #endif
             agent.status = .working
+            lastOutputAt = .now
             agent.processID = handle.processIdentifier
             agent.lastError = nil
             persist()
@@ -427,6 +435,7 @@ public final class AgentSession: Identifiable {
             #endif
             let events = ClaudeEvent.parse(line: line)
             guard !events.isEmpty else { return }
+            lastOutputAt = .now
             if !events.allSatisfy(\.isPartial) {
                 log.append(line)
             }

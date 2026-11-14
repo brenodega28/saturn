@@ -108,6 +108,32 @@ extension AppModel {
         try database.checkProjectBudget(projectId: id)
     }
 
+    func startStallWatch(interval: Duration = .seconds(60)) {
+        Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard let self else { return }
+                reportStalledWorkers()
+            }
+        }
+    }
+
+    func reportStalledWorkers(now: Date = .now) {
+        var stalled: [StalledWorker] = []
+        for project in openProjects {
+            for session in agentSessions(in: project) where session.agent.kind != .lead {
+                guard let last = session.lastOutputAt, session.isRunning else { continue }
+                let step = session.agent.runId.flatMap { liveRun(id: $0) }.flatMap { run in runWorkflow(run)?.step(run.currentStep ?? "") }
+                stalled.append(StalledWorker(agent: session.agent, lastOutputAt: last, stallMinutes: WorkerState.stallMinutes(for: step)))
+            }
+        }
+        do {
+            try stallReporter.report(stalled, now: now)
+        } catch {
+            alert = AppAlert(title: "Couldn’t report a stuck worker", message: error.localizedDescription)
+        }
+    }
+
     func startBudgetMonitor() {
         checkBudgets()
         withObservationTracking {

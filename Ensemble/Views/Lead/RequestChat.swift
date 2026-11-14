@@ -17,6 +17,7 @@ struct RequestChat: View {
         let isThinking = session.map { $0.isRunning || $0.isQueued } ?? false
         let working = model.workingSessions(for: task)
         thread(isThinking: isThinking, session: session, working: working)
+            .onChange(of: data?.thread.items.count, initial: true) { model.markViewed(task) }
     }
 
     private func thread(isThinking: Bool, session: AgentSession?, working: [AgentSession]) -> some View {

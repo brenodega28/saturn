@@ -198,11 +198,25 @@ public struct SpawnContext: Sendable, Hashable {
 
 public struct DiffInfo: Sendable, Hashable, Codable {
     public var paths: [String]
-    public var lines: Int
+    public var added: Int
+    public var deleted: Int
 
-    public init(paths: [String] = [], lines: Int = 0) {
+    public var lines: Int {
+        get { added + deleted }
+        set {
+            added = newValue
+            deleted = 0
+        }
+    }
+
+    public init(paths: [String] = [], added: Int = 0, deleted: Int = 0) {
         self.paths = paths
-        self.lines = lines
+        self.added = added
+        self.deleted = deleted
+    }
+
+    public init(paths: [String] = [], lines: Int) {
+        self.init(paths: paths, added: lines, deleted: 0)
     }
 }
 

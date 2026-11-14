@@ -106,6 +106,11 @@ extension AppModel {
         requestPageProjectIDs.remove(id)
     }
 
+    func markViewed(_ chat: Chat) {
+        guard let id = chat.id else { return }
+        try? database.markViewed(chatId: id)
+    }
+
     func showRequestPage(inProjectID id: Int64) {
         runDetailIDs[id] = nil
         tabs[id] = .lead

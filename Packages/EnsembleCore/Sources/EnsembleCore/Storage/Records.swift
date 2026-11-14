@@ -58,6 +58,12 @@ public enum ChatStatus: String, Codable, Sendable, CaseIterable {
     case dismissed
 }
 
+public enum LeadEffort: String, Codable, Sendable, CaseIterable {
+    case low
+    case medium
+    case high
+}
+
 public enum RequestCloseReason: String, Codable, Sendable, CaseIterable {
     case done
     case dropped
@@ -83,14 +89,21 @@ public struct Chat: Codable, Sendable, Hashable, Identifiable, FetchableRecord, 
     public var labels: [String]
     public var closedAt: Date?
     public var closeReason: RequestCloseReason?
+    public var viewedAt: Date?
+    public var leadModel: String?
+    public var leadEffort: LeadEffort?
     public var createdAt: Date
     public var updatedAt: Date
 
     public init(
         id: Int64? = nil, projectId: Int64, title: String, body: String, source: ChatSource,
         workflow: String? = nil, status: ChatStatus, labels: [String] = [], closedAt: Date? = nil, closeReason: RequestCloseReason? = nil,
+        viewedAt: Date? = nil, leadModel: String? = nil, leadEffort: LeadEffort? = nil,
         createdAt: Date, updatedAt: Date
     ) {
+        self.viewedAt = viewedAt
+        self.leadModel = leadModel
+        self.leadEffort = leadEffort
         self.closedAt = closedAt
         self.closeReason = closeReason
         self.labels = labels

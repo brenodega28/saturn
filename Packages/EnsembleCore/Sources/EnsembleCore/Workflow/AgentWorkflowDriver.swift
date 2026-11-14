@@ -560,18 +560,20 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
               let builders = try? runtime.runSessions(runId: runId, projectId: run.projectId).filter({ !$0.agent.readOnly })
         else { return DiffInfo() }
         var paths: Set<String> = []
-        var lines = 0
+        var added = 0
+        var deleted = 0
         for session in builders {
             guard let worktree = session.agent.worktreeURL, let base = session.agent.baseBranch else { continue }
             guard let output = try? await git.run(["diff", "--numstat", base], in: worktree) else { continue }
             for row in output.split(separator: "\n") {
                 let columns = row.split(separator: "\t", maxSplits: 2).map(String.init)
                 guard columns.count == 3 else { continue }
-                lines += (Int(columns[0]) ?? 0) + (Int(columns[1]) ?? 0)
+                added += Int(columns[0]) ?? 0
+                deleted += Int(columns[1]) ?? 0
                 paths.insert(columns[2])
             }
         }
-        return DiffInfo(paths: paths.sorted(), lines: lines)
+        return DiffInfo(paths: paths.sorted(), added: added, deleted: deleted)
     }
 
     public func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult {

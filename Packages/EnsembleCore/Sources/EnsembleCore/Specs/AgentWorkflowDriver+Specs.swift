@@ -26,9 +26,12 @@ extension AgentWorkflowDriver {
                     throw HandoffError.notAllowed("A run for this request is going and its spec is committed on the run branch. Use message_agent to change the work instead.")
                 }
                 document = existing
+                document.version = existing.version + 1
+                if existing.status == .rejected { document.status = .draft }
             }
         }
         document.title = request.title
+        document.workers = request.workers
         if let owner = request.owner { document.owner = owner }
         document.summary = request.summary
         document.interfaces = request.interfaces

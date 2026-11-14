@@ -204,11 +204,13 @@ public struct SpecDraftRequest: Sendable, Hashable, Codable {
     public var outOfScope: [String]
     public var acceptanceCriteria: [String]
     public var verification: String
+    public var workers: [SpecWorker]
 
     public init(
         title: String, owner: String? = nil, summary: String = "", interfaces: [String] = [], outOfScope: [String] = [],
-        acceptanceCriteria: [String] = [], verification: String = ""
+        acceptanceCriteria: [String] = [], verification: String = "", workers: [SpecWorker] = []
     ) {
+        self.workers = workers
         self.title = title
         self.owner = owner
         self.summary = summary
@@ -219,7 +221,7 @@ public struct SpecDraftRequest: Sendable, Hashable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case title, owner, summary, interfaces, verification
+        case title, owner, summary, interfaces, verification, workers
         case outOfScope = "out_of_scope"
         case acceptanceCriteria = "acceptance_criteria"
     }
@@ -236,6 +238,7 @@ public struct SpecDraftRequest: Sendable, Hashable, Codable {
         self.outOfScope = clean(try container.decodeIfPresent([String].self, forKey: .outOfScope))
         self.acceptanceCriteria = clean(try container.decodeIfPresent([String].self, forKey: .acceptanceCriteria))
         self.verification = try container.decodeIfPresent(String.self, forKey: .verification)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.workers = (try container.decodeIfPresent([SpecWorker].self, forKey: .workers) ?? []).filter { !$0.name.isEmpty }
     }
 }
 
@@ -465,7 +468,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .readChat:
             "Read an Ensemble request chat from any project: its messages, runs, run step history and agent transcripts. A link ensemble://chat/<request_id>?message=<message_id> maps to request_id and message_id; call this tool whenever a message contains such a link. Start with the overview section, then page with offset and limit or pull the messages, run or transcript section."
         case .draftSpec:
-            "Create or replace this request’s spec draft: a Markdown file with a summary, interfaces, out of scope, checkable acceptance criteria and how to verify the whole change. The user can open and edit it from the chat, and that file is the source of truth: when the user edited it, you get the current text, so keep their edits and send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it."
+            "Create or replace this request’s spec draft: a Markdown file with a summary, interfaces, out of scope, checkable acceptance criteria, how to verify the whole change, and the workers you will start once it is approved, in start order. The user can open and edit it from the chat, and that file is the source of truth: when the user edited it, you get the current text, so keep their edits and send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it."
         }
     }
 
@@ -595,7 +598,11 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "out_of_scope": array(string("Something this work deliberately doesn't do")),
                 "acceptance_criteria": array(string("A checkable statement that is true when the work is done")),
                 "verification": string("How to verify the whole change end to end"),
-            ], required: ["title", "summary", "acceptance_criteria"])
+                "workers": array(object([
+                    "role": string("The role id from .ensemble/roles that does this part"),
+                    "name": string("The worker's display name, such as Django Dev 1"),
+                ], required: ["role", "name"])),
+            ], required: ["title", "summary", "acceptance_criteria", "workers"])
         }
     }
 

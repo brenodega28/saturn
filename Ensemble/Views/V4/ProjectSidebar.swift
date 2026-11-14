@@ -54,6 +54,13 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
         ("", [.settings]),
     ]
 
+    static let sshGroups: [(name: String, sections: [SidebarSection])] = [
+        ("", [.chat]),
+        ("Crew", [.workflows]),
+        ("Review", [.source]),
+        ("", [.settings]),
+    ]
+
     var glyph: V4Glyph {
         switch self {
         case .chat: .chat
@@ -109,7 +116,7 @@ private struct ProjectGroup: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             header
-            if isOpen, !project.isRemote {
+            if isOpen {
                 tree
             }
         }
@@ -120,7 +127,7 @@ private struct ProjectGroup: View {
     private var tree: some View {
         let screen = model.mainScreen
         return VStack(alignment: .leading, spacing: 1) {
-            ForEach(SidebarSection.groups, id: \.name) { group in
+            ForEach(Array((project.isRemote ? SidebarSection.sshGroups : SidebarSection.groups).enumerated()), id: \.offset) { _, group in
                 if !group.name.isEmpty {
                     Text(group.name)
                         .font(.system(size: 10.5, weight: .semibold))
@@ -129,10 +136,13 @@ private struct ProjectGroup: View {
                         .accessibilityAddTraits(.isHeader)
                 }
                 ForEach(group.sections) { section in
-                    SectionRow(section: section, badge: badge(for: section), isHighlighted: section.isHighlighted(on: screen), help: help(for: section)) {
+                    SectionRow(
+                        section: section, title: project.isRemote && section == .chat ? "Overview" : section.rawValue,
+                        badge: badge(for: section), isHighlighted: section.isHighlighted(on: screen), help: help(for: section)
+                    ) {
                         activate(section)
                     }
-                    if section == .chat {
+                    if section == .chat, !project.isRemote {
                         ForEach(LeadRequest.partition(model.leadRequests(in: project)).open) { request in
                             RequestRow(request: request, project: project, needsYouTaskIDs: needsYouTaskIDs)
                         }
@@ -151,13 +161,16 @@ private struct ProjectGroup: View {
     private func activate(_ section: SidebarSection) {
         if let tool = section.tool {
             model.open(tool)
+        } else if project.isRemote {
+            model.expand(project)
         } else {
             model.startNewChat(in: project)
         }
     }
 
     private func help(for section: SidebarSection) -> String {
-        section == .chat ? "Start a new chat with the lead in \(project.name)" : section.tool?.title ?? section.rawValue
+        if section == .chat, project.isRemote { return "\(project.name) on \(project.location)" }
+        return section == .chat ? "Start a new chat with the lead in \(project.name)" : section.tool?.title ?? section.rawValue
     }
 
     private func badge(for section: SidebarSection) -> (count: Int, color: Color)? {
@@ -226,6 +239,7 @@ private struct ProjectGroup: View {
 
 private struct SectionRow: View {
     let section: SidebarSection
+    let title: String
     let badge: (count: Int, color: Color)?
     let isHighlighted: Bool
     let help: String
@@ -237,7 +251,7 @@ private struct SectionRow: View {
             HStack(spacing: 9) {
                 V4Icon(glyph: section.glyph, size: 15, lineWidth: 1.8)
                     .foregroundStyle(isHighlighted ? Color.white : V4.secondary)
-                Text(section.rawValue)
+                Text(title)
                     .font(.system(size: 13, weight: isHighlighted ? .semibold : .regular))
                     .foregroundStyle(isHighlighted ? Color.white : V4.label.opacity(0.85))
                     .lineLimit(1)

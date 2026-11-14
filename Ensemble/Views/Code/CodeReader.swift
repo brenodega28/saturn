@@ -35,6 +35,8 @@ struct CodeReader: View {
                             unreadable("File too large", "\(bytes.formatted(.byteCount(style: .file))) is over the \(CodeWorkspace.maxDocumentBytes.formatted(.byteCount(style: .file))) reader limit.")
                         case .missing:
                             unreadable("File not found", "It may have been deleted or moved since the list was loaded.")
+                        case .loading:
+                            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         if proxy.size.width >= 640, !symbols.isEmpty, markdownMode != .rendered {
                             Divider().overlay(Color.white.opacity(0.05))

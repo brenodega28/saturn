@@ -145,7 +145,7 @@ struct PermissionsSettingsView: View {
 
     private func save() {
         do {
-            try ProjectConfigLoader.write(draft, repository: project.url)
+            try ProjectConfigLoader.write(draft, repository: project.filesRoot)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

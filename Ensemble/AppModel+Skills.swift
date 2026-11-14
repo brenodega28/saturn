@@ -16,17 +16,22 @@ extension AppModel {
 
     func loadSkillPlugins(for project: Project) async throws {
         guard let id = project.id else { return }
+        guard !project.isRemote else {
+            skillPlugins[id] = []
+            return
+        }
         skillPlugins[id] = try await skillPluginInstaller().projectPlugins(in: project.url)
     }
 
     func installSkillPlugin(_ plugin: String, from source: String, in project: Project) async throws -> SkillPlugin {
+        try RemoteProjectUnsupported.check(project, "Installing skill plugins")
         let installed = try await skillPluginInstaller().install(plugin: plugin, from: source, in: project.url)
         try await loadSkillPlugins(for: project)
         return installed
     }
 
     func hasUncommittedSkillSettings(in project: Project) async -> Bool {
-        guard let git else { return false }
+        guard let git = git(for: project) else { return false }
         let status = try? await git.run(["status", "--porcelain", "--", SkillPluginInstaller.settingsPath], in: project.url)
         return !(status ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }

@@ -16,9 +16,11 @@ public struct GitClient: Sendable {
         transport = .ssh(client)
     }
 
-    public var isRemote: Bool {
-        if case .ssh = transport { return true }
-        return false
+    public var isRemote: Bool { sshClient != nil }
+
+    public var sshClient: SSHClient? {
+        if case .ssh(let client) = transport { return client }
+        return nil
     }
 
     public func execute(_ arguments: [String], in directory: URL? = nil) async throws -> CommandResult {

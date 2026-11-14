@@ -27,7 +27,7 @@ struct WorkspacesSettingsView: View {
     }
 
     private func runCommandCard(_ settings: ProjectSettings) -> some View {
-        let detected = RunCommandDetector.detect(in: project.url)
+        let detected = RunCommandDetector.detect(in: project.filesRoot)
         let isDirty = runCommandDraft != settings.runCommand
         let override = settings.runCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         return VStack(alignment: .leading, spacing: 12) {

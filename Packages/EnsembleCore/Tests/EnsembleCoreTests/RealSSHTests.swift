@@ -51,4 +51,20 @@ struct RealSSHTests {
         #expect(try await !manager.list().contains { $0.agent == agent })
         #expect(try await !SSHFileSystem(client: client).fileExists(worktree.path))
     }
+
+    @Test func readsAndSearchesCodeOnARealHost() async throws {
+        let destination = try #require(environment["ENSEMBLE_REAL_SSH_HOST"])
+        let repository = try #require(environment["ENSEMBLE_REAL_SSH_REPO"])
+        let executable = environment["ENSEMBLE_REAL_SSH_EXECUTABLE"].map { URL(fileURLWithPath: $0) } ?? SSHClient.defaultExecutable
+        let workspace = CodeWorkspace(root: URL(fileURLWithPath: repository, isDirectory: true), baseBranch: nil, git: GitClient(ssh: SSHClient(destination: destination, executable: executable)))
+
+        let snapshot = try await workspace.snapshot()
+        let file = try #require(snapshot.files.first { $0.hasSuffix(".md") || $0.hasSuffix(".ts") || $0.hasSuffix(".json") })
+        guard case .text(let lines) = await workspace.loadDocument(file), let word = lines.joined(separator: " ").split(separator: " ").first(where: { $0.count >= 4 && $0.allSatisfy(\.isLetter) }) else {
+            Issue.record("No readable word in \(file)")
+            return
+        }
+        let hits = await workspace.search(String(word), in: snapshot.files)
+        #expect(hits.contains { $0.path == file })
+    }
 }

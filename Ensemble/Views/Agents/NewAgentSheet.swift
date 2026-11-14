@@ -49,7 +49,7 @@ struct NewAgentSheet: View {
     }
 
     private func skillsField() -> some View {
-        let installed = SkillLibrary.skills(in: project.url, pluginSkills: model.pluginSkills(for: project))
+        let installed = SkillLibrary.skills(in: project.filesRoot, pluginSkills: model.pluginSkills(for: project))
         let names = Set(installed.map(\.name))
         return VStack(alignment: .leading, spacing: 8) {
             Text("Skills").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)

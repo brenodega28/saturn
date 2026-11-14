@@ -5,6 +5,8 @@ struct RemoteProjectStatus: Equatable {
     var info: RemoteHostInfo?
     var error: String?
     var isConnecting = false
+    var filesPulledAt: Date?
+    var syncError: String?
 }
 
 extension AppModel {
@@ -15,6 +17,81 @@ extension AppModel {
     func remoteWorktreeManager(for project: Project, destination: String) async -> WorktreeManager {
         let client = SSHClient(destination: destination, runner: runner)
         return await WorktreeManager.make(repository: project.url, git: GitClient(ssh: client), fileSystem: SSHFileSystem(client: client))
+    }
+
+    func git(for project: Project) -> GitClient? {
+        guard let destination = project.host else { return git }
+        return GitClient(ssh: SSHClient(destination: destination, runner: runner))
+    }
+
+    func remoteMirror(for project: Project) -> RemoteMirror? {
+        guard let id = project.id, let destination = project.host else { return nil }
+        let location = RemoteMirror.location(forProject: id)
+        return RemoteMirror(
+            directory: location.directory, manifestFile: location.manifest,
+            repository: project.path, client: SSHClient(destination: destination, runner: runner)
+        )
+    }
+
+    func pullRemoteFiles(_ project: Project) async throws {
+        guard let mirror = remoteMirror(for: project) else { return }
+        try await exclusively(project) {
+            try await self.pushRemoteFiles(project, mirror: mirror)
+            try await mirror.pull()
+            self.reloadConfig(for: project)
+        }
+    }
+
+    func pullAllRemoteFiles() async {
+        for project in openProjects where project.isRemote {
+            try? await pullRemoteFiles(project)
+        }
+    }
+
+    func syncRemoteFiles(_ project: Project) async throws {
+        guard let mirror = remoteMirror(for: project) else { return }
+        try await exclusively(project) {
+            try await self.pushRemoteFiles(project, mirror: mirror)
+        }
+    }
+
+    private func exclusively(_ project: Project, _ work: @escaping @MainActor () async throws -> Void) async throws {
+        guard let id = project.id else { return }
+        while let running = remoteFileSyncs[id] {
+            _ = await running.result
+        }
+        let task = Task { try await work() }
+        remoteFileSyncs[id] = task
+        defer { remoteFileSyncs[id] = nil }
+        try await task.value
+    }
+
+    private func pushRemoteFiles(_ project: Project, mirror: RemoteMirror) async throws {
+        do {
+            let pushed = try await mirror.push()
+            if !pushed.isEmpty { reloadConfig(for: project) }
+        } catch let conflict as RemoteMirrorConflict {
+            alert = AppAlert(title: "\(project.name) changed on \(project.host.map(SSHDestination.displayName) ?? "the host")", message: conflict.localizedDescription)
+            try await mirror.pull()
+            reloadConfig(for: project)
+        }
+    }
+
+    func startRemoteFileSync() {
+        Task { [weak self] in
+            while let self, !Task.isCancelled {
+                for project in self.openProjects where project.isRemote && self.remoteStatus(for: project).filesPulledAt != nil {
+                    guard let id = project.id else { continue }
+                    do {
+                        try await self.syncRemoteFiles(project)
+                        if self.remoteStatuses[id]?.syncError != nil { self.remoteStatuses[id]?.syncError = nil }
+                    } catch {
+                        self.remoteStatuses[id]?.syncError = "Couldn’t save changes to the host: \(error.localizedDescription)"
+                    }
+                }
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
     }
 
     func remoteStatus(for project: Project) -> RemoteProjectStatus {

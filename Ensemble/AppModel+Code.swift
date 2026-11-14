@@ -17,7 +17,6 @@ struct CodeSource: Identifiable, Hashable {
 
 extension AppModel {
     func codeSources(for project: Project) -> [CodeSource] {
-        guard !project.isRemote else { return [] }
         let projectSource = CodeSource(
             id: CodeSource.projectID, title: "Project checkout", branch: state(for: project).branch,
             root: project.url, baseBranch: nil, agent: nil, role: nil
@@ -37,8 +36,8 @@ extension AppModel {
         return [projectSource] + agentSources
     }
 
-    func codeWorkspace(for source: CodeSource) -> CodeWorkspace? {
-        git.map { CodeWorkspace(root: source.root, baseBranch: source.baseBranch, git: $0) }
+    func codeWorkspace(for source: CodeSource, in project: Project) -> CodeWorkspace? {
+        git(for: project).map { CodeWorkspace(root: source.root, baseBranch: source.baseBranch, git: $0) }
     }
 
     func codePins(for source: CodeSource) -> [Pin] {

@@ -16,7 +16,7 @@ The engine currently assumes a local folder everywhere (`Process` with a local c
 
 1. **Connect and browse (done).** SSH host input, folder navigator, remote project record, and the remote command layer. SSH projects open, appear in the sidebar and recents with their host, and show the host, path, branch and tool check (git and claude on the host). Agents, worktrees, checks, the code browser and settings are gated with a notice.
 2. **Remote git and worktrees (done).** `GitClient` and `WorktreeManager` run through a command executor (local `Process` or `ssh`), so recovery, worktree create/remove and branch state work on the host.
-3. **Remote files.** A project file system interface (local `FileManager` or SSH) for `.ensemble/` config, specs, memory, hooks and the code browser.
+3. **Remote files (done).** Ensemble's own project files live in a local mirror kept in sync with the host; the code browser reads the host directly. Agent memory and hooks move with agents in phase 4.
 4. **Remote agents.** `claude` runs on the host through `ssh -T` with its stream-json stdin/stdout piped back. The Ensemble MCP endpoint is reached through a reverse tunnel (`ssh -R`). The host keeps its own Claude Code login.
 5. **Remote checks and run-the-app.** Checks and the dev server run on the host. The detected port is forwarded to the Mac (`ssh -L`) so the localhost link works.
 
@@ -50,6 +50,25 @@ The engine currently assumes a local folder everywhere (`Process` with a local c
 - [x] Removing a worktree with its branch removes both on the host (checked on `orb`)
 - [x] The SSH project view lists the host's worktrees
 - [x] Tests run the real `WorktreeManager` through a fake `ssh`: create, list, remove, prune, orphan cleanup, restore, the exclude entry, the host's branch prefix, file round trips with quotes, `$` and backticks, and textual path normalisation. An opt-in test (`ENSEMBLE_REAL_SSH_HOST`, `ENSEMBLE_REAL_SSH_REPO`) does the same against a real host
+- [x] EnsembleCore tests pass and the app builds with xcodebuild
+
+## Interfaces (phase 3)
+
+- EnsembleCore `RemoteMirror` (one per SSH project, under `<app data>/remote/<project id>/files` with a `manifest.json` of SHA-256 hashes beside it). `pull()` copies, in one `tar | base64` round trip, `.ensemble/`, `.claude/skills`, `.claude/settings.json` and the top-level files up to 256 KB (so the setup scanner and run-command detection see `package.json`, `Makefile` and the like). A second round trip fetches the spec folder and any doc paths named in `.ensemble/`. The pull is staged and swapped in whole
+- `pendingChanges()` compares the mirror with the manifest; `push()` checks each changed path's hash on the host first and throws `RemoteMirrorConflict` without writing anything if any of them changed there since the pull, otherwise writes (base64, temp file and `mv`) or deletes each file and updates the manifest
+- `Project.filesRoot`: the mirror for SSH projects, the folder itself for local ones. Every app call site that reads or writes project files (config, onboarding, workflows, settings, skills, docs, specs, AGENTS.md, memory) uses it; every git call keeps the host path and `AppModel.git(for:)`
+- App: refresh pulls the mirror (after pushing local changes), app activation pulls every SSH project, and a loop pushes changes every 2 s, so any write, including from an external editor opened on a mirror file, reaches the host. Pushes and pulls of one project never overlap. A conflict shows an alert naming the files, then the host's versions are pulled. Push errors show in the project overview instead of an alert. Forgetting an SSH project deletes its mirror
+- `ProjectScanner.scan(repository:git:files:)` and `AppDatabase.encode(_:as:repository:git:files:sync:)` take the files root and the git repository separately; encoding and the AGENTS.md setup push the mirror before committing on the host
+- Code browser: `CodeWorkspace` on a remote `GitClient` lists files with git (subtracting deleted ones), `loadDocument` fetches a file over SSH (size checked first), and `search` runs `git grep -I -i -F --untracked` on the host. `CodeDocument.loading` shows while a file is fetched; Go to Symbol only indexes files already opened
+- UI: SSH projects show Overview, Workflows, Source and Settings in the sidebar. Chat, Tasks, Agents, Changes, runs and the run bar stay on the overview until phase 4/5. Settings hides GitHub and Workspaces for SSH projects. Skill plugins (which use the `claude` CLI) stay off until phase 4
+
+## Acceptance criteria (phase 3)
+
+- [x] Opening an SSH project with no `.ensemble/` shows onboarding with what the host's `package.json` implies (checked on `orb`: Node.js, Vitest, base branch `main`); finishing it writes `.ensemble/`, `AGENTS.md` and `CLAUDE.md` on the host
+- [x] Workflows, settings and specs read the host's files; a change to a mirror file reaches the host within seconds; a host change shows up after a refresh (checked on `orb`)
+- [x] A file changed on both sides is not overwritten: the alert names it and the host's version wins (checked on `orb`)
+- [x] Source lists the host's files with added/modified markers and opens them with syntax highlighting (checked on `orb`); text search runs on the host (real-host test; the finder's Text tab wasn't driven in the app)
+- [x] Tests: the mirror's selective pull, push of edits/additions/deletions, binary files and awkward names, conflict refusal, empty and missing repositories; remote code listing, reading, binary/size detection and search; opt-in real-host tests for browsing, worktrees and code
 - [x] EnsembleCore tests pass and the app builds with xcodebuild
 
 ## Out of scope (phase 1)

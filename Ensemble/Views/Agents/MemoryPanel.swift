@@ -25,7 +25,7 @@ struct MemoryPanel: View {
     @State private var isConfirmingClear = false
 
     private var memory: AgentMemory {
-        AgentMemory(repository: project.url, agentName: session.agent.name)
+        AgentMemory(repository: project.filesRoot, agentName: session.agent.name)
     }
 
     var body: some View {
@@ -195,7 +195,7 @@ struct MemoryBadge: View {
     let agent: Agent
 
     var body: some View {
-        let count = AgentMemory(repository: project.url, agentName: agent.name).noteCount
+        let count = AgentMemory(repository: project.filesRoot, agentName: agent.name).noteCount
         HStack(spacing: 5) {
             Image(systemName: "brain").font(.system(size: 10.5, weight: .semibold))
             Text(count == 0 ? "Memory · empty" : "Memory · \(count) note\(count == 1 ? "" : "s")")

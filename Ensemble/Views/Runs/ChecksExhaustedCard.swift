@@ -75,7 +75,7 @@ struct ChecksExhaustedCard: View {
 extension Run {
     @MainActor
     func checkRounds(at stepID: String, in project: Project) -> Int {
-        snapshotWorkflow?.step(stepID)?.maxRounds ?? ProjectConfigLoader.load(repository: project.url).checks?.maxRounds ?? ChecksConfig.defaultMaxRounds
+        snapshotWorkflow?.step(stepID)?.maxRounds ?? ProjectConfigLoader.load(repository: project.filesRoot).checks?.maxRounds ?? ChecksConfig.defaultMaxRounds
     }
 }
 

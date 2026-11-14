@@ -14,7 +14,7 @@ struct OnboardingDraft {
         self.name = project.name
         self.setup = ProjectSetupPlan.recommended(for: scan)
         self.bundledSkills = ProjectSetup.skillCatalog
-        self.installedSkills = SkillLibrary.skills(in: project.url, pluginSkills: Set(pluginSkills))
+        self.installedSkills = SkillLibrary.skills(in: project.filesRoot, pluginSkills: Set(pluginSkills))
         self.createAgentsFile = !scan.docs.contains("AGENTS.md")
     }
 

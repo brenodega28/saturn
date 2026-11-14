@@ -21,7 +21,7 @@ struct ChecksSettingsView: View {
             healthCard(hasChecks: !(checks?.checks.isEmpty ?? true))
         }
         .task(id: project.id) {
-            suggestions = CheckDetector.suggest(repository: project.url)
+            suggestions = CheckDetector.suggest(repository: project.filesRoot)
         }
     }
 
@@ -143,7 +143,7 @@ struct ChecksSettingsView: View {
 
     private func add(_ suggestions: CheckSuggestions) {
         do {
-            try ProjectConfigLoader.write(suggestions.config, repository: project.url)
+            try ProjectConfigLoader.write(suggestions.config, repository: project.filesRoot)
         } catch {
             model.alert = AppAlert(title: "Couldn’t write \(ChecksConfig.fileName)", message: error.localizedDescription)
         }
@@ -151,7 +151,7 @@ struct ChecksSettingsView: View {
     }
 
     private func openChecksFile() {
-        NSWorkspace.shared.open(ChecksConfig.file(in: project.url))
+        NSWorkspace.shared.open(ChecksConfig.file(in: project.filesRoot))
     }
 
     private func runHealthCheck() {

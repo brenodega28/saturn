@@ -29,7 +29,7 @@ struct LearnedRulesView: View {
                 Text(AgentInstructions.fileName).font(.system(size: 15, weight: .semibold))
                 Spacer()
                 if status.hasAgentsFile {
-                    Button("Open") { NSWorkspace.shared.open(project.url.appending(path: AgentInstructions.fileName)) }
+                    Button("Open") { NSWorkspace.shared.open(project.filesRoot.appending(path: AgentInstructions.fileName)) }
                         .buttonStyle(.pill)
                 }
                 if !status.isSetUp {
@@ -104,15 +104,16 @@ struct LearnedRulesView: View {
         guard let id = project.id else { return }
         corrections = (try? model.database.corrections(projectId: id)) ?? []
         repeated = (try? model.database.repeatedCorrections(projectId: id)) ?? []
-        status = AgentInstructions.status(repository: project.url)
+        status = AgentInstructions.status(repository: project.filesRoot)
     }
 
     private func setUpInstructions() {
-        guard let git = model.git else { return }
+        guard let git = model.git(for: project) else { return }
         Task {
             do {
-                let written = try AgentInstructions.setUp(repository: project.url)
+                let written = try AgentInstructions.setUp(repository: project.filesRoot)
                 if !written.isEmpty {
+                    try await model.syncRemoteFiles(project)
                     try await AgentInstructions.commit(written, message: "Set up AGENTS.md for coding agents", repository: project.url, git: git)
                 }
                 message = written.isEmpty ? nil : "Committed \(written.joined(separator: " and "))."
@@ -214,12 +215,17 @@ private struct EncodeCorrectionSheet: View {
     private var isValid: Bool { encoding != nil }
 
     private func commit() {
-        guard let encoding, let git = model.git else { return }
+        guard let encoding, let git = model.git(for: project) else { return }
         isSaving = true
         Task {
             defer { isSaving = false }
             do {
-                try await model.database.encode(correction, as: encoding, repository: project.url, git: git)
+                let model = model
+                let project = project
+                try await model.database.encode(
+                    correction, as: encoding, repository: project.url, git: git,
+                    files: project.filesRoot, sync: { try await model.syncRemoteFiles(project) }
+                )
                 model.reloadConfig(for: project)
                 done()
                 dismiss()

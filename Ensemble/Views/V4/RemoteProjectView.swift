@@ -48,6 +48,18 @@ struct RemoteProjectView: View {
                         Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(V4.greenText)
                     }
                 }
+                if let pulled = status.filesPulledAt {
+                    Text("Project files (.ensemble/, specs, AGENTS.md, skills) synced \(pulled.formatted(.relative(presentation: .named))). Changes you make in Ensemble are saved to the host within seconds.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(V4.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let syncError = status.syncError {
+                    Text(syncError)
+                        .foregroundStyle(Theme.danger)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let error = status.error {
                     Text(error)
                         .foregroundStyle(Theme.danger)
@@ -60,7 +72,7 @@ struct RemoteProjectView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Running the crew on \(destination) is still being built")
                         .font(.system(size: 13, weight: .semibold))
-                    Text("git and worktrees run on the host, but agents don’t yet. Ensemble won’t touch a folder on this Mac with the same path.")
+                    Text("git, worktrees, settings, workflows, specs and the code browser work on the host, but agents don’t run there yet. Ensemble won’t touch a folder on this Mac with the same path.")
                         .foregroundStyle(V4.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(Self.upcoming, id: \.0) { title, detail in

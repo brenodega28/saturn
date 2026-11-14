@@ -141,6 +141,7 @@ final class AppModel {
     var isOpenPanelPresented = false
     var isRemoteFolderPresented = false
     var remoteStatuses: [Int64: RemoteProjectStatus] = [:]
+    var remoteFileSyncs: [Int64: Task<Void, Error>] = [:]
     var alert: AppAlert?
     var chatHighlight: ChatLink?
 
@@ -276,6 +277,7 @@ final class AppModel {
         await refreshAllProjects()
         startWeeklySummaries()
         startActivityRecorder()
+        startRemoteFileSync()
         connectivity = ConnectivityMonitor { [weak self] offline in self?.isOffline = offline }
     }
 
@@ -356,25 +358,21 @@ final class AppModel {
     }
 
     func config(for project: Project) -> ProjectConfig {
-        guard let id = project.id, !project.isRemote else { return ProjectConfig() }
+        guard let id = project.id else { return ProjectConfig() }
         if let config = configs[id] { return config }
-        return ProjectConfigLoader.load(repository: project.url)
+        return ProjectConfigLoader.load(repository: project.filesRoot)
     }
 
     func hasConfig(_ project: Project) -> Bool {
         _ = configs[project.id ?? -1]
-        return ProjectConfigLoader.hasConfig(repository: project.url)
+        return ProjectConfigLoader.hasConfig(repository: project.filesRoot)
     }
 
     func reloadConfig(for project: Project) {
         guard let id = project.id else { return }
-        guard !project.isRemote else {
-            configs[id] = ProjectConfig()
-            return
-        }
-        let config = ProjectConfigLoader.load(repository: project.url)
+        let config = ProjectConfigLoader.load(repository: project.filesRoot)
         configs[id] = config
-        reportMigration(RoleMigration.takeNotices(for: project.url), in: project)
+        reportMigration(RoleMigration.takeNotices(for: project.filesRoot), in: project)
     }
 
     private func reportMigration(_ notices: [MigrationNotice], in project: Project) {
@@ -390,11 +388,12 @@ final class AppModel {
         for project in openProjects {
             reloadConfig(for: project)
         }
+        Task { await pullAllRemoteFiles() }
     }
 
     func installDefaultConfig(in project: Project) {
         perform("Couldn’t add the default workflows") {
-            try ProjectConfigLoader.installDefaults(repository: project.url)
+            try ProjectConfigLoader.installDefaults(repository: project.filesRoot)
         }
         reloadConfig(for: project)
     }
@@ -522,6 +521,9 @@ final class AppModel {
     func forgetRecent(_ project: Project) {
         guard let id = project.id else { return }
         perform("Couldn’t remove \(project.name)") { try database.forgetProject(id: id) }
+        if project.isRemote {
+            try? FileManager.default.removeItem(at: RemoteMirror.location(forProject: id).directory.deletingLastPathComponent())
+        }
         reloadProjects()
     }
 
@@ -556,7 +558,6 @@ final class AppModel {
 
     func refreshRemote(_ project: Project) async {
         guard let id = project.id, let destination = project.host else { return }
-        configs[id] = ProjectConfig()
         remoteStatuses[id, default: RemoteProjectStatus()].isConnecting = true
         let host = remoteHost(destination)
         do {
@@ -565,9 +566,10 @@ final class AppModel {
             let recovery = try await manager.recover()
             let branch = try await host.currentBranch(in: project.path)
             projectStates[id] = ProjectState(branch: branch, worktrees: recovery.worktrees, recovery: recovery)
-            remoteStatuses[id] = RemoteProjectStatus(info: info)
+            try await pullRemoteFiles(project)
+            remoteStatuses[id] = RemoteProjectStatus(info: info, filesPulledAt: .now)
         } catch {
-            remoteStatuses[id] = RemoteProjectStatus(info: remoteStatuses[id]?.info, error: error.localizedDescription)
+            remoteStatuses[id] = RemoteProjectStatus(info: remoteStatuses[id]?.info, error: error.localizedDescription, filesPulledAt: remoteStatuses[id]?.filesPulledAt)
         }
     }
 

@@ -217,10 +217,10 @@ private struct SkillTemplates: View {
                 }
                 Spacer()
                 if let project = model.currentProject {
-                    let installed = revision >= 0 && SkillLibrary.installedSkills(in: project.url).contains(skill.name)
+                    let installed = revision >= 0 && SkillLibrary.installedSkills(in: project.filesRoot).contains(skill.name)
                     Button(installed ? "In \(project.name)" : "Add to \(project.name)") {
                         do {
-                            _ = try skill.install(in: project.url)
+                            _ = try skill.install(in: project.filesRoot)
                             revision += 1
                         } catch {
                             model.alert = AppAlert(title: "Couldn’t add \(skill.name)", message: error.localizedDescription)
@@ -251,7 +251,7 @@ private struct WorkflowTemplates: View {
                     let installed = model.config(for: project).workflow(workflow.id) != nil
                     Button(installed ? "In \(project.name)" : "Add to \(project.name)") {
                         do {
-                            try ProjectConfigLoader.write(workflow, repository: project.url)
+                            try ProjectConfigLoader.write(workflow, repository: project.filesRoot)
                             model.reloadConfig(for: project)
                         } catch {
                             model.alert = AppAlert(title: "Couldn’t add \(workflow.name)", message: error.localizedDescription)

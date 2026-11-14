@@ -145,7 +145,7 @@ struct OnboardingView: View {
     }
 
     private func scan() async {
-        let scan = await ProjectScanner.scan(repository: project.url, git: model.git)
+        let scan = await ProjectScanner.scan(repository: project.url, git: model.git(for: project), files: project.filesRoot)
         let fresh = OnboardingDraft(project: project, scan: scan, pluginSkills: model.pluginSkills(for: project))
         if var existing = draft {
             existing.scan = scan

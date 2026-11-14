@@ -161,7 +161,7 @@ extension AppModel {
     }
 
     func originRepository(for project: Project) async -> String? {
-        guard let git else { return nil }
+        guard let git = git(for: project) else { return nil }
         return try? await GitHubRemote.originRepository(in: project.url, git: git)
     }
 }

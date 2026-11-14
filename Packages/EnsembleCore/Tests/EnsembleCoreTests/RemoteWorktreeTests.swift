@@ -130,3 +130,35 @@ extension SSHClient {
         guard process.terminationStatus == 0 else { throw CocoaError(.fileWriteUnknown) }
     }
 }
+
+@Suite struct RemoteCodeWorkspaceTests {
+    @Test func listsReadsAndSearchesFilesOnTheHost() async throws {
+        let remote = try await RemoteWorktreeTests.Remote.make()
+        defer { remote.remove() }
+        let root = remote.repo.root
+        try "let greeting = \"Hello\"\nprint(greeting)\n".write(to: root.appending(path: "main.swift"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: root.appending(path: "docs"), withIntermediateDirectories: true)
+        try "Say HELLO to everyone\n".write(to: root.appending(path: "docs/it's.md"), atomically: true, encoding: .utf8)
+        try Data([0, 1, 2, 3]).write(to: root.appending(path: "blob.bin"))
+        try String(repeating: "x", count: CodeWorkspace.maxDocumentBytes + 1).write(to: root.appending(path: "big.txt"), atomically: true, encoding: .utf8)
+        try await remote.repo.git.run(["add", "main.swift"], in: root)
+        try await remote.repo.git.run(["commit", "-m", "main"], in: root)
+        try FileManager.default.removeItem(at: root.appending(path: "README.md"))
+        let workspace = CodeWorkspace(root: remote.root, baseBranch: nil, git: remote.git)
+
+        let snapshot = try await workspace.snapshot()
+        #expect(snapshot.files == ["big.txt", "blob.bin", "docs/it's.md", "main.swift"])
+        #expect(snapshot.changes["docs/it's.md"]?.status == .added)
+
+        #expect(await workspace.loadDocument("main.swift") == .text(lines: ["let greeting = \"Hello\"", "print(greeting)"]))
+        #expect(await workspace.loadDocument("docs/it's.md") == .text(lines: ["Say HELLO to everyone"]))
+        #expect(await workspace.loadDocument("blob.bin") == .binary)
+        #expect(await workspace.loadDocument("big.txt") == .tooLarge(bytes: CodeWorkspace.maxDocumentBytes + 1))
+        #expect(await workspace.loadDocument("nope.txt") == .missing)
+
+        let hits = await workspace.search("hello", in: snapshot.files)
+        #expect(hits.map(\.path) == ["docs/it's.md", "main.swift"])
+        #expect(hits.first?.line == 1)
+        #expect(hits.first?.matchStart == 4)
+    }
+}

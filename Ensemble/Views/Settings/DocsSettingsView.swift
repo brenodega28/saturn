@@ -230,16 +230,16 @@ struct DocsSettingsView: View {
         let added = Set(config.docs.docs.compactMap(\.path))
         let fileManager = FileManager.default
         var candidates = ["AGENTS.md", "CLAUDE.md", "README.md", "CONTRIBUTING.md"]
-        let docsFolder = project.url.appending(path: "docs")
+        let docsFolder = project.filesRoot.appending(path: "docs")
         if let files = try? fileManager.contentsOfDirectory(atPath: docsFolder.path) {
             candidates += files.filter { $0.lowercased().hasSuffix(".md") }.sorted().map { "docs/\($0)" }
         }
-        return candidates.filter { !added.contains($0) && fileManager.fileExists(atPath: project.url.appending(path: $0).path) }
+        return candidates.filter { !added.contains($0) && fileManager.fileExists(atPath: project.filesRoot.appending(path: $0).path) }
     }
 
     private func tokens(for doc: DocEntry) -> Int {
         if let path = doc.path {
-            guard let file = SkillLibrary.file(path, in: project.url),
+            guard let file = SkillLibrary.file(path, in: project.filesRoot),
                   let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int else { return 0 }
             return min(size, RoleContext.defaultDocumentLimit) / 4
         }
@@ -247,11 +247,11 @@ struct DocsSettingsView: View {
     }
 
     private func isMissing(_ doc: DocEntry) -> Bool {
-        doc.path.map { SkillLibrary.file($0, in: project.url) == nil } ?? false
+        doc.path.map { SkillLibrary.file($0, in: project.filesRoot) == nil } ?? false
     }
 
     private func addFile(_ url: URL, config: ProjectConfig) {
-        let root = realPath(project.url) + "/"
+        let root = realPath(project.filesRoot) + "/"
         let file = realPath(url)
         guard file.hasPrefix(root) else {
             errorMessage = "\(url.lastPathComponent) is outside \(project.name). Copy it into the repo first, or paste it as a prompt."
@@ -298,7 +298,7 @@ struct DocsSettingsView: View {
 
     private func write(_ docs: DocsIndex) {
         do {
-            try ProjectConfigLoader.write(docs, repository: project.url)
+            try ProjectConfigLoader.write(docs, repository: project.filesRoot)
             errorMessage = nil
         } catch {
             errorMessage = "Couldn’t save docs.yaml: \(error.localizedDescription)"

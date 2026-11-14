@@ -251,7 +251,7 @@ extension CommandRegistry {
             var checks = context.model.config(for: file.project).checks ?? ChecksConfig(checks: [])
             checks.protectedPaths.append(file.path)
             do {
-                try ProjectConfigLoader.write(checks, repository: file.project.url)
+                try ProjectConfigLoader.write(checks, repository: file.project.filesRoot)
                 context.model.reloadConfig(for: file.project)
             } catch {
                 context.model.alert = AppAlert(title: "Couldn’t protect \(file.path)", message: error.localizedDescription)

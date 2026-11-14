@@ -240,7 +240,7 @@ extension AppModel {
         return openProjects.flatMap { project -> [(project: Project, problem: ProjectProblem)] in
             let runs = runs(in: [project])
             let config = config(for: project)
-            let installed = SkillLibrary.installedSkills(in: project.url).union((skillPlugins[project.id ?? -1] ?? []).flatMap(\.skills))
+            let installed = SkillLibrary.installedSkills(in: project.filesRoot).union((skillPlugins[project.id ?? -1] ?? []).flatMap(\.skills))
             return ProjectSignals.problems(
                 runs: runs, steps: steps(of: runs.filter { ProjectSignals.activeStatuses.contains($0.status) }), holds: holds,
                 configIssues: ConfigValidator.validate(config), agents: agentSessions(in: project).map(\.agent), installedSkills: installed

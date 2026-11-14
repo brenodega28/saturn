@@ -83,6 +83,7 @@ final class CodeBrowser {
     private(set) var textHits: [CodeSearchHit] = []
     private var symbolIndex: [(path: String, symbol: CodeSymbol)]?
     private var documents: [String: CodeDocument] = [:]
+    private var fetching: Set<String> = []
     private var searchTask: Task<Void, Never>?
 
     private init(project: Project, model: AppModel) {
@@ -114,7 +115,7 @@ final class CodeBrowser {
     }
 
     func reload() async {
-        guard let source, let workspace = model.codeWorkspace(for: source) else { return }
+        guard let source, let workspace = model.codeWorkspace(for: source, in: project) else { return }
         isLoading = true
         defer { isLoading = false }
         do {
@@ -198,10 +199,27 @@ final class CodeBrowser {
 
     func document(_ path: String) -> CodeDocument {
         if let cached = documents[path] { return cached }
-        guard let source else { return .missing }
-        let loaded = CodeWorkspace.document(at: source.root.appending(path: path))
-        documents[path] = loaded
-        return loaded
+        guard project.isRemote else {
+            guard let source else { return .missing }
+            let loaded = CodeWorkspace.document(at: source.root.appending(path: path))
+            documents[path] = loaded
+            return loaded
+        }
+        fetch(path)
+        return .loading
+    }
+
+    private func fetch(_ path: String) {
+        guard !fetching.contains(path) else { return }
+        let source = source ?? model.codeSources(for: project).first
+        guard let source, let workspace = model.codeWorkspace(for: source, in: project) else { return }
+        fetching.insert(path)
+        Task {
+            let loaded = await workspace.loadDocument(path)
+            fetching.remove(path)
+            guard source.id == (self.source ?? source).id else { return }
+            documents[path] = loaded
+        }
     }
 
     func lines(_ path: String) -> [String] {
@@ -229,7 +247,7 @@ final class CodeBrowser {
     private func scheduleTextSearch() {
         searchTask?.cancel()
         let query = finderQuery
-        guard let source, let files = snapshot?.files, let workspace = model.codeWorkspace(for: source),
+        guard let source, let files = snapshot?.files, let workspace = model.codeWorkspace(for: source, in: project),
               query.trimmingCharacters(in: .whitespaces).count >= 2 else {
             textHits = []
             return
@@ -295,14 +313,15 @@ final class CodeBrowser {
     private func symbols(in files: [String]) -> [(path: String, symbol: CodeSymbol)] {
         if let symbolIndex { return symbolIndex }
         var index: [(path: String, symbol: CodeSymbol)] = []
-        for path in files.prefix(4000) {
+        let indexed = project.isRemote ? files.filter { documents[$0] != nil } : Array(files.prefix(4000))
+        for path in indexed {
             let language = CodeLanguage(path: path)
             guard ![.plain, .markdown, .toml, .json, .yaml].contains(language) else { continue }
             for symbol in CodeOutline.symbols(lines(path), language: language) {
                 index.append((path, symbol))
             }
         }
-        symbolIndex = index
+        if !project.isRemote { symbolIndex = index }
         return index
     }
 

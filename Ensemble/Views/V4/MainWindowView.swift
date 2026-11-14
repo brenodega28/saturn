@@ -11,11 +11,11 @@ struct MainWindowView: View {
             HStack(spacing: 8) {
                 ProjectSidebar()
                     .overlay { RunMenuDismissal() }
-                if let project = model.currentProject, project.isRemote, model.mainScreen.isProjectScoped {
+                if let project = model.currentProject, project.isRemote, model.mainScreen.needsTheCrew {
                     RemoteProjectView(project: project)
                 } else {
                     VStack(spacing: 8) {
-                        if let project = model.currentProject {
+                        if let project = model.currentProject, !project.isRemote {
                             RunBar(project: project)
                                 .zIndex(1)
                         }
@@ -70,8 +70,11 @@ private struct RunMenuDismissal: View {
 }
 
 private extension MainScreen {
-    var isProjectScoped: Bool {
-        if case .tool(let tool) = self { return tool.projectTab != nil }
-        return true
+    var needsTheCrew: Bool {
+        switch self {
+        case .chat, .run, .agent: true
+        case .tool(let tool): [.tasks, .agents, .changes].contains(tool)
+        case .spec: false
+        }
     }
 }

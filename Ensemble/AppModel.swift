@@ -561,8 +561,10 @@ final class AppModel {
         let host = remoteHost(destination)
         do {
             let info = try await host.probe()
+            let manager = await remoteWorktreeManager(for: project, destination: destination)
+            let recovery = try await manager.recover()
             let branch = try await host.currentBranch(in: project.path)
-            projectStates[id] = ProjectState(branch: branch)
+            projectStates[id] = ProjectState(branch: branch, worktrees: recovery.worktrees, recovery: recovery)
             remoteStatuses[id] = RemoteProjectStatus(info: info)
         } catch {
             remoteStatuses[id] = RemoteProjectStatus(info: remoteStatuses[id]?.info, error: error.localizedDescription)
@@ -570,7 +572,7 @@ final class AppModel {
     }
 
     func createWorktree(in project: Project, agent: String, slug: String) async throws {
-        guard let manager = worktreeManager(for: project) else { return }
+        guard let manager = await worktreeManager(for: project) else { return }
         try await manager.create(agent: agent, slug: slug)
         await refresh(project)
     }
@@ -581,20 +583,27 @@ final class AppModel {
     }
 
     func removeWorktree(_ worktree: Worktree, in project: Project, force: Bool, deleteBranch: Bool) async throws {
-        guard let manager = worktreeManager(for: project) else { return }
+        guard let manager = await worktreeManager(for: project) else { return }
         await stopApp(runningIn: worktree.path)
         try await manager.remove(worktree, force: force, deleteBranch: deleteBranch)
         await refresh(project)
     }
 
     func deleteOrphanedDirectory(_ directory: URL, in project: Project) async {
-        guard let manager = worktreeManager(for: project) else { return }
-        perform("Couldn’t delete \(directory.lastPathComponent)") { try manager.deleteOrphanedDirectory(directory) }
+        guard let manager = await worktreeManager(for: project) else { return }
+        do {
+            try await manager.deleteOrphanedDirectory(directory)
+        } catch {
+            alert = AppAlert(title: "Couldn’t delete \(directory.lastPathComponent)", message: error.localizedDescription)
+        }
         await refresh(project)
     }
 
-    private func worktreeManager(for project: Project) -> WorktreeManager? {
-        requireGit().map { WorktreeManager(repository: project.url, git: $0) }
+    private func worktreeManager(for project: Project) async -> WorktreeManager? {
+        if let destination = project.host {
+            return await remoteWorktreeManager(for: project, destination: destination)
+        }
+        return requireGit().map { WorktreeManager(repository: project.url, git: $0) }
     }
 
     private func requireGit() -> GitClient? {

@@ -972,7 +972,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         var mergedBefore: [String] = []
         var head = base
         for branch in branches {
-            let result = try await git.runner.run(git.executable, ["merge-tree", "--write-tree", "--name-only", "--no-messages", head, branch], in: project.url)
+            let result = try await git.execute(["merge-tree", "--write-tree", "--name-only", "--no-messages", head, branch], in: project.url)
             let lines = result.standardOutput.split(separator: "\n").map(String.init)
             if result.exitCode == 1 {
                 return BranchConflict(branch: branch, base: base, mergedBefore: mergedBefore, files: Array(lines.dropFirst()))
@@ -996,7 +996,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         var conflicted: [String] = []
         let merged = [conflict.base] + conflict.mergedBefore
         for branch in merged {
-            let result = try await git.runner.run(git.executable, identity + ["merge", "--no-ff", "--no-edit", branch], in: worktree)
+            let result = try await git.execute(identity + ["merge", "--no-ff", "--no-edit", branch], in: worktree)
             if !result.succeeded {
                 conflicted = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: worktree))?
                     .split(separator: "\n").map(String.init) ?? conflict.files
@@ -1111,8 +1111,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func commitIdentity(in repository: URL, git: GitClient) async throws -> [String] {
-        let name = try await git.runner.run(git.executable, ["config", "user.name"], in: repository)
-        let email = try await git.runner.run(git.executable, ["config", "user.email"], in: repository)
+        let name = try await git.execute(["config", "user.name"], in: repository)
+        let email = try await git.execute(["config", "user.email"], in: repository)
         if name.succeeded, email.succeeded, !name.standardOutput.trimmed.isEmpty, !email.standardOutput.trimmed.isEmpty {
             return []
         }
@@ -1120,7 +1120,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     private func mergeOrAbort(_ arguments: [String], branch: String, in repository: URL, git: GitClient) async throws {
-        let result = try await git.runner.run(git.executable, arguments, in: repository)
+        let result = try await git.execute(arguments, in: repository)
         guard !result.succeeded else { return }
         let conflicted = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: repository))?
             .split(separator: "\n").map(String.init) ?? []
@@ -1140,7 +1140,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         try await manager.ensureExcluded()
         try FileManager.default.createDirectory(at: manager.crewDirectory, withIntermediateDirectories: true)
         try await git.run(["worktree", "add", "--detach", path.path, ref], in: repository)
-        let result = try? await git.runner.run(git.executable, identity + ["rebase", base], in: path)
+        let result = try? await git.execute(identity + ["rebase", base], in: path)
         var head: String?
         var conflicted: [String] = []
         if result?.succeeded == true {
@@ -1163,7 +1163,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     private func deleteBranch(_ branch: String, local: Bool, in repository: URL, git: GitClient) async throws {
         if try await git.hasCommit("refs/remotes/origin/\(branch)", in: repository) {
-            let result = try await git.runner.run(git.executable, ["push", "origin", "--delete", branch], in: repository)
+            let result = try await git.execute(["push", "origin", "--delete", branch], in: repository)
             if !result.succeeded {
                 _ = try? await git.run(["fetch", "--prune", "origin"], in: repository)
             }

@@ -45,7 +45,7 @@ extension AgentWorkflowDriver {
         let (session, _) = try builder(owning: conflict.branch, in: run)
         guard let worktree = session.agent.worktreeURL else { throw WorkflowDriverError.notReady("\(displayName(of: session.agent)) has no worktree.") }
         try await commitPending(in: worktree, git: git)
-        _ = try await git.runner.run(git.executable, Self.ensembleIdentity + ["merge", "--no-ff", "--no-commit", conflict.other], in: worktree)
+        _ = try await git.execute(Self.ensembleIdentity + ["merge", "--no-ff", "--no-commit", conflict.other], in: worktree)
         let files = (try? await git.run(["diff", "--name-only", "--diff-filter=U"], in: worktree))?.split(separator: "\n").map(String.init) ?? []
         return (worktree, files.isEmpty ? conflict.paths : files)
     }

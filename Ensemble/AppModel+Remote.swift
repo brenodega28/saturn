@@ -12,6 +12,11 @@ extension AppModel {
         RemoteHost(client: SSHClient(destination: destination, runner: runner))
     }
 
+    func remoteWorktreeManager(for project: Project, destination: String) async -> WorktreeManager {
+        let client = SSHClient(destination: destination, runner: runner)
+        return await WorktreeManager.make(repository: project.url, git: GitClient(ssh: client), fileSystem: SSHFileSystem(client: client))
+    }
+
     func remoteStatus(for project: Project) -> RemoteProjectStatus {
         project.id.flatMap { remoteStatuses[$0] } ?? RemoteProjectStatus()
     }

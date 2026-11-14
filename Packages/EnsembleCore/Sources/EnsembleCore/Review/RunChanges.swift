@@ -80,7 +80,7 @@ public struct RunChanges: Sendable {
 
     public func conflictingPaths(_ ours: String, _ theirs: String, repository: URL) async throws -> [String] {
         let arguments = ["merge-tree", "--write-tree", "--name-only", "--no-messages", ours, theirs]
-        let result = try await git.runner.run(git.executable, arguments, in: repository)
+        let result = try await git.execute(arguments, in: repository)
         switch result.exitCode {
         case 0:
             return []

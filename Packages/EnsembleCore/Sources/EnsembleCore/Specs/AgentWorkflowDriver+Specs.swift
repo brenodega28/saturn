@@ -143,7 +143,7 @@ extension AgentWorkflowDriver {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try document.markdown.write(to: file, atomically: true, encoding: .utf8)
         try await git.run(["add", "--", path], in: worktree)
-        let staged = try await git.runner.run(git.executable, ["diff", "--cached", "--quiet", "--", path], in: worktree)
+        let staged = try await git.execute(["diff", "--cached", "--quiet", "--", path], in: worktree)
         guard !staged.succeeded else { return }
         try await git.run(["-c", "user.name=Ensemble", "-c", "user.email=ensemble@localhost", "commit", "-m", message, "--", path], in: worktree)
     }

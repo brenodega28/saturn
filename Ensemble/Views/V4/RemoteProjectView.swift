@@ -7,7 +7,6 @@ struct RemoteProjectView: View {
     let project: Project
 
     private static let upcoming = [
-        ("Worktrees", "Each agent gets its own git worktree on the host."),
         ("Agents", "Claude Code runs on the host and streams back to this window."),
         ("Checks and the app", "Checks and the dev server run on the host, with ports forwarded here."),
     ]
@@ -56,10 +55,12 @@ struct RemoteProjectView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                worktrees
+
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Running the crew on \(destination) is still being built")
                         .font(.system(size: 13, weight: .semibold))
-                    Text("This project is open and connected, but nothing runs on it yet. Ensemble won’t touch a folder on this Mac with the same path.")
+                    Text("git and worktrees run on the host, but agents don’t yet. Ensemble won’t touch a folder on this Mac with the same path.")
                         .foregroundStyle(V4.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(Self.upcoming, id: \.0) { title, detail in
@@ -81,12 +82,51 @@ struct RemoteProjectView: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08)))
     }
 
+    private var worktrees: some View {
+        let state = model.state(for: project)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Worktrees on \(project.host.map(SSHDestination.displayName) ?? "the host")")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Text(".crew/ · Debug › Worktrees to create or remove")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(V4.secondary)
+            }
+            if state.worktrees.isEmpty {
+                Text("None yet. Each agent will get its own worktree here.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(V4.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(state.worktrees) { worktree in
+                        row(worktree.agent, worktree.branch ?? "detached")
+                    }
+                }
+                .background(Color.white.opacity(0.04), in: .rect(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.08)))
+            }
+            if let recovery = state.recovery, !recovery.isClean {
+                Text(recoverySummary(recovery))
+                    .font(.system(size: 12))
+                    .foregroundStyle(V4.orangeText)
+            }
+        }
+    }
+
+    private func recoverySummary(_ recovery: WorktreeRecovery) -> String {
+        var parts: [String] = []
+        if !recovery.pruned.isEmpty { parts.append("pruned \(recovery.pruned.count) missing worktree\(recovery.pruned.count == 1 ? "" : "s")") }
+        if !recovery.orphanedDirectories.isEmpty { parts.append("\(recovery.orphanedDirectories.count) leftover folder\(recovery.orphanedDirectories.count == 1 ? "" : "s") in .crew/") }
+        return "Last check: " + parts.joined(separator: ", ")
+    }
+
     private func row(_ title: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(V4.secondary)
-                .frame(width: 70, alignment: .leading)
+                .frame(width: 90, alignment: .leading)
             Text(value)
                 .font(V4.monospaced(12.5))
                 .textSelection(.enabled)

@@ -27,11 +27,19 @@ public struct WorktreeManager: Sendable {
     public let repository: URL
     public let branchPrefix: String
     private let git: GitClient
+    private let fileSystem: any ProjectFileSystem
 
-    public init(repository: URL, git: GitClient, branchPrefix: String? = nil) {
-        self.repository = repository.standardizedFileURL
+    public init(repository: URL, git: GitClient, fileSystem: any ProjectFileSystem = LocalFileSystem(), branchPrefix: String? = nil) {
+        self.repository = fileSystem.isLocal ? repository.standardizedFileURL : URL(fileURLWithPath: fileSystem.canonicalPath(repository), isDirectory: true)
         self.git = git
-        self.branchPrefix = branchPrefix ?? ProjectPreferences.load(repository: repository).branchPrefix
+        self.fileSystem = fileSystem
+        self.branchPrefix = branchPrefix ?? (fileSystem.isLocal ? ProjectPreferences.load(repository: repository).branchPrefix : ProjectPreferences.defaultBranchPrefix)
+    }
+
+    public static func make(repository: URL, git: GitClient, fileSystem: any ProjectFileSystem) async -> WorktreeManager {
+        let text = try? await fileSystem.readText(ProjectPreferences.file(in: repository))
+        let prefix = text.flatMap { $0 }.map { ProjectPreferences.parse($0).branchPrefix }
+        return WorktreeManager(repository: repository, git: git, fileSystem: fileSystem, branchPrefix: prefix)
     }
 
     public var crewDirectory: URL {
@@ -50,7 +58,7 @@ public struct WorktreeManager: Sendable {
     public func create(agent: String, slug: String, from baseRef: String? = nil) async throws -> Worktree {
         let path = try path(forAgent: agent)
         let branch = try branchName(agent: agent, slug: slug)
-        guard !FileManager.default.fileExists(atPath: path.path) else {
+        guard try await !fileSystem.fileExists(path) else {
             throw WorktreeError.alreadyExists(agent: path.lastPathComponent)
         }
 
@@ -59,10 +67,10 @@ public struct WorktreeManager: Sendable {
         }
 
         try await ensureExcluded()
-        try FileManager.default.createDirectory(at: crewDirectory, withIntermediateDirectories: true)
+        try await fileSystem.createDirectory(crewDirectory)
         try await git.run(["worktree", "add", "-b", branch, path.path] + (baseRef.map { [$0] } ?? []), in: repository)
 
-        guard let worktree = try await list().first(where: { Self.samePath($0.path, path) }) else {
+        guard let worktree = try await list().first(where: { samePath($0.path, path) }) else {
             throw WorktreeError.notFound(agent: path.lastPathComponent)
         }
         return worktree
@@ -71,7 +79,7 @@ public struct WorktreeManager: Sendable {
     @discardableResult
     public func restore(at path: URL, branch: String) async throws -> Worktree {
         guard isInsideCrewDirectory(path) else { throw WorktreeError.outsideCrewDirectory(path) }
-        guard !FileManager.default.fileExists(atPath: path.path) else {
+        guard try await !fileSystem.fileExists(path) else {
             throw WorktreeError.alreadyExists(agent: path.lastPathComponent)
         }
         guard try await git.hasCommit("refs/heads/\(branch)", in: repository) else {
@@ -79,9 +87,9 @@ public struct WorktreeManager: Sendable {
         }
         try await ensureExcluded()
         try await git.run(["worktree", "prune"], in: repository)
-        try FileManager.default.createDirectory(at: crewDirectory, withIntermediateDirectories: true)
+        try await fileSystem.createDirectory(crewDirectory)
         try await git.run(["worktree", "add", path.path, branch], in: repository)
-        guard let worktree = try await list().first(where: { Self.samePath($0.path, path) }) else {
+        guard let worktree = try await list().first(where: { samePath($0.path, path) }) else {
             throw WorktreeError.notFound(agent: path.lastPathComponent)
         }
         return worktree
@@ -104,14 +112,14 @@ public struct WorktreeManager: Sendable {
     public func ensureExcluded() async throws {
         let excludeFile = try await git.commonDirectory(of: repository).appending(path: "info/exclude")
         let entry = "/\(Self.directoryName)/"
-        let existing = (try? String(contentsOf: excludeFile, encoding: .utf8)) ?? ""
+        let existing = (try await fileSystem.readText(excludeFile)) ?? ""
         let lines = existing.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
         guard !lines.contains(where: { [entry, "\(Self.directoryName)/", Self.directoryName, "/\(Self.directoryName)"].contains($0) }) else {
             return
         }
-        try FileManager.default.createDirectory(at: excludeFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try await fileSystem.createDirectory(excludeFile.deletingLastPathComponent())
         let separator = existing.isEmpty || existing.hasSuffix("\n") ? "" : "\n"
-        try (existing + separator + entry + "\n").write(to: excludeFile, atomically: true, encoding: .utf8)
+        try await fileSystem.writeText(existing + separator + entry + "\n", to: excludeFile)
     }
 
     public func recover() async throws -> WorktreeRecovery {
@@ -121,24 +129,18 @@ public struct WorktreeManager: Sendable {
             try await git.run(["worktree", "prune"], in: repository)
         }
         let worktrees = try await list()
-        let registered = Set(worktrees.map { Self.canonicalPath($0.path) })
-        let directories = (try? FileManager.default.contentsOfDirectory(
-            at: crewDirectory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        )) ?? []
-        let orphaned = directories
-            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
-            .filter { !registered.contains(Self.canonicalPath($0)) }
+        let registered = Set(worktrees.map { canonicalPath($0.path) })
+        let orphaned = try await fileSystem.subdirectories(of: crewDirectory)
+            .filter { !registered.contains(canonicalPath($0)) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         return WorktreeRecovery(worktrees: worktrees, pruned: pruned, orphanedDirectories: orphaned)
     }
 
-    public func deleteOrphanedDirectory(_ directory: URL) throws {
-        guard isInsideCrewDirectory(directory), !Self.samePath(directory, crewDirectory) else {
+    public func deleteOrphanedDirectory(_ directory: URL) async throws {
+        guard isInsideCrewDirectory(directory), !samePath(directory, crewDirectory) else {
             throw WorktreeError.outsideCrewDirectory(directory)
         }
-        try FileManager.default.removeItem(at: directory)
+        try await fileSystem.removeItem(directory)
     }
 
     private func allRegistered() async throws -> [Worktree] {
@@ -152,21 +154,14 @@ public struct WorktreeManager: Sendable {
     }
 
     private func isInsideCrewDirectory(_ url: URL) -> Bool {
-        Self.canonicalPath(url).hasPrefix(Self.canonicalPath(crewDirectory) + "/")
+        canonicalPath(url).hasPrefix(canonicalPath(crewDirectory) + "/")
     }
 
-    private static func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
+    private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
         canonicalPath(lhs) == canonicalPath(rhs)
     }
 
-    private static func canonicalPath(_ url: URL) -> String {
-        var path = url.resolvingSymlinksInPath().standardizedFileURL.path
-        if path.hasPrefix("/private/") {
-            path.removeFirst("/private".count)
-        }
-        while path.count > 1 && path.hasSuffix("/") {
-            path.removeLast()
-        }
-        return path
+    private func canonicalPath(_ url: URL) -> String {
+        fileSystem.canonicalPath(url)
     }
 }

@@ -45,9 +45,12 @@ public struct ProjectPreferences: Sendable, Hashable, Codable {
     }
 
     public static func load(repository: URL) -> ProjectPreferences {
-        guard let text = try? String(contentsOf: file(in: repository), encoding: .utf8),
-              let preferences = try? YAMLDecoder().decode(ProjectPreferences.self, from: text) else { return ProjectPreferences() }
-        return preferences
+        guard let text = try? String(contentsOf: file(in: repository), encoding: .utf8) else { return ProjectPreferences() }
+        return parse(text)
+    }
+
+    public static func parse(_ text: String) -> ProjectPreferences {
+        (try? YAMLDecoder().decode(ProjectPreferences.self, from: text)) ?? ProjectPreferences()
     }
 }
 

@@ -14,8 +14,8 @@ The engine currently assumes a local folder everywhere (`Process` with a local c
 
 ## Phases
 
-1. **Connect and browse (this change).** SSH host input, folder navigator, remote project record, and the remote command layer. SSH projects open, appear in the sidebar and recents with their host, and show the host, path, branch and tool check (git and claude on the host). Agents, worktrees, checks, the code browser and settings are gated with a notice.
-2. **Remote git and worktrees.** `GitClient` and `WorktreeManager` run through a command executor (local `Process` or `ssh`), so recovery, worktree create/remove and branch state work on the host.
+1. **Connect and browse (done).** SSH host input, folder navigator, remote project record, and the remote command layer. SSH projects open, appear in the sidebar and recents with their host, and show the host, path, branch and tool check (git and claude on the host). Agents, worktrees, checks, the code browser and settings are gated with a notice.
+2. **Remote git and worktrees (done).** `GitClient` and `WorktreeManager` run through a command executor (local `Process` or `ssh`), so recovery, worktree create/remove and branch state work on the host.
 3. **Remote files.** A project file system interface (local `FileManager` or SSH) for `.ensemble/` config, specs, memory, hooks and the code browser.
 4. **Remote agents.** `claude` runs on the host through `ssh -T` with its stream-json stdin/stdout piped back. The Ensemble MCP endpoint is reached through a reverse tunnel (`ssh -R`). The host keeps its own Claude Code login.
 5. **Remote checks and run-the-app.** Checks and the dev server run on the host. The detected port is forwarded to the Mac (`ssh -L`) so the localhost link works.
@@ -34,6 +34,23 @@ The engine currently assumes a local folder everywhere (`Process` with a local c
 - SwiftUI `RemoteFolderSheet`: a host field with `~/.ssh/config` suggestions and Connect, then the host summary (home, system, git/claude found) and the path input with the suggestion list. ↑/↓ move the highlight, Tab completes the highlighted folder, Return opens the typed folder (or descends into the highlighted one when the input names a partial match), and clicking a row descends. Git repositories carry a badge
 - Entry points: Welcome "Open SSH Folder…", File › Open SSH Folder… (no shortcut), the ⌘K palette (it lists File menu commands), and a "+" menu in the sidebar with Open Folder…, Open SSH Folder… and Clone…
 - Main window: when the current project is an SSH project, the chat/log area is replaced by `RemoteProjectView` (host, path, branch, tools on the host, Reconnect, and what the next phases bring). The sidebar shows the host under the project name and hides the section tree
+
+## Interfaces (phase 2)
+
+- `GitClient` has two transports: `init(executable:runner:)` (local `Process`, as before) and `init(ssh:)` (each call runs `git` in the folder on the host through the shared connection). `execute(_:in:)` returns the unchecked result; every caller that used to reach into `git.runner` with `git.executable` goes through it, so no git call bypasses the transport
+- EnsembleCore `ProjectFileSystem` with `LocalFileSystem` (FileManager) and `SSHFileSystem` (`test -e`, `mkdir -p`, `cat`, `printf … > tmp && mv`, the NUL-separated listing, `rm -rf`): exists, create folder, read and write text, list subfolders, remove, and canonical path. The SSH canonical path is purely textual (`.`/`..`/slashes), because `URL.standardizedFileURL` and `resolvingSymlinksInPath` consult the local disk
+- `WorktreeManager(repository:git:fileSystem:branchPrefix:)` does all its file work through the file system, including `.git/info/exclude`, `.crew/` and orphan cleanup. `WorktreeManager.make(repository:git:fileSystem:)` reads `branch_prefix` from `.ensemble/project.yaml` on the host. `deleteOrphanedDirectory` is now async
+- App: `refreshRemote` runs worktree recovery on the host and fills the project's worktrees and recovery. Debug › Worktrees, Create Debug Worktree and Recover Worktrees work on SSH projects (Reveal is disabled for them). The SSH project view lists the host's worktrees and what the last recovery fixed
+- Agents still refuse SSH projects (phase 4), so nothing creates worktrees on the host except the Debug tools
+
+## Acceptance criteria (phase 2)
+
+- [x] Creating a worktree on an SSH project adds `.crew/<agent>` and `crew/<agent>/<slug>` on the host, adds `/.crew/` to the host's exclude file once, and leaves `git status` clean (checked on `orb` from Debug › Create Debug Worktree)
+- [x] Recovery on the host prunes worktrees whose folder is gone (keeping the branch) and lists leftover folders in `.crew/`; deleting a leftover folder removes it on the host and refuses paths outside `.crew/` (checked on `orb` in Debug › Worktrees)
+- [x] Removing a worktree with its branch removes both on the host (checked on `orb`)
+- [x] The SSH project view lists the host's worktrees
+- [x] Tests run the real `WorktreeManager` through a fake `ssh`: create, list, remove, prune, orphan cleanup, restore, the exclude entry, the host's branch prefix, file round trips with quotes, `$` and backticks, and textual path normalisation. An opt-in test (`ENSEMBLE_REAL_SSH_HOST`, `ENSEMBLE_REAL_SSH_REPO`) does the same against a real host
+- [x] EnsembleCore tests pass and the app builds with xcodebuild
 
 ## Out of scope (phase 1)
 

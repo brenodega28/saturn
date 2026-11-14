@@ -198,7 +198,7 @@ struct CommandPalette: View {
     }
 
     private var placeholder: String {
-        model.paletteMode == .agents ? "Go to an agent" : "Search runs, agents, files, or run a command"
+        model.paletteMode == .agents ? "Go to an agent" : "Search chats, or type a command…"
     }
 
     private var emptyMessage: String {
@@ -215,6 +215,7 @@ struct CommandPalette: View {
             source = menuGroups
         } else {
             source = [
+                PaletteGroup(name: searchText.isEmpty ? "Recent chats" : "Chats", commands: chatCommands),
                 PaletteGroup(name: "Runs", commands: runCommands),
                 PaletteGroup(name: "Actions", commands: actionCommands),
                 PaletteGroup(name: "Agents", commands: agentCommands),
@@ -226,8 +227,19 @@ struct CommandPalette: View {
             let matches = needle.isEmpty ? group.commands : group.commands.filter {
                 $0.title.localizedCaseInsensitiveContains(needle) || $0.keywords.localizedCaseInsensitiveContains(needle) || $0.meta.localizedCaseInsensitiveContains(needle)
             }
-            let limited = group.name == "Files" ? Array(matches.prefix(8)) : matches
+            let limited = group.name == "Files" || group.name.hasSuffix("chats") || group.name == "Chats" ? Array(matches.prefix(8)) : matches
             return limited.isEmpty ? nil : PaletteGroup(name: group.name, commands: limited)
+        }
+    }
+
+    private var chatCommands: [PaletteCommand] {
+        let summaries = model.chatSummaries()
+        return (summaries.open + summaries.closed).map { summary in
+            PaletteCommand(
+                id: "chat-\(summary.id)", title: summary.chat.title,
+                meta: "\(summary.project.name) · \(ChatTime.label(summary.lastActivity)) · \(summary.stage.title)",
+                keywords: summary.chat.body, glyph: .symbol("bubble.left"), tint: Tokens.fill2
+            ) { model.openChat(summary.chat) }
         }
     }
 
@@ -259,7 +271,13 @@ struct CommandPalette: View {
         let lead: RoleDefinition? = model.leadRole(in: project)
         let config = model.config(for: project)
         var commands = [
-            PaletteCommand(id: "new-chat", title: "New chat", meta: lead.map { "with \($0.name)" } ?? "", glyph: .symbol("plus"), tint: action, shortcut: "⌘N") { model.newChat() },
+            PaletteCommand(id: "new-chat", title: "New chat", meta: lead.map { "with \($0.name)" } ?? "", glyph: .symbol("plus"), tint: action, shortcut: "⌘N") {
+                DispatchQueue.main.async { model.requestNewChat() }
+            },
+            PaletteCommand(id: "add-project", title: "Add project…", glyph: .symbol("folder.badge.plus"), tint: action) { model.isOpenPanelPresented = true },
+            PaletteCommand(id: "appearance", title: model.appearance == .light ? "Switch to dark appearance" : "Switch to light appearance", glyph: .symbol("circle.lefthalf.filled"), tint: action) {
+                model.appearance = model.appearance == .light ? .dark : .light
+            },
             PaletteCommand(id: "encode", title: "Encode a correction…", meta: "AGENTS.md, check or protected path", glyph: .symbol("arrow.triangle.2.circlepath"), tint: action) {
                 model.openSettings(.learnedRules, in: project)
             },

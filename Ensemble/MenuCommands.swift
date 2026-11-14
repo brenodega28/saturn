@@ -268,7 +268,7 @@ extension CommandRegistry {
 
     private func registerFileCommands() {
         register(MenuCommand(id: "file.new-project", title: "New Project…", menu: "File", section: 0, order: 0) { $0.model.newProject() })
-        register(MenuCommand(id: "file.new-chat", title: "New Chat", menu: "File", section: 0, order: 1, shortcut: KeyboardShortcut("n")) { $0.model.newChat() })
+        register(MenuCommand(id: "file.new-chat", title: "New Chat", menu: "File", section: 0, order: 1, shortcut: KeyboardShortcut("n")) { $0.model.requestNewChat() })
         register(MenuCommand(id: "file.open", title: "Open…", menu: "File", section: 0, order: 2, shortcut: KeyboardShortcut("o")) {
             $0.model.isOpenPanelPresented = true
         })
@@ -357,6 +357,17 @@ extension CommandRegistry {
         register(MenuCommand(id: "run.open", title: "Open Run", menu: "Context", section: 0, order: 0,
                              isEnabled: { $0.run != nil }) { context in
             if let run = context.run { context.model.openRunDetail(run) }
+        })
+        register(MenuCommand(id: "run.app-start", title: "Run the App", menu: "Run", section: 0, order: 0, shortcut: KeyboardShortcut("r"),
+                             isEnabled: { $0.model.currentProject != nil }) { context in
+            guard let project = context.model.currentProject else { return }
+            let target = context.model.selectedRunTarget(in: project)
+            Task { await context.model.startApp(target, in: project) }
+        })
+        register(MenuCommand(id: "run.app-stop", title: "Stop the App", menu: "Run", section: 0, order: 1, shortcut: KeyboardShortcut("."),
+                             isEnabled: { context in context.model.currentProject.flatMap(context.model.appRunner(for:))?.isActive ?? false }) { context in
+            guard let project = context.model.currentProject else { return }
+            Task { await context.model.stopApp(in: project) }
         })
         register(MenuCommand(id: "run.checks", title: "Run Checks", menu: "Run", section: 0, order: 2, shortcut: KeyboardShortcut("u"),
                              isEnabled: { $0.run != nil }) { context in

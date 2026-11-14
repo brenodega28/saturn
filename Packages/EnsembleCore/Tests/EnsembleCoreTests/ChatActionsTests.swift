@@ -65,6 +65,16 @@ import Testing
         #expect(try database.leadMessages(taskId: id).isEmpty)
     }
 
+    @Test func chatsWithOnlyARequestAreListedAndOpenProposalsAreFound() throws {
+        let projectID = try #require(project.id)
+        let notice = try database.createChatRequest(ChatRequest(projectId: projectID, kind: .notice, title: "Set up checks", createdAt: at(1)))
+        let other = try chat("Order export CSV")
+        try database.insert(LeadMessage(projectId: projectID, taskId: other.id!, kind: .proposal, text: "", workflow: "w", title: "CSV", status: .open, createdAt: at(2)))
+
+        #expect(try database.leadRequests(projectId: projectID).map(\.id).contains(notice.taskId))
+        #expect(try database.openProposalChatIDs(projectId: projectID) == [other.id!])
+    }
+
     @Test func theLeadModelAndEffortArePerChat() throws {
         let id = try #require(try chat().id)
 

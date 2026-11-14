@@ -8,12 +8,12 @@ struct MainWindowView: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                ProjectSidebar()
+            HStack(spacing: 0) {
+                ChatSidebar()
                 MiddleColumn()
                     .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Tokens.window)
             }
-            .padding(8)
         }
         .frame(minWidth: 1160, minHeight: 680)
         .background(V4.container)
@@ -34,6 +34,19 @@ struct MainWindowView: View {
             }
         }
         .sheet(item: $model.pinPrompt) { prompt in PinPromptSheet(prompt: prompt) }
+        .confirmationDialog(
+            "Delete “\(model.pendingChatDeletion?.title ?? "")”?",
+            isPresented: Binding(get: { model.pendingChatDeletion != nil }, set: { if !$0 { model.pendingChatDeletion = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Chat", role: .destructive) {
+                if let chat = model.pendingChatDeletion { Task { await model.deleteChat(chat) } }
+                model.pendingChatDeletion = nil
+            }
+            Button("Cancel", role: .cancel) { model.pendingChatDeletion = nil }
+        } message: {
+            Text("Its messages, runs and workers are deleted, and their worktrees and branches removed. This can’t be undone.")
+        }
         .onChange(of: model.mainScreen) { old, new in
             model.mainWindow.record(from: old, to: new)
         }

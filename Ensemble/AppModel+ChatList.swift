@@ -1,0 +1,162 @@
+import EnsembleCore
+import EnsembleUI
+import Foundation
+import SwiftUI
+
+struct ChatSummary: Identifiable, Hashable {
+    let chat: Chat
+    let project: Project
+    let stage: ChatStage
+    let lastActivity: Date
+    let workers: [Agent]
+    let isUnread: Bool
+
+    var id: Int64 { chat.id ?? -1 }
+}
+
+extension AppModel {
+    func chatSummaries() -> (open: [ChatSummary], closed: [ChatSummary]) {
+        var open: [ChatSummary] = []
+        var closed: [ChatSummary] = []
+        let openRequests = Dictionary(grouping: requests.items.filter { $0.taskId != nil }, by: { $0.taskId ?? -1 })
+        for project in openProjects {
+            guard let projectID = project.id else { continue }
+            let chats = leadRequests(in: project)
+            let activity = (try? database.lastActivity(projectId: projectID)) ?? [:]
+            let proposals = (try? database.openProposalChatIDs(projectId: projectID)) ?? []
+            let runs = ((try? database.runs(projectId: projectID)) ?? []).map { run in run.id.flatMap { engine.runs[$0] } ?? run }
+            let runsByChat = Dictionary(grouping: runs, by: \.taskId)
+            let chatOfRun = Dictionary(runs.compactMap { run in run.id.map { ($0, run.taskId) } }, uniquingKeysWith: { first, _ in first })
+            var workersByChat: [Int64: [Agent]] = [:]
+            for session in agentSessions(in: project) where session.agent.kind != .lead && session.agent.archivedAt == nil {
+                guard let chatID = session.agent.taskId ?? session.agent.runId.flatMap({ chatOfRun[$0] }) else { continue }
+                workersByChat[chatID, default: []].append(session.agent)
+            }
+            for chat in chats {
+                guard let chatID = chat.id else { continue }
+                let latest = runsByChat[chatID]?.max { ($0.startedAt, $0.id ?? 0) < ($1.startedAt, $1.id ?? 0) }
+                let hold = latest?.id.flatMap { engine.holds[$0] }
+                let lead = leadSession(for: chat)
+                let facts = ChatStage.Facts(
+                    closeReason: chat.closeReason, isClosed: chat.isClosed, latestRun: latest,
+                    currentStep: latest.flatMap { run in run.currentStep.flatMap { runWorkflow(run)?.step($0) } },
+                    hold: hold, openRequests: openRequests[chatID]?.map(\.kind) ?? [],
+                    pendingPermissions: pendingPermissions.count(taskId: chatID), hasOpenProposal: proposals.contains(chatID),
+                    leadIsWorking: lead.map { $0.isRunning || $0.isQueued } ?? false
+                )
+                let last = activity[chatID] ?? chat.updatedAt
+                let summary = ChatSummary(
+                    chat: chat, project: project, stage: ChatStage.of(facts), lastActivity: max(last, chat.createdAt),
+                    workers: workersByChat[chatID] ?? [],
+                    isUnread: ChatActivity.isUnread(viewedAt: chat.viewedAt, createdAt: chat.createdAt, lastActivity: activity[chatID])
+                )
+                if chat.isClosed { closed.append(summary) } else { open.append(summary) }
+            }
+        }
+        open.sort { ($0.lastActivity, $0.id) > ($1.lastActivity, $1.id) }
+        closed.sort { ($0.chat.closedAt ?? .distantPast, $0.id) > ($1.chat.closedAt ?? .distantPast, $1.id) }
+        return (open, closed)
+    }
+
+    func summary(of chat: Chat) -> ChatSummary? {
+        let all = chatSummaries()
+        return (all.open + all.closed).first { $0.id == chat.id }
+    }
+
+    var appearance: Appearance {
+        get { UserDefaults.standard.string(forKey: Appearance.storageKey).flatMap(Appearance.init(rawValue:)) ?? .fallback }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: Appearance.storageKey) }
+    }
+
+    func requestNewChat() {
+        switch openProjects.count {
+        case 0: isOpenPanelPresented = true
+        case 1: startNewChat(in: openProjects[0])
+        default: isNewChatPickerShown = true
+        }
+    }
+
+    func attentionCount(_ summaries: [ChatSummary]) -> Int {
+        summaries.count { $0.stage.needsAttention }
+    }
+
+    func openChat(_ chat: Chat) {
+        guard let chatID = chat.id else { return }
+        mainWindow.spec = nil
+        runDetailIDs[chat.projectId] = nil
+        selection = .project(chat.projectId)
+        tabs[chat.projectId] = .lead
+        showRequest(id: chatID, inProjectID: chat.projectId)
+    }
+
+    func renameChat(_ chat: Chat, to title: String) {
+        guard let id = chat.id else { return }
+        do {
+            try database.renameChat(id: id, to: title)
+            leadChatRevision += 1
+        } catch {
+            alert = AppAlert(title: "Couldn’t rename the chat", message: error.localizedDescription)
+        }
+    }
+
+    func reopenChat(_ chat: Chat) {
+        do {
+            try leadChat.reopen(chat)
+            leadChatRevision += 1
+        } catch {
+            alert = AppAlert(title: "Couldn’t reopen the chat", message: error.localizedDescription)
+        }
+    }
+
+    func deleteChat(_ chat: Chat) async {
+        guard let project = project(withID: chat.projectId), let git = git(for: project) else { return }
+        do {
+            try await leadChat.delete(chat, in: project, git: git)
+            leadChatRevision += 1
+            if selectedRequest(in: project)?.id == chat.id { startNewLeadRequest(in: project) }
+        } catch {
+            alert = AppAlert(title: "Couldn’t delete the chat", message: error.localizedDescription)
+        }
+    }
+
+    func copyChatLink(_ chat: Chat) {
+        guard let id = chat.id else { return }
+        copyToPasteboard(ChatLink(requestID: id).url.absoluteString)
+    }
+}
+
+extension ChatStage {
+    var title: String {
+        switch self {
+        case .needsYou: "Needs you"
+        case .stuck: "Stuck · needs you"
+        case .building: "Building"
+        case .inReview: "In review"
+        case .done: "Done"
+        case .dropped: "Dropped"
+        case .idle: "Open"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .needsYou: Tokens.need
+        case .stuck: Tokens.stuck
+        case .building: Tokens.build
+        case .inReview: Tokens.review
+        case .done: Tokens.done
+        case .dropped, .idle: Tokens.text2
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .needsYou: Tokens.needBackground
+        case .stuck: Tokens.stuckBackground
+        case .building: Tokens.buildBackground
+        case .inReview: Tokens.reviewBackground
+        case .done: Tokens.doneBackground
+        case .dropped, .idle: Tokens.fill
+        }
+    }
+}

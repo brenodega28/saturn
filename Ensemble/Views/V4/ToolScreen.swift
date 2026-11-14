@@ -23,28 +23,38 @@ struct ToolScreen<Accessory: View, Content: View>: View {
             HStack(spacing: 10) {
                 Button { model.goBack() } label: {
                     HStack(spacing: 4) {
-                        V4Icon(glyph: .back, size: 12, lineWidth: 2.4)
-                        Text("Back")
+                        Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold))
+                        Text(backLabel).lineLimit(1)
                     }
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.leading, 8)
-                    .padding(.trailing, 12)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Tokens.text)
+                    .padding(.horizontal, 10)
                     .frame(height: 28)
-                    .background(Color.white.opacity(0.08), in: Capsule())
+                    .background(Tokens.fill, in: Capsule())
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .help("\(backLabel) (⌘[)")
+                .keyboardShortcut(.cancelAction)
+                .help("\(backLabel) (esc)")
                 .accessibilityLabel(backLabel)
+                Text("or esc").font(.system(size: 11.5)).foregroundStyle(Tokens.text3)
+                Rectangle().fill(Tokens.hair2).frame(width: 1, height: 16).padding(.horizontal, 4)
+                if let project = model.currentProject {
+                    ProjectTile(project: project, size: 16)
+                    Text(project.name).foregroundStyle(Tokens.text2)
+                    Text("/").foregroundStyle(Tokens.text3)
+                }
                 Text(title)
-                    .font(V4.display(14))
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Tokens.text)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
                 accessory
             }
-            .padding(EdgeInsets(top: 12, leading: 14, bottom: 8, trailing: 14))
+            .font(.system(size: 13.5))
+            .padding(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
+            .frame(minHeight: 56)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .environment(\.showsScreenHeader, false)
@@ -55,6 +65,7 @@ struct ToolScreen<Accessory: View, Content: View>: View {
         let screen = model.mainScreen
         if case .spec = screen { return "Back" }
         if case .tool(let tool) = model.mainWindow.back, screen != .tool(tool) { return "Back to \(tool.title)" }
+        if let chat = model.currentProject.flatMap(model.selectedRequest(in:)) { return "Back to \(chat.title)" }
         return "Back to chat"
     }
 }

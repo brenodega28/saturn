@@ -129,4 +129,20 @@ extension AppModel {
         guard let url = URL(string: "http://localhost:\(port)") else { return }
         NSWorkspace.shared.open(url)
     }
+
+    func appOutput(in project: Project) -> [LogEntry] {
+        guard let id = project.id else { return [] }
+        return activityLog.entries.filter { $0.source == AppRunner.logSource && $0.projectId == id }
+    }
+
+    func clearAppOutput(in project: Project) {
+        activityLog.clear()
+    }
+
+    func chatChecks(for chat: Chat, run: Run?) -> ChatChecks {
+        let steps = run?.id.flatMap { try? database.runSteps(runId: $0) } ?? []
+        let hold = run?.id.flatMap { engine.holds[$0] }
+        let hasWorkers = !(chat.id.map { (try? database.requestAgents(taskId: $0)) ?? [] } ?? []).isEmpty || run != nil
+        return ChatChecks.make(run: run, workflow: run.flatMap(runWorkflow), steps: steps, hold: hold, hasWorkers: hasWorkers)
+    }
 }

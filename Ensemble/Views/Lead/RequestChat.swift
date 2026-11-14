@@ -25,8 +25,9 @@ struct RequestChat: View {
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    ChatHeaderPill(task: task, project: project)
-                        .frame(maxWidth: .infinity)
+                    if task.isClosed {
+                        ClosedChatBanner(chat: task)
+                    }
                     if let data {
                         ForEach(data.thread.items) { item in
                             row(item, data: data)
@@ -245,36 +246,6 @@ struct RequestChat: View {
         case .stepFailed, .timedOut: return "“\(step)” didn’t finish. Retry it, or stop the run."
         case .gates: return "The gates found things you need to decide on: continue, or send the work back."
         }
-    }
-}
-
-private struct ChatHeaderPill: View {
-    @Environment(AppModel.self) private var model
-    let task: Chat
-    let project: Project
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 11.5))
-            .foregroundStyle(V4.label.opacity(0.72))
-            .lineLimit(1)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .background(task.closeReason.map { $0.color.opacity(0.12) } ?? Color.white.opacity(0.06), in: Capsule())
-            .contextMenu { RequestCloseMenu(request: task, project: project) }
-            .help("Right-click to copy a link to this chat or close it")
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    private var text: String {
-        let title = task.title.isEmpty ? "Request #\(task.id ?? 0)" : task.title
-        var parts = [title, "started \(task.createdAt.formatted(date: .omitted, time: .shortened))"]
-        if let reason = task.closeReason {
-            parts.append("closed as \(reason.title) · send a message to reopen")
-        } else if let run = model.latestRun(of: task), run.isActive {
-            parts.append("run in \(model.currentStepTitle(of: run) ?? model.statusLabel(of: run))")
-        }
-        return parts.joined(separator: " · ")
     }
 }
 

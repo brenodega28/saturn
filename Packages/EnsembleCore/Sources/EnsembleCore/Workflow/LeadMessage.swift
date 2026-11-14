@@ -205,7 +205,8 @@ extension AppDatabase {
                 SELECT task.* FROM task
                 WHERE task.projectId = ?
                   AND (EXISTS (SELECT 1 FROM run WHERE run.taskId = task.id)
-                       OR EXISTS (SELECT 1 FROM leadMessage WHERE leadMessage.taskId = task.id))
+                       OR EXISTS (SELECT 1 FROM leadMessage WHERE leadMessage.taskId = task.id)
+                       OR EXISTS (SELECT 1 FROM chatRequest WHERE chatRequest.taskId = task.id))
                 ORDER BY task.updatedAt DESC, task.id DESC
                 """, arguments: [projectId])
         }

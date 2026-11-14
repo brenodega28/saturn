@@ -20,31 +20,51 @@ struct ChatColumn: View {
     private var leadChat: some View {
         let selected = model.selectedRequest(in: project)
         let newRequestHeld = selected == nil ? model.heldSends(for: model.leadSendTarget(for: nil, in: project)) : []
-        let reserved = selected == nil ? 0 : ChatCard.reservedWidth
-        return Group {
-            if let selected {
-                RequestChat(task: selected, project: project)
-                    .id(selected.id)
-            } else if !newRequestHeld.isEmpty {
-                NewRequestHeldSends(held: newRequestHeld)
-            } else {
-                NewRequestIntro(project: project)
-            }
-        }
-        .padding(.trailing, reserved)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            LeadComposer(project: project, request: selected)
-                .frame(maxWidth: 760)
-                .padding(.horizontal, 28)
+        return GeometryReader { geometry in
+            let isNarrow = geometry.size.width < Tokens.Size.narrowWindow - Tokens.Size.sidebar
+            let showsCard = selected != nil && !isNarrow
+            let reserved = showsCard ? Tokens.Size.chatCardReserve : 0
+            VStack(spacing: 0) {
+                ChatHeader(project: project, chat: selected)
+                    .padding(.trailing, reserved)
+                    .overlay(alignment: .trailing) {
+                        if let selected, isNarrow {
+                            ChatCardPill(project: project, chat: selected)
+                                .padding(.trailing, 16)
+                        }
+                    }
+                Group {
+                    if let selected {
+                        RequestChat(task: selected, project: project)
+                            .id(selected.id)
+                    } else if !newRequestHeld.isEmpty {
+                        NewRequestHeldSends(held: newRequestHeld)
+                    } else {
+                        NewRequestIntro(project: project)
+                    }
+                }
                 .padding(.trailing, reserved)
-                .padding(.bottom, 16)
-        }
-        .overlay(alignment: .topTrailing) {
-            if selected != nil {
-                ChatCard(project: project)
-                    .padding(.top, 12)
-                    .padding(.trailing, 16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    VStack(spacing: 10) {
+                        if model.isAppOutputShown, selected != nil {
+                            AppOutputPanel(project: project)
+                                .padding(.horizontal, 28)
+                        }
+                        LeadComposer(project: project, request: selected)
+                            .frame(maxWidth: Tokens.Size.composer)
+                            .padding(.horizontal, 28)
+                    }
+                    .padding(.trailing, reserved)
+                    .padding(.bottom, 16)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if let selected, showsCard {
+                    ChatCard(project: project, chat: selected)
+                        .padding(.top, 12)
+                        .padding(.trailing, 16)
+                }
             }
         }
         .accessibilityElement(children: .contain)

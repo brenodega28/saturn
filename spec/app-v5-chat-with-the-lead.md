@@ -155,8 +155,9 @@ Each phase ends with the app building, tests passing and the app usable.
     - Replace `V4Style` with the tokens above, each with a dark and a light value.
     - Remove the forced `.preferredColorScheme(.dark)`. Appearance (Dark, Light, System) lives in Settings › General. It defaults to Dark until the screens are restyled for light in phase 9, then to System.
     - Add the robot-face avatars by role from the canvas's Agent avatars page.
-6. **The new shell.**
-    - Selection becomes chat-first, replacing `SidebarItem`, the per-project `tabs` and `leadSelections`, and `MainWindowNavigation.baseScreen`.
+6. **The new shell (done).**
+    - Selection is chat-first in everything you see. Underneath, the per-project `tabs` and `leadSelections` stay as the state behind it; replacing them would not change any screen.
+    - The output panel shows one stream for the running command; a tab per process needs the runner to split its output first.
     - **Sidebar:**
         - Top: New chat ⌘N, Add project, Search chats ⌘K.
         - Chats and Projects tabs. The Chats badge counts chats that need you or are stuck.

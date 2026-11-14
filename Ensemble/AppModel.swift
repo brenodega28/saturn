@@ -102,6 +102,9 @@ final class AppModel {
     var appRunners: [Int64: AppRunner] = [:]
     var runTargetSelections: [Int64: String] = [:]
     var isRunMenuOpen = false
+    var isNewChatPickerShown = false
+    var isAppOutputShown = false
+    var pendingChatDeletion: Chat?
     var activeClones: [String: Date] = [:]
     var listeningPorts: Set<Int> = []
     var isOffline = false

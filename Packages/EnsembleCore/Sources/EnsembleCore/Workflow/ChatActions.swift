@@ -50,6 +50,15 @@ extension AppDatabase {
         }
     }
 
+    public func openProposalChatIDs(projectId: Int64) throws -> Set<Int64> {
+        try writer.read { db in
+            Set(try Int64.fetchAll(db, sql: """
+                SELECT DISTINCT taskId FROM leadMessage
+                WHERE projectId = ? AND kind = 'proposal' AND status = 'open'
+                """, arguments: [projectId]))
+        }
+    }
+
     public func lastActivity(projectId: Int64) throws -> [Int64: Date] {
         try writer.read { db in
             let rows = try Row.fetchAll(db, sql: """

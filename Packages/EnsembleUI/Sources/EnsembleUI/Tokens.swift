@@ -89,6 +89,17 @@ public enum Tokens {
     public static let scrim = Color.adaptive(dark: (0x000000, 0.55), light: (0x000000, 0.22))
     public static let shadow = Color.adaptive(dark: (0x000000, 0.7), light: (0x000000, 0.16))
 
+    public static let monoFamily = "JetBrains Mono"
+
+    public static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        #if canImport(AppKit)
+        if NSFont(name: monoFamily, size: size) != nil {
+            return .custom(monoFamily, size: size).weight(weight)
+        }
+        #endif
+        return .system(size: size, weight: weight, design: .monospaced)
+    }
+
     public enum Radius {
         public static let window: CGFloat = 22
         public static let composer: CGFloat = 18

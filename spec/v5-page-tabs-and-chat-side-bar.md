@@ -1,6 +1,6 @@
 ---
 title: v5 page tabs and chat side bar
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: SwiftUI Dev}
@@ -39,17 +39,17 @@ Replace the v5 main window's single-screen middle column with page tabs, followi
 
 - [ ] The middle area shows a tab strip styled like the design: active tab on the window color with a hairline border, inactive tabs on the fill color, max width 250pt, truncated titles, and a close × on every tab (dimmed on inactive tabs)
 - [ ] Chat tabs show the project tile and the chat title. An inactive chat tab whose chat needs you or is stuck shows a colored status dot with an accessibility label. Terminal, code and tool tabs show an icon and a title
-- [ ] Clicking a chat in the sidebar focuses its tab if one is open. Otherwise it replaces the active tab when that tab is a chat, or opens a new tab when it isn't
+- [x] Clicking a chat in the sidebar focuses its tab if one is open. Otherwise it replaces the active tab when that tab is a chat, or opens a new tab when it isn't
 - [ ] The + menu opens New chat, New terminal and Open file…. Open file uses the existing ⌘P finder and opens the chosen file as a code tab
-- [ ] Changes, Agents, Workflows, Code, Usage, Settings, Run detail, Agent session and Spec each open as a tab. Opening one that is already open focuses its tab instead of making a duplicate
-- [ ] Closing the active tab focuses the tab to its right, or the last tab. Closing the last tab shows 'No pages open' with New chat, Terminal and Open file… buttons
+- [x] Changes, Agents, Workflows, Code, Usage, Settings, Run detail, Agent session and Spec each open as a tab. Opening one that is already open focuses its tab instead of making a duplicate
+- [x] Closing the active tab focuses the tab to its right, or the last tab. Closing the last tab shows 'No pages open' with New chat, Terminal and Open file… buttons
 - [ ] Tabs can be reordered by dragging. The context menu has Close and Close Others. ⌘W, ⌘⇧[, ⌘⇧] and ⌘1–⌘9 work
 - [ ] A terminal tab runs an interactive login shell in the chat's worktree (or the project root), handles input, resize, colors and scrollback, and its process exits when the tab closes. Remote projects open the shell on the SSH host
 - [ ] On chat tabs, the right side bar (320pt) replaces the floating ChatCard. Its Summary tab keeps every ChatCard row working (machine, worktree picker, run, output, changes, checks) and lists the workers. Its Log tab lists this chat's events with working filters
-- [ ] The side bar toggle in the tab strip shows and hides the side bar, and the chat column then uses the full width. The narrow-window pill behaviour still works
-- [ ] Open tabs, their order, the active tab and the side bar's open state and tab survive a relaunch. Tabs pointing at deleted chats, runs or projects are dropped silently, and terminals restart fresh in their directory
-- [ ] The colors come from the existing `Tokens` in both dark and light themes. No hard-coded hex values
-- [ ] `swift test --package-path Packages/EnsembleCore` passes, and the app builds with `xcodegen generate && xcodebuild` for the Ensemble scheme
+- [x] The side bar toggle in the tab strip shows and hides the side bar, and the chat column then uses the full width. The narrow-window pill behaviour still works
+- [x] Open tabs, their order, the active tab and the side bar's open state and tab survive a relaunch. Tabs pointing at deleted chats, runs or projects are dropped silently, and terminals restart fresh in their directory
+- [x] The colors come from the existing `Tokens` in both dark and light themes. No hard-coded hex values
+- [x] `swift test --package-path Packages/EnsembleCore` passes, and the app builds with `xcodegen generate && xcodebuild` for the Ensemble scheme
 
 ## Verification
 

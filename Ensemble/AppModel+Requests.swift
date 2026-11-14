@@ -8,6 +8,7 @@ extension AppModel {
 
     func startRequests() {
         requestNotifier.onOpen = { [weak self] target in self?.openNotification(target) }
+        requestNotifier.onAction = { [weak self] action, messageID in self?.performNotificationAction(action, messageID: messageID) }
         requests.onNewItems = { [weak self] items in
             guard let self else { return }
             let visibleChat = visibleChat()
@@ -169,7 +170,18 @@ extension AppModel {
 
 @MainActor
 final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
+    enum Action: String {
+        case allow
+        case deny
+        case approve
+    }
+
+    static let permissionCategory = "permission"
+    static let proposalCategory = "proposal"
+    nonisolated static let messageKey = "messageId"
+
     var onOpen: (@MainActor (NotificationTarget?) -> Void)?
+    var onAction: (@MainActor (Action, Int64) -> Void)?
     private var hasRequestedAuthorization = false
     private var center: UNUserNotificationCenter { .current() }
 
@@ -177,6 +189,15 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
         guard !hasRequestedAuthorization else { return }
         hasRequestedAuthorization = true
         center.delegate = self
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: Self.permissionCategory, actions: [
+                UNNotificationAction(identifier: Action.allow.rawValue, title: "Allow in this chat"),
+                UNNotificationAction(identifier: Action.deny.rawValue, title: "Deny", options: .destructive),
+            ], intentIdentifiers: []),
+            UNNotificationCategory(identifier: Self.proposalCategory, actions: [
+                UNNotificationAction(identifier: Action.approve.rawValue, title: "Approve & start"),
+            ], intentIdentifiers: []),
+        ])
         center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
@@ -188,7 +209,7 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
             content.subtitle = [projectName(item.projectId), Self.kindTitle(item.kind)].compactMap(\.self).joined(separator: " · ")
             content.body = item.body
             content.sound = .default
-            content.threadIdentifier = "project-\(item.projectId)"
+            content.threadIdentifier = item.taskId.map { "chat-\($0)" } ?? "project-\(item.projectId)"
             content.userInfo = NotificationTarget.chatRequest(id: id).userInfo
             center.add(UNNotificationRequest(identifier: "inbox-\(id)", content: content, trigger: nil))
         }
@@ -201,8 +222,17 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
             content.subtitle = [projectName(notification.projectId), Self.eventTitle(notification.event)].compactMap(\.self).joined(separator: " · ")
             content.body = notification.body
             content.sound = .default
-            content.threadIdentifier = "project-\(notification.projectId)"
-            content.userInfo = NotificationTarget.chat(projectId: notification.projectId, taskId: notification.taskId).userInfo
+            content.threadIdentifier = "chat-\(notification.taskId)"
+            var info = NotificationTarget.chat(projectId: notification.projectId, taskId: notification.taskId).userInfo
+            if let messageID = notification.messageId {
+                info[Self.messageKey] = messageID
+                switch notification.event {
+                case .permissionCard: content.categoryIdentifier = Self.permissionCategory
+                case .runProposal: content.categoryIdentifier = Self.proposalCategory
+                case .leadReply, .runFinished: break
+                }
+            }
+            content.userInfo = info
             center.add(UNNotificationRequest(identifier: notification.dedupeKey, content: content, trigger: nil))
         }
     }
@@ -238,7 +268,12 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        let target = NotificationTarget(userInfo: response.notification.request.content.userInfo)
+        let info = response.notification.request.content.userInfo
+        if let action = Action(rawValue: response.actionIdentifier), let messageID = (info[Self.messageKey] as? NSNumber)?.int64Value ?? info[Self.messageKey] as? Int64 {
+            await MainActor.run { onAction?(action, messageID) }
+            return
+        }
+        let target = NotificationTarget(userInfo: info)
         await MainActor.run {
             NSApp.activate()
             onOpen?(target)
@@ -246,3 +281,15 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
+extension AppModel {
+    func performNotificationAction(_ action: RequestNotifier.Action, messageID: Int64) {
+        guard let message = try? database.leadMessage(id: messageID) else { return }
+        switch action {
+        case .allow: answerPermission(message, decision: .allow)
+        case .deny: answerPermission(message, decision: .deny)
+        case .approve:
+            guard let project = project(withID: message.projectId) else { return }
+            startProposal(message, in: project)
+        }
+    }
+}

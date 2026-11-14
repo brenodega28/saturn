@@ -17,7 +17,7 @@ enum NotificationPreferences {
     }
 
     static func isEnabled(_ event: ChatNotificationEvent) -> Bool {
-        UserDefaults.standard.object(forKey: key(event)) as? Bool ?? true
+        UserDefaults.standard.object(forKey: key(event)) as? Bool ?? (event != .leadReply)
     }
 }
 

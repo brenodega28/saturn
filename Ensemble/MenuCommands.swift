@@ -228,6 +228,7 @@ extension AppModel {
 extension CommandRegistry {
     func registerMenuCommands() {
         registerFileCommands()
+        registerChatCommands()
         registerViewCommands()
         registerNavigateCommands()
         registerAgentCommands()
@@ -350,6 +351,39 @@ extension CommandRegistry {
         register(MenuCommand(id: "agent.copy-worktree", title: "Copy Worktree Path", menu: "Context", section: 3, order: 0,
                              isEnabled: { $0.agentSession?.agent.worktreePath != nil }) { context in
             if let path = context.agentSession?.agent.worktreePath { context.model.copyToPasteboard(path) }
+        })
+    }
+
+    private func registerChatCommands() {
+        func selected(_ context: CommandContext) -> Chat? {
+            context.model.currentProject.flatMap(context.model.selectedRequest(in:))
+        }
+        register(MenuCommand(id: "chat.new", title: "New Chat…", menu: "Chat", section: 0, order: 0) { $0.model.requestNewChat() })
+        register(MenuCommand(id: "chat.done", title: "Mark as Done", menu: "Chat", section: 1, order: 0,
+                             isEnabled: { selected($0).map { !$0.isClosed } ?? false }) { context in
+            guard let chat = selected(context), let project = context.model.currentProject else { return }
+            Task { await context.model.closeRequest(chat, as: .done, in: project) }
+        })
+        register(MenuCommand(id: "chat.drop", title: "Drop Chat", menu: "Chat", section: 1, order: 1,
+                             isEnabled: { selected($0).map { !$0.isClosed } ?? false }) { context in
+            guard let chat = selected(context), let project = context.model.currentProject else { return }
+            Task { await context.model.closeRequest(chat, as: .dropped, in: project) }
+        })
+        register(MenuCommand(id: "chat.reopen", title: "Reopen Chat", menu: "Chat", section: 1, order: 2,
+                             isEnabled: { selected($0)?.isClosed ?? false }) { context in
+            if let chat = selected(context) { context.model.reopenChat(chat) }
+        })
+        register(MenuCommand(id: "chat.stop-lead", title: "Stop the Lead", menu: "Chat", section: 2, order: 0,
+                             isEnabled: { context in context.model.isLeadBusy(selected(context)) }) { context in
+            if let chat = selected(context) { context.model.stopLead(chat) }
+        })
+        register(MenuCommand(id: "chat.copy-link", title: "Copy Link to Chat", menu: "Chat", section: 3, order: 0,
+                             isEnabled: { selected($0) != nil }) { context in
+            if let chat = selected(context) { context.model.copyChatLink(chat) }
+        })
+        register(MenuCommand(id: "chat.delete", title: "Delete Chat…", menu: "Chat", section: 3, order: 1,
+                             isEnabled: { selected($0) != nil }) { context in
+            context.model.pendingChatDeletion = selected(context)
         })
     }
 

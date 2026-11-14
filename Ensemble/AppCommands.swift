@@ -33,6 +33,10 @@ struct AppCommands: Commands {
             RegistryMenuItems(menu: "Navigate", context: context)
         }
 
+        CommandMenu("Chat") {
+            RegistryMenuItems(menu: "Chat", context: context)
+        }
+
         CommandMenu("Agent") {
             RegistryMenuItems(menu: "Agent", context: context)
         }

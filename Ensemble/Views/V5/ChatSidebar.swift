@@ -41,6 +41,7 @@ struct ChatSidebar: View {
                 }
             }
             .scrollIndicators(.never)
+            ForEach(model.systemAlerts) { SidebarAlertCard(alert: $0) }
             SidebarFooter()
         }
         .padding(EdgeInsets(top: 14, leading: 12, bottom: 12, trailing: 12))
@@ -50,6 +51,7 @@ struct ChatSidebar: View {
         .overlay(alignment: .trailing) { Rectangle().fill(Tokens.hair).frame(width: 1) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Chats with the Lead")
+        .onChange(of: model.attentionCount(summaries.open), initial: true) { _, count in model.updateDockBadge(attention: count) }
     }
 }
 

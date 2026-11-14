@@ -219,7 +219,7 @@ Each phase ends with the app building, tests passing and the app usable.
         - Stop the Lead; Send, which becomes "Queue message" while the Lead works.
         - The `@` file picker, and the `/` command picker: /spec, /status, /stop, /retry, /budget, /compact.
         - Attachment chips, and the queued-messages list with Edit and remove.
-8. **Alerts and outside the window.**
+8. **Alerts and outside the window (done).** Notification actions are Allow in this chat / Deny on permissions and Approve & start on proposals; Lead replies no longer notify by default. Install… and Locate… open Settings rather than separate flows (not designed yet).
     - Claude CLI missing, rate limit reached and SSH host disconnected, each as a sidebar alert card and as a banner in the chats they affect.
     - Their actions: Install…, Locate…, Fix in Settings, Use Sonnet 5.5, Reconnect, Details.
     - Dock badge and a menu bar item with the count of chats that need you.

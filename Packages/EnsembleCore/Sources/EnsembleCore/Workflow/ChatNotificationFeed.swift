@@ -18,8 +18,10 @@ public struct ChatNotification: Sendable, Hashable {
     public var title: String
     public var body: String
     public var dedupeKey: String
+    public var messageId: Int64?
 
-    public init(event: ChatNotificationEvent, projectId: Int64, taskId: Int64, title: String, body: String, dedupeKey: String) {
+    public init(event: ChatNotificationEvent, projectId: Int64, taskId: Int64, title: String, body: String, dedupeKey: String, messageId: Int64? = nil) {
+        self.messageId = messageId
         self.event = event
         self.projectId = projectId
         self.taskId = taskId
@@ -36,12 +38,12 @@ public struct ChatNotification: Sendable, Hashable {
             let agent = message.title.flatMap { $0.isEmpty ? nil : $0 } ?? "An agent"
             self.init(
                 event: .permissionCard, projectId: message.projectId, taskId: message.taskId,
-                title: "\(agent) needs your OK", body: Self.excerpt(message.text), dedupeKey: key
+                title: "\(agent) needs your OK", body: Self.excerpt(message.text), dedupeKey: key, messageId: id
             )
         case .proposal:
             self.init(
                 event: .runProposal, projectId: message.projectId, taskId: message.taskId,
-                title: "Run proposed: \(message.title ?? "Untitled")", body: Self.excerpt(message.text), dedupeKey: key
+                title: "Run proposed: \(message.title ?? "Untitled")", body: Self.excerpt(message.text), dedupeKey: key, messageId: id
             )
         case .lead:
             self.init(

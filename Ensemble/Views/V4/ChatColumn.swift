@@ -27,6 +27,13 @@ struct ChatColumn: View {
             VStack(spacing: 0) {
                 ChatHeader(project: project, chat: selected)
                     .padding(.trailing, reserved)
+                ForEach(model.systemAlerts.filter { $0.affects(project) }) { alert in
+                    ChatAlertBanner(alert: alert)
+                        .frame(maxWidth: Tokens.Size.transcript)
+                        .padding(.horizontal, 28)
+                        .padding(.trailing, reserved)
+                        .padding(.bottom, 6)
+                }
                     .overlay(alignment: .trailing) {
                         if let selected, isNarrow {
                             ChatCardPill(project: project, chat: selected)

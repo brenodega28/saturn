@@ -60,6 +60,18 @@ struct EnsembleApp: App {
         .defaultSize(width: 1240, height: 780)
         .handlesExternalEvents(matching: [])
 
+        MenuBarExtra {
+            if case .ready(let model) = launch {
+                MenuBarStatus().environment(model)
+            }
+        } label: {
+            if case .ready(let model) = launch {
+                MenuBarLabel().environment(model)
+            } else {
+                Image(systemName: "person.2.wave.2")
+            }
+        }
+
         Settings {
             if case .ready(let model) = launch {
                 AppSettingsView(updater: updater)

@@ -122,7 +122,7 @@ extension CommandContext {
         return copy
     }
 
-    var agentSession: AgentSession? {
+    var agentSession: LiveAgentSession? {
         if case .agent(let project, let agent) = target {
             return model.project(withID: project).flatMap { model.agentSessions(in: $0).first { $0.id == agent } }
         }
@@ -161,7 +161,7 @@ extension CommandContext {
 
 extension AppModel {
     func run(withID id: Int64) -> Run? {
-        engine.runs[id] ?? (try? database.run(id: id)) ?? nil
+        (try? database.run(id: id)) ?? nil
     }
 
     func runs(in projects: [Project]) -> [Run] {
@@ -170,7 +170,7 @@ extension AppModel {
 
     func runToStop() -> Run? {
         guard let project = currentProject?.id else { return nil }
-        return engine.runs.values.filter { $0.projectId == project }.max { $0.startedAt < $1.startedAt }
+        return connection.activeRuns(projectID: project).max { $0.startedAt < $1.startedAt }
     }
 
     func openPins(in project: Project) -> [(run: Run, pin: Pin)] {
@@ -203,7 +203,7 @@ extension AppModel {
     }
 
     func heldForFailure(_ run: Run) -> Bool {
-        guard let id = run.id, let hold = engine.holds[id] else { return false }
+        guard let id = run.id, let hold = connection.holds[id] else { return false }
         return hold.reason == .stepFailed || hold.reason == .timedOut
     }
 
@@ -406,15 +406,15 @@ extension CommandRegistry {
         register(MenuCommand(id: "run.checks", title: "Run Checks", menu: "Run", section: 0, order: 2, shortcut: KeyboardShortcut("u"),
                              isEnabled: { $0.run != nil }) { context in
             guard let run = context.run else { return }
-            if let id = run.id, let hold = context.model.engine.holds[id], hold.isChecksExhausted(in: run.snapshotWorkflow) {
-                context.model.performRunAction("Couldn’t run the checks again") { try context.model.engine.resolveFailure(run, retry: true) }
+            if let id = run.id, let hold = context.model.connection.holds[id], hold.isChecksExhausted(in: run.snapshotWorkflow) {
+                context.model.resolveFailure(run, retry: true)
             }
             context.model.openRunDetail(run)
         })
         register(MenuCommand(id: "run.retry-step", title: "Retry Step", menu: "Run", section: 1, order: 0,
                              isEnabled: { $0.run.map($0.model.heldForFailure) ?? false }) { context in
             guard let run = context.run else { return }
-            context.model.performRunAction("Couldn’t retry the step") { try context.model.engine.resolveFailure(run, retry: true) }
+            context.model.resolveFailure(run, retry: true)
         })
         register(MenuCommand(id: "run.dry-run", title: "Dry Run", menu: "Run", section: 1, order: 1,
                              isEnabled: { $0.model.currentProject != nil }) { context in
@@ -426,12 +426,12 @@ extension CommandRegistry {
         register(MenuCommand(id: "run.pause", title: "Pause", menu: "Context", section: 2, order: 0,
                              isEnabled: { $0.run?.status == .running }) { context in
             guard let run = context.run else { return }
-            Task { await context.model.performRunAction("Couldn’t pause the run") { try await context.model.engine.pause(run) } }
+            context.model.pauseRun(run)
         })
         register(MenuCommand(id: "run.stop-target", title: "Stop", menu: "Context", section: 2, order: 1,
                              isEnabled: { $0.run.map { ProjectSignals.activeStatuses.contains($0.status) } ?? false }) { context in
             guard let run = context.run else { return }
-            Task { await context.model.performRunAction("Couldn’t stop the run") { try await context.model.engine.cancel(run) } }
+            context.model.cancelRun(run)
         })
         register(MenuCommand(id: "run.pause-all", title: "Pause All", menu: "Run", section: 2, order: 0, shortcut: KeyboardShortcut("p", modifiers: [.command, .shift]),
                              isEnabled: { $0.model.currentProject != nil }) { $0.model.pauseAllAgentsInSelectedProject() })
@@ -500,7 +500,7 @@ extension CommandRegistry {
 
     private func registerWindowCommands() {
         register(MenuCommand(id: "help.shortcuts", title: "Keyboard Shortcuts", menu: "Help", section: 0, order: 1, shortcut: KeyboardShortcut("/")) { _ in
-            UserDefaults.standard.set("keys", forKey: AppSettingsView.tabKey)
+            AppDefaults.store.set("keys", forKey: AppSettingsView.tabKey)
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             NSApp.activate()
         })

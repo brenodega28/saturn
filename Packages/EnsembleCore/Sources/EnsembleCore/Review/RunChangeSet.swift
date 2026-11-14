@@ -38,7 +38,7 @@ public struct FileOverlap: Sendable, Hashable, Identifiable {
     public var id: String { path }
 }
 
-public struct MergeConflict: Sendable, Hashable, Identifiable {
+public struct MergeConflict: Sendable, Hashable, Identifiable, Codable {
     public var branch: String
     public var other: String
     public var otherIsBase: Bool

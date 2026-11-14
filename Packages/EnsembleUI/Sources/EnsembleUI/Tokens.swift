@@ -1,3 +1,4 @@
+import CryptoKit
 import SwiftUI
 #if canImport(AppKit)
 import AppKit
@@ -11,6 +12,13 @@ public enum Appearance: String, CaseIterable, Identifiable, Sendable {
     case system
 
     public static let storageKey = "appearance"
+
+    nonisolated(unsafe) public static let defaults: UserDefaults = {
+        guard let custom = ProcessInfo.processInfo.environment["ENSEMBLE_DATA_DIR"], !custom.isEmpty else { return .standard }
+        let root = URL(fileURLWithPath: (custom as NSString).expandingTildeInPath).standardizedFileURL.path
+        let digest = SHA256.hash(data: Data(root.utf8)).map { String(format: "%02x", $0) }.joined()
+        return UserDefaults(suiteName: "dev.monoliti.Ensemble.data-dir." + digest.prefix(16)) ?? .standard
+    }()
     public static let fallback = Appearance.dark
 
     public var id: Self { self }
@@ -33,7 +41,7 @@ public enum Appearance: String, CaseIterable, Identifiable, Sendable {
 }
 
 public struct AppearanceScheme: ViewModifier {
-    @AppStorage(Appearance.storageKey) private var appearance = Appearance.fallback
+    @AppStorage(Appearance.storageKey, store: Appearance.defaults) private var appearance = Appearance.fallback
 
     public init() {}
 

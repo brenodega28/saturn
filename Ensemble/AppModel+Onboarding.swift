@@ -3,7 +3,7 @@ import Foundation
 
 extension AppModel {
     func needsOnboarding(_ project: Project) -> Bool {
-        if project.isRemote, remoteStatus(for: project).filesPulledAt == nil { return false }
+        if project.isRemote { return false }
         return !hasConfig(project)
     }
 
@@ -20,7 +20,7 @@ extension AppModel {
                 _ = try AgentInstructions.setUp(repository: project.filesRoot)
             }
             if name != project.name {
-                try database.renameProject(id: id, to: name)
+                dispatch("Couldn’t rename \(project.name)", ProjectCommands.Rename(projectID: id, name: name))
             }
         } catch {
             alert = AppAlert(title: "Couldn’t set up \(project.name)", message: error.localizedDescription)

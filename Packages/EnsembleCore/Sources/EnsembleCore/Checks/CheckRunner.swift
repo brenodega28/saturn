@@ -93,7 +93,6 @@ public struct CheckRunner: Sendable {
     public var environment: [String: String]
     public var killGracePeriod: Duration
     public var minute: Duration
-    public var remote: RemoteAgentHost?
 
     public init(environment: [String: String], killGracePeriod: Duration = .seconds(3), minute: Duration = .seconds(60)) {
         self.environment = environment
@@ -116,18 +115,10 @@ public struct CheckRunner: Sendable {
         var result = CheckResult(name: check.name, kind: check.kind, command: check.command, status: .couldNotRun, logPath: log.path)
         do {
             let timeout = minute * max(1, check.timeoutMinutes)
-            let outcome = if let remote {
-                try await ShellScript.runRemote(
-                    check.command, on: remote.client, in: directory, variables: variables,
-                    pidFile: remote.stateDirectory(named: "checks/\(UUID().uuidString).pid"),
-                    log: log, timeout: timeout, killGracePeriod: killGracePeriod
-                )
-            } else {
-                try await ShellScript.run(
-                    check.command, in: directory, environment: environment.merging(variables) { _, new in new },
-                    log: log, timeout: timeout, killGracePeriod: killGracePeriod
-                )
-            }
+            let outcome = try await ShellScript.run(
+                check.command, in: directory, environment: environment.merging(variables) { _, new in new },
+                log: log, timeout: timeout, killGracePeriod: killGracePeriod
+            )
             switch outcome {
             case .exited(0):
                 result.status = .passed

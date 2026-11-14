@@ -23,7 +23,7 @@ struct WelcomeView: View {
         .background(Backdrop())
     }
 
-    @AppStorage(Appearance.storageKey) private var appearance = Appearance.fallback
+    @AppStorage(Appearance.storageKey, store: AppDefaults.store) private var appearance = Appearance.fallback
 
     private var launcher: some View {
         VStack(alignment: .leading, spacing: 22) {

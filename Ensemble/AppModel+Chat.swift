@@ -23,7 +23,7 @@ extension AppModel {
     static let defaultSendHoldSeconds = 3
 
     var sendHoldSeconds: Int {
-        max(UserDefaults.standard.object(forKey: Self.sendHoldSecondsKey) as? Int ?? Self.defaultSendHoldSeconds, 0)
+        max(AppDefaults.store.object(forKey: Self.sendHoldSecondsKey) as? Int ?? Self.defaultSendHoldSeconds, 0)
     }
 
     func holdSend(_ message: PendingMessage, to target: PendingSendTarget, deliver: @escaping @MainActor (PendingMessage) -> Void) {

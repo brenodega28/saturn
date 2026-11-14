@@ -9,7 +9,7 @@ struct RemoteHostCard: View {
     var body: some View {
         let status = model.remoteStatus(for: project)
         let destination = project.host.map(SSHDestination.displayName) ?? ""
-        let tunnel = project.host.flatMap { model.remoteTunnels[$0]?.remotePort }
+        let tunnel: Int? = nil
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "server.rack").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
@@ -20,9 +20,9 @@ struct RemoteHostCard: View {
                 } else if status.error == nil, status.info != nil {
                     Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.successText).font(.system(size: 12))
                 }
-                Button("Reconnect") { Task { await model.refresh(project) } }
+                Button("Move to this server’s daemon") { Task { await model.moveToServerDaemon(project) } }
                     .buttonStyle(.pill)
-                    .disabled(status.isConnecting)
+                    .help("Reopen this project on the Ensemble daemon running on the server. Its history here stays read-only.")
             }
 
             VStack(alignment: .leading, spacing: 6) {

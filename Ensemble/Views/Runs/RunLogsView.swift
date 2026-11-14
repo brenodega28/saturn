@@ -111,7 +111,7 @@ private struct AgentTail: View {
     let limit: Int
 
     var body: some View {
-        let session = model.agents.session(for: agent)
+        let session = model.connection.session(for: agent)
         let live = session?.agent ?? agent
         let transcript = session?.transcript
         let items = Array(TranscriptLayout.items(transcript?.entries ?? [], live: transcript?.liveEntry).suffix(limit))

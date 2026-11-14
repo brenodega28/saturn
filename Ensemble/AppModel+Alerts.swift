@@ -11,7 +11,7 @@ extension AppModel {
     func resolve(_ alert: SystemAlert) {
         switch alert {
         case .claudeMissing, .claudeBroken:
-            UserDefaults.standard.set("engines", forKey: AppSettingsView.tabKey)
+            AppDefaults.store.set("engines", forKey: AppSettingsView.tabKey)
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         case .rateLimited:
             open(.usage)

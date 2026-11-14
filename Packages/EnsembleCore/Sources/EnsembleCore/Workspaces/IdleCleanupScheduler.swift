@@ -61,7 +61,7 @@ public final class IdleCleanupScheduler {
         var archived: [Int64] = []
         for project in projects {
             guard let projectId = project.id, project.settings.idleCleanupMinutes > 0,
-                  let git = project.sshClient.map(GitClient.init(ssh:)) ?? gitProvider() else { continue }
+                  !project.isRemote, let git = gitProvider() else { continue }
             for session in dueSessions(in: projectId, minutes: project.settings.idleCleanupMinutes, now: now) {
                 if await runtime.archiveIdleAgent(session, in: project, git: git, now: now, willRemoveWorktree: willRemoveWorktree) {
                     archived.append(session.id)
@@ -89,10 +89,9 @@ extension AgentRuntime {
         _ session: AgentSession, in project: Project, git: GitClient, now: Date = .now,
         willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
     ) async -> Bool {
-        let git = hostGit(git, for: project)
         if let path = session.agent.worktreeURL, (try? await project.fileSystem.fileExists(path)) == true {
             let manager = WorktreeManager(project: project, git: git)
-            let resolve: (URL) -> String = { project.isRemote ? SSHFileSystem.normalize($0.path) : realPath(of: $0) }
+            let resolve: (URL) -> String = { realPath(of: $0) }
             let target = resolve(path)
             if let worktree = try? await manager.list().first(where: { resolve($0.path) == target }) {
                 guard let status = try? await git.run(["status", "--porcelain"], in: path),

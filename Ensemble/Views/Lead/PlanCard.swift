@@ -82,7 +82,7 @@ struct PlanCard: View {
         if isAskingForNewPlan {
             NoteField(prompt: "What should the lead change?", note: $note, sendTitle: "Ask for a New Plan", cancel: { isAskingForNewPlan = false }) {
                 let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
-                model.performRunAction("Couldn’t send the plan back") { try model.engine.rejectPlan(run, note: text) }
+                model.rejectPlan(run, note: text)
                 reload()
             }
             .padding(16)
@@ -96,7 +96,7 @@ struct PlanCard: View {
                     .buttonStyle(PillButtonStyle(height: 32))
                     .help("Send the plan back to the lead with a note")
                 Button("Approve & Start Run") {
-                    model.performRunAction("Couldn’t approve the plan") { try model.engine.approvePlan(run, plan: plan) }
+                    model.approvePlan(run, plan: plan)
                     reload()
                 }
                 .buttonStyle(PillButtonStyle(.primary, height: 32))

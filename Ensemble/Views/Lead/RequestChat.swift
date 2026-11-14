@@ -20,7 +20,7 @@ struct RequestChat: View {
             .onChange(of: data?.thread.items.count, initial: true) { model.markViewed(task) }
     }
 
-    private func thread(isThinking: Bool, session: AgentSession?, working: [AgentSession]) -> some View {
+    private func thread(isThinking: Bool, session: LiveAgentSession?, working: [LiveAgentSession]) -> some View {
         let held = model.heldSends(for: model.leadSendTarget(for: task, in: project))
         return ScrollViewReader { proxy in
             ScrollView {
@@ -83,6 +83,7 @@ struct RequestChat: View {
             }
         }
         .onChange(of: model.leadChatRevision) { reload() }
+        .onChange(of: model.connection.revision) { reload() }
     }
 
     private static let thinkingID = "thinking"
@@ -95,7 +96,7 @@ struct RequestChat: View {
         let entries: [TranscriptEntry?]
     }
 
-    private static func latestEntry(of session: AgentSession) -> TranscriptEntry? {
+    private static func latestEntry(of session: LiveAgentSession) -> TranscriptEntry? {
         session.transcript.liveEntry ?? session.transcript.entries.last
     }
 
@@ -174,7 +175,7 @@ struct RequestChat: View {
             QuestionCard(item: question, project: project, reload: reload)
         case .hold(let run):
             let current = live(run)
-            if let hold = run.id.flatMap({ model.engine.holds[$0] }), let timeline = run.id.flatMap({ data.timelines[$0] }) {
+            if let hold = run.id.flatMap({ model.connection.holds[$0] }), let timeline = run.id.flatMap({ data.timelines[$0] }) {
                 LeadBubble(role: data.leadRole, name: data.leadName, date: .now) {
                     Text(holdSentence(hold, run: current)).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
                     HoldCard(run: current, project: project, hold: hold, timeline: timeline, reload: reload)
@@ -221,7 +222,7 @@ struct RequestChat: View {
     }
 
     private func live(_ run: Run) -> Run {
-        run.id.flatMap { model.engine.runs[$0] } ?? run
+        run
     }
 
     private func agentCount(_ run: Run) -> Int {
@@ -256,7 +257,7 @@ struct ChatText: View {
 struct ThinkingRow: View {
     let role: RoleDefinition?
     let name: String
-    var session: AgentSession? = nil
+    var session: LiveAgentSession? = nil
 
     var body: some View {
         let activity = session.map { TranscriptLayout.activity($0.transcript.entries, live: $0.transcript.liveEntry) } ?? .working
@@ -634,23 +635,23 @@ private struct RunControls: View {
     @State private var isConfirmingCancel = false
 
     var body: some View {
-        let hold = run.id.flatMap { model.engine.holds[$0] }
+        let hold = run.id.flatMap { model.connection.holds[$0] }
         let canRetry = hold.map { [.stepFailed, .timedOut].contains($0.reason) } == true
         HStack(spacing: 8) {
             if run.status == .running || run.status == .pending {
                 Button {
-                    Task { await model.performRunAction("Couldn’t pause the run") { try await model.engine.pause(run) } }
+                    model.pauseRun(run)
                 } label: { Label("Pause", systemImage: "pause.fill") }
                     .help("Stop after interrupting the current step; resume later")
             } else if [.paused, .interrupted].contains(run.status) {
                 Button {
-                    model.performRunAction("Couldn’t resume the run") { try model.engine.resume(run) }
+                    model.resumeRun(run)
                 } label: { Label("Resume", systemImage: "play.fill") }
                     .help("Continue the run from where it stopped")
             }
             if canRetry {
                 Button {
-                    model.performRunAction("Couldn’t retry the step") { try model.engine.retryStep(run) }
+                    model.retryStep(run)
                 } label: { Label("Retry Step", systemImage: "arrow.clockwise") }
                     .help("Run the failed step again")
             }
@@ -664,7 +665,7 @@ private struct RunControls: View {
         .font(.system(size: 12))
         .confirmationDialog("Cancel “\(run.title)”?", isPresented: $isConfirmingCancel) {
             Button("Cancel Run", role: .destructive) {
-                Task { await model.performRunAction("Couldn’t cancel the run") { try await model.engine.cancel(run) } }
+                model.cancelRun(run)
             }
             Button("Keep Running", role: .cancel) {}
         } message: {
@@ -761,7 +762,7 @@ private struct FinalStateCard: View {
                 }
                 if run.status == .failed {
                     Button {
-                        model.performRunAction("Couldn’t retry the step") { try model.engine.retryStep(run) }
+                        model.retryStep(run)
                         reload()
                     } label: { Label("Retry Step", systemImage: "arrow.clockwise") }
                         .buttonStyle(.pill)
@@ -789,7 +790,7 @@ private struct FinalStateCard: View {
     private func push() {
         isPushing = true
         Task {
-            await model.performRunAction("Couldn’t push \(baseName)") { _ = try await model.engine.push(run) }
+            await model.pushRun(run, baseName: baseName)
             isPushing = false
             reload()
         }
@@ -802,7 +803,7 @@ private struct FinalStateCard: View {
     private func merge(_ method: MergeMethod) {
         isMerging = true
         Task {
-            await model.performRunAction("Couldn’t merge") { try await model.engine.mergeDelivery(run, method: method) }
+            await model.mergeRun(run, method: method)
             isMerging = false
             reload()
         }

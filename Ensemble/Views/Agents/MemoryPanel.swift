@@ -3,7 +3,7 @@ import EnsembleUI
 import SwiftUI
 
 struct AgentSidePanel: View {
-    let session: AgentSession
+    let session: LiveAgentSession
     let project: Project
 
     var body: some View {
@@ -18,7 +18,7 @@ struct AgentSidePanel: View {
 
 struct MemoryPanel: View {
     @Environment(AppModel.self) private var model
-    let session: AgentSession
+    let session: LiveAgentSession
     let project: Project
     @State private var text = ""
     @State private var isEditing = false

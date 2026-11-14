@@ -20,6 +20,32 @@ public struct AppPaths: Sendable {
 
     public var database: URL { root.appending(path: "ensemble.sqlite") }
 
+    public var daemonIdentity: URL { root.appending(path: "daemon.json") }
+
+    public var daemonSocket: URL { root.appending(path: "ensembled.sock") }
+
+    public var daemonSettings: URL { root.appending(path: "daemon-settings.json") }
+
+    public var daemonLog: URL { root.appending(path: "ensembled.log") }
+
+    public var replicasDirectory: URL {
+        root.appending(path: "replicas", directoryHint: .isDirectory)
+    }
+
+    public func replica(_ daemonID: DaemonID) -> URL {
+        replicasDirectory.appending(path: "\(daemonID.uuidString.lowercased()).sqlite")
+    }
+
+    public func replicaState(_ daemonID: DaemonID) -> URL {
+        replicasDirectory.appending(path: "\(daemonID.uuidString.lowercased()).json")
+    }
+
+    public func replicaFiles(_ daemonID: DaemonID) -> URL {
+        replicasDirectory.appending(path: "\(daemonID.uuidString.lowercased())-files", directoryHint: .isDirectory)
+    }
+
+    public var knownDaemons: URL { root.appending(path: "daemons.json") }
+
     public func agentDirectory(_ agentID: Int64) -> URL {
         root.appending(path: "agents/\(agentID)", directoryHint: .isDirectory)
     }

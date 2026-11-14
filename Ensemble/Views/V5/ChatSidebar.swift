@@ -6,7 +6,7 @@ struct ChatSidebar: View {
     static let tabKey = "sidebar.tab"
 
     @Environment(AppModel.self) private var model
-    @AppStorage(ChatSidebar.tabKey) private var tab = SidebarTab.chats
+    @AppStorage(ChatSidebar.tabKey, store: AppDefaults.store) private var tab = SidebarTab.chats
 
     var body: some View {
         @Bindable var model = model
@@ -128,7 +128,7 @@ private struct ChatList: View {
     @Environment(AppModel.self) private var model
     let open: [ChatSummary]
     let closed: [ChatSummary]
-    @AppStorage("sidebar.closedExpanded") private var showsClosed = false
+    @AppStorage("sidebar.closedExpanded", store: AppDefaults.store) private var showsClosed = false
 
     var body: some View {
         if open.isEmpty && closed.isEmpty {

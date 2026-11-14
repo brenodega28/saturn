@@ -922,7 +922,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     func requireGit(for project: Project) throws -> GitClient {
-        guard let git = project.sshClient.map(GitClient.init(ssh:)) ?? gitProvider() else { throw WorkflowDriverError.notReady("git isn’t available.") }
+        guard !project.isRemote, let git = gitProvider() else { throw WorkflowDriverError.notReady("git isn’t available.") }
         return git
     }
 

@@ -215,17 +215,14 @@ private struct EncodeCorrectionSheet: View {
     private var isValid: Bool { encoding != nil }
 
     private func commit() {
-        guard let encoding, let git = model.git(for: project) else { return }
+        guard let encoding, let correctionID = correction.id else { return }
         isSaving = true
         Task {
             defer { isSaving = false }
             do {
-                let model = model
-                let project = project
-                try await model.database.encode(
-                    correction, as: encoding, repository: project.url, git: git,
-                    files: project.filesRoot, sync: { try await model.syncRemoteFiles(project) }
-                )
+                try await model.syncRemoteFiles(project)
+                try await model.send(CodeCommands.EncodeCorrection(correctionID: correctionID, encoding: encoding))
+                try await model.pullRemoteFiles(project)
                 model.reloadConfig(for: project)
                 done()
                 dismiss()

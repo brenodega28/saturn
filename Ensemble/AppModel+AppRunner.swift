@@ -16,18 +16,6 @@ struct RunTarget: Identifiable, Hashable {
 }
 
 extension AppModel {
-    func connectAppRunners() {
-        idleCleanup.willRemoveWorktree = { [weak self] worktree in
-            await self?.stopApp(runningIn: worktree)
-        }
-        driver.willRemoveWorktree = { [weak self] worktree in
-            await self?.stopApp(runningIn: worktree)
-        }
-        agents.willRemoveWorktree = { [weak self] worktree in
-            await self?.stopApp(runningIn: worktree)
-        }
-    }
-
     func runTargets(in project: Project) -> [RunTarget] {
         let home = (project.path as NSString).abbreviatingWithTildeInPath
         let main = RunTarget(
@@ -95,10 +83,10 @@ extension AppModel {
             runner = AppRunner(projectId: id, log: activityLog, environment: [:])
             appRunners[id] = runner
         }
-        runner.environment = AppRunner.environment(from: agents.processEnvironment)
-        if project.isRemote {
+        runner.environment = AppRunner.environment(from: locator.environment())
+        if project.isRemote || connection.isRemote {
             do {
-                runner.remote = try await remoteAgentHost(for: project)
+                runner.remote = try await appRunnerHost(for: project)
             } catch {
                 alert = AppAlert(title: "Couldn’t run \(project.name) on \(project.location)", message: error.localizedDescription)
                 return
@@ -141,7 +129,7 @@ extension AppModel {
 
     func chatChecks(for chat: Chat, run: Run?) -> ChatChecks {
         let steps = run?.id.flatMap { try? database.runSteps(runId: $0) } ?? []
-        let hold = run?.id.flatMap { engine.holds[$0] }
+        let hold = run?.id.flatMap { connection.holds[$0] }
         let hasWorkers = !(chat.id.map { (try? database.requestAgents(taskId: $0)) ?? [] } ?? []).isEmpty || run != nil
         return ChatChecks.make(run: run, workflow: run.flatMap(runWorkflow), steps: steps, hold: hold, hasWorkers: hasWorkers)
     }

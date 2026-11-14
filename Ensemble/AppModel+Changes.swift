@@ -4,8 +4,7 @@ import Foundation
 extension AppModel {
     func reviewableRuns(in project: Project) -> [Run] {
         guard let id = project.id else { return [] }
-        _ = engine.runs
-        _ = engine.holds
+        _ = connection.revision
         return ((try? database.runs(projectId: id)) ?? []).reversed()
     }
 
@@ -18,11 +17,11 @@ extension AppModel {
 
     func holdsForApproval(_ run: Run) -> Bool {
         guard let id = run.id else { return false }
-        return engine.waitingReason(runID: id)?.reason == .approval
+        return connection.waitingReason(runID: id)?.reason == .approval
     }
 
     func loadChanges(for run: Run, in project: Project) async -> RunChangeSet? {
-        guard let runID = run.id, let git = project.isRemote ? git(for: project) : requireGitForReview() else { return nil }
+        guard let runID = run.id, let git = git(for: project) else { return nil }
         let agents = (try? database.agents(inRun: runID)) ?? []
         return await RunChanges(git: git).load(runId: runID, agents: agents, repository: project.url)
     }
@@ -60,42 +59,32 @@ extension AppModel {
 
     func setViewed(_ viewed: Bool, path: ChangedPath, in run: Run) {
         guard let id = run.id else { return }
-        performReview("Couldn’t save the viewed state") {
-            try database.setViewed(viewed, runId: id, path: path.path, fingerprint: path.fingerprint)
-        }
+        dispatch("Couldn’t save the viewed state", CodeCommands.SetViewed(runID: id, path: path.path, fingerprint: path.fingerprint, viewed: viewed))
     }
 
     func setPin(_ pin: Pin, status: PinStatus, response: String? = nil) {
         guard let id = pin.id else { return }
-        performReview("Couldn’t update the pin") {
-            try database.updatePin(id: id, status: status, response: response)
-        }
+        dispatch("Couldn’t update the pin", CodeCommands.UpdatePin(pinID: id, status: status, response: response))
     }
 
     func addComment(in run: Run, branchAgentId: Int64?, file: String, side: PinSide, lines: ClosedRange<Int>, text: String) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let id = run.id, !text.isEmpty else { return }
-        performReview("Couldn’t save the comment") {
-            try database.createComment(
-                runId: id, branchAgentId: branchAgentId, file: file, side: side,
-                startLine: lines.lowerBound, endLine: lines.upperBound, text: text
-            )
-        }
+        dispatch("Couldn’t save the comment", CodeCommands.CreateComment(
+            runID: id, branchAgentID: branchAgentId, file: file, side: side,
+            startLine: lines.lowerBound, endLine: lines.upperBound, text: text
+        ))
     }
 
     func editComment(_ pin: Pin, text: String) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let id = pin.id, !text.isEmpty else { return }
-        performReview("Couldn’t update the comment") {
-            try database.updateComment(id: id, text: text)
-        }
+        dispatch("Couldn’t update the comment", CodeCommands.UpdateComment(pinID: id, text: text))
     }
 
     func deleteComment(_ pin: Pin) {
         guard let id = pin.id else { return }
-        performReview("Couldn’t delete the comment") {
-            try database.deletePin(id: id)
-        }
+        dispatch("Couldn’t delete the comment", CodeCommands.DeletePin(pinID: id))
     }
 
     @discardableResult
@@ -129,11 +118,11 @@ extension AppModel {
 
     func approveAllPins(in run: Run) {
         guard let id = run.id else { return }
-        performReview("Couldn’t approve the pins") {
-            try database.approveOpenPins(runId: id)
-            if holdsForApproval(run) {
-                try engine.resolveApproval(run, approved: true, note: nil)
-            }
+        let approving = holdsForApproval(run)
+        let requestID = connection.hold(runID: id)?.requestId
+        Task {
+            guard await command("Couldn’t approve the pins", CodeCommands.ApproveOpenPins(runID: id)) != nil, approving else { return }
+            await command("Couldn’t approve the run", RunCommands.ResolveApproval(runID: id, approved: true, requestID: requestID))
         }
     }
 
@@ -141,32 +130,15 @@ extension AppModel {
         let names = Dictionary(agents(inRun: run).compactMap { agent in agent.id.map { ($0, displayName(of: agent)) } }, uniquingKeysWith: { first, _ in first })
         let summary = Pin.changeRequestSummary(pins, agentNames: names)
         guard !summary.isEmpty else { return }
-        performReview("Couldn’t send the changes back") {
-            try engine.resolveApproval(run, approved: false, note: summary)
-        }
+        guard let id = run.id else { return }
+        dispatch("Couldn’t send the changes back", RunCommands.ResolveApproval(runID: id, approved: false, note: summary, requestID: connection.hold(runID: id)?.requestId))
     }
 
     func displayName(of diff: BranchFileDiff) -> String {
         session(forAgentID: diff.agentId).map { displayName(of: $0.agent) } ?? diff.agentName
     }
 
-    private func session(forAgentID id: Int64?) -> AgentSession? {
-        guard let id, let agent = try? database.agent(id: id) else { return nil }
-        return agents.session(for: agent)
-    }
-
-    private func requireGitForReview() -> GitClient? {
-        if git == nil {
-            alert = AppAlert(title: "git isn’t available", message: "Ensemble couldn’t find git, so it can’t show this run’s changes.")
-        }
-        return git
-    }
-
-    private func performReview(_ title: String, _ action: () throws -> Void) {
-        do {
-            try action()
-        } catch {
-            alert = AppAlert(title: title, message: error.localizedDescription)
-        }
+    private func session(forAgentID id: Int64?) -> LiveAgentSession? {
+        id.flatMap(connection.session(agentID:))
     }
 }

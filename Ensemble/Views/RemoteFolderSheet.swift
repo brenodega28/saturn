@@ -10,7 +10,7 @@ struct RemoteFolderSheet: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("remoteFolder.lastHost") private var lastHost = ""
+    @AppStorage("remoteFolder.lastHost", store: AppDefaults.store) private var lastHost = ""
 
     @State private var hostInput = ""
     @State private var configHosts: [String] = []

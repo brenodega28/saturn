@@ -14,3 +14,15 @@ import Testing
         #expect(paths.root == URL.applicationSupportDirectory.appending(path: "Ensemble", directoryHint: .isDirectory))
     }
 }
+
+@Suite struct AppDefaultsTests {
+    @Test func aCustomDataFolderGetsItsOwnDefaultsSuite() {
+        #expect(AppDefaults.suiteName(for: [:]) == nil)
+        let one = AppDefaults.suiteName(for: ["ENSEMBLE_DATA_DIR": "/tmp/one"])
+        let again = AppDefaults.suiteName(for: ["ENSEMBLE_DATA_DIR": "/tmp/one/"])
+        let other = AppDefaults.suiteName(for: ["ENSEMBLE_DATA_DIR": "/tmp/two"])
+        #expect(one?.hasPrefix("dev.monoliti.Ensemble.data-dir.") == true)
+        #expect(one == again)
+        #expect(one != other)
+    }
+}

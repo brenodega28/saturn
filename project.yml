@@ -24,7 +24,33 @@ targets:
     type: application
     platform: macOS
     sources:
-      - Ensemble
+      - path: Ensemble
+        excludes:
+          - Daemon/*.plist
+      - path: Ensemble/Daemon/dev.monoliti.ensembled.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
+    postCompileScripts:
+      - name: Embed ensembled
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          PACKAGE="$SRCROOT/Packages/EnsembleCore"
+          if [ "$CONFIGURATION" = "Release" ]; then SWIFT_CONFIG=release; else SWIFT_CONFIG=debug; fi
+          BUILD=(/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/xcrun swift build --package-path "$PACKAGE" -c "$SWIFT_CONFIG" --product ensembled)
+          "${BUILD[@]}"
+          BIN="$("${BUILD[@]}" --show-bin-path)"
+          DEST="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          mkdir -p "$DEST"
+          rm -rf "$DEST/ensembled" "$DEST/EnsembleCore_EnsembleCore.bundle"
+          cp -f "$BIN/ensembled" "$DEST/ensembled"
+          cp -R "$BIN/EnsembleCore_EnsembleCore.bundle" "$DEST/EnsembleCore_EnsembleCore.bundle"
+          if [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]; then
+            /usr/bin/codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$DEST/EnsembleCore_EnsembleCore.bundle"
+            /usr/bin/codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --options runtime --timestamp=none --identifier dev.monoliti.ensembled "$DEST/ensembled"
+          fi
     dependencies:
       - package: EnsembleCore
       - package: EnsembleUI
@@ -53,6 +79,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.monoliti.Ensemble
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
 schemes:

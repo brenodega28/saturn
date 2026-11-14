@@ -113,10 +113,13 @@ enum NewChatFilter {
 struct ProjectCards: View {
     @Environment(AppModel.self) private var model
     let summaries: [ChatSummary]
-    @AppStorage("sidebar.openProject") private var openProjectID = -1
+    @AppStorage("sidebar.openProject", store: AppDefaults.store) private var openProjectID = -1
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if model.connections.count > 1 {
+                FleetHeader(connection: model.connection, isActive: true)
+            }
             ForEach(model.openProjects) { project in
                 ProjectCard(
                     project: project,
@@ -133,7 +136,45 @@ struct ProjectCards: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 38)
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tokens.hair2, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+            ForEach(model.orderedConnections.filter { $0.id != model.connection.id }) { other in
+                FleetHeader(connection: other, isActive: false)
+                ForEach(model.projects(on: other)) { project in
+                    Button { model.open(project, on: other) } label: {
+                        HStack(spacing: 10) {
+                            ProjectTile(project: project, size: 22)
+                            Text(project.name).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Tokens.text)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 10)
+                        .frame(height: 34)
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open \(project.name) on \(model.displayName(of: other))")
+                }
+            }
         }
+    }
+}
+
+private struct FleetHeader: View {
+    @Environment(AppModel.self) private var model
+    let connection: DaemonConnection
+    let isActive: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: connection.isRemote ? "server.rack" : "laptopcomputer").font(.system(size: 10))
+            Text(model.displayName(of: connection)).font(.system(size: 11.5, weight: .semibold))
+            if !connection.isConnected {
+                Text("offline").font(.system(size: 10.5)).foregroundStyle(Tokens.text2)
+            }
+            Spacer()
+        }
+        .foregroundStyle(isActive ? Tokens.text : Tokens.text2)
+        .padding(.top, isActive ? 0 : 8)
+        .padding(.horizontal, 4)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 

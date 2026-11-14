@@ -49,12 +49,9 @@ extension AppModel {
         if let project = project(withID: id) { return project }
         reloadProjects()
         if let project = project(withID: id) { return project }
-        guard let stored = try? database.project(id: id), FileManager.default.fileExists(atPath: stored.path),
-              (try? database.openProject(at: stored.url)) != nil else { return nil }
-        reloadProjects()
-        guard let project = project(withID: id) else { return nil }
-        Task { await refresh(project) }
-        return project
+        guard let stored = try? database.project(id: id), FileManager.default.fileExists(atPath: stored.path) else { return nil }
+        Task { await openFolder(stored.url) }
+        return stored
     }
 }
 

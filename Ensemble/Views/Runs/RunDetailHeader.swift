@@ -183,21 +183,21 @@ struct RunDetailControls: View {
             if run.status == .running || run.status == .pending {
                 Button {
                     Task {
-                        await model.performRunAction("Couldn’t pause the run") { try await model.engine.pause(run) }
+                        model.pauseRun(run)
                         reload()
                     }
                 } label: { Label("Pause", systemImage: "pause.fill") }
                     .help("Interrupt the current step and hold the run; resume later")
             } else if run.status == .paused || run.status == .interrupted {
                 Button {
-                    model.performRunAction("Couldn’t resume the run") { try model.engine.resume(run) }
+                    model.resumeRun(run)
                     reload()
                 } label: { Label("Resume", systemImage: "play.fill") }
                     .help("Continue the run from where it stopped")
             }
             if canRetry {
                 Button {
-                    model.performRunAction("Couldn’t retry the step") { try model.engine.retryStep(run) }
+                    model.retryStep(run)
                     reload()
                 } label: { Label("Retry Step", systemImage: "arrow.clockwise") }
                     .help("Run the failed step again")
@@ -218,7 +218,7 @@ struct RunDetailControls: View {
         .confirmationDialog("Cancel “\(RunDetailFormat.runTitle(run))”?", isPresented: $isConfirmingCancel) {
             Button("Cancel Run", role: .destructive) {
                 Task {
-                    await model.performRunAction("Couldn’t cancel the run") { try await model.engine.cancel(run) }
+                    model.cancelRun(run)
                     reload()
                 }
             }

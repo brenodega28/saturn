@@ -17,6 +17,14 @@ extension AgentRuntime {
     func runChecks(_ checks: [CheckDefinition], for agent: Agent, in directory: URL? = nil, label: String) async -> [CheckResult] {
         guard let worktree = directory ?? agent.worktreeURL, let id = agent.id else { return [] }
         let logs = paths.agentDirectory(id).appending(path: "checks/\(label)", directoryHint: .isDirectory)
-        return await checkRunner.run(checks, in: worktree, variables: checkVariables(for: agent, worktree: worktree), logDirectory: logs)
+        var runner = checkRunner
+        if let project = remoteProject(of: agent) {
+            do {
+                runner.remote = try await remoteHostProvider(project)
+            } catch {
+                return checks.map { CheckResult(name: $0.name, kind: $0.kind, command: $0.command, status: .couldNotRun, output: error.localizedDescription) }
+            }
+        }
+        return await runner.run(checks, in: worktree, variables: checkVariables(for: agent, worktree: worktree), logDirectory: logs)
     }
 }

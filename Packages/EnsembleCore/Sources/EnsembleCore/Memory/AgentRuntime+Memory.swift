@@ -3,7 +3,7 @@ import Foundation
 extension AgentRuntime {
     public func memory(for agent: Agent) -> AgentMemory? {
         guard let project = try? database.project(id: agent.projectId) else { return nil }
-        return AgentMemory(repository: project.url, agentName: agent.name)
+        return AgentMemory(repository: project.filesRoot, agentName: agent.name)
     }
 
     func memoryPromptSection(for agent: Agent, repository: URL) -> String? {
@@ -16,6 +16,19 @@ extension AgentRuntime {
         let memory = AgentMemory(repository: repository, agentName: agent.name)
         let directory = try memory.prepareDirectory()
         let file = "/" + realPath(of: directory) + "/" + memory.url.lastPathComponent
+        var updated = setup
+        updated.additionalDirectories.append(directory)
+        if !setup.readOnly {
+            updated.extraAllowedTools += ["Write(\(file))", "Edit(\(file))"]
+        }
+        return updated
+    }
+
+    func addingRemoteMemoryAccess(to setup: TurnSetup, for agent: Agent, repository: URL?) -> TurnSetup {
+        guard agent.isPinned, let id = agent.id, memoryUpdateAgents.contains(id), let repository else { return setup }
+        let memory = AgentMemory(repository: repository, agentName: agent.name)
+        let directory = AgentMemory.directory(in: repository)
+        let file = "/" + SSHFileSystem.normalize(memory.url.path)
         var updated = setup
         updated.additionalDirectories.append(directory)
         if !setup.readOnly {

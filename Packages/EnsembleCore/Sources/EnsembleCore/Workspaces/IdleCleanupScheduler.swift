@@ -57,10 +57,11 @@ public final class IdleCleanupScheduler {
 
     @discardableResult
     public func sweep(now: Date = .now) async -> [Int64] {
-        guard let git = gitProvider(), let projects = try? runtime.database.openProjects() else { return [] }
+        guard let projects = try? runtime.database.openProjects() else { return [] }
         var archived: [Int64] = []
         for project in projects {
-            guard let projectId = project.id, project.settings.idleCleanupMinutes > 0 else { continue }
+            guard let projectId = project.id, project.settings.idleCleanupMinutes > 0,
+                  let git = project.sshClient.map(GitClient.init(ssh:)) ?? gitProvider() else { continue }
             for session in dueSessions(in: projectId, minutes: project.settings.idleCleanupMinutes, now: now) {
                 if await runtime.archiveIdleAgent(session, in: project, git: git, now: now, willRemoveWorktree: willRemoveWorktree) {
                     archived.append(session.id)
@@ -88,10 +89,12 @@ extension AgentRuntime {
         _ session: AgentSession, in project: Project, git: GitClient, now: Date = .now,
         willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
     ) async -> Bool {
-        if let path = session.agent.worktreeURL, FileManager.default.fileExists(atPath: path.path) {
-            let manager = WorktreeManager(repository: project.url, git: git)
-            let target = realPath(of: path)
-            if let worktree = try? await manager.list().first(where: { realPath(of: $0.path) == target }) {
+        let git = hostGit(git, for: project)
+        if let path = session.agent.worktreeURL, (try? await project.fileSystem.fileExists(path)) == true {
+            let manager = WorktreeManager(project: project, git: git)
+            let resolve: (URL) -> String = { project.isRemote ? SSHFileSystem.normalize($0.path) : realPath(of: $0) }
+            let target = resolve(path)
+            if let worktree = try? await manager.list().first(where: { resolve($0.path) == target }) {
                 guard let status = try? await git.run(["status", "--porcelain"], in: path),
                       status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
                 await willRemoveWorktree(path)

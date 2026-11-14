@@ -83,7 +83,6 @@ public final class RunEngine {
 
     @discardableResult
     public func start(task: ProjectTask, workflow: WorkflowDefinition, project: Project, title: String? = nil, brief: String? = nil) throws -> Run {
-        try RemoteProjectUnsupported.check(project, "Running workflows")
         guard let first = workflow.firstStep else { throw RunEngineError.emptyWorkflow(workflow.name) }
         guard let projectId = project.id, let taskId = task.id else { throw RunEngineError.invalidState("Save the task and project before starting a run.") }
         let now = clock()

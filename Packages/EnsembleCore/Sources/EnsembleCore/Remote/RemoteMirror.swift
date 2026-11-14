@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Synchronization
 
 public struct RemoteMirrorConflict: Error, LocalizedError, Equatable {
     public let paths: [String]
@@ -34,8 +35,11 @@ public struct RemoteMirror: Sendable {
         self.client = client
     }
 
-    public static func location(forProject id: Int64, paths: AppPaths = .standard) -> (directory: URL, manifest: URL) {
-        let root = paths.root.appending(path: "remote/\(id)", directoryHint: .isDirectory)
+    static let rootOverrides = Mutex<[String: URL]>([:])
+
+    public static func location(forProject id: Int64, host: String? = nil, paths: AppPaths = .standard) -> (directory: URL, manifest: URL) {
+        let base = host.flatMap { host in rootOverrides.withLock { $0[host] } } ?? paths.root
+        let root = base.appending(path: "remote/\(id)", directoryHint: .isDirectory)
         return (root.appending(path: "files", directoryHint: .isDirectory), root.appending(path: "manifest.json"))
     }
 
@@ -171,8 +175,19 @@ public struct RemoteMirror: Sendable {
 }
 
 extension Project {
+    public var sshClient: SSHClient? {
+        host.map { destination in
+            let override = SSHClient.executable(for: destination)
+            return SSHClient(destination: destination, executable: override ?? SSHClient.defaultExecutable, controlDirectory: override == nil ? SSHClient.sharedControlDirectory() : nil)
+        }
+    }
+
+    public var fileSystem: any ProjectFileSystem {
+        sshClient.map { SSHFileSystem(client: $0) } ?? LocalFileSystem()
+    }
+
     public var filesRoot: URL {
         guard isRemote, let id else { return url }
-        return RemoteMirror.location(forProject: id).directory
+        return RemoteMirror.location(forProject: id, host: host).directory
     }
 }

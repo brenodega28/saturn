@@ -339,7 +339,9 @@ struct ConflictBanner: View {
                 defer { busy = false }
                 do {
                     let staged = try await model.driver.stageForMergeTool(conflict, in: run)
-                    if let editor = ExternalApp.installed(ExternalApp.editorCandidates).first {
+                    if let builder = model.agents(inRun: run).first(where: { $0.worktreeURL == staged.worktree }), model.isRemote(builder) {
+                        model.openRemoteShell(at: staged.worktree, forAgent: builder)
+                    } else if let editor = ExternalApp.installed(ExternalApp.editorCandidates).first {
                         editor.open(staged.worktree)
                     } else {
                         NSWorkspace.shared.activateFileViewerSelecting([staged.worktree])

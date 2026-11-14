@@ -105,6 +105,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
     public var hooks: JSONValue?
     public var permissions: PermissionPolicy?
     public var askTools: [String]
+    public var remote: RemoteAgentLaunch?
 
     public init(
         executable: URL,
@@ -119,8 +120,10 @@ public struct ClaudeLaunch: Sendable, Equatable {
         extraAllowedTools: [String] = [],
         hooks: JSONValue? = nil,
         permissions: PermissionPolicy? = nil,
-        askTools: [String] = []
+        askTools: [String] = [],
+        remote: RemoteAgentLaunch? = nil
     ) {
+        self.remote = remote
         self.permissions = permissions
         self.askTools = askTools
         self.executable = executable
@@ -146,6 +149,16 @@ public struct ClaudeLaunch: Sendable, Equatable {
 
     public var workingDirectory: URL { worktree }
 
+    func resolvedPath(of url: URL) -> String {
+        remote == nil ? realPath(of: url) : SSHFileSystem.normalize(url.path)
+    }
+
+    public var invocation: (executable: URL, arguments: [String], environment: [String: String], directory: URL?) {
+        guard let remote else { return (executable, arguments, processEnvironment, worktree) }
+        let local = remote.host.client.runner.environment
+        return (remote.host.client.executable, remote.sshArguments(directory: worktree.path, environment: processEnvironment, arguments: arguments), local, nil)
+    }
+
     public var processEnvironment: [String: String] {
         guard extraAllowedTools.contains(AgentPermissions.artifactReadTool) else { return environment }
         return environment.merging(AgentPermissions.artifactEnvironment) { _, artifact in artifact }
@@ -170,7 +183,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
         case .resume(let id): arguments += ["--resume", id]
         }
         for directory in additionalDirectories {
-            arguments += ["--add-dir", realPath(of: directory)]
+            arguments += ["--add-dir", resolvedPath(of: directory)]
         }
         if !writes {
             arguments.append("--disallowedTools")
@@ -200,11 +213,14 @@ public struct ClaudeLaunch: Sendable, Equatable {
 
     var allowedTools: [String] {
         guard let permissions else {
-            return readOnly ? AgentPermissions.readOnlyAllowedTools() : AgentPermissions.allowedTools(worktree: worktree)
+            guard !readOnly else { return AgentPermissions.readOnlyAllowedTools() }
+            guard remote != nil else { return AgentPermissions.allowedTools(worktree: worktree) }
+            let scope = "/" + resolvedPath(of: worktree) + "/**"
+            return AgentPermissions.tools + AgentPermissions.fileWritingTools.map { "\($0)(\(scope))" } + AgentPermissions.commands.map { "Bash(\($0):*)" }
         }
         let commands = permissions.commands.map { "Bash(\($0):*)" }
         guard writes, permissions.level(.editFiles) == .allow else { return AgentPermissions.tools + commands }
-        let scope = "/" + realPath(of: worktree) + "/**"
+        let scope = "/" + resolvedPath(of: worktree) + "/**"
         return AgentPermissions.tools + AgentPermissions.fileWritingTools.map { "\($0)(\(scope))" } + commands
     }
 

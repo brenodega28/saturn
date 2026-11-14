@@ -24,7 +24,12 @@ public struct ClaudeProcessLauncher: AgentProcessLauncher {
 
     public func launch(_ launch: ClaudeLaunch) throws -> (AgentProcessHandle, AsyncStream<ProcessOutput>) {
         let process = ClaudeProcess()
-        return (process, try process.start(launch))
+        let stream = try process.start(launch)
+        if let remote = launch.remote {
+            process.remote = remote
+            for line in remote.preamble { try process.send(line: line) }
+        }
+        return (process, stream)
     }
 }
 
@@ -38,6 +43,7 @@ public final class ClaudeProcess: AgentProcessHandle, @unchecked Sendable {
     private let input = Pipe()
     private let lock = NSLock()
     private var inputClosed = false
+    var remote: RemoteAgentLaunch?
 
     public init(drainGrace: Duration = .seconds(2)) {
         self.drainGrace = drainGrace
@@ -51,10 +57,11 @@ public final class ClaudeProcess: AgentProcessHandle, @unchecked Sendable {
     func start(_ launch: ClaudeLaunch) throws -> AsyncStream<ProcessOutput> {
         let output = Pipe()
         let errors = Pipe()
-        process.executableURL = launch.executable
-        process.arguments = launch.arguments
-        process.environment = launch.processEnvironment
-        process.currentDirectoryURL = launch.worktree
+        let invocation = launch.invocation
+        process.executableURL = invocation.executable
+        process.arguments = invocation.arguments
+        process.environment = invocation.environment
+        process.currentDirectoryURL = invocation.directory
         process.standardInput = input
         process.standardOutput = output
         process.standardError = errors
@@ -110,6 +117,7 @@ public final class ClaudeProcess: AgentProcessHandle, @unchecked Sendable {
 
     public func terminate() {
         closeInput()
+        remote?.signal("TERM")
         if process.isRunning {
             process.terminate()
         }
@@ -117,6 +125,7 @@ public final class ClaudeProcess: AgentProcessHandle, @unchecked Sendable {
 
     public func kill() {
         closeInput()
+        remote?.signal("KILL")
         guard process.isRunning else { return }
         let root = process.processIdentifier
         for pid in Self.descendants(of: root).reversed() {

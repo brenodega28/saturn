@@ -18,6 +18,10 @@ public struct GitClient: Sendable {
 
     public var isRemote: Bool { sshClient != nil }
 
+    public var fileSystem: any ProjectFileSystem {
+        sshClient.map { SSHFileSystem(client: $0) } ?? LocalFileSystem()
+    }
+
     public var sshClient: SSHClient? {
         if case .ssh(let client) = transport { return client }
         return nil

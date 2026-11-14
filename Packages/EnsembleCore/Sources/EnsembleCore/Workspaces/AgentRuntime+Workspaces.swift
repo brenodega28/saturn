@@ -26,13 +26,17 @@ public struct WorktreePreparation: Sendable, Equatable {
 
 extension AgentRuntime {
     public func runSetupScript(_ preparation: WorktreePreparation) async throws {
-        guard let settings = try database.project(id: preparation.projectId)?.settings else { return }
+        guard let project = try database.project(id: preparation.projectId) else { return }
+        let settings = project.settings
         let script = settings.setupScript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !script.isEmpty else { return }
-        let runner = SetupScriptRunner(
+        var runner = SetupScriptRunner(
             environment: setupEnvironment(),
             timeout: .seconds(max(1, settings.setupTimeoutMinutes) * 60)
         )
+        if project.isRemote {
+            runner.remote = try await remoteHostProvider(project)
+        }
         try await runner.run(script: script, in: preparation.worktree, variables: preparation.variables, logDirectory: preparation.logDirectory)
     }
 
@@ -96,16 +100,17 @@ extension AgentRuntime {
     }
 
     func canRestoreWorktree(of agent: Agent) -> Bool {
-        !agent.readOnly && agent.worktreeURL != nil && agent.branch != nil && gitProvider() != nil
+        !agent.readOnly && agent.worktreeURL != nil && agent.branch != nil
+            && ((try? database.project(id: agent.projectId)).flatMap { $0 }.flatMap(projectGit) != nil)
     }
 
     func restoreWorktree(of session: AgentSession) async throws {
         let agent = session.agent
-        guard let git = gitProvider(), let path = agent.worktreeURL, let branch = agent.branch,
-              let project = try database.project(id: agent.projectId) else {
+        guard let project = try database.project(id: agent.projectId), let git = projectGit(project),
+              let path = agent.worktreeURL, let branch = agent.branch else {
             throw AgentLaunchError.missingWorktree(agent.name)
         }
-        try await WorktreeManager(repository: project.url, git: git).restore(at: path, branch: branch)
+        try await WorktreeManager(project: project, git: git).restore(at: path, branch: branch)
         try await prepareWorktree(of: session)
     }
 

@@ -414,12 +414,12 @@ extension RunEngine {
 
     func approvesPlans(projectID: Int64) -> Bool {
         guard let project = try? database.project(id: projectID) else { return true }
-        return ProjectPreferences.load(repository: project.url).approvePlans
+        return ProjectPreferences.load(repository: project.filesRoot).approvePlans
     }
 
     func reviewerFixRounds(projectID: Int64) -> Int {
         guard let project = try? database.project(id: projectID) else { return ReviewPolicy.Reviewer().fixRounds }
-        return ProjectConfigLoader.load(repository: project.url).review.reviewer.fixRounds
+        return ProjectConfigLoader.load(repository: project.filesRoot).review.reviewer.fixRounds
     }
 
     func buildsCode(_ step: WorkflowStep, project: Project) -> Bool {

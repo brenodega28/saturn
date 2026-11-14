@@ -288,8 +288,7 @@ struct FakeSSHHost {
         let body = failure.map { "echo \(ShellQuote.quote($0)) >&2; exit 255" } ?? #"""
         while [ "$1" != "--" ]; do shift; done
         shift 2
-        export HOME=\#(ShellQuote.quote(home.path))
-        cd "$HOME" && exec /bin/sh -c "$1"
+        cd \#(ShellQuote.quote(home.path)) && exec env -i HOME=\#(ShellQuote.quote(home.path)) PATH=/usr/bin:/bin:/usr/sbin:/sbin SHELL=/bin/sh /bin/sh -c "$1"
         """#
         try "#!/bin/sh\n\(body)\n".write(to: executable, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
@@ -319,33 +318,17 @@ struct FakeSSHHost {
 }
 
 @Suite @MainActor struct RemoteProjectGuardTests {
-    typealias H = WorkflowHarness
-
-    @Test func refusesToRunWorkflowsOrSpawnAgentsOnAnSSHProject() async throws {
-        let h = try H.make()
-        defer { h.cleanUp() }
-        let remote = try h.database.openRemoteProject(path: h.project.path, host: "devbox")
-        let task = try h.database.insert(ProjectTask(
-            projectId: try #require(remote.id), title: "Fix it", body: "", source: .chat,
-            status: .incoming, createdAt: .now, updatedAt: .now
-        ))
-
-        #expect(throws: RemoteProjectUnsupported("Running workflows")) {
-            try h.engine.start(task: task, workflow: try h.workflow("feature-delivery"), project: remote)
-        }
-        #expect(try h.database.runs(projectId: try #require(remote.id)).isEmpty)
-    }
-
-    @Test func refusesToSpawnAgentsEvenWhenTheSamePathExistsOnThisMac() async throws {
+    @Test func neverTouchesALocalFolderAtTheSamePathEvenWhenHandedLocalGit() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
-        let remote = try harness.database.openRemoteProject(path: harness.project.path, host: "devbox")
+        let remote = try harness.database.openRemoteProject(path: harness.project.path, host: "ensemble-test.invalid")
 
-        await #expect(throws: RemoteProjectUnsupported("Spawning agents")) {
+        await #expect(throws: (any Error).self) {
             try await harness.runtime.spawn(in: remote, kind: .builder, count: 1, git: harness.repo.git, name: "Ghost")
         }
-        #expect(throws: RemoteProjectUnsupported("The Lead")) { try harness.runtime.createLeadAgent(in: remote, taskId: 1) }
         #expect(!FileManager.default.fileExists(atPath: harness.repo.root.appending(path: ".crew").path))
         #expect(try harness.database.agents(inProject: try #require(remote.id)).isEmpty)
+        #expect(harness.runtime.hostGit(harness.repo.git, for: remote).isRemote)
+        #expect(!harness.runtime.hostGit(harness.repo.git, for: harness.project).isRemote)
     }
 }

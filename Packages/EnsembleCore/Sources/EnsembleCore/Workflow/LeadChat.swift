@@ -129,7 +129,7 @@ public final class LeadChat {
         guard let workflowID = proposal.workflow else { throw LeadChatError.proposalClosed }
         guard let task = try database.task(id: proposal.taskId) else { throw RunEngineError.invalidState("The request is gone.") }
         guard try !database.runs(taskId: proposal.taskId).contains(where: \.isActive) else { throw LeadChatError.runInProgress }
-        let config = ProjectConfigLoader.load(repository: project.url)
+        let config = ProjectConfigLoader.load(repository: project.filesRoot)
         guard let workflow = config.workflow(workflowID) else { throw LeadChatError.unknownWorkflow(workflowID) }
         let lead = try database.leadAgent(taskId: proposal.taskId)
         let spec = try pendingSpec(taskId: proposal.taskId, projectId: task.projectId)

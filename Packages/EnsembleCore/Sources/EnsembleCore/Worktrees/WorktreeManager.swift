@@ -29,7 +29,12 @@ public struct WorktreeManager: Sendable {
     private let git: GitClient
     private let fileSystem: any ProjectFileSystem
 
-    public init(repository: URL, git: GitClient, fileSystem: any ProjectFileSystem = LocalFileSystem(), branchPrefix: String? = nil) {
+    public init(project: Project, git: GitClient) {
+        self.init(repository: project.url, git: git, branchPrefix: ProjectPreferences.load(repository: project.filesRoot).branchPrefix)
+    }
+
+    public init(repository: URL, git: GitClient, fileSystem: (any ProjectFileSystem)? = nil, branchPrefix: String? = nil) {
+        let fileSystem = fileSystem ?? git.sshClient.map { SSHFileSystem(client: $0) as any ProjectFileSystem } ?? LocalFileSystem()
         self.repository = fileSystem.isLocal ? repository.standardizedFileURL : URL(fileURLWithPath: fileSystem.canonicalPath(repository), isDirectory: true)
         self.git = git
         self.fileSystem = fileSystem

@@ -5,6 +5,8 @@ public protocol ProjectFileSystem: Sendable {
     func fileExists(_ url: URL) async throws -> Bool
     func createDirectory(_ url: URL) async throws
     func readText(_ url: URL) async throws -> String?
+    func readData(_ url: URL) async throws -> Data?
+    func writeData(_ data: Data, to url: URL) async throws
     func writeText(_ text: String, to url: URL) async throws
     func subdirectories(of url: URL) async throws -> [URL]
     func removeItem(_ url: URL) async throws
@@ -30,6 +32,14 @@ public struct LocalFileSystem: ProjectFileSystem {
 
     public func writeText(_ text: String, to url: URL) async throws {
         try text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    public func readData(_ url: URL) async throws -> Data? {
+        try? Data(contentsOf: url)
+    }
+
+    public func writeData(_ data: Data, to url: URL) async throws {
+        try data.write(to: url, options: .atomic)
     }
 
     public func subdirectories(of url: URL) async throws -> [URL] {
@@ -85,6 +95,21 @@ public struct SSHFileSystem: ProjectFileSystem {
         _ = try await client.runChecked(arguments: ["sh", "-c", script, "ensemble", text, url.path])
     }
 
+    public func readData(_ url: URL) async throws -> Data? {
+        let result = try await client.run(arguments: ["sh", "-c", #"[ -f "$1" ] || exit 4; base64 < "$1""#, "ensemble", url.path])
+        guard result.succeeded else { return nil }
+        return Data(base64Encoded: result.standardOutput, options: .ignoreUnknownCharacters)
+    }
+
+    public func writeData(_ data: Data, to url: URL) async throws {
+        let script = #"""
+        printf '%s' "$2" > "$1.ensemble-b64"
+        { base64 -d < "$1.ensemble-b64" 2>/dev/null || base64 -D < "$1.ensemble-b64"; } > "$1.ensemble-tmp" && mv -f -- "$1.ensemble-tmp" "$1"
+        status=$?; rm -f -- "$1.ensemble-b64" "$1.ensemble-tmp"; exit $status
+        """#
+        _ = try await client.runChecked(arguments: ["sh", "-c", script, "ensemble", url.path, data.base64EncodedString()])
+    }
+
     public func subdirectories(of url: URL) async throws -> [URL] {
         do {
             let listing = try await RemoteHost(client: client).list(url.path)
@@ -102,6 +127,30 @@ public struct SSHFileSystem: ProjectFileSystem {
 
     public func canonicalPath(_ url: URL) -> String {
         Self.normalize(url.path)
+    }
+
+    public func readTextFiles(in root: URL, paths: [String], maximumBytes: Int) async -> [String: String] {
+        guard !paths.isEmpty else { return [:] }
+        let script = #"""
+        cd -- "$1" 2>/dev/null || exit 3; max=$2; shift 2
+        for f in "$@"; do
+          [ -f "./$f" ] || continue
+          [ "$(wc -c < "./$f" | tr -d ' ')" -lt "$max" ] || continue
+          printf '%s\0' "$f"; base64 < "./$f" | tr -d '\n'; printf '\0'
+        done
+        """#
+        var contents: [String: String] = [:]
+        for batch in stride(from: 0, to: paths.count, by: 500).map({ Array(paths[$0..<min($0 + 500, paths.count)]) }) {
+            guard let result = try? await client.run(arguments: ["sh", "-c", script, "ensemble", root.path, String(maximumBytes)] + batch),
+                  result.succeeded else { continue }
+            let fields = RemoteHost.records(result.standardOutput)
+            for index in stride(from: 0, to: fields.count - 1, by: 2) {
+                if let data = Data(base64Encoded: fields[index + 1]), let text = String(data: data, encoding: .utf8) {
+                    contents[fields[index]] = text
+                }
+            }
+        }
+        return contents
     }
 
     static func normalize(_ path: String) -> String {

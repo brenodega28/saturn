@@ -140,7 +140,7 @@ struct SettingsContainer: View {
     }
 
     private var visibleSections: [SettingsSection] {
-        project.isRemote ? SettingsSection.allCases.filter { ![.github, .workspaces].contains($0) } : Array(SettingsSection.allCases)
+        Array(SettingsSection.allCases)
     }
 
     private var sidebar: some View {
@@ -277,6 +277,9 @@ private struct GeneralSettings: View {
     var body: some View {
         let config = model.config(for: project)
         SettingsPage("General", subtitle: "Where this project lives and the state of its Ensemble config.") {
+            if project.isRemote {
+                RemoteHostCard(project: project)
+            }
             VStack(alignment: .leading, spacing: 10) {
                 row("Folder") {
                     HStack {

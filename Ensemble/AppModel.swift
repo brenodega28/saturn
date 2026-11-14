@@ -142,6 +142,9 @@ final class AppModel {
     var isRemoteFolderPresented = false
     var remoteStatuses: [Int64: RemoteProjectStatus] = [:]
     var remoteFileSyncs: [Int64: Task<Void, Error>] = [:]
+    var remoteHostInfos: [String: RemoteHostInfo] = [:]
+    var remoteTunnels: [String: RemoteTunnel] = [:]
+    var remoteTunnelOpenings: [String: Task<Int, Error>] = [:]
     var alert: AppAlert?
     var chatHighlight: ChatLink?
 
@@ -418,7 +421,7 @@ final class AppModel {
     }
 
     func spawnAgents(in project: Project, kind: AgentKind, count: Int, name: String, model: String, skills: [String], pinned: Bool, task: String) async throws {
-        guard let git = requireGit() else { return }
+        guard let git = project.isRemote ? git(for: project) : requireGit() else { return }
         let sessions = try await agents.spawn(
             in: project,
             kind: kind,
@@ -455,7 +458,7 @@ final class AppModel {
     }
 
     func deleteAgent(_ session: AgentSession, in project: Project, deleteBranch: Bool) async {
-        guard let git = requireGit() else { return }
+        guard let git = project.isRemote ? git(for: project) : requireGit() else { return }
         do {
             try await agents.delete(session, in: project, git: git, deleteBranch: deleteBranch)
             if selectedAgent(in: project)?.id == session.id { select(nil, in: project) }
@@ -566,6 +569,7 @@ final class AppModel {
             let recovery = try await manager.recover()
             let branch = try await host.currentBranch(in: project.path)
             projectStates[id] = ProjectState(branch: branch, worktrees: recovery.worktrees, recovery: recovery)
+            if let destination = project.host { remoteHostInfos[destination] = info }
             try await pullRemoteFiles(project)
             remoteStatuses[id] = RemoteProjectStatus(info: info, filesPulledAt: .now)
         } catch {

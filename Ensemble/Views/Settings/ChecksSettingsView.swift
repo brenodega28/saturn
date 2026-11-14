@@ -155,7 +155,7 @@ struct ChecksSettingsView: View {
     }
 
     private func runHealthCheck() {
-        guard let git = model.git else {
+        guard let git = model.git(for: project) else {
             healthError = "git isn’t available."
             return
         }

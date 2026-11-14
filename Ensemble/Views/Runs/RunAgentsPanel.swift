@@ -96,7 +96,7 @@ private struct RunAgentRow: View {
             FlowLayout(spacing: 6) {
                 Button("Open Session") { model.openAgentSession(agent, in: project) }
                     .help("Show \(live.name)’s transcript and controls")
-                if let url = live.worktreeURL {
+                if let url = live.worktreeURL, !project.isRemote {
                     Button("Reveal Worktree") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                         .help("Show the worktree in Finder")
                 }

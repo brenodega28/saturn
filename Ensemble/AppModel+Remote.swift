@@ -1,3 +1,4 @@
+import AppKit
 import EnsembleCore
 import Foundation
 
@@ -22,6 +23,28 @@ extension AppModel {
     func git(for project: Project) -> GitClient? {
         guard let destination = project.host else { return git }
         return GitClient(ssh: SSHClient(destination: destination, runner: runner))
+    }
+
+    func git(forAgent agent: Agent) -> GitClient? {
+        guard let project = try? database.project(id: agent.projectId) else { return git }
+        return git(for: project)
+    }
+
+    func isRemote(_ agent: Agent) -> Bool {
+        ((try? database.project(id: agent.projectId)) ?? nil)?.isRemote ?? false
+    }
+
+    func openRemoteShell(at directory: URL, forAgent agent: Agent) {
+        guard let project = try? database.project(id: agent.projectId), let destination = project.host else { return }
+        let command = "exec /usr/bin/ssh -t -- " + ShellQuote.quote(destination) + " " + ShellQuote.quote("cd -- " + ShellQuote.quote(directory.path) + " && exec \"${SHELL:-/bin/sh}\" -l")
+        let file = FileManager.default.temporaryDirectory.appending(path: "ensemble-ssh-\(UUID().uuidString.prefix(8)).command")
+        do {
+            try ("#!/bin/sh\nrm -f -- \"$0\"\n" + command + "\n").write(to: file, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
+            NSWorkspace.shared.open(file)
+        } catch {
+            alert = AppAlert(title: "Couldn’t open a terminal on \(SSHDestination.displayName(destination))", message: error.localizedDescription)
+        }
     }
 
     func remoteMirror(for project: Project) -> RemoteMirror? {
@@ -118,6 +141,57 @@ extension AppModel {
             try await openRemoteFolder(host: destination, path: project.path)
         } catch {
             alert = AppAlert(title: "Couldn’t open \(project.name) on \(SSHDestination.displayName(destination))", message: error.localizedDescription)
+        }
+    }
+
+    func remoteAgentHost(for project: Project) async throws -> RemoteAgentHost {
+        guard let destination = project.host else { throw RemoteProjectUnsupported("Running agents on the host") }
+        try await driver.ensureServer()
+        guard let localPort = agents.mcpServer.map({ Int($0.port) }) else { throw RemoteAgentSetupError.serverUnavailable }
+        let client = SSHClient(destination: destination, runner: runner)
+        var info = remoteHostInfos[destination]
+        if info?.claudePath == nil {
+            info = try await RemoteHost(client: client).probe()
+            remoteHostInfos[destination] = info
+        }
+        guard let info, let claudePath = info.claudePath else { throw RemoteAgentSetupError.claudeMissing(SSHDestination.displayName(destination)) }
+        let relayPort = try await openTunnel(to: destination, client: client, localPort: localPort)
+        return RemoteAgentHost(client: client, claudePath: claudePath, home: info.home, localPort: localPort, relayPort: relayPort)
+    }
+
+    private func openTunnel(to destination: String, client: SSHClient, localPort: Int) async throws -> Int {
+        if let opening = remoteTunnelOpenings[destination] { return try await opening.value }
+        let tunnel: RemoteTunnel
+        if let existing = remoteTunnels[destination], existing.localPort == localPort {
+            if let port = existing.remotePort { return port }
+            tunnel = existing
+        } else {
+            remoteTunnels[destination]?.stop()
+            tunnel = RemoteTunnel(client: client, localPort: localPort)
+            remoteTunnels[destination] = tunnel
+        }
+        let opening = Task { try await tunnel.open() }
+        remoteTunnelOpenings[destination] = opening
+        defer { remoteTunnelOpenings[destination] = nil }
+        return try await opening.value
+    }
+
+    func stopRemoteTunnels() {
+        for tunnel in remoteTunnels.values { tunnel.stop() }
+        remoteTunnels = [:]
+    }
+}
+
+enum RemoteAgentSetupError: LocalizedError {
+    case serverUnavailable
+    case claudeMissing(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .serverUnavailable:
+            "Ensemble’s agent tools aren’t running, so agents on the host couldn’t reach them. Restart Ensemble and try again."
+        case .claudeMissing(let host):
+            "Claude Code isn’t installed on \(host). Install it there (curl -fsSL https://claude.ai/install.sh | bash), sign in by running claude once on the host, then try again."
         }
     }
 }

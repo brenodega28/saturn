@@ -93,6 +93,10 @@ extension AppModel {
     }
 
     func takeOver(_ session: AgentSession?) {
+        if let session, let worktree = session.agent.worktreeURL, isRemote(session.agent) {
+            openRemoteShell(at: worktree, forAgent: session.agent)
+            return
+        }
         guard let worktree = session?.agent.worktreeURL,
               let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
         NSWorkspace.shared.open([worktree], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())

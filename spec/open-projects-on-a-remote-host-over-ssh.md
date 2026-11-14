@@ -17,8 +17,8 @@ The engine currently assumes a local folder everywhere (`Process` with a local c
 1. **Connect and browse (done).** SSH host input, folder navigator, remote project record, and the remote command layer. SSH projects open, appear in the sidebar and recents with their host, and show the host, path, branch and tool check (git and claude on the host). Agents, worktrees, checks, the code browser and settings are gated with a notice.
 2. **Remote git and worktrees (done).** `GitClient` and `WorktreeManager` run through a command executor (local `Process` or `ssh`), so recovery, worktree create/remove and branch state work on the host.
 3. **Remote files (done).** Ensemble's own project files live in a local mirror kept in sync with the host; the code browser reads the host directly. Agent memory and hooks move with agents in phase 4.
-4. **Remote agents.** `claude` runs on the host through `ssh -T` with its stream-json stdin/stdout piped back. The Ensemble MCP endpoint is reached through a reverse tunnel (`ssh -R`). The host keeps its own Claude Code login.
-5. **Remote checks and run-the-app.** Checks and the dev server run on the host. The detected port is forwarded to the Mac (`ssh -L`) so the localhost link works.
+4. **Remote agents (done).** `claude` runs on the host through `ssh -T` with its stream-json stdin/stdout piped back. The Ensemble MCP endpoint and hooks are reached through a reverse tunnel (`ssh -R`). The host keeps its own Claude Code login; in API-key mode the key goes over stdin. Checks and setup scripts run on the host too.
+5. **Run-the-app.** The dev server runs on the host and the detected port is forwarded to the Mac (`ssh -L`) so the localhost link works. (Checks moved into phase 4, because agents need their rails.)
 
 ## Interfaces (phase 1)
 
@@ -69,6 +69,25 @@ The engine currently assumes a local folder everywhere (`Process` with a local c
 - [x] A file changed on both sides is not overwritten: the alert names it and the host's version wins (checked on `orb`)
 - [x] Source lists the host's files with added/modified markers and opens them with syntax highlighting (checked on `orb`); text search runs on the host (real-host test; the finder's Text tab wasn't driven in the app)
 - [x] Tests: the mirror's selective pull, push of edits/additions/deletions, binary files and awkward names, conflict refusal, empty and missing repositories; remote code listing, reading, binary/size detection and search; opt-in real-host tests for browsing, worktrees and code
+- [x] EnsembleCore tests pass and the app builds with xcodebuild
+
+## Interfaces (phase 4)
+
+- EnsembleCore `RemoteAgentHost` (SSH client, the host's claude path and home, the local MCP port and the tunnel's port on the host; `relay(_:)` rewrites hook and MCP URLs) and `RemoteTunnel` (`ssh -N -R 127.0.0.1:<port>:127.0.0.1:<local>` with `ExitOnForwardFailure`, trying the local port number first, then random ones; a host that refuses forwarding gets `RemoteTunnelError.refused` explaining `AllowTcpForwarding`)
+- `ClaudeLaunch.remote: RemoteAgentLaunch` turns the launch into an `ssh` invocation of a POSIX wrapper that: becomes its own process group (re-executing under `setsid` where the remote shell isn't one), reads the MCP config and API key from the first two stdin lines into a `0700` state folder under `~/.cache/ensemble/agents/<id>` (so neither appears on a command line), drops inherited `ANTHROPIC_*` variables, exports only `PORT`, `ENSEMBLE_PORT` and the artifact flag, records its pid, `cd`s into the worktree (failing with a clear message if it's missing) and `exec`s `claude`. Terminate and kill also signal the host process group, only when it owns that group. Worktree scopes in allowed tools use the host path as is
+- `AgentSession` does an async step for SSH projects before each turn: get the host from the app (opening the tunnel), check the worktree exists on the host (restoring it from its branch like local agents), create the memory folder for a memory update, then launch. A local `claude` isn't required
+- `ShellScript.runRemote` runs checks and setup scripts in the worktree on the host under the user's login shell, writes output to the same local log, forwards only the check's variables, and on timeout signals the host before killing the local `ssh`. `CheckRunner.remote` and `SetupScriptRunner.remote` select it
+- Engine plumbing: every runtime entry point that takes `git:` swaps in the project's SSH git client for SSH projects (`hostGit`), so even a caller passing local git can't create a `.crew/` on this Mac. `WorktreeManager(project:git:)` infers SSH file access from the git client and reads the branch prefix from `filesRoot`. Config, role context, skills and memory read `filesRoot`. The driver's QA reproduction checkout (in the agent's state folder on the host), rebase and spec worktrees, the dependency and duplicate-code gates (one batched SSH read of candidate files), run changes, harness health and evidence (fetched from the host, up to 50 MB) all go through the host
+- App: `remoteAgentHost(for:)` caches the probe per host, opens one tunnel per host (deduplicated while opening) and stops all tunnels on quit. Agents' memory updates pull the mirror. Chat, Tasks, Agents, Changes and Workflows work for SSH projects; the host's details move into a card in Settings › General (tools, missing claude with install steps, missing git identity, tunnel, sync). "Take over" and the merge-tool fallback open Terminal with `ssh -t` into the worktree; Finder reveals are hidden. GitHub polling works for SSH projects
+- The probe checks the host's git identity with `git var GIT_COMMITTER_IDENT`, output discarded, and the card warns when commits would fail
+
+## Acceptance criteria (phase 4)
+
+- [x] Engine test: a builder spawned on an SSH project (fake `ssh`, fake `claude`) gets its worktree on the host, runs a turn through the wrapper, resumes for a follow-up, is killed on the host when stopped, and gets a deleted worktree restored before its next turn
+- [x] Engine test: feature delivery runs end to end on an SSH project: plan, build, review, QA, approval and merge to `main`, with every agent launched through the wrapper and worktrees cleaned up on the host
+- [x] Wrapper and check tests: preamble written `0600` and never on the command line, API key exported, host `ANTHROPIC_*` dropped, only allowed variables forwarded, missing worktree fails clearly; remote checks pass, fail with the exit code and time out
+- [x] An SSH project whose path also exists on this Mac never gets a local `.crew/`, even when handed local git
+- [x] On a real OpenSSH host with claude signed in (a macOS server whose home is the same path as this Mac's): the tunnel opens, a spawned builder edits files in its worktree on the host, its permission hook reaches Ensemble through the tunnel and waits for approval in the Inbox, the before-stop check runs on the host, the agent commits there, nothing is created at the same path on this Mac, and quitting Ensemble leaves no tunnel or agent process behind
 - [x] EnsembleCore tests pass and the app builds with xcodebuild
 
 ## Out of scope (phase 1)

@@ -8,9 +8,9 @@ extension AgentWorkflowDriver {
     nonisolated static let noChecksSummary = "No checks are set up, so nothing was verified. Add them in Settings › Checks."
 
     public func runCheckStep(_ context: StepContext) async throws -> StepResult {
-        let git = try requireGit()
+        let git = try requireGit(for: context.project)
         let runId = try requireRunID(context.run)
-        let config = ProjectConfigLoader.load(repository: context.project.url)
+        let config = ProjectConfigLoader.load(repository: context.project.filesRoot)
         guard let checksConfig = config.checks, case let checks = checksConfig.checks(named: context.step.checks), !checks.isEmpty else {
             return StepResult(outcome: StepOutcome.passed, output: StepOutput(summary: Self.noChecksSummary))
         }
@@ -121,7 +121,13 @@ extension AgentWorkflowDriver {
         guard let commit = await ProtectedChanges.reproductionCommit(prefix: Self.reproductionPrefix, since: start, in: worktree, git: git) else {
             return ["No reproduction commit: this step is test-first, so commit a failing test on its own with a message starting with “\(Self.reproductionPrefix)” before the fix."]
         }
-        let checkout = runtime.paths.agentDirectory(session.id).appending(path: "reproduction", directoryHint: .isDirectory)
+        let checkout: URL
+        if project.isRemote {
+            guard let host = try? await runtime.remoteHostProvider(project) else { return ["Couldn’t reach \(project.location) to check the reproduction commit."] }
+            checkout = URL(fileURLWithPath: host.stateDirectory(forAgent: session.id) + "/reproduction", isDirectory: true)
+        } else {
+            checkout = runtime.paths.agentDirectory(session.id).appending(path: "reproduction", directoryHint: .isDirectory)
+        }
         await removeWorktree(at: checkout, repository: project.url, git: git)
         let notes: [String]
         do {
@@ -145,7 +151,7 @@ extension AgentWorkflowDriver {
 
     private func removeWorktree(at path: URL, repository: URL, git: GitClient) async {
         _ = try? await git.run(["worktree", "remove", "--force", path.path], in: repository)
-        try? FileManager.default.removeItem(at: path)
+        try? await git.fileSystem.removeItem(path)
         _ = try? await git.run(["worktree", "prune"], in: repository)
     }
 }

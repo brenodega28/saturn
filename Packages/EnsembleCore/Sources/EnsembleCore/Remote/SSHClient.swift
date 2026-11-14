@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Synchronization
 
 public struct SSHError: Error, LocalizedError, Sendable, Equatable {
     public let destination: String
@@ -36,8 +37,13 @@ public enum ShellQuote {
     }
 }
 
-public struct SSHClient: Sendable {
+public struct SSHClient: Sendable, Equatable {
     public static let defaultExecutable = URL(fileURLWithPath: "/usr/bin/ssh")
+    static let executableOverrides = Mutex<[String: URL]>([:])
+
+    static func executable(for destination: String) -> URL? {
+        executableOverrides.withLock { $0[destination] }
+    }
     static let failureExitCode: Int32 = 255
 
     public let destination: String

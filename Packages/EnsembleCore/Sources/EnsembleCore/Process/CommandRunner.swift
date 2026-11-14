@@ -21,7 +21,7 @@ public struct CommandError: Error, LocalizedError, Sendable {
     }
 }
 
-public struct CommandRunner: Sendable {
+public struct CommandRunner: Sendable, Equatable {
     public var environment: [String: String]
 
     public init(environment: [String: String] = ProcessInfo.processInfo.environment) {

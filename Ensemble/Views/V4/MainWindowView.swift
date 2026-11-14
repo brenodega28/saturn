@@ -11,21 +11,17 @@ struct MainWindowView: View {
             HStack(spacing: 8) {
                 ProjectSidebar()
                     .overlay { RunMenuDismissal() }
-                if let project = model.currentProject, project.isRemote, model.mainScreen.needsTheCrew {
-                    RemoteProjectView(project: project)
-                } else {
-                    VStack(spacing: 8) {
-                        if let project = model.currentProject, !project.isRemote {
-                            RunBar(project: project)
-                                .zIndex(1)
-                        }
-                        HStack(spacing: 8) {
-                            MiddleColumn()
-                                .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
-                            LogColumn()
-                        }
-                        .overlay { RunMenuDismissal() }
+                VStack(spacing: 8) {
+                    if let project = model.currentProject, !project.isRemote {
+                        RunBar(project: project)
+                            .zIndex(1)
                     }
+                    HStack(spacing: 8) {
+                        MiddleColumn()
+                            .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                        LogColumn()
+                    }
+                    .overlay { RunMenuDismissal() }
                 }
             }
             .padding(8)
@@ -65,16 +61,6 @@ private struct RunMenuDismissal: View {
                 .contentShape(.rect)
                 .onTapGesture { model.isRunMenuOpen = false }
                 .accessibilityHidden(true)
-        }
-    }
-}
-
-private extension MainScreen {
-    var needsTheCrew: Bool {
-        switch self {
-        case .chat, .run, .agent: true
-        case .tool(let tool): [.tasks, .agents, .changes].contains(tool)
-        case .spec: false
         }
     }
 }

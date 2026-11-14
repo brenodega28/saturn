@@ -104,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model?.engine.stopOrphanWatchdog()
         model?.stopAllAppsImmediately()
         model?.agents.terminateAll()
+        model?.stopRemoteTunnels()
     }
 }
 

@@ -54,13 +54,6 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
         ("", [.settings]),
     ]
 
-    static let sshGroups: [(name: String, sections: [SidebarSection])] = [
-        ("", [.chat]),
-        ("Crew", [.workflows]),
-        ("Review", [.source]),
-        ("", [.settings]),
-    ]
-
     var glyph: V4Glyph {
         switch self {
         case .chat: .chat
@@ -127,7 +120,7 @@ private struct ProjectGroup: View {
     private var tree: some View {
         let screen = model.mainScreen
         return VStack(alignment: .leading, spacing: 1) {
-            ForEach(Array((project.isRemote ? SidebarSection.sshGroups : SidebarSection.groups).enumerated()), id: \.offset) { _, group in
+            ForEach(Array(SidebarSection.groups.enumerated()), id: \.offset) { _, group in
                 if !group.name.isEmpty {
                     Text(group.name)
                         .font(.system(size: 10.5, weight: .semibold))
@@ -137,12 +130,12 @@ private struct ProjectGroup: View {
                 }
                 ForEach(group.sections) { section in
                     SectionRow(
-                        section: section, title: project.isRemote && section == .chat ? "Overview" : section.rawValue,
+                        section: section, title: section.rawValue,
                         badge: badge(for: section), isHighlighted: section.isHighlighted(on: screen), help: help(for: section)
                     ) {
                         activate(section)
                     }
-                    if section == .chat, !project.isRemote {
+                    if section == .chat {
                         ForEach(LeadRequest.partition(model.leadRequests(in: project)).open) { request in
                             RequestRow(request: request, project: project, needsYouTaskIDs: needsYouTaskIDs)
                         }
@@ -161,15 +154,12 @@ private struct ProjectGroup: View {
     private func activate(_ section: SidebarSection) {
         if let tool = section.tool {
             model.open(tool)
-        } else if project.isRemote {
-            model.expand(project)
         } else {
             model.startNewChat(in: project)
         }
     }
 
     private func help(for section: SidebarSection) -> String {
-        if section == .chat, project.isRemote { return "\(project.name) on \(project.location)" }
         return section == .chat ? "Start a new chat with the lead in \(project.name)" : section.tool?.title ?? section.rawValue
     }
 

@@ -75,6 +75,7 @@ public struct SetupScriptRunner: Sendable {
     public var environment: [String: String]
     public var timeout: Duration
     public var killGracePeriod: Duration
+    public var remote: RemoteAgentHost?
 
     public init(environment: [String: String], timeout: Duration = .seconds(600), killGracePeriod: Duration = .seconds(3)) {
         self.environment = environment
@@ -125,7 +126,14 @@ public struct SetupScriptRunner: Sendable {
     }
 
     private func execute(script: String, in directory: URL, variables: [String: String], log: URL) async throws -> ShellScript.Outcome {
-        try await ShellScript.run(
+        if let remote {
+            return try await ShellScript.runRemote(
+                script, on: remote.client, in: directory, variables: variables,
+                pidFile: remote.stateDirectory(named: "setup/\(UUID().uuidString).pid"),
+                log: log, timeout: timeout, killGracePeriod: killGracePeriod
+            )
+        }
+        return try await ShellScript.run(
             script, in: directory, environment: environment.merging(variables) { _, new in new },
             log: log, timeout: timeout, killGracePeriod: killGracePeriod
         )

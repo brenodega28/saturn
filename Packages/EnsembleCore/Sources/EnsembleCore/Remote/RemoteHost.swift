@@ -5,12 +5,14 @@ public struct RemoteHostInfo: Sendable, Equatable {
     public let system: String
     public let gitPath: String?
     public let claudePath: String?
+    public let hasGitIdentity: Bool
 
-    public init(home: String, system: String, gitPath: String?, claudePath: String?) {
+    public init(home: String, system: String, gitPath: String?, claudePath: String?, hasGitIdentity: Bool = true) {
         self.home = home
         self.system = system
         self.gitPath = gitPath
         self.claudePath = claudePath
+        self.hasGitIdentity = hasGitIdentity
     }
 }
 
@@ -78,7 +80,9 @@ public struct RemoteHost: RemoteDirectoryListing {
     for c in "$HOME/.local/bin/claude" "$HOME/.claude/local/claude"; do
       [ -z "$claude" ] && [ -x "$c" ] && claude=$c
     done
-    printf '%s\0' "$HOME" "$(uname -sm)" "$(command -v git 2>/dev/null)" "$claude"
+    identity=no
+    command -v git >/dev/null 2>&1 && git var GIT_COMMITTER_IDENT >/dev/null 2>&1 && identity=yes
+    printf '%s\0' "$HOME" "$(uname -sm)" "$(command -v git 2>/dev/null)" "$claude" "$identity"
     """#
 
     public let client: SSHClient
@@ -90,11 +94,12 @@ public struct RemoteHost: RemoteDirectoryListing {
     public func probe() async throws -> RemoteHostInfo {
         let result = try await client.run(Self.shellScript(Self.probeScript))
         let fields = Self.records(result.standardOutput)
-        guard fields.count == 4 else { throw RemoteFolderError.unexpectedOutput }
+        guard fields.count == 5 else { throw RemoteFolderError.unexpectedOutput }
         return RemoteHostInfo(
             home: fields[0], system: fields[1],
             gitPath: fields[2].isEmpty ? nil : fields[2],
-            claudePath: fields[3].isEmpty ? nil : fields[3]
+            claudePath: fields[3].isEmpty ? nil : fields[3],
+            hasGitIdentity: fields[4] == "yes"
         )
     }
 

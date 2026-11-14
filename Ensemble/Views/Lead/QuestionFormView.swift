@@ -100,7 +100,7 @@ struct QuestionFormView<Accessory: View>: View {
         FlowLayout(spacing: 8) {
             ForEach(Array(options.enumerated()), id: \.offset) { index, option in
                 Button(option) { send(option) }
-                    .buttonStyle(V4Pill(kind: index == 0 ? .orange : .secondary, height: 28, horizontalPadding: 12))
+                    .buttonStyle(QuestionOptionStyle(isFirst: index == 0))
                     .help("Answer “\(option)”\(recipient.map { " to \($0)" } ?? "")")
             }
         }
@@ -191,5 +191,19 @@ struct QuestionFormView<Accessory: View>: View {
 extension QuestionFormView where Accessory == EmptyView {
     init(form: QuestionForm, recipient: String?, compact: Bool = false, send: @escaping (String) -> Void) {
         self.init(form: form, recipient: recipient, compact: compact, send: send) { EmptyView() }
+    }
+}
+
+private struct QuestionOptionStyle: ButtonStyle {
+    let isFirst: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        Group {
+            if isFirst {
+                PrimaryPillStyle().makeBody(configuration: configuration)
+            } else {
+                SecondaryPillStyle().makeBody(configuration: configuration)
+            }
+        }
     }
 }

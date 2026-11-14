@@ -68,7 +68,6 @@ struct SpecScreen: Hashable {
 final class MainWindowNavigation {
     var back: MainScreen?
     var spec: SpecScreen?
-    var isLibraryShown = false
 
     func record(from old: MainScreen, to new: MainScreen) {
         switch new {
@@ -83,7 +82,7 @@ final class MainWindowNavigation {
 extension AppModel {
     var baseScreen: MainScreen {
         switch selection {
-        case .usage, .quality: return .tool(.usage)
+        case .usage: return .tool(.usage)
         case .project(let id):
             if let run = runDetailIDs[id] { return .run(run) }
             let tab = tabs[id] ?? .lead

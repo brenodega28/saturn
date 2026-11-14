@@ -319,8 +319,8 @@ struct ProposalCard: View {
         let workflow = proposal.workflow.flatMap { model.config(for: project).workflow($0) }
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text("Proposed run").font(.system(size: 12, weight: .semibold)).foregroundStyle(V4.secondary)
-                Text(workflow?.displayName ?? proposal.workflow ?? "").font(.system(size: 12)).foregroundStyle(V4.link)
+                Text("Proposed run").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.text2)
+                Text(workflow?.displayName ?? proposal.workflow ?? "").font(.system(size: 12)).foregroundStyle(Tokens.link)
                 if workflow.map({ !$0.hasLead }) == true {
                     NoPlanPill()
                 }
@@ -337,16 +337,16 @@ struct ProposalCard: View {
             }
             .buttonStyle(.plain)
             .font(.system(size: 12.5, weight: .medium))
-            .foregroundStyle(V4.link)
+            .foregroundStyle(Tokens.link)
             .help(showsBrief ? "Hide the full brief" : "Show the full brief the run will start from")
             if proposal.status == .open {
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
                     Button("Dismiss") { model.dismissProposal(proposal) }
-                        .buttonStyle(V4Pill(kind: .secondary))
+                        .buttonStyle(SecondaryPillStyle())
                         .help("Don’t run this; keep talking to the lead")
                     Button("Start run") { model.startProposal(proposal, in: project) }
-                        .buttonStyle(V4Pill(kind: .primary, horizontalPadding: 16))
+                        .buttonStyle(PrimaryPillStyle())
                         .disabled(hasActiveRun || isRequestClosed || workflow == nil)
                         .help(Self.startHelp(hasActiveRun: hasActiveRun, isRequestClosed: isRequestClosed))
                 }
@@ -355,13 +355,13 @@ struct ProposalCard: View {
         .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Tokens.hover, in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(proposal.status == .open ? V4.blue.opacity(0.35) : Tokens.hair))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(proposal.status == .open ? Tokens.hair2 : Tokens.hair))
     }
 
     @ViewBuilder
     private var statusLabel: some View {
         switch proposal.status {
-        case .started: Text("Started").font(.system(size: 12, weight: .semibold)).foregroundStyle(V4.greenText)
+        case .started: Text("Started").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.done)
         case .dismissed: Text("Dismissed").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.tertiaryText)
         default: EmptyView()
         }
@@ -457,7 +457,7 @@ struct RequestBubble: View {
                         .foregroundStyle(Theme.link)
                         .help("Stop this message and put it back in the composer (Esc)")
                         .accessibilityLabel("Cancel send")
-                    Text(date.formatted(.relative(presentation: .named))).font(.system(size: 11.5)).foregroundStyle(V4.secondary)
+                    Text(date.formatted(.relative(presentation: .named))).font(.system(size: 11.5)).foregroundStyle(Tokens.text2)
                 }
             }
         }

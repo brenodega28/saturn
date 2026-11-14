@@ -19,7 +19,7 @@ struct QuestionCard: View {
             QuestionFormView(form: QuestionForm(item: item), recipient: name, quickAnswers: true, send: send) {
                 if let agent {
                     Button("Open \(model.displayName(of: agent, in: project))") { model.openAgentSession(agent, in: project) }
-                        .buttonStyle(V4Pill(kind: .quiet, height: 30, horizontalPadding: 10))
+                        .buttonStyle(SecondaryPillStyle())
                         .help("Open the agent’s session")
                 }
             }

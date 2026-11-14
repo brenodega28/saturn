@@ -12,14 +12,14 @@ Ensemble is a complete developer toolkit for agentic coding, in the way Xcode an
 
 ## Product experience
 
-The [Ensemble design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD) is the reference for how the app looks and behaves. It covers every screen: Chat, Tasks, Agents, Workflows, Changes, Source, Run detail, Agent session, Inbox, Usage, Settings, the ⌘K palette, Welcome, project onboarding and the website. When the app and the canvas disagree, the canvas wins or gets updated, never ignored.
+The [Ensemble design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD) is the reference for how the app looks and behaves. It covers every screen: the chat with the Lead, Agents, Workflows, Changes, Source, Run detail, Agent session, Usage, Settings, the ⌘K palette, Welcome, project onboarding and the website. The v5 pages are the current design. When the app and the canvas disagree, the canvas wins or gets updated, never ignored.
 
 The experience it sets out:
 
-- **Native and calm.** A macOS app with Liquid Glass and a dark theme, and one quiet place to run the crew instead of a wall of terminals.
+- **Native and calm.** A macOS app in dark or light, and one quiet place to run the crew instead of a wall of terminals.
 - **Keyboard-first.** ⌘K reaches any run, agent, file or action; ⌘P opens any file; common actions have shortcuts.
 - **Written for humans.** Plain-language summaries, plans and pins. Review shows what needs a person and says why.
-- **Decisions come to you.** Questions, approvals, failures and pins from every project land in one Inbox and can be answered there.
+- **Decisions come to you.** You talk only to the Lead. Questions, approvals and failures appear in the chat they belong to, the chat list shows which ones need you, and the Dock, the menu bar and notifications count them.
 - **Cost always visible.** Spend shows in the sidebar, on every run and agent, and before a plan starts.
 - **Guided start.** Onboarding scans the project, suggests workflows, skills, checks and limits, and gets to the first task in a few steps.
 

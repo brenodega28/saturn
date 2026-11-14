@@ -332,10 +332,6 @@ struct CommandPalette: View {
         }
         commands += [
             PaletteCommand(id: "go-usage", title: "Usage", meta: String(format: "$%.2f this week · $%.2f this month", model.weeklySpend, model.monthlySpend), glyph: .symbol("chart.bar")) { model.open(.usage) },
-            PaletteCommand(id: "go-quality", title: "Quality", glyph: .symbol("gauge.with.dots.needle.33percent")) {
-                model.mainWindow.spec = nil
-                model.selection = .quality
-            },
         ]
         commands += model.openProjects.compactMap { project in
             guard let id = project.id, id != model.currentProject?.id else { return nil }

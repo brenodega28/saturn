@@ -49,29 +49,6 @@ struct EnsembleApp: App {
         .defaultSize(width: 900, height: 700)
         .handlesExternalEvents(matching: [])
 
-        Window("Organizer", id: WindowID.organizer) {
-            if case .ready(let model) = launch {
-                OrganizerView()
-                    .environment(model)
-                    .followsAppearance()
-                    .tint(Theme.accent)
-            }
-        }
-        .defaultSize(width: 1240, height: 780)
-        .handlesExternalEvents(matching: [])
-
-        MenuBarExtra {
-            if case .ready(let model) = launch {
-                MenuBarStatus().environment(model)
-            }
-        } label: {
-            if case .ready(let model) = launch {
-                MenuBarLabel().environment(model)
-            } else {
-                Image(systemName: "person.2.wave.2")
-            }
-        }
-
         Settings {
             if case .ready(let model) = launch {
                 AppSettingsView(updater: updater)
@@ -138,7 +115,6 @@ enum WindowID {
     static let main = "main"
     static let debugWorktrees = "debug-worktrees"
     static let detail = "detail"
-    static let organizer = "organizer"
 }
 
 enum Launch {

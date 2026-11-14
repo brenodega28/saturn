@@ -5,13 +5,11 @@ import Observation
 
 enum SidebarItem: Hashable, Codable {
     case usage
-    case quality
     case project(Int64)
 }
 
 enum SidebarDestination: Hashable {
     case usage
-    case quality
     case section(project: Int64, tab: ProjectTab)
     case run(project: Int64, run: Int64)
     case request(project: Int64, request: Int64)
@@ -203,7 +201,6 @@ final class AppModel {
         get {
             switch selection {
             case .usage: .usage
-            case .quality: .quality
             case .project(let id):
                 if let runID = runDetailIDs[id] {
                     .run(project: id, run: runID)
@@ -221,8 +218,6 @@ final class AppModel {
             switch newValue {
             case .usage:
                 selection = .usage
-            case .quality:
-                selection = .quality
             case .section(let id, let tab):
                 runDetailIDs[id] = nil
                 tabs[id] = tab

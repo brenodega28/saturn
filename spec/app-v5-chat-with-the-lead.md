@@ -238,7 +238,7 @@ Each phase ends with the app building, tests passing and the app usable.
     - The Settings window (⌘,): General with Appearance, Open at login, notifications and the default project for ⌘N.
     - Usage.
     - The stepped Welcome, project onboarding, and the Clone and SSH folder sheets.
-10. **Clean up and QA.** Delete what's left of `Views/V4`, the Library panel, the Organizer and the Quality screen. Update `roadmap.md` and `mission.md` where they describe Tasks, the Inbox or GitHub. Run a QA pass against the v5 designs in both themes.
+10. **Clean up and QA (cleanup done; QA against the canvas not run).** The QA pass needs the app driven on screen in both themes, which has not been done. Delete what's left of `Views/V4`, the Library panel, the Organizer and the Quality screen. Update `roadmap.md` and `mission.md` where they describe Tasks, the Inbox or GitHub. Run a QA pass against the v5 designs in both themes.
 
 ## Acceptance criteria
 

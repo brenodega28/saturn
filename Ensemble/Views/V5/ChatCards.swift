@@ -2,18 +2,6 @@ import EnsembleCore
 import EnsembleUI
 import SwiftUI
 
-struct LeadAvatar: View {
-    var appearance: RoleAppearance?
-    var size: CGFloat = 30
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: size / 3, style: .continuous)
-            .fill(appearance.map { AnyShapeStyle($0.palette.gradient) } ?? AnyShapeStyle(V4.leadGradient))
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
-    }
-}
-
 extension PermissionCardStatus {
     var title: String {
         switch self {
@@ -299,9 +287,9 @@ struct NoPlanPill: View {
     var body: some View {
         Text("No plan needed")
             .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(V4.greenText)
+            .foregroundStyle(Tokens.done)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
-            .background(V4.green.opacity(0.14), in: Capsule())
+            .background(Tokens.doneBackground, in: Capsule())
     }
 }

@@ -87,9 +87,7 @@ struct MiddleColumn: View {
                 ChatColumn(project: project)
             case .tool(let tool):
                 ToolScreen(title: tool.title) {
-                    if tool == .usage {
-                        usageSwitch
-                    } else if let tab = tool.projectTab {
+                    if let tab = tool.projectTab {
                         ProjectScreenAccessory(project: project, tab: tab)
                     }
                 } content: {
@@ -124,35 +122,12 @@ struct MiddleColumn: View {
     private func toolContent(_ tool: MainTool, project: Project) -> some View {
         switch tool {
         case .usage:
-            if model.selection == .quality { QualityView() } else { UsageView() }
+            UsageView()
         default:
             if let tab = tool.projectTab {
                 ProjectScreen(project: project, tab: tab)
                     .environment(\.isInWorkbench, tool == .code)
             }
         }
-    }
-
-    private var usageSwitch: some View {
-        HStack(spacing: 2) {
-            ForEach([SidebarItem.usage, .quality], id: \.self) { item in
-                let isOn = model.selection == item
-                Button {
-                    model.selection = item
-                } label: {
-                    Text(item == .usage ? "Usage" : "Quality")
-                        .font(.system(size: 11.5, weight: isOn ? .semibold : .regular))
-                        .foregroundStyle(Tokens.text)
-                        .padding(.horizontal, 8)
-                        .frame(height: 22)
-                        .background(isOn ? Tokens.fill2 : .clear, in: .rect(cornerRadius: 6, style: .continuous))
-                        .contentShape(.rect(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isOn ? .isSelected : [])
-            }
-        }
-        .padding(2)
-        .background(Tokens.fill, in: .rect(cornerRadius: 8, style: .continuous))
     }
 }

@@ -16,18 +16,11 @@ struct MainWindowView: View {
             }
         }
         .frame(minWidth: 1160, minHeight: 680)
-        .background(V4.container)
+        .background(Tokens.window)
         .ignoresSafeArea()
         .toolbar(removing: .title)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .insetsWindowButtons(leading: 22, centerFromTop: 32)
-        .overlay(alignment: .top) {
-            if model.mainWindow.isLibraryShown {
-                LibraryPanel { model.mainWindow.isLibraryShown = false }
-                    .padding(.top, 50)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            }
-        }
         .sheet(isPresented: $model.isNewAgentPresented) {
             if let project = model.currentProject {
                 NewAgentSheet(project: project)

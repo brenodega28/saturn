@@ -12,7 +12,7 @@ struct RemoteHostCard: View {
         let tunnel = project.host.flatMap { model.remoteTunnels[$0]?.remotePort }
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                V4Icon(glyph: .server, size: 14, lineWidth: 1.8).foregroundStyle(Theme.secondaryText)
+                Image(systemName: "server.rack").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
                 Text("SSH host").font(.system(size: 13, weight: .semibold))
                 Spacer()
                 if status.isConnecting {

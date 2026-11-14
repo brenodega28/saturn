@@ -2,7 +2,7 @@
 
 Ensemble is a macOS app for solo developers that runs AI coding agents inside a verification harness: **agents propose, rails verify, humans approve** (see [mission.md](mission.md)). You define **roles** and **workflows** in the repo. Every coding agent works on a scoped task in its own git worktree and must pass the project's deterministic **checks** before its work reaches you. AI review flags what you must read as **pins**, and nothing reaches `main` without your approval.
 
-This document is the build order for the MVP and what comes after. Each phase ends with something usable and a clear exit check. Phases 0–7 were planned before the mission was written and are kept as a record of what was built. Phases 8–10 bring the product in line with the mission, Phase 11 closes the gaps with the [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD), and Phase 12 moves the app into an IDE-style work-tool shell.
+This document is the build order for the MVP and what comes after. Each phase ends with something usable and a clear exit check. Phases 0–7 were planned before the mission was written and are kept as a record of what was built. Phases 8–10 bring the product in line with the mission, Phase 11 closes the gaps with the [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD), Phase 12 moved the app into an IDE-style work-tool shell, and Phase 13 replaces that with the chat-first v5 app (see [app-v5-chat-with-the-lead.md](app-v5-chat-with-the-lead.md)).
 
 ---
 
@@ -13,12 +13,12 @@ This document is the build order for the MVP and what comes after. Each phase en
 | Solo developer, one machine                                          | Teams, shared config, multi-user      |
 | Bring your own keys                                                  | —                                     |
 | Claude Code as the only engine                                       | Codex, Gemini CLI and other providers |
-| Task sources: Lead chat, GitHub Issues                               | Linear, Jira, Trello                  |
+| Work starts from a chat with the Lead                                | Linear, Jira, Trello                  |
 | One worktree per coding agent                                        | —                                     |
-| Workflow ends in PR, local merge, pushed branch, or left in worktree | —                                     |
+| Workflow ends in a local merge you push, a pushed branch, or left in worktree | —                        |
 | Pinned agents with memory                                            | —                                     |
 | You approve every change                                             | Opt-in auto-merge for low-risk change classes with a proven record |
-| Dark mode only                                                       | Light mode                            |
+| Dark and light                                                       | —                                     |
 | macOS app                                                            | iOS companion app                     |
 
 ---
@@ -35,18 +35,17 @@ This document is the build order for the MVP and what comes after. Each phase en
 | Agent runner      | Drive the `claude` CLI headlessly from Swift (`Process`), reading its streaming JSON output; one process per agent, cwd = its worktree     | No Node runtime to bundle; uses the user's own Claude Code login or API key; resumable sessions and MCP support come for free |
 | Engine boundary   | All logic in a UI-free Swift package, `EnsembleCore`; the app only renders state from it                                                   | Testable without the UI; the future iOS app reuses the models and talks to the Mac's engine                                   |
 | Local storage     | SQLite through [GRDB](https://github.com/groue/GRDB.swift) for projects, tasks, runs, agents, usage                                        | Explicit migrations, safe concurrent access from the engine, no dependence on the UI layer                                    |
-| Secrets           | Provider keys and GitHub tokens in the macOS Keychain                                                                                      | Never written to disk or to the repo                                                                                          |
+| Secrets           | Provider keys in the macOS Keychain                                                                                                        | Never written to disk or to the repo                                                                                          |
 | Config in git     | `.ensemble/` is committed; `.ensemble/memory/` and `.ensemble/local.yaml` are git-ignored                                                  | Roles and workflows are versioned with the code; personal state stays local                                                   |
 | Pinned memory     | One Markdown file per pinned agent in `.ensemble/memory/<agent>.md`, loaded into its context at start                                      | Readable and editable in any editor as well as in the app's Memory panel                                                      |
 | Pins              | Ensemble runs a local MCP server that every agent is given; agents call its `create_pin` tool                                              | Structured pins without parsing agent prose                                                                                   |
-| GitHub            | Sign in with GitHub's OAuth device flow; open PRs and comment through the REST API                                                         | No local `gh` dependency                                                                                                      |
-| GitHub write-back | Comment on the issue when a run starts and when it ends (with the PR link); set `ensemble:running` / `ensemble:done` labels                | Visible progress without noisy live edits                                                                                     |
+| Delivery          | No GitHub integration: a finished run merges into the base branch on this Mac, and you push it from the chat | You review and land work locally; pushing stays your call |
 | Worktrees         | Under `<repo>/.crew/<agent>/`, branch `crew/<agent>/<slug>`, excluded through `.git/info/exclude`                                          | Isolated per coding agent, invisible to the user's own git status                                                             |
 | Verification      | Ensemble runs the project's checks itself, in the agent's worktree, outside the agent's session; results go back to the agent as feedback   | The agent can't skip, fake or reinterpret a check it doesn't run; a separate verification runtime is what stopped agents gaming builds elsewhere |
 | Agent hooks       | Each worktree gets Claude Code hooks: lint after every edit, block edits to protected paths, block "done" while checks fail                | Enforcement in deterministic tools instead of prompt text                                                                     |
 | Instructions      | One lean `AGENTS.md` at the repo root (`CLAUDE.md` points to it); occasional know-how goes in skills                                       | Context files buy consistency and lower cost, not capability; bloat makes agents ignore them                                  |
 | AI review         | Reviewer roles comment through pins; they never approve and never block a run on their own                                                | Precision-tuned commenters help; rigid LLM gates block valid changes                                                          |
-| Mobile (later)    | iOS app is a remote control for the Mac: inbox, approvals, pins, run status. Agents always run on the Mac. Transport decided after the MVP | Keeps the engine in one place; the `EnsembleCore` boundary makes a remote client possible                                     |
+| Mobile (later)    | iOS app is a remote control for the Mac: chats that need you, approvals, pins, run status. Agents always run on the Mac. Transport decided after the MVP | Keeps the engine in one place; the `EnsembleCore` boundary makes a remote client possible                                     |
 
 ---
 
@@ -56,7 +55,7 @@ This document is the build order for the MVP and what comes after. Each phase en
 | ------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | **Role**     | A reusable agent template           | name, icon, color, provider, model, system prompt, skills, docs, `edits_code`, permission profile, `can_spawn`, budget per run |
 | **Agent**    | A running instance of a role        | role, run, step, worktree path, branch, status, tokens, cost, `pinned`, memory                                                 |
-| **Task**     | One unit of work                    | title, body, source (`chat` \| `github`), source URL, workflow, status                                                         |
+| **Chat**     | One conversation with the Lead and its work | title, body, workflow, status, Lead model, close reason                                                                |
 | **Workflow** | A graph of steps                    | trigger, steps, edges (with loop limits), end action, run budget                                                               |
 | **Run**      | One task going through one workflow | task, workflow version, current step, step history, agents, branches, pins, cost, outcome                                      |
 | **Pin**      | A spot in a diff a human must read  | run, agent, file, line range, title, tags, explanation, status (`open` \| `approved` \| `change_requested`)                    |
@@ -68,7 +67,7 @@ Rules that hold everywhere:
 - Any role with `edits_code: true` **always** gets its own git worktree and branch. There is no shared-folder mode.
 - Read-only roles (reviewers, QA, leads) can read every worktree in their run but never write to them.
 - QA runs against a separate, temporary worktree that merges the run's branches.
-- Work reaches human review only after its checks pass. Check retries are capped; after the cap the work goes to the Inbox, not back into the loop.
+- Work reaches human review only after its checks pass. Check retries are capped; after the cap the work comes back to you in its chat, not back into the loop.
 - Existing tests and other protected paths are read-only to coding agents. Agents may add tests; any change to a protected file is pinned for separate review.
 - AI review comments; only you approve.
 
@@ -305,7 +304,21 @@ Goal: Ensemble feels like Xcode or Android Studio: one fixed frame of panes arou
 
 **Exit check:** a full Refunds v2 run is started, followed, reviewed and approved without leaving the frame. The Log, Terminal, Checks and Problems panels, the inspector and the menus all work. A new navigator tab can be added by registering it, with no changes to the shell.
 
-**MVP is done when Phases 0–12 pass their exit checks.**
+## Phase 13 — v5: chat with the Lead
+
+Goal: the app is chat-first. You talk only to the Lead, it starts the workers, and everything that needs you shows up in that chat. The plan, decisions and what is still open are in [app-v5-chat-with-the-lead.md](app-v5-chat-with-the-lead.md).
+
+- [x] Remove GitHub, Tasks and direct agent chats; runs merge locally and you push
+- [x] Replace the Inbox with requests inside each chat
+- [x] Drop the log column, status bar, run bar, Library panel, Organizer and Quality screen
+- [x] Chat stages, worker states, chat checks, and specs that name their workers
+- [x] v5 tokens in dark and light, robot avatars, the chat-first sidebar, chat card, transcript and composer
+- [x] Alerts, Dock badge, menu bar item, actionable notifications and a Chat menu
+- [ ] The screens and states the spec lists as not built or not designed yet
+
+**Exit check:** from the chat list, a request goes from a spec through workers and checks to a local merge and a push without leaving the chat, in dark and in light.
+
+**MVP is done when Phases 0–12 pass their exit checks.** Phase 13 supersedes the Phase 5 Inbox and GitHub work and the Phase 12 frame.
 
 ---
 
@@ -319,8 +332,7 @@ Goal: Ensemble feels like Xcode or Android Studio: one fixed frame of panes arou
 - [ ] More providers: Codex, Gemini CLI; provider and model per role
 - [ ] Secrets access per role
 - [ ] Menu-bar extra: running agents and items waiting on you
-- [ ] Light mode
-- [ ] iOS companion app: inbox, approvals, pins and run status for the Mac's engine
+- [ ] iOS companion app: chats that need you, approvals, pins and run status for the Mac's engine
 
 ---
 

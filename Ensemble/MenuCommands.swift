@@ -499,23 +499,12 @@ extension CommandRegistry {
     }
 
     private func registerWindowCommands() {
-        register(MenuCommand(id: "window.organizer", title: "Organizer", menu: "Window", section: 0, order: 0, shortcut: KeyboardShortcut("1", modifiers: [.command, .shift])) { context in
-            context.openWindow?(id: WindowID.organizer)
-        })
-        register(MenuCommand(id: "window.library", title: "Library", menu: "Window", section: 0, order: 1, shortcut: KeyboardShortcut("l", modifiers: [.command, .shift]),
-                             isChecked: { $0.model.mainWindow.isLibraryShown }) { context in
-            context.model.mainWindow.isLibraryShown.toggle()
-        })
         register(MenuCommand(id: "help.shortcuts", title: "Keyboard Shortcuts", menu: "Help", section: 0, order: 1, shortcut: KeyboardShortcut("/")) { _ in
             UserDefaults.standard.set("keys", forKey: AppSettingsView.tabKey)
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             NSApp.activate()
         })
         register(MenuCommand(id: "window.usage", title: "Usage", menu: "Window", section: 1, order: 1) { $0.model.open(.usage) })
-        register(MenuCommand(id: "window.quality", title: "Quality", menu: "Window", section: 1, order: 2) { context in
-            context.model.mainWindow.spec = nil
-            context.model.selection = .quality
-        })
         register(MenuCommand(id: "help.docs", title: "Ensemble Docs", menu: "Help", section: 0, order: 0) { _ in
             if let url = URL(string: "https://github.com/Monoliti/ensemble#readme") { NSWorkspace.shared.open(url) }
         })

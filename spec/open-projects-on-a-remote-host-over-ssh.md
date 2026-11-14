@@ -1,6 +1,6 @@
 ---
 title: Open projects on a remote host over SSH
-status: in-progress
+status: done
 owner: ""
 linked_runs: []
 created: 2026-11-14
@@ -18,7 +18,7 @@ The engine currently assumes a local folder everywhere (`Process` with a local c
 2. **Remote git and worktrees (done).** `GitClient` and `WorktreeManager` run through a command executor (local `Process` or `ssh`), so recovery, worktree create/remove and branch state work on the host.
 3. **Remote files (done).** Ensemble's own project files live in a local mirror kept in sync with the host; the code browser reads the host directly. Agent memory and hooks move with agents in phase 4.
 4. **Remote agents (done).** `claude` runs on the host through `ssh -T` with its stream-json stdin/stdout piped back. The Ensemble MCP endpoint and hooks are reached through a reverse tunnel (`ssh -R`). The host keeps its own Claude Code login; in API-key mode the key goes over stdin. Checks and setup scripts run on the host too.
-5. **Run-the-app.** The dev server runs on the host and the detected port is forwarded to the Mac (`ssh -L`) so the localhost link works. (Checks moved into phase 4, because agents need their rails.)
+5. **Run-the-app (done).** The dev server runs on the host and the detected port is forwarded to the Mac (`ssh -L`) so the localhost link works. (Checks moved into phase 4, because agents need their rails.)
 
 ## Interfaces (phase 1)
 
@@ -88,6 +88,21 @@ The engine currently assumes a local folder everywhere (`Process` with a local c
 - [x] Wrapper and check tests: preamble written `0600` and never on the command line, API key exported, host `ANTHROPIC_*` dropped, only allowed variables forwarded, missing worktree fails clearly; remote checks pass, fail with the exit code and time out
 - [x] An SSH project whose path also exists on this Mac never gets a local `.crew/`, even when handed local git
 - [x] On a real OpenSSH host with claude signed in (a macOS server whose home is the same path as this Mac's): the tunnel opens, a spawned builder edits files in its worktree on the host, its permission hook reaches Ensemble through the tunnel and waits for approval in the Inbox, the before-stop check runs on the host, the agent commits there, nothing is created at the same path on this Mac, and quitting Ensemble leaves no tunnel or agent process behind
+- [x] EnsembleCore tests pass and the app builds with xcodebuild
+
+## Interfaces (phase 5)
+
+- `AppRunner.remote: RemoteAgentHost?`: the run command runs on the host through the same wrapper as checks (own process group, pid file under `~/.cache/ensemble/apps/<project>.pid`, the worktree as working directory, the login shell), started by a local `ssh` whose output streams into the Log. Only `PORT`, `ENSEMBLE_PORT` and `ENSEMBLE_WORKTREE` are passed; the Mac's environment isn't
+- Ports: each tick one SSH call lists the TCP ports the host process group listens on (`lsof -g`) and confirms ports seen in the output with `nc -z`. Each one gets an `SSHPortForward` (`ssh -N -L`), on the same port number on this Mac when it's free, otherwise on a free one. The run bar, its link and the "ready" log line use the Mac's port; `forwardedPorts` maps host to Mac ports
+- Stop signals the host's process group (TERM, then KILL after the grace period), waits for the local `ssh` to end and closes every forward. Quitting Ensemble kills the host's group synchronously (up to 3 s) before closing forwards
+- Run-command detection for SSH projects reads the mirror's top-level `package.json`, `Makefile` and `Procfile`, for the main checkout and agents' worktrees alike. The run bar shows for SSH projects again
+
+## Acceptance criteria (phase 5)
+
+- [x] On a real host (`macserver.local`), Start runs `make dev` in the project there, the Log shows its output, the bar shows Running with a `localhost:8123` link, and the page loads on this Mac through the forward
+- [x] Stop leaves no server on the host and no forward on this Mac; quitting Ensemble while it runs does the same
+- [x] A server that never listens (Homebrew's Python on that host hangs in a reverse DNS lookup) stays in "waiting for the server to listen" and still stops cleanly
+- [x] Tests: output streaming, forwarded variables, exit codes and stopping through a fake host, plus an opt-in real-host test that serves a page through the forwarded port and checks cleanup
 - [x] EnsembleCore tests pass and the app builds with xcodebuild
 
 ## Out of scope (phase 1)

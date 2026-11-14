@@ -55,7 +55,7 @@ struct RemoteHostCard: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("Running the app from the run bar isn’t available for SSH projects yet.")
+            Text("The run bar starts the app on the host and forwards the ports it listens on to this Mac, so localhost links work here.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.tertiaryText)
         }

@@ -12,7 +12,7 @@ struct MainWindowView: View {
                 ProjectSidebar()
                     .overlay { RunMenuDismissal() }
                 VStack(spacing: 8) {
-                    if let project = model.currentProject, !project.isRemote {
+                    if let project = model.currentProject {
                         RunBar(project: project)
                             .zIndex(1)
                     }

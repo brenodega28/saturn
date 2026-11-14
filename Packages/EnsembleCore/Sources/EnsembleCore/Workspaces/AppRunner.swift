@@ -40,6 +40,8 @@ public final class AppRunner {
     public var environment: [String: String]
     public var killGracePeriod: Duration
     public var portWait: Duration
+    public var remote: RemoteAgentHost?
+    public private(set) var forwardedPorts: [Int: Int] = [:]
 
     @ObservationIgnored private let log: ActivityLog
     @ObservationIgnored private var generation = 0
@@ -49,6 +51,9 @@ public final class AppRunner {
     @ObservationIgnored private var openStreams = 0
     @ObservationIgnored private var monitor: Task<Void, Never>?
     @ObservationIgnored private var exitTask: Task<Void, Never>?
+    @ObservationIgnored private var forwards: [Int: SSHPortForward] = [:]
+    @ObservationIgnored private var remotePidFile: String?
+    @ObservationIgnored private var runningRemote: RemoteAgentHost?
 
     public init(projectId: Int64, log: ActivityLog, environment: [String: String], killGracePeriod: Duration = .seconds(5), portWait: Duration = .seconds(30)) {
         self.projectId = projectId
@@ -87,19 +92,32 @@ public final class AppRunner {
         state = .starting
         append(.debug, "\(label ?? command) · \(branch)")
 
-        var variables = environment
+        var variables = remote == nil ? environment : [:]
         variables["ENSEMBLE_WORKTREE"] = worktree.path
         if let port {
             variables["PORT"] = String(port)
             variables["ENSEMBLE_PORT"] = String(port)
         }
+        runningRemote = remote
         let launched: ProcessGroup.Launch
         do {
-            launched = try ProcessGroup.spawn(
-                arguments: [ShellScript.shell.path, "-lc", command],
-                environment: variables.map { "\($0.key)=\($0.value)" },
-                directory: worktree.path
-            )
+            if let remote {
+                let pidFile = remote.stateDirectory(named: "apps/\(projectId).pid")
+                remotePidFile = pidFile
+                let assignments = variables.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+                let remoteCommand = ShellQuote.command(["sh", "-c", ShellScript.remoteWrapper, ShellScript.remoteWrapper, worktree.path, pidFile, command] + assignments)
+                launched = try ProcessGroup.spawn(
+                    arguments: [remote.client.executable.path] + remote.client.arguments(for: remoteCommand),
+                    environment: remote.client.runner.environment.map { "\($0.key)=\($0.value)" },
+                    directory: FileManager.default.temporaryDirectory.path
+                )
+            } else {
+                launched = try ProcessGroup.spawn(
+                    arguments: [ShellScript.shell.path, "-lc", command],
+                    environment: variables.map { "\($0.key)=\($0.value)" },
+                    directory: worktree.path
+                )
+            }
         } catch {
             let message = "Couldn’t start \(label ?? command): \(error.localizedDescription)"
             state = .failed(message)
@@ -118,6 +136,14 @@ public final class AppRunner {
         guard let group = processGroup else { return }
         stopRequested = true
         let grace = killGracePeriod
+        if let remote = runningRemote, let pidFile = remotePidFile {
+            await Self.signal(remote, pidFile: pidFile, "TERM")
+            let deadline = ContinuousClock.now + grace
+            while processGroup == group, ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            if processGroup == group { await Self.signal(remote, pidFile: pidFile, "KILL") }
+        }
         await Task.detached { ProcessGroup.terminate(group, grace: grace) }.value
         await exitTask?.value
     }
@@ -126,6 +152,10 @@ public final class AppRunner {
         guard let group = processGroup else { return }
         stopRequested = true
         monitor?.cancel()
+        if let remote = runningRemote, let pidFile = remotePidFile {
+            Self.signalAndWait(remote, pidFile: pidFile, "KILL")
+        }
+        closeForwards()
         ProcessGroup.terminate(group, grace: killGracePeriod)
         processGroup = nil
         generation += 1
@@ -187,6 +217,7 @@ public final class AppRunner {
         guard current == generation else { return }
         monitor?.cancel()
         monitor = nil
+        closeForwards()
         processGroup = nil
         generation += 1
         if stopRequested {
@@ -211,14 +242,18 @@ public final class AppRunner {
 
     private func checkPorts(generation current: Int) async {
         guard current == generation, let group = processGroup else { return }
-        if let worktree, !FileManager.default.fileExists(atPath: worktree.path) {
-            await stop()
-            return
-        }
-        let socketPorts = await Task.detached { ListeningPorts.ports(inGroup: group) }.value
         var ports: [Int] = []
-        for port in urlPorts + socketPorts where !ports.contains(port) {
-            if await PortProbe.isListening(port: port) { ports.append(port) }
+        if let remote = runningRemote, let pidFile = remotePidFile {
+            ports = await forwardedListeningPorts(on: remote, pidFile: pidFile, generation: current)
+        } else {
+            if let worktree, !FileManager.default.fileExists(atPath: worktree.path) {
+                await stop()
+                return
+            }
+            let socketPorts = await Task.detached { ListeningPorts.ports(inGroup: group) }.value
+            for port in urlPorts + socketPorts where !ports.contains(port) {
+                if await PortProbe.isListening(port: port) { ports.append(port) }
+            }
         }
         guard current == generation, processGroup == group else { return }
         let since = startedAt ?? .now
@@ -238,6 +273,66 @@ public final class AppRunner {
             announcedReady = true
             append(.info, "ready · http://localhost:\(first) · \(branch ?? "")")
         }
+    }
+
+    static let remoteListeningScript = #"""
+    pg=$(cat -- "$1" 2>/dev/null) || exit 0; shift
+    [ -n "$pg" ] || exit 0
+    if command -v lsof >/dev/null 2>&1; then
+      lsof -nP -a -g "$pg" -iTCP -sTCP:LISTEN -Fn 2>/dev/null | sed -n 's/^n.*:\([0-9][0-9]*\)$/\1/p'
+    fi
+    for p in "$@"; do
+      command -v nc >/dev/null 2>&1 && nc -z -w 1 127.0.0.1 "$p" >/dev/null 2>&1 && echo "$p"
+    done
+    exit 0
+    """#
+
+    private func forwardedListeningPorts(on remote: RemoteAgentHost, pidFile: String, generation current: Int) async -> [Int] {
+        let candidates = urlPorts.map(String.init)
+        guard let result = try? await remote.client.run(arguments: ["sh", "-c", Self.remoteListeningScript, "ensemble", pidFile] + candidates) else { return [] }
+        var remotePorts: [Int] = []
+        for line in result.standardOutput.split(separator: "\n") {
+            if let port = Int(line.trimmingCharacters(in: .whitespaces)), !remotePorts.contains(port) { remotePorts.append(port) }
+        }
+        var local: [Int] = []
+        for port in remotePorts {
+            guard current == generation else { return [] }
+            let forward = forwards[port] ?? SSHPortForward(client: remote.client, remotePort: port)
+            forwards[port] = forward
+            do {
+                let localPort = try await forward.open()
+                forwardedPorts[port] = localPort
+                local.append(localPort)
+            } catch {
+                forwards[port] = nil
+                append(.warning, "Couldn’t forward port \(port) from the host: \(error.localizedDescription)")
+            }
+        }
+        return local
+    }
+
+    private func closeForwards() {
+        for forward in forwards.values { forward.stop() }
+        forwards = [:]
+        forwardedPorts = [:]
+    }
+
+    private static func signal(_ remote: RemoteAgentHost, pidFile: String, _ name: String) async {
+        _ = try? await remote.client.run(arguments: ["sh", "-c", RemoteAgentLaunch.killScript(signal: name), "ensemble", pidFile])
+    }
+
+    private static func signalAndWait(_ remote: RemoteAgentHost, pidFile: String, _ name: String) {
+        let process = Process()
+        process.executableURL = remote.client.executable
+        process.arguments = remote.client.arguments(for: ShellQuote.command(["sh", "-c", RemoteAgentLaunch.killScript(signal: name), "ensemble", pidFile]))
+        process.environment = remote.client.runner.environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return }
+        let deadline = Date.now.addingTimeInterval(3)
+        while process.isRunning, Date.now < deadline { usleep(50_000) }
+        if process.isRunning { process.terminate() }
     }
 
     private func append(_ level: LogEntry.Level, _ message: String) {

@@ -2,7 +2,7 @@ import Foundation
 
 public struct RequestThread: Sendable, Hashable {
     public enum Item: Sendable, Hashable, Identifiable {
-        case request(ProjectTask)
+        case request(Chat)
         case message(LeadMessage)
         case runStarted(Run)
         case step(Run, RunTimeline.Entry)
@@ -38,7 +38,7 @@ public struct RequestThread: Sendable, Hashable {
     public var items: [Item]
 
     public init(
-        task: ProjectTask,
+        task: Chat,
         messages: [LeadMessage],
         runs: [Run],
         timelines: [Int64: RunTimeline],

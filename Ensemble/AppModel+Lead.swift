@@ -23,7 +23,7 @@ extension AppModel {
         return Run.leadOrdering(engine.activeRuns(projectID: id))
     }
 
-    func leadRequests(in project: Project) -> [ProjectTask] {
+    func leadRequests(in project: Project) -> [Chat] {
         guard let id = project.id else { return [] }
         _ = engine.runs
         _ = engine.holds
@@ -31,7 +31,7 @@ extension AppModel {
         return (try? database.leadRequests(projectId: id)) ?? []
     }
 
-    func selectedRequest(in project: Project) -> ProjectTask? {
+    func selectedRequest(in project: Project) -> Chat? {
         guard let projectID = project.id else { return nil }
         switch leadSelections[projectID] {
         case .newRequest:
@@ -44,13 +44,13 @@ extension AppModel {
         }
     }
 
-    func requestHasActiveRun(_ task: ProjectTask) -> Bool {
+    func requestHasActiveRun(_ task: Chat) -> Bool {
         guard let id = task.id else { return false }
         _ = engine.runs
         return ((try? database.runs(taskId: id)) ?? []).contains { run in (run.id.flatMap { engine.runs[$0] } ?? run).isActive }
     }
 
-    func closeRequest(_ task: ProjectTask, as reason: RequestCloseReason, in project: Project) async {
+    func closeRequest(_ task: Chat, as reason: RequestCloseReason, in project: Project) async {
         guard let git = git(for: project) else {
             alert = AppAlert(title: "git isn’t available", message: "Ensemble couldn’t find git. Install the Xcode Command Line Tools and check again.")
             return
@@ -75,7 +75,7 @@ extension AppModel {
         }
     }
 
-    func latestRun(of task: ProjectTask) -> Run? {
+    func latestRun(of task: Chat) -> Run? {
         guard let id = task.id, let run = (try? database.runs(taskId: id))?.last else { return nil }
         return run.id.flatMap { engine.runs[$0] } ?? run
     }
@@ -86,7 +86,7 @@ extension AppModel {
         tabs[run.projectId] = .lead
     }
 
-    func showRequest(_ task: ProjectTask) {
+    func showRequest(_ task: Chat) {
         guard let id = task.id else { return }
         showRequest(id: id, inProjectID: task.projectId)
     }
@@ -123,7 +123,7 @@ extension AppModel {
         return requestID
     }
 
-    func requestStatusLabel(of request: ProjectTask, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> String {
+    func requestStatusLabel(of request: Chat, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> String {
         if pendingApprovalCount(of: request) > 0 { return "Needs approval" }
         if requestNeedsYou(request, latestRun: latestRun, needsYouTaskIDs: needsYouTaskIDs) { return "Needs you" }
         guard let latestRun else { return "Chat" }
@@ -131,20 +131,20 @@ extension AppModel {
         return latestRun.isActive ? (currentStepTitle(of: latestRun) ?? label) : label
     }
 
-    func leadSession(for task: ProjectTask) -> AgentSession? {
+    func leadSession(for task: Chat) -> AgentSession? {
         leadChat.leadSession(for: task)
     }
 
-    func workingSessions(for task: ProjectTask) -> [AgentSession] {
+    func workingSessions(for task: Chat) -> [AgentSession] {
         _ = agents.usageRevision
         return leadChat.workingSessions(for: task)
     }
 
-    func leadSendTarget(for request: ProjectTask?, in project: Project) -> PendingSendTarget? {
+    func leadSendTarget(for request: Chat?, in project: Project) -> PendingSendTarget? {
         project.id.map { .lead(project: $0, request: request?.id) }
     }
 
-    func holdLeadMessage(_ message: PendingMessage, lead: RoleDefinition?, to request: ProjectTask?, in project: Project) {
+    func holdLeadMessage(_ message: PendingMessage, lead: RoleDefinition?, to request: Chat?, in project: Project) {
         guard let target = leadSendTarget(for: request, in: project) else { return }
         holdSend(message, to: target) { [weak self] held in
             guard let self else { return }
@@ -163,7 +163,7 @@ extension AppModel {
     }
 
     @discardableResult
-    func sendLeadMessage(_ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, to request: ProjectTask?, in project: Project) async -> Bool {
+    func sendLeadMessage(_ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, to request: Chat?, in project: Project) async -> Bool {
         do {
             if let request {
                 try await leadChat.send(text, attachments: attachments, to: request, in: project)
@@ -204,7 +204,7 @@ extension AppModel {
         }
     }
 
-    func requestThread(for task: ProjectTask, in project: Project) -> RequestThreadData? {
+    func requestThread(for task: Chat, in project: Project) -> RequestThreadData? {
         guard let taskID = task.id else { return nil }
         let runs = ((try? database.runs(taskId: taskID)) ?? []).map { run in run.id.flatMap { engine.runs[$0] } ?? run }
         var timelines: [Int64: RunTimeline] = [:]
@@ -272,7 +272,7 @@ extension AppModel {
         runWorkflow(run)?.hasLead == true ? leadRole(in: project) : nil
     }
 
-    func requestTask(for run: Run) -> ProjectTask? {
+    func requestTask(for run: Run) -> Chat? {
         try? database.task(id: run.taskId)
     }
 

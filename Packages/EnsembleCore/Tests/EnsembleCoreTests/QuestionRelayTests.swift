@@ -111,7 +111,7 @@ import Testing
 
         let projectId = try #require(harness.project.id)
         let now = Date()
-        let task = try harness.database.insert(ProjectTask(
+        let task = try harness.database.insert(Chat(
             projectId: projectId, title: "Add alpha and beta", body: "Two files, please.", source: .chat,
             status: .incoming, createdAt: now, updatedAt: now
         ))

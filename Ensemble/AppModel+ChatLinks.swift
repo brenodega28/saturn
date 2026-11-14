@@ -24,12 +24,12 @@ extension AppModel {
         tabs[projectID] = .lead
     }
 
-    func copyLink(to task: ProjectTask, message: LeadMessage? = nil) {
+    func copyLink(to task: Chat, message: LeadMessage? = nil) {
         guard let requestID = task.id else { return }
         copyToPasteboard(ChatLink(requestID: requestID, messageID: message?.id).url.absoluteString)
     }
 
-    var chatRequestForLink: ProjectTask? {
+    var chatRequestForLink: Chat? {
         currentProject.flatMap(selectedRequest(in:))
     }
 

@@ -147,7 +147,7 @@ extension AppModel {
         Set(needsYouItems.compactMap(\.taskId))
     }
 
-    func pendingApprovalCount(of task: ProjectTask) -> Int {
+    func pendingApprovalCount(of task: Chat) -> Int {
         task.id.map(pendingPermissions.count(taskId:)) ?? 0
     }
 
@@ -155,7 +155,7 @@ extension AppModel {
         project.id.map(pendingPermissions.count(projectId:)).map { $0 > 0 } ?? false
     }
 
-    func requestNeedsYou(_ task: ProjectTask, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> Bool {
+    func requestNeedsYou(_ task: Chat, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> Bool {
         if let latestRun, runNeedsYou(latestRun) { return true }
         return task.id.map(needsYouTaskIDs.contains) == true
     }

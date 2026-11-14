@@ -5,7 +5,7 @@ import SwiftUI
 struct LeadComposer: View {
     @Environment(AppModel.self) private var model
     let project: Project
-    let request: ProjectTask?
+    let request: Chat?
     @State private var text = ""
     @State private var attachments: [ChatAttachment] = []
     @State private var isDropTargeted = false

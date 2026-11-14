@@ -216,7 +216,7 @@ enum StdinRecorder {
         #expect(try Data(contentsOf: imageURL) == png)
 
         let projectId = try #require(harness.project.id)
-        let task = try harness.database.insert(ProjectTask(projectId: projectId, title: "T", body: "", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now))
+        let task = try harness.database.insert(Chat(projectId: projectId, title: "T", body: "", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now))
         try harness.database.insert(LeadMessage(projectId: projectId, taskId: task.id!, kind: .user, text: "", createdAt: .now, attachments: stored))
         try harness.database.insert(LeadMessage(projectId: projectId, taskId: task.id!, kind: .lead, text: "Hi", createdAt: .now))
 

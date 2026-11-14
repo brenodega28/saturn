@@ -150,7 +150,7 @@ import Testing
 
     func startRun(_ setup: Setup) throws -> Run {
         let now = Date()
-        let task = try setup.harness.database.insert(ProjectTask(
+        let task = try setup.harness.database.insert(Chat(
             projectId: setup.project.id!, title: "Add alpha and beta", body: "Two files, please.", source: .chat,
             status: .incoming, createdAt: now, updatedAt: now
         ))

@@ -69,10 +69,10 @@ public struct WorkflowDefinition: Sendable, Hashable, Identifiable, Codable {
 }
 
 public struct WorkflowTrigger: Sendable, Hashable, Codable {
-    public var sources: [TaskSource]
+    public var sources: [ChatSource]
     public var labels: [String]
 
-    public init(sources: [TaskSource] = [.chat], labels: [String] = []) {
+    public init(sources: [ChatSource] = [.chat], labels: [String] = []) {
         self.sources = sources
         self.labels = labels
     }
@@ -80,7 +80,7 @@ public struct WorkflowTrigger: Sendable, Hashable, Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let names = try container.decodeIfPresent([String].self, forKey: .sources)
-        self.sources = names.map { $0.compactMap(TaskSource.init(rawValue:)) } ?? [.chat]
+        self.sources = names.map { $0.compactMap(ChatSource.init(rawValue:)) } ?? [.chat]
         self.labels = try container.decodeIfPresent([String].self, forKey: .labels) ?? []
     }
 }

@@ -24,7 +24,7 @@ import Testing
 
     func start(_ setup: WorkflowDriverTests.Setup) throws -> Run {
         let now = Date()
-        let task = try setup.harness.database.insert(ProjectTask(
+        let task = try setup.harness.database.insert(Chat(
             projectId: setup.project.id!, title: "Fix refunds", body: "Refunds can exceed the captured total.", source: .chat,
             status: .incoming, createdAt: now, updatedAt: now
         ))

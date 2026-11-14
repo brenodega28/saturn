@@ -141,7 +141,7 @@ extension FailureAction {
     }
 }
 
-extension TaskSource {
+extension ChatSource {
     var title: String {
         switch self {
         case .chat: "Lead chat"

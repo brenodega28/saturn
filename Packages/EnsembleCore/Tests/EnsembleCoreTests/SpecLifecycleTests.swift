@@ -39,11 +39,11 @@ final class SpecGateDriver: WorkflowDriver {
         return (setup, chat)
     }
 
-    func messages(_ setup: Setup, _ task: ProjectTask) -> [LeadMessage] {
+    func messages(_ setup: Setup, _ task: Chat) -> [LeadMessage] {
         (try? setup.harness.database.leadMessages(taskId: task.id!)) ?? []
     }
 
-    func draftURL(_ setup: Setup, _ task: ProjectTask) -> URL {
+    func draftURL(_ setup: Setup, _ task: Chat) -> URL {
         SpecStore(paths: setup.harness.runtime.paths).draftURL(projectId: setup.project.id!, taskId: task.id!)
     }
 
@@ -335,7 +335,7 @@ final class SpecGateDriver: WorkflowDriver {
             CriterionResult(criterion: "2. beta.txt exists", status: .pass, evidence: "beta.txt:1"),
         ]))))
 
-        let task = try setup.harness.database.insert(ProjectTask(
+        let task = try setup.harness.database.insert(Chat(
             projectId: setup.project.id!, title: "Alpha and beta", body: "", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now
         ))
         let run = try engine.start(task: task, workflow: workflow, project: setup.project)

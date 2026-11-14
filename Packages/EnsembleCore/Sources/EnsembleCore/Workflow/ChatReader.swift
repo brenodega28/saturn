@@ -60,7 +60,7 @@ public struct ChatReader {
         return Self.capped(text)
     }
 
-    private func overview(_ task: ProjectTask, taskID: Int64, messages: [LeadMessage], request: ChatReadRequest, config: ProjectConfig?) throws -> String {
+    private func overview(_ task: Chat, taskID: Int64, messages: [LeadMessage], request: ChatReadRequest, config: ProjectConfig?) throws -> String {
         var lines = ["Request chat \(taskID): \(task.title)"]
         if let project = try database.project(id: task.projectId) {
             lines.append("Project: \(project.name) (\(project.path))")

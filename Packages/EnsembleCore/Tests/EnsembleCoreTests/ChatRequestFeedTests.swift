@@ -35,9 +35,9 @@ import Testing
         #expect(try database.openChatRequestsInOpenProjects().map(\.kind) == [.question])
     }
 
-    func chat(_ project: Project, _ title: String, minutes: Double, closed: Bool = false) throws -> ProjectTask {
+    func chat(_ project: Project, _ title: String, minutes: Double, closed: Bool = false) throws -> Chat {
         let at = launch.addingTimeInterval(minutes * 60)
-        return try database.insert(ProjectTask(
+        return try database.insert(Chat(
             projectId: try #require(project.id), title: title, body: "", source: .chat, status: .running,
             closedAt: closed ? at : nil, createdAt: at, updatedAt: at
         ))

@@ -4,7 +4,7 @@ import SwiftUI
 
 struct RequestChat: View {
     @Environment(AppModel.self) private var model
-    let task: ProjectTask
+    let task: Chat
     let project: Project
     @State private var data: RequestThreadData?
     @State private var highlightedItemID: String?
@@ -249,7 +249,7 @@ struct RequestChat: View {
 
 private struct ChatHeaderPill: View {
     @Environment(AppModel.self) private var model
-    let task: ProjectTask
+    let task: Chat
     let project: Project
 
     var body: some View {

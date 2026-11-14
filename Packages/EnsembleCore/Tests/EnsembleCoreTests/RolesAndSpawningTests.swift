@@ -373,7 +373,7 @@ import Testing
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
         let projectId = try #require(harness.project.id)
-        let task = try harness.database.insert(ProjectTask(projectId: projectId, title: "Refunds", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
+        let task = try harness.database.insert(Chat(projectId: projectId, title: "Refunds", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
         let run = try harness.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: .running, startedAt: .now, title: "Refunds"), state: RunEngineState())
         let runID = try #require(run.id)
 

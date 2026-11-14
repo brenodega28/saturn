@@ -149,9 +149,9 @@ struct WorkflowHarness {
         try #require(ProjectConfigLoader.load(repository: repository).workflow(id))
     }
 
-    func makeTask(title: String = "Refunds v2", labels: [String] = []) throws -> ProjectTask {
+    func makeTask(title: String = "Refunds v2", labels: [String] = []) throws -> Chat {
         let projectId = try #require(project.id)
-        return try database.insert(ProjectTask(
+        return try database.insert(Chat(
             projectId: projectId, title: title, body: "Let support agents refund orders.", source: .chat,
             status: .incoming, labels: labels, createdAt: .now, updatedAt: .now
         ))
@@ -168,7 +168,7 @@ struct WorkflowHarness {
         try #require(try database.run(id: id))
     }
 
-    func task(of id: Int64) throws -> ProjectTask {
+    func task(of id: Int64) throws -> Chat {
         try #require(try database.task(id: try run(id).taskId))
     }
 

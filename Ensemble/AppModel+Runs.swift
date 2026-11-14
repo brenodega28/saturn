@@ -3,7 +3,7 @@ import Foundation
 
 struct RunDetailSnapshot {
     var run: Run
-    var task: ProjectTask?
+    var task: Chat?
     var workflow: WorkflowDefinition?
     var steps: [RunStep]
     var state: RunEngineState

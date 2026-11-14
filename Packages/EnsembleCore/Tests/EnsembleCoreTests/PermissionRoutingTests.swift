@@ -72,7 +72,7 @@ import Testing
         driver.gitProvider = { harness.repo.git }
         let projectId = try #require(harness.project.id)
         let now = Date()
-        let task = try harness.database.insert(ProjectTask(
+        let task = try harness.database.insert(Chat(
             projectId: projectId, title: "Check the JDK", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now
         ))
         let taskId = try #require(task.id)

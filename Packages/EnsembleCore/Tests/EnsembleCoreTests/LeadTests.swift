@@ -98,8 +98,8 @@ struct LeadRequestTests {
 
     @Test func partitionKeepsOpenOrderAndListsClosedNewestFirst() {
         let base = Date(timeIntervalSince1970: 1_000)
-        func request(_ id: Int64, closedMinutes: Double? = nil) -> ProjectTask {
-            ProjectTask(
+        func request(_ id: Int64, closedMinutes: Double? = nil) -> Chat {
+            Chat(
                 id: id, projectId: 1, title: "R\(id)", body: "", source: .chat, status: .done,
                 closedAt: closedMinutes.map { base.addingTimeInterval($0 * 60) }, closeReason: closedMinutes.map { _ in .done },
                 createdAt: base, updatedAt: base

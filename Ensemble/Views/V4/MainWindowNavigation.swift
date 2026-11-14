@@ -120,7 +120,7 @@ extension AppModel {
         }
     }
 
-    func showChat(_ request: ProjectTask) {
+    func showChat(_ request: Chat) {
         guard let project = project(withID: request.projectId) else { return }
         mainWindow.spec = nil
         showChat(in: project)

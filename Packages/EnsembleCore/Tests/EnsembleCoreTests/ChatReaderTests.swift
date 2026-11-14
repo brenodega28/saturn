@@ -9,7 +9,7 @@ import Testing
         let harness: AgentHarness
         let driver: AgentWorkflowDriver
         let otherProjectFolder: URL
-        let task: ProjectTask
+        let task: Chat
         let messages: [LeadMessage]
         let lead: Agent
         let run: Run
@@ -48,7 +48,7 @@ import Testing
         let database = harness.database
         let projectA = try #require(harness.project.id)
         let base = Date(timeIntervalSince1970: 1_800_000_000)
-        let task = try database.insert(ProjectTask(
+        let task = try database.insert(Chat(
             projectId: projectA, title: "Fix the login loop", body: "Login redirects forever.", source: .chat,
             status: .running, createdAt: base, updatedAt: base
         ))
@@ -247,7 +247,7 @@ import Testing
             try f.reader.read(ChatReadRequest(requestID: f.taskID, messageID: 8_888))
         }
 
-        let otherTask = try f.harness.database.insert(ProjectTask(
+        let otherTask = try f.harness.database.insert(Chat(
             projectId: f.task.projectId, title: "Other", body: "", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now
         ))
         let foreignRun = try f.harness.database.insert(Run(

@@ -216,7 +216,7 @@ public enum DryRun {
         let database = try AppDatabase.inMemory()
         let project = try database.openProject(at: FileManager.default.temporaryDirectory.appending(path: "ensemble-dry-run", directoryHint: .isDirectory))
         guard let projectId = project.id else { throw RunEngineError.invalidState("The dry run couldn’t create a project.") }
-        let task = try database.insert(ProjectTask(
+        let task = try database.insert(Chat(
             projectId: projectId, title: script.taskTitle, body: script.taskBody, source: .chat, status: .incoming,
             labels: script.labels, createdAt: .now, updatedAt: .now
         ))

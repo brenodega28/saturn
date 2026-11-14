@@ -256,7 +256,7 @@ private struct SectionRow: View {
 
 private struct RequestRow: View {
     @Environment(AppModel.self) private var model
-    let request: ProjectTask
+    let request: Chat
     let project: Project
     let needsYouTaskIDs: Set<Int64>
     @State private var isHovered = false

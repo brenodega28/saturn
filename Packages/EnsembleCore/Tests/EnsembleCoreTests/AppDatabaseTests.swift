@@ -102,7 +102,7 @@ import Testing
         let projectId = try #require(project.id)
 
         try database.writer.write { db in
-            var task = ProjectTask(projectId: projectId, title: "Refunds v2", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now)
+            var task = Chat(projectId: projectId, title: "Refunds v2", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now)
             try task.insert(db)
             var run = Run(projectId: projectId, taskId: task.id!, workflow: "feature-delivery", status: .running, startedAt: now)
             try run.insert(db)
@@ -121,7 +121,7 @@ import Testing
         try database.forgetProject(id: projectId)
 
         let counts = try database.writer.read { db in
-            try [ProjectTask.fetchCount(db), Run.fetchCount(db), Agent.fetchCount(db), UsageEntry.fetchCount(db)]
+            try [Chat.fetchCount(db), Run.fetchCount(db), Agent.fetchCount(db), UsageEntry.fetchCount(db)]
         }
         #expect(counts == [0, 0, 0, 0])
     }

@@ -96,7 +96,7 @@ extension AppModel {
         runNeedsYou(run) ? RunStatus.waitingOnYou.label : run.status.label
     }
 
-    func statusColor(of request: ProjectTask, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> Color {
+    func statusColor(of request: Chat, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> Color {
         let needsYou = pendingApprovalCount(of: request) > 0 || requestNeedsYou(request, latestRun: latestRun, needsYouTaskIDs: needsYouTaskIDs)
         return Self.statusColor(needsYou: needsYou, otherwise: latestRun?.status.color ?? Theme.secondaryText)
     }

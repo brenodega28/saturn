@@ -64,7 +64,7 @@ import Testing
 
     func makeRun(_ setup: Setup, title: String = "Refunds") throws -> Int64 {
         let projectId = try #require(setup.project.id)
-        let task = try setup.database.insert(ProjectTask(projectId: projectId, title: title, body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
+        let task = try setup.database.insert(Chat(projectId: projectId, title: title, body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
         let taskId = try #require(task.id)
         let run = try setup.database.insert(Run(projectId: projectId, taskId: taskId, workflow: "w", status: .running, startedAt: .now, title: title), state: RunEngineState())
         return try #require(run.id)
@@ -150,7 +150,7 @@ import Testing
     }
 
     func addRun(_ database: AppDatabase, project: Int64, ended: Date, lines: Int, cost: Double, checkRounds: Int, sentBack: Bool, approvalMinutes: Double) throws {
-        let task = try database.insert(ProjectTask(projectId: project, title: "T", body: "", source: .chat, status: .done, createdAt: ended, updatedAt: ended))
+        let task = try database.insert(Chat(projectId: project, title: "T", body: "", source: .chat, status: .done, createdAt: ended, updatedAt: ended))
         let run = try database.insert(Run(
             projectId: project, taskId: try #require(task.id), workflow: "w", status: .succeeded, costUSD: cost, startedAt: ended.addingTimeInterval(-7200),
             endedAt: ended, title: "T", workflowSnapshot: try ProjectConfigLoader.encodeYAML(workflow), linesChanged: lines, filesChanged: 2

@@ -31,10 +31,10 @@ public final class LeadChat {
     @discardableResult
     public func createRequest(
         _ text: String, attachments: [ChatAttachment] = [], in project: Project, now: Date = .now
-    ) async throws -> ProjectTask {
+    ) async throws -> Chat {
         let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let projectId = project.id, !typed.isEmpty || !attachments.isEmpty else { throw AgentError.emptyTask }
-        let task = try database.insert(ProjectTask(
+        let task = try database.insert(Chat(
             projectId: projectId, title: Self.title(text: typed, attachments: attachments),
             body: ChatAttachment.prompt(text: typed, attachments: attachments), source: .chat,
             status: .incoming, createdAt: now, updatedAt: now
@@ -44,7 +44,7 @@ public final class LeadChat {
     }
 
     public func send(
-        _ text: String, attachments: [ChatAttachment] = [], to task: ProjectTask, in project: Project, now: Date = .now
+        _ text: String, attachments: [ChatAttachment] = [], to task: Chat, in project: Project, now: Date = .now
     ) async throws {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let taskId = task.id, !body.isEmpty || !attachments.isEmpty else { return }
@@ -75,7 +75,7 @@ public final class LeadChat {
     }
 
     @discardableResult
-    public func close(_ task: ProjectTask, as reason: RequestCloseReason, in project: Project, git: GitClient, now: Date = .now) async throws -> ProjectTask {
+    public func close(_ task: Chat, as reason: RequestCloseReason, in project: Project, git: GitClient, now: Date = .now) async throws -> Chat {
         guard let taskId = task.id, try database.task(id: taskId) != nil else { throw RunEngineError.invalidState("The request is gone.") }
         guard !(try hasActiveRun(taskId: taskId)) else { throw LeadChatError.runInProgress }
         for agent in try database.requestAgents(taskId: taskId) {
@@ -102,12 +102,12 @@ public final class LeadChat {
         try database.runs(taskId: taskId).contains { (engine.runs[$0.id ?? -1] ?? $0).isActive }
     }
 
-    public func leadSession(for task: ProjectTask) -> AgentSession? {
+    public func leadSession(for task: Chat) -> AgentSession? {
         guard let taskId = task.id, let agent = try? database.leadAgent(taskId: taskId) else { return nil }
         return runtime.session(for: agent)
     }
 
-    public func workingSessions(for task: ProjectTask) -> [AgentSession] {
+    public func workingSessions(for task: Chat) -> [AgentSession] {
         guard let taskId = task.id,
               let requestAgents = try? database.requestAgents(taskId: taskId),
               let spawned = try? database.spawnedAgents(taskId: taskId) else { return [] }
@@ -170,7 +170,7 @@ public final class LeadChat {
         #endif
     }
 
-    private func leadSession(for task: ProjectTask, in project: Project) throws -> AgentSession {
+    private func leadSession(for task: Chat, in project: Project) throws -> AgentSession {
         if let session = leadSession(for: task) { return session }
         guard let taskId = task.id else { throw AgentError.emptyTask }
         return try runtime.createLeadAgent(in: project, taskId: taskId)

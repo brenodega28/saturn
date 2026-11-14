@@ -144,7 +144,7 @@ public struct StepInputs: Sendable, Hashable, Codable {
 
 public struct StepContext: Sendable, Hashable {
     public var run: Run
-    public var task: ProjectTask
+    public var task: Chat
     public var project: Project
     public var step: WorkflowStep
     public var kind: AgentKind?
@@ -157,7 +157,7 @@ public struct StepContext: Sendable, Hashable {
     public var runBudgetRemainingUSD: Double?
 
     public init(
-        run: Run, task: ProjectTask, project: Project, step: WorkflowStep, kind: AgentKind?, iteration: Int, attempt: Int,
+        run: Run, task: Chat, project: Project, step: WorkflowStep, kind: AgentKind?, iteration: Int, attempt: Int,
         runStepID: Int64, start: StepStart, inputs: StepInputs, stepBudgetUSD: Double?, runBudgetRemainingUSD: Double?
     ) {
         self.run = run

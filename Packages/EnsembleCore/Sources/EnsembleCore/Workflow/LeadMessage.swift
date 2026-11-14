@@ -162,9 +162,9 @@ extension AppDatabase {
         }
     }
 
-    public func closedTasks(projectId: Int64) throws -> [ProjectTask] {
+    public func closedTasks(projectId: Int64) throws -> [Chat] {
         try writer.read { db in
-            try ProjectTask.fetchAll(db, sql: """
+            try Chat.fetchAll(db, sql: """
                 SELECT task.* FROM task
                 WHERE task.projectId = ? AND task.closedAt IS NOT NULL
                 ORDER BY task.id
@@ -173,13 +173,13 @@ extension AppDatabase {
     }
 
     @discardableResult
-    public func setClosed(taskId: Int64, reason: RequestCloseReason?, at date: Date) throws -> ProjectTask? {
+    public func setClosed(taskId: Int64, reason: RequestCloseReason?, at date: Date) throws -> Chat? {
         try writer.write { db in
             try db.execute(
                 sql: "UPDATE task SET closedAt = ?, closeReason = ?, updatedAt = ? WHERE id = ?",
                 arguments: [reason == nil ? nil : date, reason?.rawValue, date, taskId]
             )
-            return try ProjectTask.fetchOne(db, id: taskId)
+            return try Chat.fetchOne(db, id: taskId)
         }
     }
 
@@ -199,9 +199,9 @@ extension AppDatabase {
         }
     }
 
-    public func leadRequests(projectId: Int64) throws -> [ProjectTask] {
+    public func leadRequests(projectId: Int64) throws -> [Chat] {
         try writer.read { db in
-            try ProjectTask.fetchAll(db, sql: """
+            try Chat.fetchAll(db, sql: """
                 SELECT task.* FROM task
                 WHERE task.projectId = ?
                   AND (EXISTS (SELECT 1 FROM run WHERE run.taskId = task.id)

@@ -10,7 +10,7 @@ struct PendingPermissionCountsTests {
         let otherProjectId: Int64
 
         func task(in projectId: Int64? = nil) throws -> Int64 {
-            let task = try database.insert(ProjectTask(
+            let task = try database.insert(Chat(
                 projectId: projectId ?? self.projectId, title: "T", body: "", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now
             ))
             return try #require(task.id)

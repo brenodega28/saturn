@@ -82,7 +82,7 @@ public final class RunEngine {
     }
 
     @discardableResult
-    public func start(task: ProjectTask, workflow: WorkflowDefinition, project: Project, title: String? = nil, brief: String? = nil) throws -> Run {
+    public func start(task: Chat, workflow: WorkflowDefinition, project: Project, title: String? = nil, brief: String? = nil) throws -> Run {
         guard let first = workflow.firstStep else { throw RunEngineError.emptyWorkflow(workflow.name) }
         guard let projectId = project.id, let taskId = task.id else { throw RunEngineError.invalidState("Save the task and project before starting a run.") }
         let now = clock()
@@ -96,7 +96,7 @@ public final class RunEngine {
         let run = try database.insert(draft, state: state)
         guard let runID = run.id else { throw RunEngineError.runNotFound }
         try database.writer.write { db in
-            try db.execute(sql: "UPDATE task SET status = ?, workflow = ?, updatedAt = ? WHERE id = ?", arguments: [TaskStatus.running.rawValue, workflow.id, now, taskId])
+            try db.execute(sql: "UPDATE task SET status = ?, workflow = ?, updatedAt = ? WHERE id = ?", arguments: [ChatStatus.running.rawValue, workflow.id, now, taskId])
         }
         refresh(run, state: state)
         #if DEBUG
@@ -571,7 +571,7 @@ extension RunEngine {
         }
     }
 
-    static func taskStatus(for status: RunStatus) -> TaskStatus {
+    static func taskStatus(for status: RunStatus) -> ChatStatus {
         switch status {
         case .pending, .running, .interrupted: .running
         case .waitingOnYou, .paused: .waitingOnYou

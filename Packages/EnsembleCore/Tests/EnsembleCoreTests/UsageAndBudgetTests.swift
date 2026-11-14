@@ -30,7 +30,7 @@ import Testing
         let now = Self.date("2026-10-22T12:00:00Z")
         let shop = try database.openProject(at: URL(fileURLWithPath: "/tmp/shopfront"))
         let docs = try database.openProject(at: URL(fileURLWithPath: "/tmp/docs-site"))
-        let task = try database.insert(ProjectTask(projectId: shop.id!, title: "Refunds", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now))
+        let task = try database.insert(Chat(projectId: shop.id!, title: "Refunds", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now))
         let run = try database.insert(Run(projectId: shop.id!, taskId: task.id!, workflow: "feature-delivery", status: .succeeded, startedAt: now, title: "Refunds v2"), state: RunEngineState())
         let lead = try database.insert(Agent(projectId: shop.id!, runId: run.id, role: "tech-lead", name: "Tech Lead", status: .idle, createdAt: now, updatedAt: now))
         let dev = try database.insert(Agent(projectId: shop.id!, runId: run.id, role: "claude-code", name: "Dev 1", status: .idle, createdAt: now, updatedAt: now))

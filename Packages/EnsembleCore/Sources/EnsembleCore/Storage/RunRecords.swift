@@ -286,7 +286,7 @@ public struct ChatRequest: Codable, Sendable, Hashable, Identifiable, FetchableR
     }
 }
 
-extension ProjectTask {
+extension Chat {
     public enum Columns {
         public static let projectId = Column("projectId")
         public static let status = Column("status")

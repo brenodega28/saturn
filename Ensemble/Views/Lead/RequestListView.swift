@@ -92,7 +92,7 @@ struct RequestListView: View {
         .background(Theme.fillRaised, in: .rect(cornerRadius: 10, style: .continuous))
     }
 
-    private func matchesQuery(_ request: ProjectTask) -> Bool {
+    private func matchesQuery(_ request: Chat) -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty || request.title.localizedCaseInsensitiveContains(trimmed)
     }
@@ -103,7 +103,7 @@ struct RequestListView: View {
     }
 
     @ViewBuilder
-    private func section(_ title: String, requests: [ProjectTask], needsYouTaskIDs: Set<Int64>) -> some View {
+    private func section(_ title: String, requests: [Chat], needsYouTaskIDs: Set<Int64>) -> some View {
         if !requests.isEmpty {
             HStack(spacing: 6) {
                 Text(title).font(.system(size: 12, weight: .semibold))
@@ -122,7 +122,7 @@ struct RequestListView: View {
         }
     }
 
-    private func row(_ request: ProjectTask, needsYouTaskIDs: Set<Int64>) -> some View {
+    private func row(_ request: Chat, needsYouTaskIDs: Set<Int64>) -> some View {
         let run = model.latestRun(of: request)
         let title = request.title.isEmpty ? "Request #\(request.id ?? 0)" : request.title
         let status = model.requestStatusLabel(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs)

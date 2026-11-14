@@ -71,7 +71,7 @@ extension ChatRequest {
         if let taskId = try latestOpenChatID(projectId: request.projectId, db) {
             return taskId
         }
-        var chat = ProjectTask(
+        var chat = Chat(
             projectId: request.projectId, title: request.title, body: request.body, source: .chat,
             status: request.status == .open ? .waitingOnYou : .done, createdAt: request.createdAt, updatedAt: request.createdAt
         )

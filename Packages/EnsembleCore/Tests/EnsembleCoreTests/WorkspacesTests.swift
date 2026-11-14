@@ -151,7 +151,7 @@ import Testing
 
     func makeRun(_ h: AgentHarness, status: RunStatus) throws -> Int64 {
         let projectId = try #require(h.project.id)
-        let task = try h.database.insert(ProjectTask(projectId: projectId, title: "Refunds", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
+        let task = try h.database.insert(Chat(projectId: projectId, title: "Refunds", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
         let run = try h.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: status, startedAt: .now, title: "Refunds"), state: RunEngineState())
         return try #require(run.id)
     }
@@ -312,7 +312,7 @@ import Testing
 
         let idle = try #require(try await h.runtime.spawn(in: project, kind: builder, count: 1, git: h.repo.git, name: "Idle Dev").first)
         let pinned = try #require(try await h.runtime.spawn(in: project, kind: builder, count: 1, git: h.repo.git, pinned: true, name: "Pinned Dev").first)
-        let task = try h.database.insert(ProjectTask(projectId: projectId, title: "Refunds", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
+        let task = try h.database.insert(Chat(projectId: projectId, title: "Refunds", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
         let active = try h.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: .running, startedAt: .now), state: RunEngineState())
         let finished = try h.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: .succeeded, startedAt: .now), state: RunEngineState())
         let inRun = try await h.runtime.createRunAgent(in: project, kind: builder, runId: try #require(active.id), runStepId: nil, task: "Build", git: h.repo.git)

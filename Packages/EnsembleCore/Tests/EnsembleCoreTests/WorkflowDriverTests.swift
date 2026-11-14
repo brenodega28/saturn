@@ -33,7 +33,7 @@ import Testing
 
     func startRun(_ setup: Setup, title: String = "Add alpha and beta") throws -> Run {
         let now = Date()
-        let task = try setup.harness.database.insert(ProjectTask(
+        let task = try setup.harness.database.insert(Chat(
             projectId: setup.project.id!, title: title, body: "Two files, please.", source: .chat,
             status: .incoming, createdAt: now, updatedAt: now
         ))
@@ -110,7 +110,7 @@ import Testing
         setup.harness.runtime.lingerGrace = .milliseconds(300)
 
         let now = Date()
-        let task = try setup.harness.database.insert(ProjectTask(
+        let task = try setup.harness.database.insert(Chat(
             projectId: setup.project.id!, title: "Add gamma", body: "One file.", source: .chat,
             status: .incoming, createdAt: now, updatedAt: now
         ))
@@ -283,7 +283,7 @@ import Testing
         let engine = RunEngine(database: harness.database, driver: driver)
         let projectId = try #require(harness.project.id)
         let now = Date()
-        let task = try harness.database.insert(ProjectTask(
+        let task = try harness.database.insert(Chat(
             projectId: projectId, title: MergeSetup.title, body: "", source: .chat, status: .done, createdAt: now, updatedAt: now
         ))
         let run = try harness.database.insert(Run(

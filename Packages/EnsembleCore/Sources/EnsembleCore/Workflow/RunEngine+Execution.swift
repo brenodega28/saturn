@@ -368,14 +368,14 @@ extension RunEngine {
         try database.runStep(id: runStepID)?.status == .running
     }
 
-    private func taskAndProject(of run: Run) throws -> (ProjectTask, Project) {
+    private func taskAndProject(of run: Run) throws -> (Chat, Project) {
         guard let task = try database.task(id: run.taskId), let project = try database.project(id: run.projectId) else {
             throw RunEngineError.invalidState("The run’s task or project was deleted.")
         }
         return (task, project)
     }
 
-    private func makeInputs(_ loaded: LoadedRun, step: WorkflowStep, task: ProjectTask) throws -> StepInputs {
+    private func makeInputs(_ loaded: LoadedRun, step: WorkflowStep, task: Chat) throws -> StepInputs {
         let previous = try database.runSteps(runId: try loaded.id)
             .filter { $0.status == .succeeded }
             .map { PreviousOutput(stepId: $0.stepId, iteration: $0.iteration, outcome: $0.outcome, output: decodeOutput($0.output)) }

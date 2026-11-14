@@ -181,7 +181,7 @@ import Testing
         let database = try AppDatabase.inMemory()
         let project = try database.openProject(at: URL(fileURLWithPath: "/tmp/chat-notify-\(UUID().uuidString)"))
         let projectId = try #require(project.id)
-        let task = try database.insert(ProjectTask(projectId: projectId, title: "T", body: "", source: .chat, status: .incoming, createdAt: at(-60), updatedAt: at(-60)))
+        let task = try database.insert(Chat(projectId: projectId, title: "T", body: "", source: .chat, status: .incoming, createdAt: at(-60), updatedAt: at(-60)))
         let taskId = try #require(task.id)
         try database.insert(LeadMessage(projectId: projectId, taskId: taskId, kind: .lead, text: "Old", createdAt: at(-5)))
 

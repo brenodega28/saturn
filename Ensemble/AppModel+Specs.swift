@@ -17,7 +17,7 @@ extension SpecStatus {
 extension AppModel {
     var specStore: SpecStore { SpecStore(paths: agents.paths) }
 
-    func specDraft(for task: ProjectTask) -> SpecFile? {
+    func specDraft(for task: Chat) -> SpecFile? {
         guard let taskID = task.id else { return nil }
         let url = specStore.draftURL(projectId: task.projectId, taskId: taskID)
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }

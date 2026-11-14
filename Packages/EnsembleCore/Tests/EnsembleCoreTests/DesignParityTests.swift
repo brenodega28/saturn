@@ -88,7 +88,7 @@ import Testing
         var feature = try #require(setup.config.workflow("feature-delivery"))
         let build = try #require(feature.steps.firstIndex { $0.id == "build" })
         feature.steps[build].reusePinned = true
-        let task = try setup.harness.database.insert(ProjectTask(projectId: projectID, title: "Add alpha and beta", body: "", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now))
+        let task = try setup.harness.database.insert(Chat(projectId: projectID, title: "Add alpha and beta", body: "", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now))
         let run = try setup.engine.start(task: task, workflow: feature, project: setup.project)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
         let planStep = try setup.harness.database.runSteps(runId: run.id!).first { $0.stepId == "plan" }
@@ -135,7 +135,7 @@ import Testing
         let database = try AppDatabase.inMemory()
         let project = try database.openProject(at: repository)
         let projectId = try #require(project.id)
-        let task = try database.insert(ProjectTask(projectId: projectId, title: "T", body: "", source: .chat, status: .done, createdAt: .now, updatedAt: .now))
+        let task = try database.insert(Chat(projectId: projectId, title: "T", body: "", source: .chat, status: .done, createdAt: .now, updatedAt: .now))
         let taskId = try #require(task.id)
         for cost in [2.0, 4.0] {
             _ = try database.insert(Run(projectId: projectId, taskId: taskId, workflow: "hotfix", workflowVersion: "2", status: .succeeded, costUSD: cost, startedAt: .now, endedAt: .now), state: RunEngineState())
@@ -154,7 +154,7 @@ import Testing
         let driver = AgentWorkflowDriver(runtime: harness.runtime)
         driver.gitProvider = { harness.repo.git }
         let projectId = try #require(harness.project.id)
-        let task = try harness.database.insert(ProjectTask(projectId: projectId, title: "Greeting", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
+        let task = try harness.database.insert(Chat(projectId: projectId, title: "Greeting", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
         let taskId = try #require(task.id)
         let run = try harness.database.insert(Run(projectId: projectId, taskId: taskId, workflow: "w", status: .waitingOnYou, startedAt: .now, title: "Greeting"), state: RunEngineState())
         var sessions: [AgentSession] = []

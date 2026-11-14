@@ -242,7 +242,7 @@ import Testing
         defer { h.cleanUp() }
         let projectId = try #require(h.project.id)
         let now = Date()
-        let task = try h.database.insert(ProjectTask(projectId: projectId, title: "Preview", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now))
+        let task = try h.database.insert(Chat(projectId: projectId, title: "Preview", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now))
         let run = try h.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "small-task", status: .running, startedAt: now, baseBranch: "main"), state: RunEngineState())
         let runId = try #require(run.id)
         let worktree = try await h.repo.manager.create(agent: "preview-run-\(runId)", slug: "preview").path

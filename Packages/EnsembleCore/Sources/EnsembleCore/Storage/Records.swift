@@ -45,11 +45,11 @@ public struct Project: Codable, Sendable, Hashable, Identifiable, FetchableRecor
     }
 }
 
-public enum TaskSource: String, Codable, Sendable, CaseIterable {
+public enum ChatSource: String, Codable, Sendable, CaseIterable {
     case chat
 }
 
-public enum TaskStatus: String, Codable, Sendable, CaseIterable {
+public enum ChatStatus: String, Codable, Sendable, CaseIterable {
     case incoming
     case running
     case waitingOnYou
@@ -70,16 +70,16 @@ public enum RequestCloseReason: String, Codable, Sendable, CaseIterable {
     }
 }
 
-public struct ProjectTask: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
+public struct Chat: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "task"
 
     public var id: Int64?
     public var projectId: Int64
     public var title: String
     public var body: String
-    public var source: TaskSource
+    public var source: ChatSource
     public var workflow: String?
-    public var status: TaskStatus
+    public var status: ChatStatus
     public var labels: [String]
     public var closedAt: Date?
     public var closeReason: RequestCloseReason?
@@ -87,8 +87,8 @@ public struct ProjectTask: Codable, Sendable, Hashable, Identifiable, FetchableR
     public var updatedAt: Date
 
     public init(
-        id: Int64? = nil, projectId: Int64, title: String, body: String, source: TaskSource,
-        workflow: String? = nil, status: TaskStatus, labels: [String] = [], closedAt: Date? = nil, closeReason: RequestCloseReason? = nil,
+        id: Int64? = nil, projectId: Int64, title: String, body: String, source: ChatSource,
+        workflow: String? = nil, status: ChatStatus, labels: [String] = [], closedAt: Date? = nil, closeReason: RequestCloseReason? = nil,
         createdAt: Date, updatedAt: Date
     ) {
         self.closedAt = closedAt

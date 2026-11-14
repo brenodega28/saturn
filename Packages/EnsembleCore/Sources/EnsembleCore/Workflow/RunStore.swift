@@ -6,12 +6,12 @@ extension AppDatabase {
         try writer.read { db in try Run.fetchOne(db, id: id) }
     }
 
-    public func task(id: Int64) throws -> ProjectTask? {
-        try writer.read { db in try ProjectTask.fetchOne(db, id: id) }
+    public func task(id: Int64) throws -> Chat? {
+        try writer.read { db in try Chat.fetchOne(db, id: id) }
     }
 
     @discardableResult
-    public func insert(_ task: ProjectTask) throws -> ProjectTask {
+    public func insert(_ task: Chat) throws -> Chat {
         try writer.write { db in
             var task = task
             try task.insert(db)
@@ -19,7 +19,7 @@ extension AppDatabase {
         }
     }
 
-    public func save(_ task: ProjectTask) throws {
+    public func save(_ task: Chat) throws {
         try writer.write { db in try task.update(db) }
     }
 

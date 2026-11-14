@@ -47,7 +47,7 @@ import Testing
         driver.pollInterval = .milliseconds(20)
         let engine = RunEngine(database: harness.database, driver: driver)
 
-        let task = try harness.database.insert(ProjectTask(
+        let task = try harness.database.insert(Chat(
             projectId: project.id!, title: "Add alpha and beta", body: "Two files, please.", source: .chat,
             status: .incoming, createdAt: .now, updatedAt: .now
         ))

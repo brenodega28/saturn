@@ -12,7 +12,7 @@ struct LeadView: View {
 
 struct RequestCloseMenu: View {
     @Environment(AppModel.self) private var model
-    let request: ProjectTask
+    let request: Chat
     let project: Project
 
     var body: some View {

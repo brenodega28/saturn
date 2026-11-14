@@ -13,7 +13,7 @@ import Testing
         return (setup, chat, setup.config.lead)
     }
 
-    func messages(_ setup: Setup, _ task: ProjectTask) -> [LeadMessage] {
+    func messages(_ setup: Setup, _ task: Chat) -> [LeadMessage] {
         (try? setup.harness.database.leadMessages(taskId: task.id!)) ?? []
     }
 
@@ -193,7 +193,7 @@ import Testing
         #expect(throws: LeadChatError.proposalClosed) { try chat.start(dismissed, in: setup.project) }
     }
 
-    func startedRun(_ setup: Setup, _ chat: LeadChat) async throws -> (ProjectTask, Run) {
+    func startedRun(_ setup: Setup, _ chat: LeadChat) async throws -> (Chat, Run) {
         let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
         let run = try chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
@@ -201,7 +201,7 @@ import Testing
         return (task, run)
     }
 
-    func stored(_ setup: Setup, _ task: ProjectTask) throws -> ProjectTask {
+    func stored(_ setup: Setup, _ task: Chat) throws -> Chat {
         try #require(try setup.harness.database.task(id: task.id!))
     }
 
@@ -468,8 +468,8 @@ import Testing
 
     func at(_ minutes: Double) -> Date { start.addingTimeInterval(minutes * 60) }
 
-    var task: ProjectTask {
-        ProjectTask(id: 1, projectId: 1, title: "Add alpha", body: "Add alpha please", source: .chat, status: .running, createdAt: at(0), updatedAt: at(0))
+    var task: Chat {
+        Chat(id: 1, projectId: 1, title: "Add alpha", body: "Add alpha please", source: .chat, status: .running, createdAt: at(0), updatedAt: at(0))
     }
 
     func message(_ id: Int64, _ kind: LeadMessageKind, _ minutes: Double) -> LeadMessage {

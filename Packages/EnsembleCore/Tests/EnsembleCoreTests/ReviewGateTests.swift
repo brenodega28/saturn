@@ -254,7 +254,7 @@ struct StubRegistry: PackageRegistry {
 
 @MainActor
 @Suite(.serialized) struct GateRunnerTests {
-    func makeBuilder() async throws -> (AgentHarness, AgentWorkflowDriver, AgentSession, Run, ProjectTask) {
+    func makeBuilder() async throws -> (AgentHarness, AgentWorkflowDriver, AgentSession, Run, Chat) {
         let harness = try await AgentHarness.make()
         let driver = AgentWorkflowDriver(runtime: harness.runtime)
         driver.gitProvider = { harness.repo.git }
@@ -265,7 +265,7 @@ struct StubRegistry: PackageRegistry {
         try #"{"dependencies":{"react":"18"}}"#.write(to: harness.repo.root.appending(path: "package.json"), atomically: true, encoding: .utf8)
         try await harness.repo.git.run(["add", "-A"], in: harness.repo.root)
         try await harness.repo.git.run(["-c", "user.name=T", "-c", "user.email=t@x", "commit", "-qm", "Base"], in: harness.repo.root)
-        let task = try harness.database.insert(ProjectTask(projectId: projectId, title: "Refund button", body: "", source: .chat, status: .running, labels: ["performance"], createdAt: .now, updatedAt: .now))
+        let task = try harness.database.insert(Chat(projectId: projectId, title: "Refund button", body: "", source: .chat, status: .running, labels: ["performance"], createdAt: .now, updatedAt: .now))
         let run = try harness.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "w", status: .running, startedAt: .now, title: "Refund button"), state: RunEngineState())
         let session = try await harness.runtime.createRunAgent(
             in: harness.project, kind: .builder, runId: try #require(run.id), runStepId: nil, task: "Build it", git: harness.repo.git
@@ -273,7 +273,7 @@ struct StubRegistry: PackageRegistry {
         return (harness, driver, session, run, task)
     }
 
-    func context(run: Run, task: ProjectTask, project: Project) -> StepContext {
+    func context(run: Run, task: Chat, project: Project) -> StepContext {
         StepContext(
             run: run, task: task, project: project, step: WorkflowStep(id: "gates", type: .gates), kind: nil, iteration: 1, attempt: 1,
             runStepID: 1, start: .fresh, inputs: StepInputs(taskTitle: task.title, taskBody: "", labels: task.labels), stepBudgetUSD: nil, runBudgetRemainingUSD: nil
@@ -344,7 +344,7 @@ struct StubRegistry: PackageRegistry {
         driver.packageRegistry = StubRegistry(known: [])
         let engine = RunEngine(database: harness.database, driver: driver)
         let config = ProjectConfigLoader.load(repository: harness.repo.root)
-        let task = try harness.database.insert(ProjectTask(
+        let task = try harness.database.insert(Chat(
             projectId: harness.project.id!, title: "Add alpha and beta", body: "Two files, please.", source: .chat, status: .incoming, createdAt: .now, updatedAt: .now
         ))
         let run = try engine.start(task: task, workflow: try #require(config.workflow("feature-delivery")), project: harness.project)

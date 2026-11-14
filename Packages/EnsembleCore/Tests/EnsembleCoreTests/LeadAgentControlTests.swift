@@ -204,7 +204,7 @@ import Testing
         let setup = try await WorkflowDriverTests().makeSetup()
         defer { setup.harness.cleanUp() }
         let now = Date()
-        let task = try setup.harness.database.insert(ProjectTask(
+        let task = try setup.harness.database.insert(Chat(
             projectId: setup.project.id!, title: "Run the tests", body: "Please.", source: .chat, status: .incoming, createdAt: now, updatedAt: now
         ))
         let taskId = try #require(task.id)
@@ -235,7 +235,7 @@ import Testing
         let database = setup.harness.database
         let runtime = setup.harness.runtime
         let now = Date()
-        let task = try database.insert(ProjectTask(
+        let task = try database.insert(Chat(
             projectId: setup.project.id!, title: "Run the tests", body: "Please.", source: .chat, status: .incoming, createdAt: now, updatedAt: now
         ))
         let lead = try runtime.createLeadAgent(in: setup.project, taskId: task.id!)

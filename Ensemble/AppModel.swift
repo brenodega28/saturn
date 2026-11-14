@@ -263,7 +263,6 @@ final class AppModel {
         idleCleanup.start()
         await refreshAllProjects()
         startWeeklySummaries()
-        startActivityRecorder()
         startRemoteFileSync()
         connectivity = ConnectivityMonitor { [weak self] offline in self?.isOffline = offline }
     }

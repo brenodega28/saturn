@@ -38,9 +38,9 @@ extension AppModel {
             port: project.settings.basePort,
             agent: nil
         )
-        let workers = agentSessions(in: project)
-            .map(\.agent)
-            .filter { $0.archivedAt == nil && $0.worktreeURL != nil }
+        let chatID = selectedRequest(in: project)?.id
+        let runIDs = Set(chatID.map { (try? database.runs(taskId: $0)) ?? [] }?.compactMap(\.id) ?? [])
+        let workers = ChatWorktrees.agents(agentSessions(in: project).map(\.agent), inChat: chatID, runIDs: runIDs)
             .compactMap { agent -> RunTarget? in
                 guard let id = agent.id, let worktree = agent.worktreeURL else { return nil }
                 return RunTarget(

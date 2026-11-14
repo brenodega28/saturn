@@ -2,82 +2,99 @@ import EnsembleCore
 import EnsembleUI
 import SwiftUI
 
-struct RunBar: View {
+struct ChatCard: View {
+    static let width: CGFloat = 300
+    static let reservedWidth: CGFloat = 340
+
     @Environment(AppModel.self) private var model
     let project: Project
 
     var body: some View {
+        @Bindable var model = model
         let target = model.selectedRunTarget(in: project)
         let runner = model.appRunner(for: project)
         let command = model.runCommand(for: project, in: target.folder)
         let state = runner?.state ?? .idle
         let isActive = runner?.isActive ?? false
         let runsSelected = runner?.isRunning(in: target.folder) ?? false
-        HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 4) {
+            MachineRow(project: project)
             BranchButton(target: target, isOpen: model.isRunMenuOpen) {
                 model.isRunMenuOpen.toggle()
             }
-            .overlay(alignment: .topLeading) {
-                if model.isRunMenuOpen {
-                    RunTargetList(project: project, selected: target)
-                        .offset(y: 42)
-                        .transition(.opacity)
-                }
+            .popover(isPresented: $model.isRunMenuOpen, arrowEdge: .leading) {
+                RunTargetList(project: project, selected: target)
             }
-            RunBarButton(title: "Start", glyph: .start, isEnabled: command != nil && !runsSelected, enabledFill: V4.green, enabledText: V4.onGreen) {
-                model.isRunMenuOpen = false
-                Task { await model.startApp(target, in: project) }
-            }
-            .help(command == nil ? "No run command found" : "Run \(command?.label ?? "") from \(target.branch)")
-            RunBarButton(title: "Stop", glyph: .stop, isEnabled: isActive, enabledFill: V4.stopFill, enabledText: V4.denied) {
-                model.isRunMenuOpen = false
-                Task { await model.stopApp(in: project) }
-            }
-            .help("Stop the app and every process it started")
-            Rectangle()
-                .fill(Color.white.opacity(0.1))
-                .frame(width: 1, height: 24)
-                .padding(.horizontal, 2)
-                .accessibilityHidden(true)
-            RunStatus(project: project, state: state, branch: runner?.branch ?? target.branch, hasCommand: command != nil)
-            if let port = state.ports.first {
-                Button { model.openRunningApp(port: port) } label: {
-                    HStack(spacing: 6) {
-                        Text(verbatim: "localhost:\(port)")
-                        Text("↗").accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 8) {
+                RunStatus(project: project, state: state, branch: runner?.branch ?? target.branch, hasCommand: command != nil)
+                HStack(spacing: 8) {
+                    RunBarButton(title: "Start", glyph: .start, isEnabled: command != nil && !runsSelected, enabledFill: V4.green, enabledText: V4.onGreen) {
+                        Task { await model.startApp(target, in: project) }
                     }
-                    .font(V4.monospaced(12))
-                    .foregroundStyle(V4.link)
-                    .padding(.horizontal, 11)
-                    .frame(height: 30)
-                    .background(V4.blue.opacity(0.16), in: .rect(cornerRadius: 9, style: .continuous))
-                    .contentShape(.rect(cornerRadius: 9))
+                    .help(command == nil ? "No run command found" : "Run \(command?.label ?? "") from \(target.branch)")
+                    RunBarButton(title: "Stop", glyph: .stop, isEnabled: isActive, enabledFill: V4.stopFill, enabledText: V4.denied) {
+                        Task { await model.stopApp(in: project) }
+                    }
+                    .help("Stop the app and every process it started")
+                    Spacer(minLength: 0)
+                    if let port = state.ports.first {
+                        Button { model.openRunningApp(port: port) } label: {
+                            Text(verbatim: ":\(port) ↗")
+                                .font(V4.monospaced(12))
+                                .foregroundStyle(V4.link)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open http://localhost:\(port) in your browser")
+                        .accessibilityLabel("Open localhost:\(port) in the browser")
+                    }
                 }
-                .buttonStyle(.plain)
-                .help("Open http://localhost:\(port) in your browser")
-                .accessibilityLabel("Open localhost:\(port) in the browser")
+                if let label = runner?.isActive == true ? runner?.label : command?.label {
+                    Text(label)
+                        .font(V4.monospaced(11.5))
+                        .foregroundStyle(V4.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(command?.origin ?? "")
+                }
             }
-            if let label = runner?.isActive == true ? runner?.label : command?.label {
-                Text(label)
-                    .font(V4.monospaced(11.5))
+            .padding(10)
+            .background(Color.white.opacity(0.04), in: .rect(cornerRadius: 10, style: .continuous))
+        }
+        .padding(6)
+        .frame(width: Self.width, alignment: .leading)
+        .background(V4.sidebarFill, in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.09)))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("This chat’s project and app")
+        .onChange(of: project.id) { model.isRunMenuOpen = false }
+    }
+}
+
+private struct MachineRow: View {
+    let project: Project
+
+    var body: some View {
+        HStack(spacing: 10) {
+            V4Icon(glyph: project.isRemote ? .server : .laptop, size: 14, lineWidth: 1.8)
+                .foregroundStyle(V4.label.opacity(0.85))
+            Text(project.isRemote ? project.location : Host.current().localizedName ?? "This Mac")
+                .font(.system(size: 13))
+                .foregroundStyle(V4.label.opacity(0.85))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+            if project.isRemote {
+                Text("SSH")
+                    .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(V4.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: 220, alignment: .trailing)
-                    .fixedSize(horizontal: label.count < 28, vertical: false)
-                    .help(command?.origin ?? "")
+                    .padding(.horizontal, 6)
+                    .frame(height: 18)
+                    .background(Color.white.opacity(0.08), in: Capsule())
             }
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 10)
-        .frame(height: 52)
-        .frame(maxWidth: .infinity)
-        .background(V4.sidebarFill, in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08)))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Run the app")
-        .onExitCommand { model.isRunMenuOpen = false }
-        .onChange(of: project.id) { model.isRunMenuOpen = false }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -99,7 +116,7 @@ private struct BranchButton: View {
                         .foregroundStyle(V4.secondary)
                 }
                 .lineLimit(1)
-                .frame(maxWidth: 280, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 ChevronShape()
                     .stroke(V4.label.opacity(0.7), style: StrokeStyle(lineWidth: 2.6 * 10 / 24, lineCap: .round, lineJoin: .round))
                     .frame(width: 10, height: 10)
@@ -114,7 +131,6 @@ private struct BranchButton: View {
             .contentShape(.rect(cornerRadius: 10))
         }
         .buttonStyle(.plain)
-        .fixedSize()
         .accessibilityLabel("Branch to run: \(target.branch)")
         .accessibilityValue(isOpen ? "expanded" : "collapsed")
         .help("Choose the checkout to run the app from")
@@ -159,14 +175,18 @@ private struct RunTargetList: View {
             VStack(alignment: .leading, spacing: 1) {
                 header("Main")
                 ForEach(targets.filter(\.isMain)) { row($0, runner: runner) }
-                header("Workers")
+                header("This chat’s workers")
                 if workers.isEmpty {
-                    Text("No agents with a worktree in this project")
+                    Text("No worker in this chat has a worktree yet")
                         .font(.system(size: 11))
                         .foregroundStyle(V4.secondary)
                         .padding(EdgeInsets(top: 4, leading: 8, bottom: 6, trailing: 8))
                 }
                 ForEach(workers) { row($0, runner: runner) }
+                Text("Only this chat’s worktrees are listed. Switching restarts the app.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(V4.secondary)
+                    .padding(EdgeInsets(top: 6, leading: 8, bottom: 2, trailing: 8))
             }
             .padding(6)
         }
@@ -174,10 +194,6 @@ private struct RunTargetList: View {
         .frame(width: 400)
         .frame(maxHeight: 460)
         .fixedSize(horizontal: false, vertical: true)
-        .background(Color(red: 40 / 255, green: 40 / 255, blue: 46 / 255).opacity(0.97), in: .rect(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
-        .clipShape(.rect(cornerRadius: 14, style: .continuous))
-        .shadow(color: .black.opacity(0.55), radius: 25, y: 20)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Branches")
     }
@@ -242,7 +258,7 @@ private struct RunStatus: View {
     let hasCommand: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             ZStack {
                 if case .running = state {
                     Circle().fill(V4.green.opacity(0.2)).frame(width: 14, height: 14)
@@ -251,30 +267,29 @@ private struct RunStatus: View {
             }
             .frame(width: 8, height: 8)
             .accessibilityHidden(true)
-            Text(title)
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(.white)
-            if !hasCommand, !state.isActive {
-                Text("No run command found.")
-                    .foregroundStyle(V4.label.opacity(0.82))
-                Button("Set one in Settings › Workspaces") {
-                    model.openSettings(.workspaces, in: project)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(V4.link)
-                .help("Open Settings › Workspaces to set a run command")
-            } else {
-                TimelineView(.periodic(from: .now, by: 15)) { context in
-                    Text(detail(at: context.date))
-                        .foregroundStyle(V4.label.opacity(0.82))
-                        .truncationMode(.tail)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                if !hasCommand, !state.isActive {
+                    Button("Tell Ensemble how to start this app") {
+                        model.openSettings(.workspaces, in: project)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(V4.link)
+                    .help("Open Settings › Workspaces to set a run command")
+                } else {
+                    TimelineView(.periodic(from: .now, by: 15)) { context in
+                        Text(detail(at: context.date))
+                            .foregroundStyle(V4.label.opacity(0.82))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
-        .font(.system(size: 12.5))
-        .lineLimit(1)
+        .font(.system(size: 12))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .clipped()
         .accessibilityElement(children: .combine)
     }
 
@@ -300,7 +315,7 @@ private struct RunStatus: View {
     private func detail(at now: Date) -> String {
         switch state {
         case .idle, .stopped(nil):
-            return "Pick a branch and press Start to run the app from it"
+            return "Press Start to run the app from \(branch)"
         case .stopped(let code?):
             return "\(branch) · exited with code \(code)"
         case .starting:

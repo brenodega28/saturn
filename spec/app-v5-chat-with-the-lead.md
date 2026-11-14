@@ -134,7 +134,7 @@ Each phase ends with the app building, tests passing and the app usable.
     - `RunEngine`, `AgentWorkflowDriver`, `PermissionRequests`, `RequestThread`, `RunTimeline`, Quality and budget code use it instead of `InboxItem`.
     - A request with no chat (an agent spawned by hand, a setup notice) goes to the project's most recent open chat, or starts a new chat titled after the request.
     - Migration copies open inbox items into requests, then drops the `inboxItem` table. Delete the Inbox UI.
-3. **Remove the log column, status bar and top run bar.** Move the app-runner state that `RunBar` reads into a model the chat card can use, with a port per worktree and captured output per process.
+3. **Remove the log column, status bar and top run bar (done).** Move the app-runner state that `RunBar` reads into a model the chat card can use, with a port per worktree and captured output per process.
 4. **Core state for v5 (no UI).**
     - Rename `ProjectTask` to `Chat` across the code.
     - Chats can be renamed, marked done, dropped, reopened (worktrees come back if they still exist) and deleted.

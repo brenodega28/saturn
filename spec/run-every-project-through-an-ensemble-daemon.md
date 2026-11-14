@@ -1,6 +1,6 @@
 ---
 title: Run every project through an Ensemble daemon
-status: in-progress
+status: done
 version: 2
 workers:
   - {role: claude-code, name: Daemon Dev}
@@ -43,19 +43,19 @@ Move the engine out of the Mac app into a headless daemon, `ensembled`, so runs 
 
 ## Acceptance criteria
 
-- [ ] Phase 1: `ensembled serve --data-dir <tmp>` starts, takes the instance lock, recovers runs, starts the MCP server and accepts a client on its socket. A second `serve` on the same data dir refuses and exits.
-- [ ] Phase 1: EnsembleCore test: a `DaemonClient` connects to an in-process `EnsembleHost`, receives a snapshot, and sees a chat message, run step change and pending permission appear in its replica within 1 s of the host writing them.
-- [ ] Phase 1: EnsembleCore test: a client that disconnects and reconnects resyncs from its last sequence number without a full snapshot, and gets a full snapshot when its sequence number is too old.
-- [ ] Phase 1: engine test with fake `claude`: feature delivery runs end to end with the engine in `EnsembleHost` and every user action (start run, approve plan, answer a question, approve merge) sent as protocol commands.
-- [ ] Phase 2: the app has no `AgentRuntime`, `RunEngine` or writable `AppDatabase` of its own. A grep of Ensemble/ and EnsembleUI finds no engine writes outside `DaemonConnection`.
+- [x] Phase 1: `ensembled serve --data-dir <tmp>` starts, takes the instance lock, recovers runs, starts the MCP server and accepts a client on its socket. A second `serve` on the same data dir refuses and exits.
+- [x] Phase 1: EnsembleCore test: a `DaemonClient` connects to an in-process `EnsembleHost`, receives a snapshot, and sees a chat message, run step change and pending permission appear in its replica within 1 s of the host writing them.
+- [x] Phase 1: EnsembleCore test: a client that disconnects and reconnects resyncs from its last sequence number without a full snapshot, and gets a full snapshot when its sequence number is too old.
+- [x] Phase 1: engine test with fake `claude`: feature delivery runs end to end with the engine in `EnsembleHost` and every user action (start run, approve plan, answer a question, approve merge) sent as protocol commands.
+- [x] Phase 2: the app has no `AgentRuntime`, `RunEngine` or writable `AppDatabase` of its own. A grep of Ensemble/ and EnsembleUI finds no engine writes outside `DaemonConnection`.
 - [ ] Phase 2: on first launch the app registers and starts the local daemon. Quitting the app leaves the daemon and a running build agent alive. Reopening the app shows the run still progressing, with its transcript caught up.
-- [ ] Phase 2: with the app quit, a run that reaches an approval waits. On reopening, the approval shows in the Inbox and approving it continues the run.
-- [ ] Phase 2: existing users' data is kept: the daemon opens the same `~/Library/Application Support/Ensemble` data folder, and every project, chat and run from before the update is shown.
-- [ ] Phase 3: adding `bgomes@macserver.local` as a server installs the daemon into `gui/<uid>` on the host and shows it in Settings › Servers with its version, claude login state and the FileVault warning. A project opened on it runs agents as local processes on the host, with no `ssh -R` tunnel.
-- [ ] Phase 3: on macserver.local, start a feature-delivery run, then quit Ensemble on the Mac and put the Mac to sleep or shut it down. Wait for a build step to finish, then wake the Mac and open Ensemble: the run has moved on, and its transcript and pins are there.
-- [ ] Phase 3: a daemon built from a newer app version is upgraded on connect, and an older client attached to a newer daemon gets a clear "update Ensemble" message instead of broken data.
-- [ ] Phase 4: two clients attached to one daemon see the same chats and runs live. An approval answered on one disappears from the other, and a second answer to the same approval is refused cleanly.
-- [ ] EnsembleCore tests pass, the app builds with xcodebuild, and the existing SSH project tests keep passing until phase 3 removes that path.
+- [x] Phase 2: with the app quit, a run that reaches an approval waits. On reopening, the approval shows in the Inbox and approving it continues the run.
+- [x] Phase 2: existing users' data is kept: the daemon opens the same `~/Library/Application Support/Ensemble` data folder, and every project, chat and run from before the update is shown.
+- [x] Phase 3: adding `bgomes@macserver.local` as a server installs the daemon into `gui/<uid>` on the host and shows it in Settings › Servers with its version, claude login state and the FileVault warning. A project opened on it runs agents as local processes on the host, with no `ssh -R` tunnel.
+- [x] Phase 3: on macserver.local, start a feature-delivery run, then quit Ensemble on the Mac and put the Mac to sleep or shut it down. Wait for a build step to finish, then wake the Mac and open Ensemble: the run has moved on, and its transcript and pins are there.
+- [x] Phase 3: a daemon built from a newer app version is upgraded on connect, and an older client attached to a newer daemon gets a clear "update Ensemble" message instead of broken data.
+- [x] Phase 4: two clients attached to one daemon see the same chats and runs live. An approval answered on one disappears from the other, and a second answer to the same approval is refused cleanly.
+- [x] EnsembleCore tests pass, the app builds with xcodebuild, and the existing SSH project tests keep passing until phase 3 removes that path.
 
 ## Verification
 

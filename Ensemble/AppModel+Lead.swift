@@ -57,7 +57,11 @@ extension AppModel {
         if selectedAgent(in: project) == nil { select(nil, in: project) }
         guard let projectID = project.id else { return }
         let next = LeadRequest.partition(leadRequests(in: project)).open.first { $0.id != task.id }
-        leadSelections[projectID] = next?.id.map(LeadSelection.request) ?? .newRequest
+        if let page = pages.page(showing: chatID) {
+            pages.replace(page.id, with: .chat(chatID: next?.id, projectID: projectID))
+        } else if leadSelections[projectID] == .request(chatID) {
+            leadSelections[projectID] = next?.id.map(LeadSelection.request) ?? .newRequest
+        }
     }
 
     func latestRun(of task: Chat) -> Run? {
@@ -67,8 +71,6 @@ extension AppModel {
 
     func showRun(_ run: Run) {
         showRequest(id: run.taskId, inProjectID: run.projectId)
-        selection = .project(run.projectId)
-        tabs[run.projectId] = .lead
     }
 
     func showRequest(_ task: Chat) {
@@ -77,18 +79,21 @@ extension AppModel {
     }
 
     func showRequest(id requestID: Int64, inProjectID id: Int64) {
-        leadSelections[id] = .request(requestID)
-        showLeadChat(inProjectID: id)
+        showChatPage(requestID, inProjectID: id)
     }
 
     func startNewLeadRequest(in project: Project) {
         guard let id = project.id else { return }
-        leadSelections[id] = .newRequest
-        showLeadChat(inProjectID: id)
+        showChatPage(nil, inProjectID: id)
     }
 
-    private func showLeadChat(inProjectID id: Int64) {
-        requestPageProjectIDs.remove(id)
+    func adoptNewChat(_ request: Chat) {
+        guard let id = request.id else { return }
+        if let page = pages.pages.first(where: { $0.kind == .chat(chatID: nil, projectID: request.projectId) }) {
+            pages.replace(page.id, with: .chat(chatID: id, projectID: request.projectId))
+        } else if let project = project(withID: request.projectId), selectedRequest(in: project) == nil {
+            showRequest(request)
+        }
     }
 
     func markViewed(_ chat: Chat) {
@@ -97,9 +102,7 @@ extension AppModel {
     }
 
     func showRequestPage(inProjectID id: Int64) {
-        runDetailIDs[id] = nil
-        tabs[id] = .lead
-        selection = .project(id)
+        if let project = project(withID: id) { showChat(in: project) }
         requestPageProjectIDs.insert(id)
     }
 
@@ -162,9 +165,7 @@ extension AppModel {
                 let request = try await send(ChatCommands.Create(
                     projectID: projectID, text: text, attachments: attachments, workflow: options.workflow, leadModel: options.model, leadEffort: options.effort
                 ))
-                if selectedRequest(in: project) == nil {
-                    showRequest(request)
-                }
+                adoptNewChat(request)
             }
             leadChatRevision += 1
             return true
@@ -211,7 +212,7 @@ extension AppModel {
             if let id = run.id, let timeline = timeline(for: run) { timelines[id] = timeline }
         }
         let lead = try? database.leadAgent(taskId: taskID)
-        let leadRole = lead.flatMap { config(for: project).role($0.role) } ?? runs.last.flatMap { leadRole(for: $0, in: project) } ?? leadRole(in: project)
+        let role = lead.flatMap { config(for: project).role($0.role) } ?? runs.last.flatMap { leadRole(for: $0, in: project) } ?? leadRole(in: project)
         let messages = (try? database.leadMessages(taskId: taskID)) ?? []
         var thread = RequestThread(
             task: task,
@@ -222,7 +223,7 @@ extension AppModel {
             heldRunIDs: Set(runs.compactMap(\.id).filter { connection.holds[$0] != nil })
         )
         thread.items = Self.placingPermissions(messages.filter { $0.kind == .permission }, in: thread.items)
-        return RequestThreadData(thread: thread, timelines: timelines, leadRole: leadRole, leadName: lead.map { AgentNaming.displayName(of: $0) } ?? leadRole.name)
+        return RequestThreadData(thread: thread, timelines: timelines, leadRole: role, leadName: lead.map { AgentNaming.displayName(of: $0) } ?? role.name)
     }
 
     static func placingPermissions(_ cards: [LeadMessage], in items: [RequestThread.Item]) -> [RequestThread.Item] {

@@ -6,11 +6,12 @@ struct CodeReader: View {
     @Environment(AppModel.self) private var model
     let browser: CodeBrowser
     let project: Project
+    var showsTabs = true
     @State private var sourceModePaths: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
-            CodeTabStrip(browser: browser)
+            if showsTabs { CodeTabStrip(browser: browser) }
             if let path = browser.activePath {
                 let lines = browser.lines(path)
                 let language = CodeLanguage(path: path)

@@ -116,7 +116,12 @@ final class AppModel {
     var problemCursor = -1
     var pinPrompt: PinPrompt?
     var workflowMenuAction: WorkflowMenuAction?
-    let mainWindow = MainWindowNavigation()
+    let pages: MainPages
+    let terminals = TerminalStore()
+    @ObservationIgnored var codePages: [UUID: CodeBrowser] = [:]
+    @ObservationIgnored var pendingCodeLines: [String: Int] = [:]
+    var isPageFinderShown = false
+    @ObservationIgnored weak var mainWindowRef: NSWindow?
     @ObservationIgnored var connectivity: ConnectivityMonitor?
     let pendingSends = PendingSends<PendingSendTarget>()
     var deliveringSends: [HeldSend] = []
@@ -157,11 +162,15 @@ final class AppModel {
         self.requests = ChatRequestFeed(database: connection.database)
         self.chatNotifications = ChatNotificationFeed(database: connection.database)
         self.pendingPermissions = PendingPermissionFeed(database: connection.database)
+        self.pages = MainPages(storageKey: Self.pagesKey(for: connection.id))
         connection.onError = { [weak self] title, error in
             self?.alert = AppAlert(title: title, message: error.localizedDescription)
         }
         connection.onEvent = { [weak self] event in self?.receive(event) }
         restoreNavigation()
+        pages.onActivate = { [weak self] page in self?.apply(page) }
+        pages.onClose = { [weak self] page in self?.pageClosed(page) }
+        apply(pages.active)
         observeReplica()
         CommandRegistry.shared.registerChatLinkCommands()
         planUsageActivationObserver = NotificationCenter.default.addObserver(
@@ -258,18 +267,13 @@ final class AppModel {
         set {
             switch newValue {
             case .usage:
-                selection = .usage
+                open(.usage)
             case .section(let id, let tab):
-                runDetailIDs[id] = nil
-                tabs[id] = tab
-                selection = .project(id)
                 requestPageProjectIDs.remove(id)
+                if let project = project(withID: id) { setTab(tab, for: project) }
             case .run(let id, let runID):
                 openRunDetail(runID: runID, in: id)
             case .request(let id, let requestID):
-                runDetailIDs[id] = nil
-                tabs[id] = .lead
-                selection = .project(id)
                 showRequest(id: requestID, inProjectID: id)
             case .requests(let id):
                 showRequestPage(inProjectID: id)
@@ -281,7 +285,11 @@ final class AppModel {
 
     func setTab(_ tab: ProjectTab, for project: Project) {
         guard let id = project.id else { return }
-        tabs[id] = tab
+        if let tool = MainTool(tab: tab) {
+            showPage(.tool(tool, projectID: id))
+        } else {
+            showChat(in: project)
+        }
     }
 
     func state(for project: Project) -> ProjectState {
@@ -290,6 +298,7 @@ final class AppModel {
 
     func launch() async {
         reloadProjects()
+        dropStalePages()
         await migrateSettingsToDaemon()
         await checkEnvironment()
         updatePlanUsagePolling()
@@ -377,7 +386,11 @@ final class AppModel {
     func select(_ session: LiveAgentSession?, in project: Project) {
         guard let projectID = project.id else { return }
         selectedAgents[projectID] = session?.id
-        if session != nil { setTab(.agents, for: project) }
+        if let id = session?.id {
+            showPage(.agent(id))
+        } else if let page = activePage, case .agent = page.kind {
+            pages.replace(page.id, with: .tool(.agents, projectID: projectID))
+        }
     }
 
     func config(for project: Project) -> ProjectConfig {
@@ -485,9 +498,7 @@ final class AppModel {
         do {
             let project = try await send(ProjectCommands.Open(path: url.path))
             reloadProjects()
-            if let id = project.id {
-                selection = .project(id)
-            }
+            showChat(in: project)
             await refresh(project)
         } catch {
             alert = AppAlert(title: "Couldn’t open \(url.lastPathComponent)", message: error.localizedDescription)
@@ -503,7 +514,7 @@ final class AppModel {
         defer { activeClones[remote] = nil }
         let project = try await send(ProjectCommands.Clone(remote: remote, destination: destination.path))
         reloadProjects()
-        if let id = project.id { selection = .project(id) }
+        showChat(in: project)
         await refresh(project)
     }
 
@@ -518,6 +529,7 @@ final class AppModel {
             if selection == .project(id) {
                 selection = openProjects.first?.id.map(SidebarItem.project)
             }
+            dropStalePages()
         }
     }
 

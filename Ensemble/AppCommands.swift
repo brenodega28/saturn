@@ -28,32 +28,38 @@ struct AppCommands: Commands {
             .disabled(model.recentProjects.isEmpty)
         }
 
-        CommandGroup(after: .sidebar) {
-            RegistryMenuItems(menu: "View", context: context)
+        Group {
+            CommandGroup(replacing: .saveItem) {}
+
+            CommandGroup(after: .sidebar) {
+                RegistryMenuItems(menu: "View", context: context)
+            }
         }
 
-        CommandMenu("Navigate") {
-            RegistryMenuItems(menu: "Navigate", context: context)
-        }
+        Group {
+            CommandMenu("Navigate") {
+                RegistryMenuItems(menu: "Navigate", context: context)
+            }
 
-        CommandMenu("Chat") {
-            RegistryMenuItems(menu: "Chat", context: context)
-        }
+            CommandMenu("Chat") {
+                RegistryMenuItems(menu: "Chat", context: context)
+            }
 
-        CommandMenu("Agent") {
-            RegistryMenuItems(menu: "Agent", context: context)
-        }
+            CommandMenu("Agent") {
+                RegistryMenuItems(menu: "Agent", context: context)
+            }
 
-        CommandMenu("Run") {
-            RegistryMenuItems(menu: "Run", context: context)
-        }
+            CommandMenu("Run") {
+                RegistryMenuItems(menu: "Run", context: context)
+            }
 
-        CommandMenu("Review") {
-            RegistryMenuItems(menu: "Review", context: context)
-        }
+            CommandMenu("Review") {
+                RegistryMenuItems(menu: "Review", context: context)
+            }
 
-        CommandMenu("Workflow") {
-            RegistryMenuItems(menu: "Workflow", context: context)
+            CommandMenu("Workflow") {
+                RegistryMenuItems(menu: "Workflow", context: context)
+            }
         }
 
         CommandGroup(before: .windowList) {

@@ -40,8 +40,20 @@ struct MainWindowView: View {
         } message: {
             Text("Its messages, runs and workers are deleted, and their worktrees and branches removed. This can’t be undone.")
         }
-        .onChange(of: model.mainScreen) { old, new in
-            model.mainWindow.record(from: old, to: new)
-        }
+        .background(MainWindowReader { model.mainWindowRef = $0 })
+    }
+}
+
+private struct MainWindowReader: NSViewRepresentable {
+    let found: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { found(view.window) }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { found(view.window) }
     }
 }

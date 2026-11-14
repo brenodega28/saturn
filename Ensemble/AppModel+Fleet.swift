@@ -178,6 +178,8 @@ extension AppModel {
         AppDefaults.store.set(id.uuidString, forKey: Self.activeDaemonKey)
         startRequests()
         reloadProjects()
+        pages.reload(storageKey: Self.pagesKey(for: id))
+        dropStalePages()
         Task { await refreshAllProjects() }
         Task { await checkEnvironment() }
     }
@@ -189,7 +191,7 @@ extension AppModel {
 
     func open(_ project: Project, on daemon: DaemonConnection) {
         activate(daemon.id)
-        if let id = project.id { selection = .project(id) }
+        if let opened = project.id.flatMap(self.project(withID:)) { showChat(in: opened) }
     }
 
     func connection(forServer destination: String) async -> DaemonConnection? {
@@ -202,7 +204,7 @@ extension AppModel {
         let project = try await remote.send(ProjectCommands.Open(path: path))
         activate(remote.id)
         reloadProjects()
-        if let id = project.id { selection = .project(id) }
+        if let opened = project.id.flatMap(self.project(withID:)) { showChat(in: opened) }
         await refresh(project)
     }
 

@@ -16,11 +16,19 @@ extension SpecStatus {
 }
 
 extension AppModel {
-    var specStore: SpecStore { SpecStore(paths: daemonPaths) }
+    var specStore: SpecStore {
+        if connection.isRemote, let root = connection.environment.dataDirectory {
+            return SpecStore(paths: AppPaths(root: URL(fileURLWithPath: root, isDirectory: true)))
+        }
+        return SpecStore(paths: daemonPaths)
+    }
 
     func specDraft(for task: Chat) -> SpecFile? {
         guard let taskID = task.id else { return nil }
-        let url = specStore.draftURL(projectId: task.projectId, taskId: taskID)
+        var url = specStore.draftURL(projectId: task.projectId, taskId: taskID)
+        if connection.isRemote {
+            url = cachedDaemonFile(.specDraft, id: "\(task.projectId)/\(taskID)", name: url.lastPathComponent, remotePath: url.path, maximumAge: 3)
+        }
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         let document = (try? String(contentsOf: url, encoding: .utf8)).flatMap { try? SpecDocument(markdown: $0) }
         return SpecFile(url: url, relativePath: specStore.committedPath(projectId: task.projectId, taskId: taskID), document: document, taskId: taskID)
@@ -126,13 +134,17 @@ struct SpecEditor: View {
 
     private func save() {
         guard loadedPath == path else { return }
-        do {
-            try text.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
-            saved = text
-            problem = nil
-            model.leadChatRevision += 1
-        } catch {
-            problem = "Couldn’t save: \(error.localizedDescription)"
+        let text = text
+        let path = path
+        Task {
+            do {
+                try await model.saveDaemonFile(text, at: path)
+                saved = text
+                problem = nil
+                model.leadChatRevision += 1
+            } catch {
+                problem = "Couldn’t save: \(error.localizedDescription)"
+            }
         }
     }
 }

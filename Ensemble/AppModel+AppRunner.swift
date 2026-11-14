@@ -84,7 +84,7 @@ extension AppModel {
             appRunners[id] = runner
         }
         runner.environment = AppRunner.environment(from: locator.environment())
-        if project.isRemote {
+        if project.isRemote || connection.isRemote {
             do {
                 runner.remote = try await appRunnerHost(for: project)
             } catch {

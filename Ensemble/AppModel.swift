@@ -62,14 +62,20 @@ final class AppModel {
 
     let clientPaths: AppPaths
     let daemonPaths: AppPaths
-    let connection: DaemonConnection
+    var connection: DaemonConnection
     var connections: [DaemonID: DaemonConnection]
+    var knownDaemons: [KnownDaemon]
+    var serverProblems: [String: ServerProblem] = [:]
+    var serverChecks: Set<String> = []
+    var addingServers: Set<String> = []
+    @ObservationIgnored var fetchingFiles: Set<String> = []
+    @ObservationIgnored var remoteFilePaths: [String: String] = [:]
     let locator: ToolLocator
     let runner: CommandRunner
-    let requests: ChatRequestFeed
+    var requests: ChatRequestFeed
     let requestNotifier = RequestNotifier()
-    let chatNotifications: ChatNotificationFeed
-    let pendingPermissions: PendingPermissionFeed
+    var chatNotifications: ChatNotificationFeed
+    var pendingPermissions: PendingPermissionFeed
     var runDetailIDs: [Int64: Int64] = [:]
     let planUsage = PlanUsagePoller()
     @ObservationIgnored private var planUsageActivationObserver: NSObjectProtocol?
@@ -79,8 +85,8 @@ final class AppModel {
     private(set) var isCheckingEnvironment = false
     private(set) var openProjects: [Project] = []
     private(set) var recentProjects: [Project] = []
-    private(set) var projectStates: [Int64: ProjectState] = [:]
-    private(set) var configs: [Int64: ProjectConfig] = [:]
+    var projectStates: [Int64: ProjectState] = [:]
+    var configs: [Int64: ProjectConfig] = [:]
     var selectedAgents: [Int64: Int64] = [:]
     var isNewAgentPresented = false
     var leadSelections: [Int64: LeadSelection] = [:]
@@ -143,6 +149,7 @@ final class AppModel {
         self.connection = connection
         self.daemonPaths = daemonPaths
         self.connections = [connection.id: connection]
+        self.knownDaemons = Self.loadKnownDaemons(clientPaths)
         self.clientPaths = clientPaths
         self.providerMode = UserDefaults.standard.string(forKey: Self.providerModeKey).flatMap(ProviderMode.init(rawValue:))
         self.locator = locator
@@ -198,7 +205,7 @@ final class AppModel {
         }
     }
 
-    private func receive(_ event: DaemonEvent) {
+    func receive(_ event: DaemonEvent) {
         switch event {
         case .worktreeRemoving(let path):
             Task { await stopApp(runningIn: URL(fileURLWithPath: path, isDirectory: true)) }
@@ -289,6 +296,7 @@ final class AppModel {
         startRequests()
         await refreshAllProjects()
         startRemoteFileSync()
+        Task { await connectRemoteDaemons() }
         connectivity = ConnectivityMonitor { [weak self] offline in self?.isOffline = offline }
     }
 
@@ -460,12 +468,16 @@ final class AppModel {
     func saveAPIKey(_ key: String) async {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        await command("Couldn’t save the API key", SettingsCommands.SaveAPIKey(key: trimmed))
+        if await !storeAPIKeyOnServer(trimmed) {
+            await command("Couldn’t save the API key", SettingsCommands.SaveAPIKey(key: trimmed))
+        }
         await checkEnvironment()
     }
 
     func removeAPIKey() async {
-        await command("Couldn’t remove the API key", SettingsCommands.RemoveAPIKey())
+        if await !removeAPIKeyOnServer() {
+            await command("Couldn’t remove the API key", SettingsCommands.RemoveAPIKey())
+        }
         await checkEnvironment()
     }
 
@@ -513,9 +525,6 @@ final class AppModel {
         guard let id = project.id else { return }
         Task {
             await command("Couldn’t remove \(project.name)", ProjectCommands.Forget(projectID: id))
-            if project.isRemote {
-                try? FileManager.default.removeItem(at: RemoteMirror.location(forProject: id).directory.deletingLastPathComponent())
-            }
             reloadProjects()
         }
     }
@@ -528,7 +537,7 @@ final class AppModel {
 
     func refresh(_ project: Project) async {
         if project.isRemote {
-            await refreshRemote(project)
+            refreshLegacySSHProject(project)
             return
         }
         guard let id = project.id else { return }
@@ -540,25 +549,10 @@ final class AppModel {
                 return
             }
             projectStates[id] = ProjectState(branch: status.branch, worktrees: status.recovery.worktrees, recovery: status.recovery)
+            await pullConfigFiles(project)
             reloadConfig(for: project)
         } catch {
             alert = AppAlert(title: "Couldn’t read worktrees for \(project.name)", message: error.localizedDescription)
-        }
-    }
-
-    func refreshRemote(_ project: Project) async {
-        guard let id = project.id, let destination = project.host else { return }
-        remoteStatuses[id, default: RemoteProjectStatus()].isConnecting = true
-        let host = remoteHost(destination)
-        do {
-            let info = try await host.probe()
-            let status = try await send(ProjectCommands.Refresh(projectID: id))
-            projectStates[id] = ProjectState(branch: status.branch, worktrees: status.recovery.worktrees, recovery: status.recovery)
-            remoteHostInfos[destination] = info
-            try await pullRemoteFiles(project)
-            remoteStatuses[id] = RemoteProjectStatus(info: info, filesPulledAt: .now)
-        } catch {
-            remoteStatuses[id] = RemoteProjectStatus(info: remoteStatuses[id]?.info, error: error.localizedDescription, filesPulledAt: remoteStatuses[id]?.filesPulledAt)
         }
     }
 

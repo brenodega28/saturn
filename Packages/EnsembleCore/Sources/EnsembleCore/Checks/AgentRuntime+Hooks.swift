@@ -81,7 +81,7 @@ extension AgentRuntime {
 
     private func protectFiles(_ input: JSONValue, agent: Agent, worktree: URL, checks: ChecksConfig) async -> JSONValue {
         guard let path = input["tool_input"]?["file_path"]?.string ?? input["tool_input"]?["notebook_path"]?.string,
-              let relative = Self.relativePath(path, in: worktree, remote: remoteProject(of: agent) != nil),
+              let relative = Self.relativePath(path, in: worktree),
               let pattern = checks.protectedPaths.first(where: { PathGlob($0).matches(relative) }),
               let project = try? database.project(id: agent.projectId), let git = projectGit(project), let base = agent.baseBranch else { return .object([:]) }
         let start = await ProtectedChanges.mergeBase(of: base, in: worktree, git: git)
@@ -133,12 +133,7 @@ extension AgentRuntime {
         ])
     }
 
-    nonisolated static func relativePath(_ path: String, in worktree: URL, remote: Bool = false) -> String? {
-        if remote {
-            let root = SSHFileSystem.normalize(worktree.path) + "/"
-            let absolute = SSHFileSystem.normalize(path.hasPrefix("/") ? path : worktree.path + "/" + path)
-            return absolute.hasPrefix(root) ? String(absolute.dropFirst(root.count)) : nil
-        }
+    nonisolated static func relativePath(_ path: String, in worktree: URL) -> String? {
         let root = realPath(of: worktree) + "/"
         let absolute = path.hasPrefix("/") ? URL(filePath: path) : worktree.appending(path: path)
         let resolved = realPath(of: absolute.deletingLastPathComponent()) + "/" + absolute.lastPathComponent

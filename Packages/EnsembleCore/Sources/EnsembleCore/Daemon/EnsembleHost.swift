@@ -59,8 +59,6 @@ public final class EnsembleHost {
     let locator = ToolLocator()
     let router = CommandRouter()
     var remoteHostInfos: [String: RemoteHostInfo] = [:]
-    var remoteTunnels: [String: RemoteTunnel] = [:]
-    var remoteTunnelOpenings: [String: Task<Int, Error>] = [:]
     var pluginSkillCache: [Int64: Set<String>] = [:]
     private var lock: InstanceLock?
     private var loops: [Task<Void, Never>] = []
@@ -134,10 +132,6 @@ public final class EnsembleHost {
         driver.willRemoveWorktree = removing
         runtime.willRemoveWorktree = removing
         idleCleanup.willRemoveWorktree = removing
-        runtime.remoteHostProvider = { [weak self] project in
-            guard let self else { throw RemoteProjectUnsupported("Running agents on the host") }
-            return try await self.remoteAgentHost(for: project)
-        }
         runtime.observeTurnEnds { [weak self] session in
             guard session.agent.kind == .lead, session.agent.status == .idle, let taskId = session.agent.taskId,
                   !session.isRunning, !session.isQueued else { return }
@@ -228,8 +222,6 @@ public final class EnsembleHost {
         idleCleanup.stop()
         engine.stopOrphanWatchdog()
         runtime.terminateAll()
-        for tunnel in remoteTunnels.values { tunnel.stop() }
-        remoteTunnels = [:]
         changeLog.waitUntilFlushed()
         lock?.release()
         lock = nil
@@ -298,6 +290,7 @@ public final class EnsembleHost {
         if options.claudeExecutable != nil { environment.claudeProblem = nil }
         environment.fileVaultOn = await Self.fileVaultStatus()
         environment.report = report
+        environment.dataDirectory = paths.root.path
         environment.processEnvironment = ["PATH": baseEnvironment["PATH"] ?? "", "HOME": baseEnvironment["HOME"] ?? NSHomeDirectory()]
         self.environment = environment
         publishLive()
@@ -367,51 +360,5 @@ public final class EnsembleHost {
             activeRuns: live.activeRunCount, runningAgents: live.agents.values.filter(\.isRunning).count,
             clients: server?.clientCount ?? 0, environment: environment, startedAt: live.startedAt
         )
-    }
-
-    func remoteAgentHost(for project: Project) async throws -> RemoteAgentHost {
-        guard let destination = project.host else { throw RemoteProjectUnsupported("Running agents on the host") }
-        try await driver.ensureServer()
-        guard let localPort = runtime.mcpServer.map({ Int($0.port) }) else { throw HostRemoteError.serverUnavailable }
-        let client = SSHClient(destination: destination, runner: runner)
-        var info = remoteHostInfos[destination]
-        if info?.claudePath == nil {
-            info = try await RemoteHost(client: client).probe()
-            remoteHostInfos[destination] = info
-        }
-        guard let info, let claudePath = info.claudePath else { throw HostRemoteError.claudeMissing(SSHDestination.displayName(destination)) }
-        let relayPort = try await openTunnel(to: destination, client: client, localPort: localPort)
-        return RemoteAgentHost(client: client, claudePath: claudePath, home: info.home, localPort: localPort, relayPort: relayPort)
-    }
-
-    private func openTunnel(to destination: String, client: SSHClient, localPort: Int) async throws -> Int {
-        if let opening = remoteTunnelOpenings[destination] { return try await opening.value }
-        let tunnel: RemoteTunnel
-        if let existing = remoteTunnels[destination], existing.localPort == localPort {
-            if let port = existing.remotePort { return port }
-            tunnel = existing
-        } else {
-            remoteTunnels[destination]?.stop()
-            tunnel = RemoteTunnel(client: client, localPort: localPort)
-            remoteTunnels[destination] = tunnel
-        }
-        let opening = Task { try await tunnel.open() }
-        remoteTunnelOpenings[destination] = opening
-        defer { remoteTunnelOpenings[destination] = nil }
-        return try await opening.value
-    }
-}
-
-enum HostRemoteError: LocalizedError {
-    case serverUnavailable
-    case claudeMissing(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .serverUnavailable:
-            "Ensemble’s agent tools aren’t running, so agents on the host couldn’t reach them. Restart the Ensemble daemon and try again."
-        case .claudeMissing(let host):
-            "Claude Code isn’t installed on \(host). Install it there (curl -fsSL https://claude.ai/install.sh | bash), sign in by running claude once on the host, then try again."
-        }
     }
 }

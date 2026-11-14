@@ -125,6 +125,7 @@ struct CriteriaList: View {
 }
 
 struct EvidenceCard: View {
+    @Environment(AppModel.self) private var model
     let evidence: [Evidence]
     let context: ReviewContext
 
@@ -144,7 +145,7 @@ struct EvidenceCard: View {
                         }
                     }
                     Spacer()
-                    Button("Open") { NSWorkspace.shared.open(item.url) }
+                    Button("Open") { NSWorkspace.shared.open(model.localURL(forEvidence: item)) }
                         .buttonStyle(.pill)
                 }
             }
@@ -156,7 +157,7 @@ struct EvidenceCard: View {
 
     @ViewBuilder
     private func thumbnail(_ item: Evidence) -> some View {
-        if item.kind == .screenshot, let image = NSImage(contentsOf: item.url) {
+        if item.kind == .screenshot, let image = NSImage(contentsOf: model.localURL(forEvidence: item)) {
             Image(nsImage: image)
                 .resizable()
                 .scaledToFit()

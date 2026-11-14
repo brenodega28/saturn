@@ -44,6 +44,7 @@ public struct DaemonEnvironment: Codable, Sendable, Hashable {
     public var homeDirectory: String
     public var fileVaultOn: Bool?
     public var report: EnvironmentReport?
+    public var dataDirectory: String?
     public var processEnvironment: [String: String] = [:]
 
     public init(
@@ -89,4 +90,19 @@ extension SetupRecord {
         decoder.dateDecodingStrategy = .iso8601
         return try? decoder.decode(SetupRecord.self, from: data)
     }
+}
+
+extension DaemonEnvironment {
+    public var loginSummary: String {
+        switch report?.provider {
+        case .claudeSignIn(let account, let isSignedIn)?:
+            isSignedIn ? "Claude signed in\(account.map { " as \($0)" } ?? "")" : "Claude isn’t signed in. Run claude once on this machine and log in."
+        case .apiKey(let isStored)?:
+            isStored ? "Anthropic API key stored in this machine’s keychain" : "No Anthropic API key on this machine"
+        case .notChosen?, nil:
+            "Choose how agents sign in, in Settings › Accounts"
+        }
+    }
+
+    public var isLoginReady: Bool { report?.provider.isOK ?? false }
 }

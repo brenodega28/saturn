@@ -13,7 +13,7 @@ extension AgentRuntime {
     public static let healthWorktreeName = "health-check"
 
     public func checkHarness(of project: Project, git: GitClient) async throws -> HarnessReport {
-        let git = hostGit(git, for: project)
+        try Self.refuseSSHProject(project)
         let config = ProjectConfigLoader.load(repository: project.filesRoot)
         let checks = config.checks?.checks ?? []
         var problems: [String] = []
@@ -48,11 +48,7 @@ extension AgentRuntime {
             }
         }
 
-        var runner = checkRunner
-        if project.isRemote {
-            runner.remote = try await remoteHostProvider(project)
-        }
-        let results = await runner.run(checks, in: path, variables: ["ENSEMBLE_WORKTREE": path.path, "ENSEMBLE_AGENT": Self.healthWorktreeName], logDirectory: logs.appending(path: "checks"))
+        let results = await checkRunner.run(checks, in: path, variables: ["ENSEMBLE_WORKTREE": path.path, "ENSEMBLE_AGENT": Self.healthWorktreeName], logDirectory: logs.appending(path: "checks"))
         _ = try? await git.run(["worktree", "remove", "--force", path.path], in: project.url)
         for result in results where !result.passed {
             problems.append("\(result.headline) on a clean checkout. Agents can’t get it green unless it passes here first: check its command, dependencies, network access or credentials.")

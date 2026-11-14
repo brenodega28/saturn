@@ -323,12 +323,10 @@ struct FakeSSHHost {
         defer { harness.cleanUp() }
         let remote = try harness.database.openRemoteProject(path: harness.project.path, host: "ensemble-test.invalid")
 
-        await #expect(throws: (any Error).self) {
+        await #expect(throws: RemoteProjectUnsupported.self) {
             try await harness.runtime.spawn(in: remote, kind: .builder, count: 1, git: harness.repo.git, name: "Ghost")
         }
         #expect(!FileManager.default.fileExists(atPath: harness.repo.root.appending(path: ".crew").path))
         #expect(try harness.database.agents(inProject: try #require(remote.id)).isEmpty)
-        #expect(harness.runtime.hostGit(harness.repo.git, for: remote).isRemote)
-        #expect(!harness.runtime.hostGit(harness.repo.git, for: harness.project).isRemote)
     }
 }

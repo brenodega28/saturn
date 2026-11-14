@@ -7,6 +7,9 @@ import Observation
 public final class DaemonConnection: Identifiable {
     public let client: DaemonClient
     public let replica: ReplicaDatabase
+    public var destination: String?
+
+    public var isRemote: Bool { destination != nil }
     public private(set) var revision = 0
     @ObservationIgnored public var onError: (@MainActor (String, Error) -> Void)?
     @ObservationIgnored public var onEvent: (@MainActor (DaemonEvent) -> Void)?

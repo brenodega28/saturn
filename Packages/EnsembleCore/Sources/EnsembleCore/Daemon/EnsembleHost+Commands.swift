@@ -102,6 +102,9 @@ extension EnsembleHost {
         router.register(ProjectCommands.Refresh.self) { [unowned self] command in
             try await refresh(try requireProject(command.projectID))
         }
+        router.register(ProjectCommands.ConfigFiles.self) { [unowned self] command in
+            ProjectConfigFiles.collect(in: try requireProject(command.projectID).url)
+        }
         router.register(ProjectCommands.CheckHarness.self) { [unowned self] command in
             let project = try requireProject(command.projectID)
             return try await runtime.checkHarness(of: project, git: try requireGit(for: project))
@@ -540,6 +543,7 @@ extension EnsembleHost {
             try await LocalFileSystem().subdirectories(of: URL(fileURLWithPath: command.path, isDirectory: true)).map(\.path)
         }
         router.register(CodeCommands.RemoveItem.self) { command in
+            guard FileManager.default.fileExists(atPath: command.path) else { return Done() }
             try FileManager.default.removeItem(atPath: command.path)
             return Done()
         }

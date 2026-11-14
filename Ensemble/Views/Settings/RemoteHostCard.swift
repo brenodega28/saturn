@@ -20,9 +20,9 @@ struct RemoteHostCard: View {
                 } else if status.error == nil, status.info != nil {
                     Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.successText).font(.system(size: 12))
                 }
-                Button("Reconnect") { Task { await model.refresh(project) } }
+                Button("Move to this server’s daemon") { Task { await model.moveToServerDaemon(project) } }
                     .buttonStyle(.pill)
-                    .disabled(status.isConnecting)
+                    .help("Reopen this project on the Ensemble daemon running on the server. Its history here stays read-only.")
             }
 
             VStack(alignment: .leading, spacing: 6) {

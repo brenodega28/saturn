@@ -15,26 +15,26 @@ extension AppModel {
         RemoteHost(client: SSHClient(destination: destination, runner: runner))
     }
 
-    func remoteWorktreeManager(for project: Project, destination: String) async -> WorktreeManager {
-        let client = SSHClient(destination: destination, runner: runner)
-        return await WorktreeManager.make(repository: project.url, git: GitClient(ssh: client), fileSystem: SSHFileSystem(client: client))
-    }
-
     func git(for project: Project) -> GitClient? {
         connection.git(for: project)
     }
 
     func git(forAgent agent: Agent) -> GitClient? {
-        guard let project = try? database.project(id: agent.projectId) else { return git }
+        guard let project = try? database.project(id: agent.projectId) else { return nil }
         return git(for: project)
     }
 
+    func shellDestination(for project: Project?) -> String? {
+        connection.destination ?? project?.host
+    }
+
     func isRemote(_ agent: Agent) -> Bool {
-        ((try? database.project(id: agent.projectId)) ?? nil)?.isRemote ?? false
+        connection.isRemote || (((try? database.project(id: agent.projectId)) ?? nil)?.isRemote ?? false)
     }
 
     func openRemoteShell(at directory: URL, forAgent agent: Agent) {
-        guard let project = try? database.project(id: agent.projectId), let destination = project.host else { return }
+        let project = (try? database.project(id: agent.projectId)) ?? nil
+        guard let destination = shellDestination(for: project) else { return }
         let command = "exec /usr/bin/ssh -t -- " + ShellQuote.quote(destination) + " " + ShellQuote.quote("cd -- " + ShellQuote.quote(directory.path) + " && exec \"${SHELL:-/bin/sh}\" -l")
         let file = FileManager.default.temporaryDirectory.appending(path: "ensemble-ssh-\(UUID().uuidString.prefix(8)).command")
         do {
@@ -46,69 +46,35 @@ extension AppModel {
         }
     }
 
-    func remoteMirror(for project: Project) -> RemoteMirror? {
-        guard let id = project.id, let destination = project.host else { return nil }
-        let location = RemoteMirror.location(forProject: id)
-        return RemoteMirror(
-            directory: location.directory, manifestFile: location.manifest,
-            repository: project.path, client: SSHClient(destination: destination, runner: runner)
-        )
-    }
-
     func pullRemoteFiles(_ project: Project) async throws {
-        guard let mirror = remoteMirror(for: project) else { return }
-        try await exclusively(project) {
-            try await self.pushRemoteFiles(project, mirror: mirror)
-            try await mirror.pull()
-            self.reloadConfig(for: project)
-        }
+        await pullConfigFiles(project)
+        reloadConfig(for: project)
     }
 
     func pullAllRemoteFiles() async {
-        for project in openProjects where project.isRemote {
-            try? await pullRemoteFiles(project)
+        guard connection.isRemote else { return }
+        for project in openProjects {
+            await pullConfigFiles(project)
+            reloadConfig(for: project)
         }
     }
 
     func syncRemoteFiles(_ project: Project) async throws {
-        guard let mirror = remoteMirror(for: project) else { return }
-        try await exclusively(project) {
-            try await self.pushRemoteFiles(project, mirror: mirror)
-        }
-    }
-
-    private func exclusively(_ project: Project, _ work: @escaping @MainActor () async throws -> Void) async throws {
-        guard let id = project.id else { return }
-        while let running = remoteFileSyncs[id] {
-            _ = await running.result
-        }
-        let task = Task { try await work() }
-        remoteFileSyncs[id] = task
-        defer { remoteFileSyncs[id] = nil }
-        try await task.value
-    }
-
-    private func pushRemoteFiles(_ project: Project, mirror: RemoteMirror) async throws {
-        do {
-            let pushed = try await mirror.push()
-            if !pushed.isEmpty { reloadConfig(for: project) }
-        } catch let conflict as RemoteMirrorConflict {
-            alert = AppAlert(title: "\(project.name) changed on \(project.host.map(SSHDestination.displayName) ?? "the host")", message: conflict.localizedDescription)
-            try await mirror.pull()
-            reloadConfig(for: project)
-        }
+        try await pushConfigFiles(project)
     }
 
     func startRemoteFileSync() {
         Task { [weak self] in
             while let self, !Task.isCancelled {
-                for project in self.openProjects where project.isRemote && self.remoteStatus(for: project).filesPulledAt != nil {
-                    guard let id = project.id else { continue }
-                    do {
-                        try await self.syncRemoteFiles(project)
-                        if self.remoteStatuses[id]?.syncError != nil { self.remoteStatuses[id]?.syncError = nil }
-                    } catch {
-                        self.remoteStatuses[id]?.syncError = "Couldn’t save changes to the host: \(error.localizedDescription)"
+                if self.connection.isRemote, self.connection.isConnected {
+                    for project in self.openProjects {
+                        guard let id = project.id else { continue }
+                        do {
+                            try await self.pushConfigFiles(project)
+                            if self.remoteStatuses[id]?.syncError != nil { self.remoteStatuses[id]?.syncError = nil }
+                        } catch {
+                            self.remoteStatuses[id, default: RemoteProjectStatus()].syncError = "Couldn’t save changes to the server: \(error.localizedDescription)"
+                        }
                     }
                 }
                 try? await Task.sleep(for: .seconds(2))
@@ -120,13 +86,15 @@ extension AppModel {
         project.id.flatMap { remoteStatuses[$0] } ?? RemoteProjectStatus()
     }
 
+    func refreshLegacySSHProject(_ project: Project) {
+        guard let id = project.id, let host = project.host else { return }
+        remoteStatuses[id] = RemoteProjectStatus(
+            error: "This project ran agents over SSH, which Ensemble no longer does. Move it to \(SSHDestination.displayName(host))’s daemon to keep working on it there; its history stays here, read-only."
+        )
+    }
+
     func openRemoteFolder(host destination: String, path: String) async throws {
-        let project = try await send(ProjectCommands.OpenRemote(host: destination, path: path))
-        reloadProjects()
-        if let id = project.id {
-            selection = .project(id)
-        }
-        await refresh(project)
+        try await openOnServer(destination, path: path)
     }
 
     func reopen(_ project: Project) async {
@@ -141,8 +109,8 @@ extension AppModel {
         }
     }
 
-    func appRunnerHost(for project: Project) async throws -> RemoteAgentHost {
-        guard let destination = project.host else { throw RemoteProjectUnsupported("Running the app on the host") }
+    func appRunnerHost(for project: Project) async throws -> RemoteAppHost {
+        guard let destination = shellDestination(for: project) else { throw RemoteProjectUnsupported("Running the app on the host") }
         let client = SSHClient(destination: destination, runner: runner)
         let info: RemoteHostInfo
         if let known = remoteHostInfos[destination] {
@@ -151,6 +119,6 @@ extension AppModel {
             info = try await RemoteHost(client: client).probe()
             remoteHostInfos[destination] = info
         }
-        return RemoteAgentHost(client: client, claudePath: info.claudePath ?? "", home: info.home, localPort: 0, relayPort: 0)
+        return RemoteAppHost(client: client, home: info.home)
     }
 }

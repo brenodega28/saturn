@@ -112,6 +112,13 @@ public enum ProjectCommands {
         public init(projectID: Int64) { self.projectID = projectID }
     }
 
+    public struct ConfigFiles: DaemonCommand {
+        public static let name = "project.configFiles"
+        public typealias Response = [String: Data]
+        public var projectID: Int64
+        public init(projectID: Int64) { self.projectID = projectID }
+    }
+
     public struct CheckHarness: DaemonCommand {
         public static let name = "project.checkHarness"
         public typealias Response = HarnessReport

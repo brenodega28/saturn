@@ -31,6 +31,7 @@ struct AppSettingsView: View {
             Tab("General", systemImage: "gearshape", value: "general") { GeneralSettings() }
             Tab("Accounts", systemImage: "person.crop.circle", value: "accounts") { AccountsSettings() }
             Tab("Engines", systemImage: "terminal", value: "engines") { EnginesSettings() }
+            Tab("Servers", systemImage: "server.rack", value: "servers") { ServersSettings() }
             Tab("Key Bindings", systemImage: "keyboard", value: "keys") {
                 KeyBindingsEditor().padding(20)
             }
@@ -43,7 +44,7 @@ struct AppSettingsView: View {
     }
 }
 
-private struct SettingsPane<Content: View>: View {
+struct SettingsPane<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {

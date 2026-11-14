@@ -3,7 +3,7 @@ import Foundation
 
 extension AppModel {
     func needsOnboarding(_ project: Project) -> Bool {
-        if project.isRemote, remoteStatus(for: project).filesPulledAt == nil { return false }
+        if project.isRemote { return false }
         return !hasConfig(project)
     }
 

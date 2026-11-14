@@ -7,9 +7,16 @@ public struct AppPaths: Sendable {
         self.root = root
     }
 
-    public static let standard = AppPaths(
-        root: URL.applicationSupportDirectory.appending(path: "Ensemble", directoryHint: .isDirectory)
-    )
+    public static let dataDirectoryVariable = "ENSEMBLE_DATA_DIR"
+
+    public static let standard = resolved(environment: ProcessInfo.processInfo.environment)
+
+    static func resolved(environment: [String: String]) -> AppPaths {
+        if let custom = environment[dataDirectoryVariable], !custom.isEmpty {
+            return AppPaths(root: URL(fileURLWithPath: (custom as NSString).expandingTildeInPath, isDirectory: true))
+        }
+        return AppPaths(root: URL.applicationSupportDirectory.appending(path: "Ensemble", directoryHint: .isDirectory))
+    }
 
     public var database: URL { root.appending(path: "ensemble.sqlite") }
 

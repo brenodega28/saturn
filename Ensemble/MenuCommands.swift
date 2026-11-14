@@ -228,6 +228,7 @@ extension AppModel {
 extension CommandRegistry {
     func registerMenuCommands() {
         registerFileCommands()
+        registerTabCommands()
         registerChatCommands()
         registerViewCommands()
         registerNavigateCommands()
@@ -260,7 +261,7 @@ extension CommandRegistry {
         })
         register(MenuCommand(id: "file.reveal", title: "Reveal in Code", menu: "Context", isEnabled: { $0.file != nil }) { context in
             guard let file = context.file else { return }
-            context.model.openFile(file.path, in: file.project)
+            context.model.revealInCode(file.path, in: file.project)
         })
         register(MenuCommand(id: "file.copy-path", title: "Copy Path", menu: "Context", shortcut: KeyboardShortcut("c", modifiers: [.command, .option]), isEnabled: { $0.file != nil }) { context in
             if let file = context.file { context.model.copyToPasteboard(file.path) }
@@ -275,10 +276,34 @@ extension CommandRegistry {
         })
         register(MenuCommand(id: "file.open-ssh", title: "Open SSH Folder…", menu: "File", section: 0, order: 3) { $0.model.isRemoteFolderPresented = true })
         register(MenuCommand(id: "file.clone", title: "Clone…", menu: "File", section: 0, order: 4) { $0.model.isClonePresented = true })
-        register(MenuCommand(id: "file.close-project", title: "Close Project", menu: "File", section: 1, order: 0, shortcut: KeyboardShortcut("w", modifiers: [.command, .shift]),
+        register(MenuCommand(id: "file.new-terminal", title: "New Terminal", menu: "File", section: 0, order: 5, shortcut: KeyboardShortcut("`", modifiers: .control),
+                             isEnabled: { $0.model.currentProject != nil }) { $0.model.openTerminal() })
+        register(MenuCommand(id: "file.close-tab", title: "Close Tab", menu: "File", section: 1, order: 0, shortcut: KeyboardShortcut("w")) { context in
+            let model = context.model
+            if let window = NSApp.keyWindow, window !== model.mainWindowRef || model.activePage == nil {
+                window.performClose(nil)
+            } else {
+                model.pages.closeActive()
+            }
+        })
+        register(MenuCommand(id: "file.close-project", title: "Close Project", menu: "File", section: 1, order: 1, shortcut: KeyboardShortcut("w", modifiers: [.command, .shift]),
                              isEnabled: { $0.model.currentProject != nil }) { context in
             if let project = context.model.currentProject { context.model.close(project) }
         })
+    }
+
+    private func registerTabCommands() {
+        register(MenuCommand(id: "tab.next", title: "Next Tab", menu: "Window", section: 0, order: 0, shortcut: KeyboardShortcut("}", modifiers: .command),
+                             isEnabled: { $0.model.pages.pages.count > 1 }) { $0.model.pages.selectNext() })
+        register(MenuCommand(id: "tab.previous", title: "Previous Tab", menu: "Window", section: 0, order: 1, shortcut: KeyboardShortcut("{", modifiers: .command),
+                             isEnabled: { $0.model.pages.pages.count > 1 }) { $0.model.pages.selectPrevious() })
+        for number in 1...9 {
+            register(MenuCommand(
+                id: "tab.select.\(number)", title: "Select Tab \(number)", menu: "Window", section: 0, order: 1 + number,
+                shortcut: KeyboardShortcut(KeyEquivalent(Character("\(number)"))),
+                isEnabled: { $0.model.pages.pages.count >= number }
+            ) { $0.model.pages.select(index: number - 1) })
+        }
     }
 
     private func registerViewCommands() {
@@ -292,23 +317,20 @@ extension CommandRegistry {
         for (index, tool) in MainTool.allCases.enumerated() {
             register(MenuCommand(
                 id: "view.tool.\(tool.rawValue)", title: tool.title, menu: "View", section: 1, order: index + 1,
-                shortcut: KeyboardShortcut(KeyEquivalent(Character("\(index + 1)"))),
+                shortcut: KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.command, .option]),
                 isEnabled: { tool.projectTab == nil || $0.model.currentProject != nil },
                 isChecked: { $0.model.mainScreen == .tool(tool) }
             ) { $0.model.open(tool) })
         }
+        register(MenuCommand(id: "view.side-bar", title: "Toggle Side Bar", menu: "View", section: 2, order: 0, shortcut: KeyboardShortcut("0", modifiers: [.command, .option]),
+                             isChecked: { $0.model.pages.isSideBarOpen }) { $0.model.pages.isSideBarOpen.toggle() })
     }
 
     private func registerNavigateCommands() {
-        register(MenuCommand(id: "navigate.back", title: "Back", menu: "Navigate", section: 0, order: 0, shortcut: KeyboardShortcut("[", modifiers: [.command]),
+        register(MenuCommand(id: "navigate.back", title: "Back to Chat", menu: "Navigate", section: 0, order: 0, shortcut: KeyboardShortcut("[", modifiers: [.command]),
                              isEnabled: { $0.model.canGoBack }) { $0.model.goBack() })
-        register(MenuCommand(id: "navigate.open-quickly", title: "Open Quickly…", menu: "Navigate", section: 1, order: 0, shortcut: KeyboardShortcut("p")) { context in
-            if context.model.mainScreen == .tool(.code), let project = context.model.currentProject {
-                context.model.codeBrowser(for: project).presentFinder()
-            } else {
-                context.model.openPalette()
-            }
-        })
+        register(MenuCommand(id: "navigate.open-quickly", title: "Open File…", menu: "Navigate", section: 1, order: 0, shortcut: KeyboardShortcut("p"),
+                             isEnabled: { $0.model.currentProject != nil }) { $0.model.openFileFinder() })
         register(MenuCommand(id: "navigate.open-symbol", title: "Open Symbol…", menu: "Navigate", section: 1, order: 1, shortcut: KeyboardShortcut("o", modifiers: [.command, .shift]),
                              isEnabled: { $0.model.currentProject != nil }) { context in
             guard let project = context.model.currentProject else { return }
@@ -356,7 +378,7 @@ extension CommandRegistry {
 
     private func registerChatCommands() {
         func selected(_ context: CommandContext) -> Chat? {
-            context.model.currentProject.flatMap(context.model.selectedRequest(in:))
+            context.model.focusedChat
         }
         register(MenuCommand(id: "chat.new", title: "New Chat…", menu: "Chat", section: 0, order: 0) { $0.model.requestNewChat() })
         register(MenuCommand(id: "chat.done", title: "Mark as Done", menu: "Chat", section: 1, order: 0,

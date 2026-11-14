@@ -88,11 +88,7 @@ extension AppModel {
 
     func openChat(_ chat: Chat) {
         guard let chatID = chat.id else { return }
-        mainWindow.spec = nil
-        runDetailIDs[chat.projectId] = nil
-        selection = .project(chat.projectId)
-        tabs[chat.projectId] = .lead
-        showRequest(id: chatID, inProjectID: chat.projectId)
+        showChatPage(chatID, inProjectID: chat.projectId)
     }
 
     func renameChat(_ chat: Chat, to title: String) {
@@ -108,11 +104,13 @@ extension AppModel {
     }
 
     func deleteChat(_ chat: Chat) async {
-        guard let project = project(withID: chat.projectId), let id = chat.id else { return }
+        guard project(withID: chat.projectId) != nil, let id = chat.id else { return }
         do {
             try await send(ChatCommands.Delete(chatID: id))
             leadChatRevision += 1
-            if selectedRequest(in: project)?.id == chat.id { startNewLeadRequest(in: project) }
+            pages.retain { $0.kind.chatID != id }
+            if leadSelections[chat.projectId] == .request(id) { leadSelections[chat.projectId] = nil }
+            dropStalePages()
         } catch {
             alert = AppAlert(title: "Couldn’t delete the chat", message: error.localizedDescription)
         }

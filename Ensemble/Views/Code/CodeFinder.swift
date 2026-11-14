@@ -4,7 +4,22 @@ import SwiftUI
 
 struct CodeFinder: View {
     @Bindable var browser: CodeBrowser
+    var onOpen: ((String, Int) -> Void)?
     @FocusState private var isQueryFocused: Bool
+
+    private func open(_ result: CodeFinderResult) {
+        guard let onOpen else {
+            browser.open(result.path, line: result.line)
+            return
+        }
+        browser.isFinderPresented = false
+        onOpen(result.path, result.line)
+    }
+
+    private func openSelected() {
+        let results = browser.finderResults
+        if results.indices.contains(browser.finderSelection) { open(results[browser.finderSelection]) }
+    }
 
     var body: some View {
         let results = browser.finderResults
@@ -78,7 +93,7 @@ struct CodeFinder: View {
                     .font(.system(size: 16, design: .monospaced))
                     .focused($isQueryFocused)
                     .onChange(of: browser.finderQuery) { browser.queryChanged() }
-                    .onSubmit { browser.openSelectedResult() }
+                    .onSubmit(openSelected)
                     .onKeyPress(.downArrow) { browser.moveFinderSelection(1); return .handled }
                     .onKeyPress(.upArrow) { browser.moveFinderSelection(-1); return .handled }
                     .onKeyPress(.escape) { browser.isFinderPresented = false; return .handled }
@@ -109,7 +124,7 @@ struct CodeFinder: View {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(results.enumerated()), id: \.element.id) { index, result in
                         let isSelected = index == browser.finderSelection
-                        Button { browser.open(result.path, line: result.line) } label: {
+                        Button { open(result) } label: {
                             HStack(spacing: 10) {
                                 FileBadge(path: result.path)
                                 VStack(alignment: .leading, spacing: 1) {

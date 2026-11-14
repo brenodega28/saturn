@@ -38,9 +38,7 @@ extension AppModel {
     }
 
     func visibleChat() -> (projectId: Int64, taskId: Int64)? {
-        guard case .project(let projectID) = selection, tabs[projectID] == .lead, runDetailIDs[projectID] == nil,
-              !requestPageProjectIDs.contains(projectID), let project = project(withID: projectID),
-              let taskID = selectedRequest(in: project)?.id else { return nil }
+        guard case .chat(let taskID?, let projectID) = activePage?.kind, !requestPageProjectIDs.contains(projectID) else { return nil }
         return (projectID, taskID)
     }
 
@@ -51,9 +49,6 @@ extension AppModel {
     func openNotification(_ target: NotificationTarget?) {
         switch target {
         case .chat(let projectID, let taskID):
-            runDetailIDs[projectID] = nil
-            selection = .project(projectID)
-            tabs[projectID] = .lead
             showRequest(id: taskID, inProjectID: projectID)
         case .chatRequest(let id):
             guard let item = try? database.chatRequest(id: id) else { return }
@@ -81,12 +76,8 @@ extension AppModel {
 
     func openRequest(_ item: ChatRequest) {
         if item.kind == .pinReview {
-            selection = .project(item.projectId)
-            tabs[item.projectId] = .changes
+            showPage(.tool(.changes, projectID: item.projectId))
         } else if let taskID = item.taskId {
-            runDetailIDs[item.projectId] = nil
-            selection = .project(item.projectId)
-            tabs[item.projectId] = .lead
             showRequest(id: taskID, inProjectID: item.projectId)
         }
     }

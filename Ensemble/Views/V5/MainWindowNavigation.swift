@@ -1,8 +1,7 @@
 import EnsembleCore
 import Foundation
-import Observation
 
-enum MainTool: String, CaseIterable, Identifiable, Hashable {
+enum MainTool: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
     case changes
     case agents
     case workflows
@@ -20,6 +19,13 @@ enum MainTool: String, CaseIterable, Identifiable, Hashable {
         case .code: "Code"
         case .usage: "Usage"
         case .settings: "Settings"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .usage: "chart.bar"
+        default: projectTab?.systemImage ?? "square"
         }
     }
 
@@ -47,7 +53,10 @@ enum MainTool: String, CaseIterable, Identifiable, Hashable {
 }
 
 enum MainScreen: Hashable {
+    case none
     case chat
+    case terminal
+    case code
     case tool(MainTool)
     case run(Int64)
     case agent(Int64)
@@ -56,108 +65,188 @@ enum MainScreen: Hashable {
     var isChat: Bool { self == .chat }
 }
 
-struct SpecScreen: Hashable {
-    let path: String
-    let project: Int64?
-    let chat: LeadSelection?
-    let base: MainScreen
-}
-
-@MainActor
-@Observable
-final class MainWindowNavigation {
-    var back: MainScreen?
-    var spec: SpecScreen?
-
-    func record(from old: MainScreen, to new: MainScreen) {
-        switch new {
-        case .chat, .tool:
-            back = nil
-        case .run, .agent, .spec:
-            if case .tool = old { back = old }
-        }
-    }
-}
-
 extension AppModel {
-    var baseScreen: MainScreen {
-        switch selection {
-        case .usage: return .tool(.usage)
-        case .project(let id):
-            if let run = runDetailIDs[id] { return .run(run) }
-            let tab = tabs[id] ?? .lead
-            if tab == .agents, let agent = selectedAgents[id] { return .agent(agent) }
-            return MainTool(tab: tab).map(MainScreen.tool) ?? .chat
-        case nil: return .chat
-        }
+    static func pagesKey(for daemon: DaemonID) -> String {
+        "pages.\(daemon.uuidString.lowercased())"
     }
+
+    var activePage: MainPage? { pages.active }
 
     var mainScreen: MainScreen {
-        let base = baseScreen
-        if let spec = mainWindow.spec, spec.base == base, spec.project == currentProject?.id,
-           spec.chat == currentProject?.id.flatMap({ leadSelections[$0] }) {
-            return .spec(spec.path)
+        switch activePage?.kind {
+        case nil: .none
+        case .chat: .chat
+        case .terminal: .terminal
+        case .code: .code
+        case .tool(let tool, _): .tool(tool)
+        case .run(let id): .run(id)
+        case .agent(let id): .agent(id)
+        case .spec(let path, _): .spec(path)
         }
-        return base
     }
 
     var selectedRequestID: Int64? {
         currentProject.flatMap(selectedRequest(in:))?.id
     }
 
-    func open(_ tool: MainTool) {
-        mainWindow.spec = nil
-        switch tool {
-        case .usage:
-            selection = .usage
-        default:
-            guard let project = currentProject, let id = project.id, let tab = tool.projectTab else { return }
-            runDetailIDs[id] = nil
-            if tool == .agents { selectedAgents[id] = nil }
-            tabs[id] = tab
-            selection = .project(id)
+    var focusedChat: Chat? {
+        activePage.flatMap { sideBarChat(for: $0.kind) }
+    }
+
+    func project(of kind: MainPageKind) -> Project? {
+        switch kind {
+        case .chat(_, let id), .terminal(let id, _), .code(let id, _), .spec(_, let id): project(withID: id)
+        case .tool(_, let id): id.flatMap(project(withID:))
+        case .run(let id): run(withID: id).flatMap { project(withID: $0.projectId) }
+        case .agent(let id): agent(id: id).flatMap { project(withID: $0.projectId) }
         }
     }
 
+    func sideBarChat(for kind: MainPageKind) -> Chat? {
+        switch kind {
+        case .chat(let chatID?, _): try? database.task(id: chatID)
+        case .terminal, .code: project(of: kind).flatMap(selectedRequest(in:))
+        default: nil
+        }
+    }
+
+    func open(_ tool: MainTool) {
+        if tool == .usage {
+            pages.open(.tool(.usage, projectID: nil))
+        } else if let id = currentProject?.id {
+            pages.open(.tool(tool, projectID: id))
+        }
+    }
+
+    func showPage(_ kind: MainPageKind) {
+        pages.open(kind)
+    }
+
+    func showChatPage(_ chatID: Int64?, inProjectID projectID: Int64) {
+        requestPageProjectIDs.remove(projectID)
+        guard let chatID else {
+            pages.open(.chat(chatID: nil, projectID: projectID))
+            return
+        }
+        pages.showChat(.chat(chatID: chatID, projectID: projectID))
+    }
+
     func showChat(_ request: Chat) {
-        guard let project = project(withID: request.projectId) else { return }
-        mainWindow.spec = nil
-        showChat(in: project)
-        showRequest(request)
+        guard let id = request.id else { return }
+        showChatPage(id, inProjectID: request.projectId)
     }
 
     func expand(_ project: Project) {
-        mainWindow.spec = nil
         showChat(in: project)
-        guard let id = project.id else { return }
-        requestPageProjectIDs.remove(id)
     }
 
     func startNewChat(in project: Project) {
-        mainWindow.spec = nil
         newChat(in: project)
     }
 
     func openSpecScreen(_ path: String, in project: Project) {
-        mainWindow.spec = SpecScreen(path: path, project: project.id, chat: project.id.flatMap { leadSelections[$0] }, base: baseScreen)
+        guard let id = project.id else { return }
+        pages.open(.spec(path: path, projectID: id))
     }
 
     var canGoBack: Bool {
-        !mainScreen.isChat
+        currentProject != nil && !mainScreen.isChat
     }
 
     func goBack() {
-        let screen = mainScreen
-        if case .spec = screen {
-            mainWindow.spec = nil
-            return
+        if let project = currentProject { showChat(in: project) }
+    }
+
+    func openTerminal(in project: Project? = nil) {
+        guard let project = project ?? currentProject, let id = project.id else { return }
+        let chosen = selectedRunTarget(in: project)
+        let folder = chosen.isMain ? runTargets(in: project).dropFirst().first?.folder ?? project.url : chosen.folder
+        pages.open(.terminal(projectID: id, directory: folder.path), unique: false)
+    }
+
+    func apply(_ page: MainPage?) {
+        guard let kind = page?.kind else { return }
+        switch kind {
+        case .chat(let chatID, let projectID):
+            focusProject(projectID)
+            tabs[projectID] = .lead
+            runDetailIDs[projectID] = nil
+            leadSelections[projectID] = chatID.map(LeadSelection.request) ?? .newRequest
+        case .tool(.usage, _):
+            selection = .usage
+        case .tool(let tool, let projectID?):
+            focusProject(projectID)
+            if let tab = tool.projectTab { tabs[projectID] = tab }
+            runDetailIDs[projectID] = nil
+        case .tool(_, nil):
+            break
+        case .run(let runID):
+            guard let run = run(withID: runID) else { return }
+            focusProject(run.projectId)
+            runDetailIDs[run.projectId] = runID
+        case .agent(let agentID):
+            guard let agent = agent(id: agentID) else { return }
+            focusProject(agent.projectId)
+            tabs[agent.projectId] = .agents
+            selectedAgents[agent.projectId] = agentID
+        case .terminal(let projectID, _), .code(let projectID, _), .spec(_, let projectID):
+            focusProject(projectID)
         }
-        if let back = mainWindow.back, case .tool(let tool) = back, screen != back {
-            open(tool)
-            return
+    }
+
+    private func focusProject(_ id: Int64) {
+        if selection != .project(id) { selection = .project(id) }
+    }
+
+    func pageClosed(_ page: MainPage) {
+        terminals.terminate(page.id)
+        codePages[page.id] = nil
+    }
+
+    func isLive(_ kind: MainPageKind) -> Bool {
+        switch kind {
+        case .chat(let chatID, let projectID):
+            guard project(withID: projectID) != nil else { return false }
+            guard let chatID else { return true }
+            return (try? database.task(id: chatID))?.projectId == projectID
+        case .tool(.usage, _):
+            return true
+        case .tool(_, let projectID):
+            return projectID.flatMap(project(withID:)) != nil
+        case .run(let id):
+            return run(withID: id).flatMap { project(withID: $0.projectId) } != nil
+        case .agent(let id):
+            return agent(id: id).flatMap { project(withID: $0.projectId) } != nil
+        case .terminal(let projectID, _), .code(let projectID, _), .spec(_, let projectID):
+            return project(withID: projectID) != nil
         }
-        if let project = currentProject {
-            expand(project)
+    }
+
+    func dropStalePages() {
+        pages.retain { isLive($0.kind) }
+    }
+
+    func title(of kind: MainPageKind) -> String {
+        switch kind {
+        case .chat(let chatID?, _): (try? database.task(id: chatID))?.title ?? "Chat"
+        case .chat(nil, _): "New chat"
+        case .terminal(let projectID, let directory):
+            "Terminal · \(project(withID: projectID).map { terminalPlace(directory, in: $0) } ?? (directory as NSString).lastPathComponent)"
+        case .code(_, let path): (path as NSString).lastPathComponent
+        case .tool(let tool, _): tool.title
+        case .run(let id): run(withID: id).map { "Run · \($0.displayTitle)" } ?? "Run"
+        case .agent(let id): agent(id: id).map { displayName(of: $0) } ?? "Agent"
+        case .spec(let path, _): "Spec · \(specTitle(atPath: path))"
         }
+    }
+
+    func terminalPlace(_ directory: String, in project: Project) -> String {
+        let root = (project.path as NSString).standardizingPath
+        let path = (directory as NSString).standardizingPath
+        if path == root { return project.name }
+        if let agent = agentSessions(in: project).map(\.agent).first(where: { $0.worktreePath.map { ($0 as NSString).standardizingPath } == path }) {
+            return displayName(of: agent, in: project)
+        }
+        return (path as NSString).lastPathComponent
     }
 }

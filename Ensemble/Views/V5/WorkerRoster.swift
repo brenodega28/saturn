@@ -51,7 +51,7 @@ struct ChatWorker {
     let state: WorkerState
 }
 
-private struct WorkerRow: View {
+struct WorkerRow: View {
     @Environment(AppModel.self) private var model
     let worker: ChatWorker
     let project: Project

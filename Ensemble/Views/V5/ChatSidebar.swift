@@ -203,7 +203,7 @@ struct ChatRow: View {
     @FocusState private var renameFocused: Bool
 
     var body: some View {
-        let isSelected = model.currentProject?.id == summary.project.id && model.selectedRequestID == summary.id && model.mainScreen.isChat
+        let isSelected = model.activePage?.kind.chatID == summary.id
         Button { model.openChat(summary.chat) } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {

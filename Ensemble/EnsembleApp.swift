@@ -25,7 +25,7 @@ struct EnsembleApp: App {
                     EmptyView()
                 }
             }
-            .preferredColorScheme(.dark)
+            .followsAppearance()
             .tint(Theme.accent)
         }
         .defaultSize(width: 1280, height: 820)
@@ -41,7 +41,7 @@ struct EnsembleApp: App {
                 DetailWindow(destination: destination)
                     .environment(model)
                     .modifier(ChatLinkRouting(model: model))
-                    .preferredColorScheme(.dark)
+                    .followsAppearance()
                     .tint(Theme.accent)
                     .navigationTitle(destination?.title ?? "Ensemble")
             }
@@ -53,7 +53,7 @@ struct EnsembleApp: App {
             if case .ready(let model) = launch {
                 OrganizerView()
                     .environment(model)
-                    .preferredColorScheme(.dark)
+                    .followsAppearance()
                     .tint(Theme.accent)
             }
         }
@@ -64,7 +64,7 @@ struct EnsembleApp: App {
             if case .ready(let model) = launch {
                 AppSettingsView(updater: updater)
                     .environment(model)
-                    .preferredColorScheme(.dark)
+                    .followsAppearance()
                     .tint(Theme.accent)
             }
         }
@@ -73,7 +73,7 @@ struct EnsembleApp: App {
             if case .ready(let model) = launch {
                 DebugWorktreesView()
                     .environment(model)
-                    .preferredColorScheme(.dark)
+                    .followsAppearance()
                     .tint(Theme.accent)
             }
         }

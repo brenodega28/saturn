@@ -24,10 +24,11 @@ enum NotificationPreferences {
 struct AppSettingsView: View {
     static let tabKey = "settings.tab"
     let updater: Updater
-    @AppStorage(AppSettingsView.tabKey) private var tab = "accounts"
+    @AppStorage(AppSettingsView.tabKey) private var tab = "general"
 
     var body: some View {
         TabView(selection: $tab) {
+            Tab("General", systemImage: "gearshape", value: "general") { GeneralSettings() }
             Tab("Accounts", systemImage: "person.crop.circle", value: "accounts") { AccountsSettings() }
             Tab("Engines", systemImage: "terminal", value: "engines") { EnginesSettings() }
             Tab("Key Bindings", systemImage: "keyboard", value: "keys") {
@@ -55,6 +56,29 @@ private struct SettingsPane<Content: View>: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct GeneralSettings: View {
+    @AppStorage(Appearance.storageKey) private var appearance = Appearance.fallback
+
+    var body: some View {
+        SettingsPane {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Appearance").font(.system(size: 13, weight: .semibold))
+                Picker("Appearance", selection: $appearance) {
+                    ForEach(Appearance.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                Text("System follows macOS and switches with it.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.secondaryText)
+            }
         }
     }
 }

@@ -151,9 +151,9 @@ Each phase ends with the app building, tests passing and the app usable.
     - Spec front matter gains `workers:` (role and display name per worker, in start order) and a version number. The parser, the Lead's prompt and spec validation handle it. Saving an edited spec makes a new version; the Lead reads your edits before starting anyone. Rejecting a spec records it, and your next message is the reason.
     - The Lead's model and effort (Low, Medium, High) per chat. The model is applied to the Lead's next turn; the effort is stored and applied once the Claude CLI flag for it is confirmed. Messages sent while the Lead works already queue on its session.
     - Chats with no stage of their own (no run, no request, Lead quiet) are Idle.
-5. **Theme and avatars.**
+5. **Theme and avatars (done).**
     - Replace `V4Style` with the tokens above, each with a dark and a light value.
-    - Remove the forced `.preferredColorScheme(.dark)`. Appearance (Dark, Light, System) lives in Settings › General.
+    - Remove the forced `.preferredColorScheme(.dark)`. Appearance (Dark, Light, System) lives in Settings › General. It defaults to Dark until the screens are restyled for light in phase 9, then to System.
     - Add the robot-face avatars by role from the canvas's Agent avatars page.
 6. **The new shell.**
     - Selection becomes chat-first, replacing `SidebarItem`, the per-project `tabs` and `leadSelections`, and `MainWindowNavigation.baseScreen`.

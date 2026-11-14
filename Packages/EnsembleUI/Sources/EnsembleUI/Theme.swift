@@ -2,22 +2,22 @@ import SwiftUI
 
 public enum Theme {
     public static let accent = Color(hex: 0x0A84FF)
-    public static let link = Color(hex: 0x64A8FF)
-    public static let windowBackground = Color(hex: 0x1A1A1E)
-    public static let canvas = Color(hex: 0x0B0D12)
-    public static let sidebarBackground = Color(hex: 0x2E2F34, opacity: 0.6)
+    public static let link = Tokens.link
+    public static let windowBackground = Tokens.window
+    public static let canvas = Tokens.desk
+    public static let sidebarBackground = Tokens.side
 
-    public static let primaryText = Color.white.opacity(0.92)
-    public static let secondaryText = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.65)
-    public static let tertiaryText = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.55)
+    public static let primaryText = Tokens.text
+    public static let secondaryText = Tokens.text2
+    public static let tertiaryText = Tokens.text3
 
-    public static let fill = Color.white.opacity(0.045)
-    public static let fillRaised = Color.white.opacity(0.07)
-    public static let fillSelected = Color.white.opacity(0.16)
-    public static let hairline = Color.white.opacity(0.08)
+    public static let fill = Tokens.fill
+    public static let fillRaised = Tokens.fill2
+    public static let fillSelected = Tokens.tabOn
+    public static let hairline = Tokens.hair
 
     public static let success = Color(hex: 0x30D158)
-    public static let successText = Color(hex: 0x4BD97B)
+    public static let successText = Tokens.done
     public static let warning = Color(hex: 0xFF9F0A)
     public static let info = Color(hex: 0x409CFF)
     public static let paused = Color(hex: 0xFFD60A)

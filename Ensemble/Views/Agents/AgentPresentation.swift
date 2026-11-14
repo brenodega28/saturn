@@ -40,12 +40,14 @@ extension Agent {
 struct RoleAppearance: Hashable {
     let palette: RolePalette
     let symbol: String
+    let face: RobotFace.Kind
 
-    static let claude = RoleAppearance(palette: .claude, symbol: "terminal")
+    static let claude = RoleAppearance(palette: .claude, symbol: "terminal", face: .cli)
 
-    init(palette: RolePalette, symbol: String) {
+    init(palette: RolePalette, symbol: String, face: RobotFace.Kind = .cli) {
         self.palette = palette
         self.symbol = symbol
+        self.face = face
     }
 
     init(role: RoleDefinition?) {
@@ -55,6 +57,7 @@ struct RoleAppearance: Hashable {
         }
         self.palette = RolePalette(rawValue: role.color) ?? .neutral
         self.symbol = Self.symbol(for: role.icon)
+        self.face = RobotFace.Kind(icon: role.icon)
     }
 
     static let iconChoices = ["terminal", "lead", "reviewer", "qa", "django", "react", "scrum", "sparkle"]
@@ -79,14 +82,10 @@ struct AgentAvatar: View {
     var size: CGFloat = 44
     var appearance: RoleAppearance = .claude
 
+    var isFailing = false
+
     var body: some View {
-        Image(systemName: appearance.symbol)
-            .font(.system(size: size * 0.45, weight: .medium))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(appearance.palette.gradient, in: .rect(cornerRadius: size * 0.3, style: .continuous))
-            .shadow(color: .black.opacity(0.35), radius: 8, y: 6)
-            .accessibilityHidden(true)
+        RobotFace(kind: appearance.face, size: size, isFailing: isFailing)
     }
 }
 

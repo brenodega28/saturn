@@ -3,25 +3,24 @@ import EnsembleUI
 import SwiftUI
 
 enum V4 {
-    static let container = Color(hex: 0x1A1A1E)
-    static let sidebarFill = Color(red: 46 / 255, green: 47 / 255, blue: 52 / 255).opacity(0.6)
-    static let logFill = Color(hex: 0x141417)
-    static let label = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255)
-    static let secondary = label.opacity(0.62)
-    static let selected = Color(hex: 0x0A84FF).opacity(0.24)
-    static let blue = Color(hex: 0x0A84FF)
-    static let link = Color(hex: 0x9CC6FF)
+    static let container = Tokens.window
+    static let sidebarFill = Tokens.side
+    static let label = Tokens.text
+    static let secondary = Tokens.text2
+    static let selected = Tokens.selection
+    static let blue = Tokens.accent
+    static let link = Tokens.link
     static let orange = Color(hex: 0xFF7A2F)
-    static let orangeText = Color(hex: 0xFF9A5C)
+    static let orangeText = Tokens.need
     static let onOrange = Color(hex: 0x1A0E05)
     static let green = Color(hex: 0x30D158)
-    static let greenText = Color(hex: 0x4BD97B)
+    static let greenText = Tokens.done
     static let onGreen = Color(hex: 0x04210D)
     static let red = Color(hex: 0xFF453A)
     static let stopFill = red.opacity(0.18)
     static let youGradient = LinearGradient(colors: [Color(hex: 0x8E96A8), Color(hex: 0x4D5466)], startPoint: .top, endPoint: .bottom)
-    static let denied = Color(hex: 0xFF8A80)
-    static let code = Color(hex: 0x111114)
+    static let denied = Tokens.stuck
+    static let code = Tokens.code
     static let leadGradient = LinearGradient(colors: [Color(hex: 0xBE86FF), Color(hex: 0x7B3FD9)], startPoint: .top, endPoint: .bottom)
     static let railsGradient = LinearGradient(colors: [Color(hex: 0x5B6475), Color(hex: 0x2F3542)], startPoint: .top, endPoint: .bottom)
     static let mono = "JetBrains Mono"

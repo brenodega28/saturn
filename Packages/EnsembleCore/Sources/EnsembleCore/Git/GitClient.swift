@@ -1,9 +1,12 @@
 import Foundation
 
 public struct GitClient: Sendable {
+    public typealias Executor = @Sendable ([String], String?) async throws -> CommandResult
+
     enum Transport: Sendable {
         case local(executable: URL, runner: CommandRunner)
         case ssh(SSHClient)
+        case executor(Executor, any ProjectFileSystem)
     }
 
     let transport: Transport
@@ -16,10 +19,15 @@ public struct GitClient: Sendable {
         transport = .ssh(client)
     }
 
+    public init(executor: @escaping Executor, fileSystem: any ProjectFileSystem) {
+        transport = .executor(executor, fileSystem)
+    }
+
     public var isRemote: Bool { sshClient != nil }
 
     public var fileSystem: any ProjectFileSystem {
-        sshClient.map { SSHFileSystem(client: $0) } ?? LocalFileSystem()
+        if case .executor(_, let fileSystem) = transport { return fileSystem }
+        return sshClient.map { SSHFileSystem(client: $0) } ?? LocalFileSystem()
     }
 
     public var sshClient: SSHClient? {
@@ -33,6 +41,8 @@ public struct GitClient: Sendable {
             return try await runner.run(executable, arguments, in: directory)
         case .ssh(let client):
             return try await client.run(arguments: ["git"] + arguments, in: directory?.path)
+        case .executor(let executor, _):
+            return try await executor(arguments, directory?.path)
         }
     }
 

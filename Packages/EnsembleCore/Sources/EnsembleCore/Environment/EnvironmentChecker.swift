@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ToolCheck: Sendable, Equatable {
+public enum ToolCheck: Sendable, Hashable, Codable {
     case found(path: URL, version: String)
     case missing
     case broken(path: URL, message: String)
@@ -18,7 +18,7 @@ public enum ToolCheck: Sendable, Equatable {
     }
 }
 
-public enum ProviderStatus: Sendable, Equatable {
+public enum ProviderStatus: Sendable, Hashable, Codable {
     case notChosen
     case apiKey(isStored: Bool)
     case claudeSignIn(account: String?, isSignedIn: Bool)
@@ -40,7 +40,7 @@ public enum ProviderStatus: Sendable, Equatable {
     }
 }
 
-public struct EnvironmentReport: Sendable, Equatable {
+public struct EnvironmentReport: Sendable, Hashable, Codable {
     public let git: ToolCheck
     public let claude: ToolCheck
     public let provider: ProviderStatus

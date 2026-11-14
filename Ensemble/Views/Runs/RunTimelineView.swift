@@ -173,7 +173,7 @@ struct AgentLink: View {
     let project: Project
 
     var body: some View {
-        let live = model.agents.session(for: agent)?.agent ?? agent
+        let live = model.connection.session(for: agent)?.agent ?? agent
         let status = model.displayStatus(of: live)
         Button {
             model.openAgentSession(agent, in: project)

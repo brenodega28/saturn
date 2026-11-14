@@ -60,20 +60,17 @@ struct ProjectState {
 final class AppModel {
     static let keychainService = "dev.monoliti.Ensemble"
 
-    let database: AppDatabase
-    let agents: AgentRuntime
-    let driver: AgentWorkflowDriver
-    let engine: RunEngine
-    let secrets: any SecretStore
+    let clientPaths: AppPaths
+    let daemonPaths: AppPaths
+    let connection: DaemonConnection
+    var connections: [DaemonID: DaemonConnection]
     let locator: ToolLocator
     let runner: CommandRunner
     let requests: ChatRequestFeed
-    let stallReporter: StallReporter
     let requestNotifier = RequestNotifier()
     let chatNotifications: ChatNotificationFeed
     let pendingPermissions: PendingPermissionFeed
     var runDetailIDs: [Int64: Int64] = [:]
-    let idleCleanup: IdleCleanupScheduler
     let planUsage = PlanUsagePoller()
     @ObservationIgnored private var planUsageActivationObserver: NSObjectProtocol?
 
@@ -115,7 +112,6 @@ final class AppModel {
     var workflowMenuAction: WorkflowMenuAction?
     let mainWindow = MainWindowNavigation()
     @ObservationIgnored var connectivity: ConnectivityMonitor?
-    let leadChat: LeadChat
     let pendingSends = PendingSends<PendingSendTarget>()
     var deliveringSends: [HeldSend] = []
 
@@ -140,33 +136,26 @@ final class AppModel {
     var remoteStatuses: [Int64: RemoteProjectStatus] = [:]
     var remoteFileSyncs: [Int64: Task<Void, Error>] = [:]
     var remoteHostInfos: [String: RemoteHostInfo] = [:]
-    var remoteTunnels: [String: RemoteTunnel] = [:]
-    var remoteTunnelOpenings: [String: Task<Int, Error>] = [:]
     var alert: AppAlert?
     var chatHighlight: ChatLink?
 
-    init(database: AppDatabase, paths: AppPaths, secrets: any SecretStore, locator: ToolLocator = ToolLocator()) {
-        self.database = database
-        let storedMode = UserDefaults.standard.string(forKey: Self.providerModeKey).flatMap(ProviderMode.init(rawValue:))
-        self.providerMode = storedMode
-        let agents = AgentRuntime(database: database, paths: paths, secrets: secrets, providerMode: storedMode)
-        self.agents = agents
-        self.secrets = secrets
+    init(connection: DaemonConnection, clientPaths: AppPaths, daemonPaths: AppPaths, locator: ToolLocator = ToolLocator()) {
+        self.connection = connection
+        self.daemonPaths = daemonPaths
+        self.connections = [connection.id: connection]
+        self.clientPaths = clientPaths
+        self.providerMode = UserDefaults.standard.string(forKey: Self.providerModeKey).flatMap(ProviderMode.init(rawValue:))
         self.locator = locator
         self.runner = CommandRunner(environment: locator.environment())
-        let driver = AgentWorkflowDriver(runtime: agents)
-        self.driver = driver
-        self.engine = RunEngine(database: database, driver: driver)
-        self.leadChat = LeadChat(runtime: agents, engine: engine, driver: driver)
-        self.requests = ChatRequestFeed(database: database)
-        self.stallReporter = StallReporter(database: database)
-        self.chatNotifications = ChatNotificationFeed(database: database)
-        self.pendingPermissions = PendingPermissionFeed(database: database)
-        self.idleCleanup = IdleCleanupScheduler(runtime: agents)
-        driver.gitProvider = { [weak self] in self?.git }
-        connectWorkspaces()
-        connectAppRunners()
+        self.requests = ChatRequestFeed(database: connection.database)
+        self.chatNotifications = ChatNotificationFeed(database: connection.database)
+        self.pendingPermissions = PendingPermissionFeed(database: connection.database)
+        connection.onError = { [weak self] title, error in
+            self?.alert = AppAlert(title: title, message: error.localizedDescription)
+        }
+        connection.onEvent = { [weak self] event in self?.receive(event) }
         restoreNavigation()
+        observeReplica()
         CommandRegistry.shared.registerChatLinkCommands()
         planUsageActivationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
@@ -175,8 +164,53 @@ final class AppModel {
         }
     }
 
+    var database: AppDatabase { connection.database }
+
+    var live: LiveState { connection.live }
+
+    private func observeReplica() {
+        withObservationTracking {
+            _ = connection.revision
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.reloadProjects()
+                self.observeReplica()
+            }
+        }
+    }
+
+    func send<C: DaemonCommand>(_ command: C) async throws -> C.Response {
+        try await connection.send(command)
+    }
+
+    func dispatch<C: DaemonCommand>(_ failureTitle: String, _ command: C) {
+        connection.perform(failureTitle, command)
+    }
+
+    @discardableResult
+    func command<C: DaemonCommand>(_ failureTitle: String, _ command: C) async -> C.Response? {
+        do {
+            return try await connection.send(command)
+        } catch {
+            alert = AppAlert(title: failureTitle, message: error.localizedDescription)
+            return nil
+        }
+    }
+
+    private func receive(_ event: DaemonEvent) {
+        switch event {
+        case .worktreeRemoving(let path):
+            Task { await stopApp(runningIn: URL(fileURLWithPath: path, isDirectory: true)) }
+        case .leadTurnEnded(let taskId):
+            chatNotifications.leadTurnEnded(taskId: taskId)
+        case .agentReplied, .shuttingDown:
+            break
+        }
+    }
+
     var git: GitClient? {
-        guard case .found(let path, _) = environment?.git else { return nil }
+        guard let path = locator.locate("git") else { return nil }
         return GitClient(executable: path, runner: runner)
     }
 
@@ -249,60 +283,52 @@ final class AppModel {
 
     func launch() async {
         reloadProjects()
-        perform("Couldn’t recover agents") { try agents.recoverAfterLaunch() }
-        do {
-            try await driver.ensureServer()
-        } catch {
-            alert = AppAlert(title: "Couldn’t start Ensemble’s agent tools", message: error.localizedDescription)
-        }
+        await migrateSettingsToDaemon()
         await checkEnvironment()
         updatePlanUsagePolling()
-        perform("Couldn’t recover runs") { try engine.recover() }
-        engine.startOrphanWatchdog()
-        await deleteAgentsOfClosedRequests()
         startRequests()
-        startBudgetMonitor()
-        startStallWatch()
-        startMemoryUpdates()
-        idleCleanup.start()
         await refreshAllProjects()
-        startWeeklySummaries()
         startRemoteFileSync()
         connectivity = ConnectivityMonitor { [weak self] offline in self?.isOffline = offline }
     }
 
-    func pauseAllAgents(in project: Project) {
-        guard let id = project.id else { return }
-        perform("Couldn’t pause the agents") { _ = try agents.pauseAll(inProject: id) }
+    private static let settingsMigratedKey = "daemon.settingsMigrated"
+
+    private func migrateSettingsToDaemon() async {
+        let migratedKey = "\(Self.settingsMigratedKey).\(connection.id.uuidString.lowercased())"
+        guard !UserDefaults.standard.bool(forKey: migratedKey),
+              let settings = try? await send(SettingsCommands.Get()) else { return }
+        if settings.providerMode == nil, let mode = providerMode {
+            _ = try? await send(SettingsCommands.SetProviderMode(mode: mode))
+        }
+        if settings.globalMonthlyBudgetUSD == nil, settings.globalWeeklyBudgetUSD == nil, globalMonthlyBudget != nil || globalWeeklyBudget != nil {
+            _ = try? await send(SettingsCommands.SetBudgets(monthlyUSD: globalMonthlyBudget, weeklyUSD: globalWeeklyBudget))
+        }
+        UserDefaults.standard.set(true, forKey: migratedKey)
     }
 
-    func startWeeklySummaries() {
-        Task { [weak self] in
-            while let self, !Task.isCancelled {
-                for project in self.openProjects {
-                    _ = try? WeeklySummary.postIfDue(for: project, database: self.database)
-                }
-                _ = try? self.engine.postApprovalReminders()
-                try? await Task.sleep(for: .seconds(3600))
-            }
-        }
+    func pauseAllAgents(in project: Project) {
+        guard let id = project.id else { return }
+        dispatch("Couldn’t pause the agents", AgentCommands.PauseAll(projectID: id))
     }
 
     func checkEnvironment() async {
         isCheckingEnvironment = true
         defer { isCheckingEnvironment = false }
-        let report = await EnvironmentChecker(locator: locator, runner: runner, secrets: secrets, mode: providerMode).check()
-        environment = report
-        agents.claudeExecutable = report.claude.isOK ? report.claude.path : nil
-        agents.processEnvironment = locator.environment()
+        guard let daemonEnvironment = try? await send(SettingsCommands.CheckEnvironment()) else { return }
+        environment = daemonEnvironment.report
+        if let mode = daemonEnvironment.providerMode, providerMode != mode {
+            providerMode = mode
+            UserDefaults.standard.set(mode.rawValue, forKey: Self.providerModeKey)
+        }
     }
 
     private static let providerModeKey = "providerMode"
 
     func chooseProvider(_ mode: ProviderMode) async {
         providerMode = mode
-        agents.providerMode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: Self.providerModeKey)
+        await command("Couldn’t change how agents sign in", SettingsCommands.SetProviderMode(mode: mode))
         updatePlanUsagePolling()
         await checkEnvironment()
     }
@@ -325,23 +351,22 @@ final class AppModel {
     }
 
     var weeklySpend: Double {
-        _ = agents.usageRevision
+        _ = connection.usageRevision
         let start = UsagePeriod.week.displayedStart(at: .now, countingSince: usageResetPoint) ?? .now
         return (try? database.spend(since: start)) ?? 0
     }
 
-    func agentSessions(in project: Project) -> [AgentSession] {
+    func agentSessions(in project: Project) -> [LiveAgentSession] {
         guard let id = project.id else { return [] }
-        _ = agents.usageRevision
-        return (try? agents.sessions(inProject: id)) ?? []
+        return (try? connection.sessions(inProject: id)) ?? []
     }
 
-    func selectedAgent(in project: Project) -> AgentSession? {
+    func selectedAgent(in project: Project) -> LiveAgentSession? {
         guard let projectID = project.id, let agentID = selectedAgents[projectID] else { return nil }
         return agentSessions(in: project).first { $0.id == agentID }
     }
 
-    func select(_ session: AgentSession?, in project: Project) {
+    func select(_ session: LiveAgentSession?, in project: Project) {
         guard let projectID = project.id else { return }
         selectedAgents[projectID] = session?.id
         if session != nil { setTab(.agents, for: project) }
@@ -360,18 +385,7 @@ final class AppModel {
 
     func reloadConfig(for project: Project) {
         guard let id = project.id else { return }
-        let config = ProjectConfigLoader.load(repository: project.filesRoot)
-        configs[id] = config
-        reportMigration(RoleMigration.takeNotices(for: project.filesRoot), in: project)
-    }
-
-    private func reportMigration(_ notices: [MigrationNotice], in project: Project) {
-        guard let id = project.id, !notices.isEmpty else { return }
-        let body = "Roles are now built-in Lead, Builder and Checker agents. Ensemble updated this project:\n\n"
-            + notices.map { "- \($0.file): \($0.message)" }.joined(separator: "\n")
-        _ = try? database.createChatRequest(ChatRequest(
-            projectId: id, kind: .notice, title: "\(project.name) moved from roles to agent kinds", body: body, createdAt: .now
-        ))
+        configs[id] = ProjectConfigLoader.load(repository: project.filesRoot)
     }
 
     func reloadAllConfigs() {
@@ -382,10 +396,11 @@ final class AppModel {
     }
 
     func installDefaultConfig(in project: Project) {
-        perform("Couldn’t add the default workflows") {
-            try ProjectConfigLoader.installDefaults(repository: project.filesRoot)
+        guard let id = project.id else { return }
+        Task {
+            await command("Couldn’t add the default workflows", ProjectCommands.InstallDefaults(projectID: id))
+            reloadConfig(for: project)
         }
-        reloadConfig(for: project)
     }
 
     func role(for agent: Agent, in project: Project) -> RoleDefinition? {
@@ -403,39 +418,27 @@ final class AppModel {
 
     func agentNames(for base: String, count: Int, in project: Project) -> [String] {
         guard let id = project.id else { return [] }
-        _ = agents.usageRevision
-        return (try? agents.agentNames(for: base, count: count, inProject: id)) ?? []
+        let existing = ((try? database.agents(inProject: id)) ?? []).map(\.name)
+        return AgentNaming.names(base: base, count: count, existing: existing)
     }
 
     func spawnAgents(in project: Project, kind: AgentKind, count: Int, name: String, model: String, skills: [String], pinned: Bool, task: String) async throws {
-        guard let git = project.isRemote ? git(for: project) : requireGit() else { return }
-        let sessions = try await agents.spawn(
-            in: project,
-            kind: kind,
-            count: count,
-            git: git,
-            pinned: pinned,
-            name: name,
-            model: model,
-            task: task,
-            skills: skills
-        )
-        if sessions.count == 1 {
-            select(sessions.first, in: project)
+        guard let projectID = project.id else { return }
+        let ids = try await send(AgentCommands.Spawn(
+            projectID: projectID, kind: kind, count: count, name: name, model: model, skills: skills, pinned: pinned, task: task
+        ))
+        if ids.count == 1, let id = ids.first {
+            select(connection.session(agentID: id), in: project)
         }
         await refresh(project)
     }
 
     func updateSettings(_ settings: ProjectSettings, for project: Project) {
         guard let id = project.id else { return }
-        perform("Couldn’t save project settings") {
-            try database.updateSettings(settings, forProject: id)
-        }
-        reloadProjects()
-        agents.startQueuedTurns(inProject: id)
+        dispatch("Couldn’t save project settings", ProjectCommands.UpdateSettings(projectID: id, settings: settings))
     }
 
-    func runs(for sessions: [AgentSession]) -> [Run] {
+    func runs(for sessions: [LiveAgentSession]) -> [Run] {
         let ids = Array(Set(sessions.compactMap(\.agent.runId)))
         return (try? database.runs(withIDs: ids)) ?? []
     }
@@ -444,10 +447,9 @@ final class AppModel {
         openProjects.first { $0.id == id }
     }
 
-    func deleteAgent(_ session: AgentSession, in project: Project, deleteBranch: Bool) async {
-        guard let git = project.isRemote ? git(for: project) : requireGit() else { return }
+    func deleteAgent(_ session: LiveAgentSession, in project: Project, deleteBranch: Bool) async {
         do {
-            try await agents.delete(session, in: project, git: git, deleteBranch: deleteBranch)
+            try await send(AgentCommands.Delete(agentID: session.id, deleteBranch: deleteBranch))
             if selectedAgent(in: project)?.id == session.id { select(nil, in: project) }
         } catch {
             alert = AppAlert(title: "Couldn’t delete \(displayName(of: session.agent, in: project))", message: error.localizedDescription)
@@ -458,63 +460,64 @@ final class AppModel {
     func saveAPIKey(_ key: String) async {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        perform("Couldn’t save the API key") { try secrets.write(trimmed, for: .anthropicAPIKey) }
+        await command("Couldn’t save the API key", SettingsCommands.SaveAPIKey(key: trimmed))
         await checkEnvironment()
     }
 
     func removeAPIKey() async {
-        perform("Couldn’t remove the API key") { try secrets.delete(.anthropicAPIKey) }
+        await command("Couldn’t remove the API key", SettingsCommands.RemoveAPIKey())
         await checkEnvironment()
     }
 
     func openFolder(_ url: URL) async {
-        guard let git = requireGit() else { return }
         do {
-            let root = try await git.repositoryRoot(containing: url)
-            let project = try database.openProject(at: root)
+            let project = try await send(ProjectCommands.Open(path: url.path))
             reloadProjects()
             if let id = project.id {
                 selection = .project(id)
             }
             await refresh(project)
-        } catch is CommandError {
-            alert = AppAlert(title: "Not a git repository", message: "\(url.path) isn’t inside a git repository. Ensemble needs git to give each agent its own worktree.")
         } catch {
             alert = AppAlert(title: "Couldn’t open \(url.lastPathComponent)", message: error.localizedDescription)
         }
     }
 
     func clone(_ remote: String, into parent: URL, folderName: String) async throws {
-        guard let git = requireGit() else { return }
         let destination = parent.appending(path: folderName, directoryHint: .isDirectory)
         guard !FileManager.default.fileExists(atPath: destination.path) else {
             throw CloneError.destinationExists(destination)
         }
         activeClones[remote] = .now
         defer { activeClones[remote] = nil }
-        try await git.clone(remote, to: destination)
-        await openFolder(destination)
+        let project = try await send(ProjectCommands.Clone(remote: remote, destination: destination.path))
+        reloadProjects()
+        if let id = project.id { selection = .project(id) }
+        await refresh(project)
     }
 
     func close(_ project: Project) {
         guard let id = project.id else { return }
-        perform("Couldn’t close \(project.name)") { try database.closeProject(id: id) }
         projectStates[id] = nil
         remoteStatuses[id] = nil
         if let runner = appRunners[id] { Task { await runner.stop() } }
-        reloadProjects()
-        if selection == .project(id) {
-            selection = openProjects.first?.id.map(SidebarItem.project)
+        Task {
+            await command("Couldn’t close \(project.name)", ProjectCommands.Close(projectID: id))
+            reloadProjects()
+            if selection == .project(id) {
+                selection = openProjects.first?.id.map(SidebarItem.project)
+            }
         }
     }
 
     func forgetRecent(_ project: Project) {
         guard let id = project.id else { return }
-        perform("Couldn’t remove \(project.name)") { try database.forgetProject(id: id) }
-        if project.isRemote {
-            try? FileManager.default.removeItem(at: RemoteMirror.location(forProject: id).directory.deletingLastPathComponent())
+        Task {
+            await command("Couldn’t remove \(project.name)", ProjectCommands.Forget(projectID: id))
+            if project.isRemote {
+                try? FileManager.default.removeItem(at: RemoteMirror.location(forProject: id).directory.deletingLastPathComponent())
+            }
+            reloadProjects()
         }
-        reloadProjects()
     }
 
     func refreshAllProjects() async {
@@ -528,19 +531,16 @@ final class AppModel {
             await refreshRemote(project)
             return
         }
-        guard let id = project.id, let git else { return }
-        guard FileManager.default.fileExists(atPath: project.path) else {
-            alert = AppAlert(title: "\(project.name) is missing", message: "\(project.path) no longer exists. It has been closed.")
-            close(project)
-            return
-        }
-        let manager = WorktreeManager(repository: project.url, git: git)
+        guard let id = project.id else { return }
         do {
-            let recovery = try await manager.recover()
-            let branch = try await git.currentBranch(in: project.url)
-            projectStates[id] = ProjectState(branch: branch, worktrees: recovery.worktrees, recovery: recovery)
+            let status = try await send(ProjectCommands.Refresh(projectID: id))
+            if status.missing {
+                alert = AppAlert(title: "\(project.name) is missing", message: "\(project.path) no longer exists. It has been closed.")
+                close(project)
+                return
+            }
+            projectStates[id] = ProjectState(branch: status.branch, worktrees: status.recovery.worktrees, recovery: status.recovery)
             reloadConfig(for: project)
-            _ = try? CheckSetupNotice.postIfNeeded(for: project, config: config(for: project), database: database)
         } catch {
             alert = AppAlert(title: "Couldn’t read worktrees for \(project.name)", message: error.localizedDescription)
         }
@@ -552,11 +552,9 @@ final class AppModel {
         let host = remoteHost(destination)
         do {
             let info = try await host.probe()
-            let manager = await remoteWorktreeManager(for: project, destination: destination)
-            let recovery = try await manager.recover()
-            let branch = try await host.currentBranch(in: project.path)
-            projectStates[id] = ProjectState(branch: branch, worktrees: recovery.worktrees, recovery: recovery)
-            if let destination = project.host { remoteHostInfos[destination] = info }
+            let status = try await send(ProjectCommands.Refresh(projectID: id))
+            projectStates[id] = ProjectState(branch: status.branch, worktrees: status.recovery.worktrees, recovery: status.recovery)
+            remoteHostInfos[destination] = info
             try await pullRemoteFiles(project)
             remoteStatuses[id] = RemoteProjectStatus(info: info, filesPulledAt: .now)
         } catch {
@@ -565,8 +563,8 @@ final class AppModel {
     }
 
     func createWorktree(in project: Project, agent: String, slug: String) async throws {
-        guard let manager = await worktreeManager(for: project) else { return }
-        try await manager.create(agent: agent, slug: slug)
+        guard let id = project.id else { return }
+        try await send(ProjectCommands.CreateWorktree(projectID: id, agent: agent, slug: slug))
         await refresh(project)
     }
 
@@ -576,30 +574,19 @@ final class AppModel {
     }
 
     func removeWorktree(_ worktree: Worktree, in project: Project, force: Bool, deleteBranch: Bool) async throws {
-        guard let manager = await worktreeManager(for: project) else { return }
+        guard let id = project.id else { return }
         await stopApp(runningIn: worktree.path)
-        try await manager.remove(worktree, force: force, deleteBranch: deleteBranch)
+        try await send(ProjectCommands.RemoveWorktree(projectID: id, path: worktree.path.path, force: force, deleteBranch: deleteBranch))
         await refresh(project)
     }
 
     func deleteOrphanedDirectory(_ directory: URL, in project: Project) async {
-        guard let manager = await worktreeManager(for: project) else { return }
-        do {
-            try await manager.deleteOrphanedDirectory(directory)
-        } catch {
-            alert = AppAlert(title: "Couldn’t delete \(directory.lastPathComponent)", message: error.localizedDescription)
-        }
+        guard let id = project.id else { return }
+        await command("Couldn’t delete \(directory.lastPathComponent)", ProjectCommands.DeleteOrphanedDirectory(projectID: id, path: directory.path))
         await refresh(project)
     }
 
-    private func worktreeManager(for project: Project) async -> WorktreeManager? {
-        if let destination = project.host {
-            return await remoteWorktreeManager(for: project, destination: destination)
-        }
-        return requireGit().map { WorktreeManager(repository: project.url, git: $0) }
-    }
-
-    private func requireGit() -> GitClient? {
+    func requireGit() -> GitClient? {
         if git == nil {
             alert = AppAlert(title: "git isn’t available", message: "Ensemble couldn’t find git. Install the Xcode Command Line Tools and check again.")
         }

@@ -43,6 +43,8 @@ public struct DaemonEnvironment: Codable, Sendable, Hashable {
     public var hostName: String
     public var homeDirectory: String
     public var fileVaultOn: Bool?
+    public var report: EnvironmentReport?
+    public var processEnvironment: [String: String] = [:]
 
     public init(
         gitPath: String? = nil, claudePath: String? = nil, claudeProblem: String? = nil, gitProblem: String? = nil,
@@ -79,4 +81,12 @@ public struct LiveState: Codable, Sendable, Hashable {
     }
 
     public var activeRunCount: Int { drivingRunIDs.count }
+}
+
+extension SetupRecord {
+    public static func decoded(from data: Data) -> SetupRecord? {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(SetupRecord.self, from: data)
+    }
 }

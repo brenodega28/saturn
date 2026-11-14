@@ -68,6 +68,11 @@ extension EnsembleHost {
             _ = try? await refresh(project)
             return project
         }
+        router.register(ProjectCommands.OpenRemote.self) { [unowned self] command in
+            let host = RemoteHost(client: SSHClient(destination: command.host, runner: runner))
+            let root = try await host.repositoryRoot(containing: command.path)
+            return try database.openRemoteProject(path: root, host: command.host)
+        }
         router.register(ProjectCommands.Clone.self) { [unowned self] command in
             let destination = URL(fileURLWithPath: command.destination, isDirectory: true)
             guard !FileManager.default.fileExists(atPath: destination.path) else {
@@ -96,6 +101,10 @@ extension EnsembleHost {
         }
         router.register(ProjectCommands.Refresh.self) { [unowned self] command in
             try await refresh(try requireProject(command.projectID))
+        }
+        router.register(ProjectCommands.CheckHarness.self) { [unowned self] command in
+            let project = try requireProject(command.projectID)
+            return try await runtime.checkHarness(of: project, git: try requireGit(for: project))
         }
         router.register(ProjectCommands.InstallDefaults.self) { [unowned self] command in
             let project = try requireProject(command.projectID)
@@ -132,6 +141,10 @@ extension EnsembleHost {
         let recovery = try await manager.recover()
         let branch = try await requireGit(for: project).currentBranch(in: project.url)
         if project.host == nil {
+            if let id = project.id, let claude = runtime.claudeExecutable,
+               let plugins = try? await SkillPluginInstaller(claude: claude, runner: runner).projectPlugins(in: project.url) {
+                pluginSkillCache[id] = Set(plugins.flatMap(\.skills))
+            }
             let config = ProjectConfigLoader.load(repository: project.filesRoot)
             reportMigration(RoleMigration.takeNotices(for: project.filesRoot), in: project)
             _ = try? CheckSetupNotice.postIfNeeded(for: project, config: config, database: database)
@@ -304,6 +317,20 @@ extension EnsembleHost {
         router.register(RunCommands.Push.self) { [unowned self] command in
             try await engine.push(try requireRun(command.runID))
         }
+        router.register(RunCommands.DiffSummary.self) { [unowned self] command in
+            await driver.diffInfo(try requireRun(command.runID))
+        }
+        router.register(RunCommands.AskToCombine.self) { [unowned self] command in
+            try await driver.askToCombine(command.conflict, in: try requireRun(command.runID))
+        }
+        router.register(RunCommands.KeepBranch.self) { [unowned self] command in
+            try await driver.keep(command.winner, resolving: command.conflict, in: try requireRun(command.runID))
+            return Done()
+        }
+        router.register(RunCommands.StageForMergeTool.self) { [unowned self] command in
+            let staged = try await driver.stageForMergeTool(command.conflict, in: try requireRun(command.runID))
+            return StagedMerge(worktree: staged.worktree.path, files: staged.files)
+        }
     }
 
     private func registerAgentCommands() {
@@ -462,6 +489,59 @@ extension EnsembleHost {
             let project = try requireProject(command.projectID)
             let output = try await requireGit(for: project).run(["ls-files", "--cached", "--others", "--exclude-standard"], in: project.url)
             return output.split(separator: "\n").map(String.init)
+        }
+        router.register(CodeCommands.UpdatePin.self) { [unowned self] command in
+            guard try database.updatePin(id: command.pinID, status: command.status, response: command.response) != nil else { throw CommandFailure.notFound("The pin") }
+            return Done()
+        }
+        router.register(CodeCommands.CreateComment.self) { [unowned self] command in
+            try database.createComment(
+                runId: command.runID, branchAgentId: command.branchAgentID, file: command.file, side: command.side,
+                startLine: command.startLine, endLine: command.endLine, text: command.text
+            )
+            return Done()
+        }
+        router.register(CodeCommands.UpdateComment.self) { [unowned self] command in
+            guard try database.updateComment(id: command.pinID, text: command.text) != nil else { throw CommandFailure.notFound("The comment") }
+            return Done()
+        }
+        router.register(CodeCommands.DeletePin.self) { [unowned self] command in
+            _ = try database.deletePin(id: command.pinID)
+            return Done()
+        }
+        router.register(CodeCommands.ApproveOpenPins.self) { [unowned self] command in
+            try database.approveOpenPins(runId: command.runID)
+        }
+        router.register(CodeCommands.SetViewed.self) { [unowned self] command in
+            try database.setViewed(command.viewed, runId: command.runID, path: command.path, fingerprint: command.fingerprint)
+            return Done()
+        }
+        router.register(CodeCommands.EncodeCorrection.self) { [unowned self] command in
+            guard let correction = try await database.writer.read({ db in try Correction.fetchOne(db, id: command.correctionID) }) else {
+                throw CommandFailure.notFound("The correction")
+            }
+            let project = try requireProject(correction.projectId)
+            try await database.encode(correction, as: command.encoding, repository: project.url, git: try requireGit(for: project), files: project.filesRoot)
+            return Done()
+        }
+        router.register(CodeCommands.Exec.self) { [unowned self] command in
+            let project = try requireProject(command.projectID)
+            let directory = command.directory.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            return ExecResult(try await requireGit(for: project).execute(command.arguments, in: directory))
+        }
+        router.register(CodeCommands.FileExists.self) { command in
+            FileManager.default.fileExists(atPath: command.path)
+        }
+        router.register(CodeCommands.CreateDirectory.self) { command in
+            try FileManager.default.createDirectory(atPath: command.path, withIntermediateDirectories: true)
+            return Done()
+        }
+        router.register(CodeCommands.Subdirectories.self) { command in
+            try await LocalFileSystem().subdirectories(of: URL(fileURLWithPath: command.path, isDirectory: true)).map(\.path)
+        }
+        router.register(CodeCommands.RemoveItem.self) { command in
+            try FileManager.default.removeItem(atPath: command.path)
+            return Done()
         }
         router.register(CodeCommands.Git.self) { [unowned self] command in
             let project = try requireProject(command.projectID)

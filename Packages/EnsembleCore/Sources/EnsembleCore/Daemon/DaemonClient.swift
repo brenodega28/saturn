@@ -39,6 +39,11 @@ public enum DaemonTransport: Sendable {
     }
 }
 
+public enum FileStreamEvent: Sendable {
+    case data(Data)
+    case caughtUp
+}
+
 public enum DaemonConnectionState: Sendable, Equatable {
     case idle
     case connecting
@@ -66,11 +71,12 @@ public final class DaemonClient {
     public private(set) var lastError: String?
     @ObservationIgnored public var onEvent: (@MainActor (DaemonEvent) -> Void)?
     @ObservationIgnored public var onReplicaReady: (@MainActor (ReplicaDatabase) -> Void)?
-    @ObservationIgnored public var backoff: [Duration] = [.milliseconds(250), .milliseconds(500), .seconds(1), .seconds(2), .seconds(5), .seconds(10)]
+    @ObservationIgnored public var commandConnectTimeout: Duration = .seconds(15)
+    @ObservationIgnored public var backoff:[Duration] = [.milliseconds(250), .milliseconds(500), .seconds(1), .seconds(2), .seconds(5), .seconds(10)]
     @ObservationIgnored private var channel: LineChannel?
     @ObservationIgnored private var process: Process?
     @ObservationIgnored private var pending: [UUID: CheckedContinuation<ResultEnvelope, Error>] = [:]
-    @ObservationIgnored private var files: [UUID: AsyncThrowingStream<Data, Error>.Continuation] = [:]
+    @ObservationIgnored private var files: [UUID: AsyncThrowingStream<FileStreamEvent, Error>.Continuation] = [:]
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var connectedWaiters: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored private var isRunning = false
@@ -123,7 +129,10 @@ public final class DaemonClient {
 
     public func send<C: DaemonCommand>(_ command: C) async throws -> C.Response {
         let envelope = try CommandCoding.envelope(command)
-        guard let channel, state == .connected || state == .syncing else {
+        if state != .connected, isRunning {
+            try? await waitUntilConnected(timeout: commandConnectTimeout)
+        }
+        guard let channel, state == .connected else {
             throw ChannelError.system("Not connected to the Ensemble daemon\(identity.map { " on \($0.name)" } ?? "").")
         }
         let result: ResultEnvelope = try await withCheckedThrowingContinuation { continuation in
@@ -139,6 +148,23 @@ public final class DaemonClient {
     }
 
     public func file(_ kind: FileKind, id: String, offset: Int64 = 0, follow: Bool = false) -> AsyncThrowingStream<Data, Error> {
+        let events = fileEvents(kind, id: id, offset: offset, follow: follow)
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await event in events {
+                        if case .data(let data) = event { continuation.yield(data) }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    public func fileEvents(_ kind: FileKind, id: String, offset: Int64 = 0, follow: Bool = false) -> AsyncThrowingStream<FileStreamEvent, Error> {
         let request = FileRequest(kind: kind, id: id, offset: offset, follow: follow)
         return AsyncThrowingStream { continuation in
             guard let channel else {
@@ -259,7 +285,8 @@ public final class DaemonClient {
             pending.removeValue(forKey: result.id)?.resume(returning: result)
         case .fileChunk(let chunk):
             guard let continuation = files[chunk.requestID] else { return }
-            if !chunk.data.isEmpty { continuation.yield(chunk.data) }
+            if !chunk.data.isEmpty { continuation.yield(.data(chunk.data)) }
+            if chunk.caughtUp { continuation.yield(.caughtUp) }
             if chunk.end {
                 files[chunk.requestID] = nil
                 if let error = chunk.error {

@@ -67,7 +67,8 @@ func serve(paths: AppPaths) async -> Never {
         host = try await EnsembleHost.start(paths: paths, secrets: KeychainSecretStore(service: "dev.monoliti.Ensemble"))
     } catch let error as InstanceLockError {
         if case .alreadyRunning = error {
-            fail("Another ensembled is already serving \(paths.root.path). \(error.localizedDescription)", code: Exit.alreadyRunning)
+            let underLaunchd = ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] == "dev.monoliti.ensembled"
+            fail("Another ensembled is already serving \(paths.root.path). \(error.localizedDescription)", code: underLaunchd ? 0 : Exit.alreadyRunning)
         }
         fail(error.localizedDescription)
     } catch {

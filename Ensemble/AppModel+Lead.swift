@@ -20,13 +20,13 @@ extension AppModel {
 
     func activeLeadRuns(in project: Project) -> [Run] {
         guard let id = project.id else { return [] }
-        return Run.leadOrdering(engine.activeRuns(projectID: id))
+        return Run.leadOrdering(connection.activeRuns(projectID: id))
     }
 
     func leadRequests(in project: Project) -> [Chat] {
         guard let id = project.id else { return [] }
-        _ = engine.runs
-        _ = engine.holds
+        _ = connection.revision
+        _ = connection.revision
         _ = leadChatRevision
         return (try? database.leadRequests(projectId: id)) ?? []
     }
@@ -46,21 +46,13 @@ extension AppModel {
 
     func requestHasActiveRun(_ task: Chat) -> Bool {
         guard let id = task.id else { return false }
-        _ = engine.runs
-        return ((try? database.runs(taskId: id)) ?? []).contains { run in (run.id.flatMap { engine.runs[$0] } ?? run).isActive }
+        _ = connection.revision
+        return ((try? database.runs(taskId: id)) ?? []).contains { run in (run).isActive }
     }
 
     func closeRequest(_ task: Chat, as reason: RequestCloseReason, in project: Project) async {
-        guard let git = git(for: project) else {
-            alert = AppAlert(title: "git isn’t available", message: "Ensemble couldn’t find git. Install the Xcode Command Line Tools and check again.")
-            return
-        }
-        do {
-            _ = try await leadChat.close(task, as: reason, in: project, git: git)
-        } catch {
-            alert = AppAlert(title: "Couldn’t close the request", message: error.localizedDescription)
-            return
-        }
+        guard let chatID = task.id else { return }
+        guard await command("Couldn’t close the request", ChatCommands.Close(chatID: chatID, reason: reason)) != nil else { return }
         leadChatRevision += 1
         if selectedAgent(in: project) == nil { select(nil, in: project) }
         guard let projectID = project.id else { return }
@@ -68,16 +60,9 @@ extension AppModel {
         leadSelections[projectID] = next?.id.map(LeadSelection.request) ?? .newRequest
     }
 
-    func deleteAgentsOfClosedRequests() async {
-        for project in openProjects {
-            guard let git = git(for: project) else { continue }
-            await leadChat.deleteAgentsOfClosedRequests(in: project, git: git)
-        }
-    }
-
     func latestRun(of task: Chat) -> Run? {
         guard let id = task.id, let run = (try? database.runs(taskId: id))?.last else { return nil }
-        return run.id.flatMap { engine.runs[$0] } ?? run
+        return run
     }
 
     func showRun(_ run: Run) {
@@ -108,7 +93,7 @@ extension AppModel {
 
     func markViewed(_ chat: Chat) {
         guard let id = chat.id else { return }
-        try? database.markViewed(chatId: id)
+        connection.perform("Couldn’t mark the chat as read", ChatCommands.MarkViewed(chatID: id))
     }
 
     func showRequestPage(inProjectID id: Int64) {
@@ -136,13 +121,12 @@ extension AppModel {
         return latestRun.isActive ? (currentStepTitle(of: latestRun) ?? label) : label
     }
 
-    func leadSession(for task: Chat) -> AgentSession? {
-        leadChat.leadSession(for: task)
+    func leadSession(for task: Chat) -> LiveAgentSession? {
+        connection.leadSession(for: task)
     }
 
-    func workingSessions(for task: Chat) -> [AgentSession] {
-        _ = agents.usageRevision
-        return leadChat.workingSessions(for: task)
+    func workingSessions(for task: Chat) -> [LiveAgentSession] {
+        connection.workingSessions(for: task)
     }
 
     func leadSendTarget(for request: Chat?, in project: Project) -> PendingSendTarget? {
@@ -170,13 +154,14 @@ extension AppModel {
     @discardableResult
     func sendLeadMessage(_ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, to request: Chat?, in project: Project) async -> Bool {
         do {
-            if let request {
-                try await leadChat.send(text, attachments: attachments, to: request, in: project)
+            if let request, let chatID = request.id {
+                try await send(ChatCommands.Send(chatID: chatID, text: text, attachments: attachments))
             } else {
+                guard let projectID = project.id else { return false }
                 let options = newChatOptions(for: project)
-                let request = try await leadChat.createRequest(
-                    text, attachments: attachments, in: project, workflow: options.workflow, leadModel: options.model, leadEffort: options.effort
-                )
+                let request = try await send(ChatCommands.Create(
+                    projectID: projectID, text: text, attachments: attachments, workflow: options.workflow, leadModel: options.model, leadEffort: options.effort
+                ))
                 if selectedRequest(in: project) == nil {
                     showRequest(request)
                 }
@@ -194,37 +179,33 @@ extension AppModel {
             alert = AppAlert(title: "Couldn’t start the run", message: "This request is closed. Send a message to reopen it first.")
             return
         }
+        guard let messageID = proposal.id else { return }
         do {
             try ensureWithinBudget(project)
-            try leadChat.start(proposal, in: project)
-            leadChatRevision += 1
         } catch {
             alert = AppAlert(title: "Couldn’t start the run", message: error.localizedDescription)
+            return
         }
+        dispatch("Couldn’t start the run", ChatCommands.StartProposal(messageID: messageID))
+        leadChatRevision += 1
     }
 
     func rejectProposal(_ proposal: LeadMessage) {
-        do {
-            try leadChat.reject(proposal)
-            leadChatRevision += 1
-            composerFocusToken += 1
-        } catch {
-            alert = AppAlert(title: "Couldn’t reject the spec", message: error.localizedDescription)
-        }
+        guard let messageID = proposal.id else { return }
+        dispatch("Couldn’t reject the spec", ChatCommands.RejectProposal(messageID: messageID))
+        leadChatRevision += 1
+        composerFocusToken += 1
     }
 
     func dismissProposal(_ proposal: LeadMessage) {
-        do {
-            try leadChat.dismiss(proposal)
-            leadChatRevision += 1
-        } catch {
-            alert = AppAlert(title: "Couldn’t dismiss the proposal", message: error.localizedDescription)
-        }
+        guard let messageID = proposal.id else { return }
+        dispatch("Couldn’t dismiss the proposal", ChatCommands.DismissProposal(messageID: messageID))
+        leadChatRevision += 1
     }
 
     func requestThread(for task: Chat, in project: Project) -> RequestThreadData? {
         guard let taskID = task.id else { return nil }
-        let runs = ((try? database.runs(taskId: taskID)) ?? []).map { run in run.id.flatMap { engine.runs[$0] } ?? run }
+        let runs = ((try? database.runs(taskId: taskID)) ?? [])
         var timelines: [Int64: RunTimeline] = [:]
         for run in runs {
             if let id = run.id, let timeline = timeline(for: run) { timelines[id] = timeline }
@@ -238,7 +219,7 @@ extension AppModel {
             runs: runs,
             timelines: timelines,
             requests: (try? database.chatRequests(taskId: taskID)) ?? [],
-            heldRunIDs: Set(runs.compactMap(\.id).filter { engine.holds[$0] != nil })
+            heldRunIDs: Set(runs.compactMap(\.id).filter { connection.holds[$0] != nil })
         )
         thread.items = Self.placingPermissions(messages.filter { $0.kind == .permission }, in: thread.items)
         return RequestThreadData(thread: thread, timelines: timelines, leadRole: leadRole, leadName: lead.map { AgentNaming.displayName(of: $0) } ?? leadRole.name)
@@ -271,7 +252,7 @@ extension AppModel {
     }
 
     func runWorkflow(_ run: Run) -> WorkflowDefinition? {
-        try? engine.workflow(for: run)
+        try? connection.workflow(for: run)
     }
 
     func timeline(for run: Run) -> RunTimeline? {
@@ -282,7 +263,7 @@ extension AppModel {
     func currentStepTitle(of run: Run) -> String? {
         guard let step = run.currentStep else { return nil }
         let title = runWorkflow(run).map { RunTimeline.title(ofStep: step, in: $0) } ?? step
-        guard let id = run.id, engine.waitingForCapacity.contains(id) else { return title }
+        guard let id = run.id, connection.waitingForCapacity.contains(id) else { return title }
         return title + " · waiting for your reviews to clear"
     }
 
@@ -301,15 +282,7 @@ extension AppModel {
     func answerQuestion(item: ChatRequest, text: String) {
         let answer = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let itemID = item.id, !answer.isEmpty else { return }
-        do {
-            try database.resolveChatRequest(id: itemID, response: answer)
-        } catch {
-            alert = AppAlert(title: "Couldn’t send the answer", message: error.localizedDescription)
-            return
-        }
-        if let agentID = item.agentId, let agent = agent(id: agentID) {
-            agents.session(for: agent)?.send(answer)
-        }
+        dispatch("Couldn’t send the answer", ApprovalCommands.AnswerQuestion(requestID: itemID, text: answer))
     }
 
     func performRunAction(_ failureTitle: String, _ action: () throws -> Void) {
@@ -331,7 +304,7 @@ extension AppModel {
 
 extension AppModel {
     func runGroupDescription(_ run: Run) -> (workflow: String?, step: String?) {
-        let live = run.id.flatMap { engine.runs[$0] } ?? run
+        let live = run
         return (runWorkflow(live)?.displayName ?? live.workflow, live.isActive ? currentStepTitle(of: live) : live.status.label)
     }
 }

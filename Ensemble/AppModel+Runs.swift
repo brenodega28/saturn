@@ -43,11 +43,11 @@ extension AppModel {
     func openAgentSession(_ agent: Agent, in project: Project) {
         guard let projectID = project.id else { return }
         runDetailIDs[projectID] = nil
-        select(agents.session(for: agent), in: project)
+        select(connection.session(for: agent), in: project)
     }
 
     func liveRun(id: Int64) -> Run? {
-        engine.runs[id] ?? (try? database.run(id: id)) ?? nil
+        (try? database.run(id: id)) ?? nil
     }
 
     func runDetailSnapshot(runID: Int64) -> RunDetailSnapshot? {

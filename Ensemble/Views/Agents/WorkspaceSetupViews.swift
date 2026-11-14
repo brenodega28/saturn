@@ -73,13 +73,13 @@ struct SetupLogSection: View {
     static let maximumLogBytes = 64 * 1024
 
     @Environment(AppModel.self) private var model
-    let session: AgentSession
+    let session: LiveAgentSession
     @State private var record: SetupRecord?
     @State private var log = ""
     @State private var isExpanded = false
 
     var body: some View {
-        let isSettingUp = model.agents.isSettingUp(session)
+        let isSettingUp = session.isSettingUp
         VStack(alignment: .leading, spacing: 0) {
             if record != nil || isSettingUp {
                 VStack(alignment: .leading, spacing: 8) {
@@ -110,8 +110,8 @@ struct SetupLogSection: View {
                     }
                     .help("Output of the project’s setup script for this worktree")
 
-                    if model.agents.setupFailed(session) {
-                        Button("Retry Setup") { model.agents.retrySetup(session) }
+                    if session.setupFailed {
+                        Button("Retry Setup") { session.retrySetup() }
                             .buttonStyle(.pill)
                             .help("Run the setup script again in this worktree")
                     }
@@ -125,17 +125,19 @@ struct SetupLogSection: View {
 
     private func follow(isSettingUp: Bool) async {
         repeat {
-            reload()
+            await reload()
             if isSettingUp || record?.status == .failed || record?.status == .timedOut { isExpanded = true }
             guard isSettingUp else { return }
             try? await Task.sleep(for: .seconds(1))
         } while !Task.isCancelled
     }
 
-    private func reload() {
-        guard let directory = model.agents.setupLogDirectory(for: session.agent) else { return }
-        record = SetupRecord.load(from: directory)
-        guard let data = try? Data(contentsOf: SetupRecord.logFile(in: directory)) else {
+    private func reload() async {
+        let connection = model.connection
+        let agentID = session.id
+        record = (try? await connection.fileData(.agentFile, id: "\(agentID)/\(SetupRecord.recordFileName)"))
+            .flatMap(SetupRecord.decoded(from:))
+        guard let data = try? await connection.fileData(.agentFile, id: "\(agentID)/\(SetupRecord.logFileName)") else {
             log = ""
             return
         }

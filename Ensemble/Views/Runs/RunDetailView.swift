@@ -13,8 +13,8 @@ struct RunDetailView: View {
     static let wideLayoutWidth: CGFloat = 900
 
     var body: some View {
-        let live = model.engine.runs[runID]
-        let hold = model.engine.holds[runID]
+        let live = model.connection.run(id: runID)
+        let hold = model.connection.holds[runID]
         let isActive = (live ?? snapshot?.run)?.isActive ?? true
         Group {
             if let snapshot {
@@ -45,7 +45,7 @@ struct RunDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     RunDetailHeader(snapshot: snapshot, project: project, reload: reload)
-                    if let hold = model.engine.holds[runID], hold.isChecksExhausted(in: snapshot.workflow) {
+                    if let hold = model.connection.holds[runID], hold.isChecksExhausted(in: snapshot.workflow) {
                         ChecksExhaustedCard(run: snapshot.run, project: project, rounds: snapshot.run.checkRounds(at: hold.stepId, in: project), reload: reload)
                     }
                     if isWide {

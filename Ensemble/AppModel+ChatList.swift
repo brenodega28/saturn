@@ -24,7 +24,7 @@ extension AppModel {
             let chats = leadRequests(in: project)
             let activity = (try? database.lastActivity(projectId: projectID)) ?? [:]
             let proposals = (try? database.openProposalChatIDs(projectId: projectID)) ?? []
-            let runs = ((try? database.runs(projectId: projectID)) ?? []).map { run in run.id.flatMap { engine.runs[$0] } ?? run }
+            let runs = ((try? database.runs(projectId: projectID)) ?? [])
             let runsByChat = Dictionary(grouping: runs, by: \.taskId)
             let chatOfRun = Dictionary(runs.compactMap { run in run.id.map { ($0, run.taskId) } }, uniquingKeysWith: { first, _ in first })
             var workersByChat: [Int64: [Agent]] = [:]
@@ -35,7 +35,7 @@ extension AppModel {
             for chat in chats {
                 guard let chatID = chat.id else { continue }
                 let latest = runsByChat[chatID]?.max { ($0.startedAt, $0.id ?? 0) < ($1.startedAt, $1.id ?? 0) }
-                let hold = latest?.id.flatMap { engine.holds[$0] }
+                let hold = latest?.id.flatMap { connection.holds[$0] }
                 let lead = leadSession(for: chat)
                 let facts = ChatStage.Facts(
                     closeReason: chat.closeReason, isClosed: chat.isClosed, latestRun: latest,
@@ -97,27 +97,20 @@ extension AppModel {
 
     func renameChat(_ chat: Chat, to title: String) {
         guard let id = chat.id else { return }
-        do {
-            try database.renameChat(id: id, to: title)
-            leadChatRevision += 1
-        } catch {
-            alert = AppAlert(title: "Couldn’t rename the chat", message: error.localizedDescription)
-        }
+        dispatch("Couldn’t rename the chat", ChatCommands.Rename(chatID: id, title: title))
+        leadChatRevision += 1
     }
 
     func reopenChat(_ chat: Chat) {
-        do {
-            try leadChat.reopen(chat)
-            leadChatRevision += 1
-        } catch {
-            alert = AppAlert(title: "Couldn’t reopen the chat", message: error.localizedDescription)
-        }
+        guard let id = chat.id else { return }
+        dispatch("Couldn’t reopen the chat", ChatCommands.Reopen(chatID: id))
+        leadChatRevision += 1
     }
 
     func deleteChat(_ chat: Chat) async {
-        guard let project = project(withID: chat.projectId), let git = git(for: project) else { return }
+        guard let project = project(withID: chat.projectId), let id = chat.id else { return }
         do {
-            try await leadChat.delete(chat, in: project, git: git)
+            try await send(ChatCommands.Delete(chatID: id))
             leadChatRevision += 1
             if selectedRequest(in: project)?.id == chat.id { startNewLeadRequest(in: project) }
         } catch {

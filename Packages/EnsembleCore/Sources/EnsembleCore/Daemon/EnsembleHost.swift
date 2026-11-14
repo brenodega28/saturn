@@ -61,7 +61,7 @@ public final class EnsembleHost {
     var remoteHostInfos: [String: RemoteHostInfo] = [:]
     var remoteTunnels: [String: RemoteTunnel] = [:]
     var remoteTunnelOpenings: [String: Task<Int, Error>] = [:]
-    var answering: Set<String> = []
+    var pluginSkillCache: [Int64: Set<String>] = [:]
     private var lock: InstanceLock?
     private var loops: [Task<Void, Never>] = []
     private var gitExecutable: URL?
@@ -122,6 +122,9 @@ public final class EnsembleHost {
         driver.gitProvider = { [weak self] in self?.git }
         runtime.gitProvider = { [weak self] in self?.git }
         idleCleanup.gitProvider = { [weak self] in self?.git }
+        runtime.pluginSkills = { [weak self] project in
+            project.id.flatMap { self?.pluginSkillCache[$0] } ?? []
+        }
         runtime.worktreePrepared = { [weak runtime] preparation in
             try await runtime?.runSetupScript(preparation)
         }
@@ -136,7 +139,8 @@ public final class EnsembleHost {
             return try await self.remoteAgentHost(for: project)
         }
         runtime.observeTurnEnds { [weak self] session in
-            guard session.agent.kind == .lead, let taskId = session.agent.taskId else { return }
+            guard session.agent.kind == .lead, session.agent.status == .idle, let taskId = session.agent.taskId,
+                  !session.isRunning, !session.isQueued else { return }
             self?.server?.broadcast(.event(.leadTurnEnded(taskId: taskId)))
         }
         let updater = PinnedMemoryUpdater(runtime: runtime)
@@ -293,6 +297,8 @@ public final class EnsembleHost {
         )
         if options.claudeExecutable != nil { environment.claudeProblem = nil }
         environment.fileVaultOn = await Self.fileVaultStatus()
+        environment.report = report
+        environment.processEnvironment = ["PATH": baseEnvironment["PATH"] ?? "", "HOME": baseEnvironment["HOME"] ?? NSHomeDirectory()]
         self.environment = environment
         publishLive()
         return environment

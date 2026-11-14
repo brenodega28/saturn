@@ -47,7 +47,7 @@ struct WorkerRoster: View {
 
 struct ChatWorker {
     let agent: Agent
-    let session: AgentSession?
+    let session: LiveAgentSession?
     let state: WorkerState
 }
 
@@ -116,7 +116,7 @@ private struct WorkerRow: View {
         .foregroundStyle(Tokens.link)
     }
 
-    static func silentMinutes(_ session: AgentSession) -> Int {
+    static func silentMinutes(_ session: LiveAgentSession) -> Int {
         session.lastOutputAt.map { Int(Date.now.timeIntervalSince($0) / 60) } ?? 0
     }
 
@@ -149,7 +149,7 @@ extension AppModel {
         guard let chatID = chat.id else { return [] }
         let runs = (try? database.runs(taskId: chatID)) ?? []
         let runIDs = Set(runs.compactMap(\.id))
-        let finished = Set(runs.filter { !(($0.id.flatMap { engine.runs[$0] }) ?? $0).isActive }.compactMap(\.id))
+        let finished = Set(runs.filter { !$0.isActive }.compactMap(\.id))
         let needsYou = Set(needsYouItems.compactMap(\.agentId))
         return agentSessions(in: project)
             .filter { session in

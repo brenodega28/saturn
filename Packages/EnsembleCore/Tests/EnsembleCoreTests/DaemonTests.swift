@@ -112,6 +112,42 @@ import Testing
         await host.stop()
     }
 
+    @Test func aDataFolderFromBeforeTheDaemonKeepsItsProjectsChatsAndRuns() async throws {
+        let data = DaemonTestPaths.shortDirectory()
+        defer { try? FileManager.default.removeItem(at: data) }
+        let repo = try await TestRepository.make()
+        defer { repo.delete() }
+        let paths = AppPaths(root: data)
+        var configuration = Configuration()
+        configuration.foreignKeysEnabled = true
+        let legacy = try DatabasePool(path: paths.database.path, configuration: configuration)
+        try AppDatabase.migrator.migrate(legacy, upTo: "v25-chat-state")
+        let now = Date()
+        let (projectID, chatID, runID) = try await legacy.write { db -> (Int64, Int64, Int64) in
+            var project = Project(name: "Legacy", path: repo.root.path, isOpen: true, createdAt: now, lastOpenedAt: now)
+            try project.insert(db)
+            var chat = Chat(projectId: project.id!, title: "Old chat", body: "", source: .chat, status: .done, createdAt: now, updatedAt: now)
+            try chat.insert(db)
+            var run = Run(projectId: project.id!, taskId: chat.id!, workflow: "feature-delivery", status: .succeeded, startedAt: now, endedAt: now, title: "Old run")
+            try run.insert(db)
+            var message = LeadMessage(projectId: project.id!, taskId: chat.id!, kind: .lead, text: "Done before the update", createdAt: now)
+            try message.insert(db)
+            return (project.id!, chat.id!, run.id!)
+        }
+        try legacy.close()
+
+        let host = try await EnsembleHost.start(paths: paths, secrets: InMemorySecretStore(), options: HostOptions(runsBackgroundLoops: false))
+        let client = DaemonClient(transport: .socket(paths.daemonSocket), replicasDirectory: DaemonTestPaths.shortDirectory("ec"))
+        client.start()
+        try await client.waitUntilConnected()
+        #expect(try client.database?.openProjects().map(\.id) == [projectID])
+        #expect(try client.database?.task(id: chatID)?.title == "Old chat")
+        #expect(try client.database?.run(id: runID)?.title == "Old run")
+        #expect(try client.database?.leadMessages(taskId: chatID).map(\.text) == ["Done before the update"])
+        client.stop()
+        await host.stop()
+    }
+
     @Test func versionPrintsTheProtocolAndBuild() async throws {
         let process = Process()
         process.executableURL = DaemonTestPaths.ensembledExecutable
@@ -253,6 +289,36 @@ import Testing
         #expect(String(decoding: received, as: UTF8.self) == "line one\nline two\n")
 
         await #expect(throws: CommandFailure.self) { _ = try await client.readFile(.transcript, id: "999") }
+        await h.cleanUp()
+    }
+
+    @Test func aConnectionShowsLiveAgentsAndTheirTranscripts() async throws {
+        let h = try await DaemonHarness.make(mode: "normal")
+        let client = try await h.connectedClient()
+        let connection = DaemonConnection(client: client, replica: try #require(client.replica))
+        defer { connection.stop() }
+        let project = try await connection.send(ProjectCommands.Open(path: h.repo.root.path))
+
+        let ids = try await connection.send(AgentCommands.Spawn(
+            projectID: project.id!, kind: .builder, count: 1, name: "Dev", model: "haiku", skills: [], pinned: false, task: "Add a world line"
+        ))
+        let agentID = try #require(ids.first)
+        let session = try #require(connection.session(agentID: agentID))
+        try await waitUntil(timeout: .seconds(20)) { session.agent.status == .idle && !session.isRunning && session.transcript.entries.count > 2 }
+        let texts = session.transcript.entries.compactMap { entry -> String? in
+            if case .assistant(let text) = entry.content { return text }
+            return nil
+        }
+        #expect(texts.contains("Done"))
+        #expect(session.agent.worktreeURL != nil)
+
+        session.send("Once more")
+        try await waitUntil(timeout: .seconds(20)) {
+            session.transcript.entries.contains { entry in
+                if case .user(let text) = entry.content { return text == "Once more" }
+                return false
+            }
+        }
         await h.cleanUp()
     }
 

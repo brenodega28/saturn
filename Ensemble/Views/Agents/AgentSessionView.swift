@@ -4,7 +4,7 @@ import SwiftUI
 
 struct AgentSessionView: View {
     @Environment(AppModel.self) private var model
-    let session: AgentSession
+    let session: LiveAgentSession
     let project: Project
     @AppStorage("preferredEditor") private var preferredEditor = ""
     @Environment(\.isInWorkbench) private var isInWorkbench
@@ -14,7 +14,7 @@ struct AgentSessionView: View {
             header
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 12) {
-                    if let run = model.exhaustedChecksRun(for: session), let hold = run.id.flatMap({ model.engine.holds[$0] }) {
+                    if let run = model.exhaustedChecksRun(for: session), let hold = run.id.flatMap({ model.connection.holds[$0] }) {
                         ChecksExhaustedCard(run: run, project: project, rounds: run.checkRounds(at: hold.stepId, in: project))
                     }
                     StatusBanner(session: session)
@@ -97,17 +97,17 @@ struct AgentSessionView: View {
 
 private struct StatusBanner: View {
     @Environment(AppModel.self) private var model
-    let session: AgentSession
+    let session: LiveAgentSession
 
     var body: some View {
         let agent = session.agent
-        if model.agents.isSettingUp(session) {
+        if session.isSettingUp {
             banner(icon: "hammer", color: Theme.info, text: "Running the project’s setup script in this worktree. The agent starts when it finishes.") {
                 ProgressView().controlSize(.small)
             }
-        } else if agent.status == .failed, model.agents.setupFailed(session) {
+        } else if agent.status == .failed, session.setupFailed {
             banner(icon: "xmark.octagon", color: Theme.danger, text: agent.lastError ?? "The setup script failed.") {
-                Button("Retry Setup") { model.agents.retrySetup(session) }
+                Button("Retry Setup") { session.retrySetup() }
                     .buttonStyle(.primaryPill)
                     .help("Run the setup script again in this worktree")
             }
@@ -155,7 +155,7 @@ private struct StatusBanner: View {
 
 private struct ReadOnlyNote: View {
     @Environment(AppModel.self) private var model
-    let session: AgentSession
+    let session: LiveAgentSession
     let project: Project
 
     var body: some View {

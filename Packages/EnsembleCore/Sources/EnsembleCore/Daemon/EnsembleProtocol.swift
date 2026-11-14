@@ -146,6 +146,7 @@ public enum FileKind: String, Codable, Sendable {
     case evidence
     case specDraft
     case attachment
+    case agentFile
 }
 
 public struct FileRequest: Codable, Sendable {
@@ -170,6 +171,7 @@ public struct FileChunk: Codable, Sendable {
     public var data: Data
     public var end: Bool
     public var error: String?
+    public var caughtUp: Bool = false
 }
 
 public struct CommandEnvelope: Codable, Sendable {

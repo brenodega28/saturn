@@ -183,14 +183,16 @@ final class ClientSession {
         let url = host?.fileURL(for: request)
         let channel = channel
         return Task.detached {
-            func chunk(offset: Int64, data: Data = Data(), end: Bool, error: String? = nil) -> Bool {
-                (try? channel.send(.fileChunk(FileChunk(requestID: request.requestID, offset: offset, data: data, end: end, error: error)))) != nil
+            func chunk(offset: Int64, data: Data = Data(), end: Bool, error: String? = nil, caughtUp: Bool = false) -> Bool {
+                let message = FileChunk(requestID: request.requestID, offset: offset, data: data, end: end, error: error, caughtUp: caughtUp)
+                return (try? channel.send(.fileChunk(message))) != nil
             }
             guard let url else {
                 _ = chunk(offset: request.offset, end: true, error: "Unknown file")
                 return
             }
             var offset = request.offset
+            var announcedCatchUp = false
             while !Task.isCancelled {
                 if let handle = try? FileHandle(forReadingFrom: url) {
                     defer { try? handle.close() }
@@ -208,6 +210,10 @@ final class ClientSession {
                 guard request.follow else {
                     _ = chunk(offset: offset, end: true)
                     return
+                }
+                if !announcedCatchUp {
+                    announcedCatchUp = true
+                    guard chunk(offset: offset, end: false, caughtUp: true) else { return }
                 }
                 try? await Task.sleep(for: .milliseconds(250))
             }
@@ -307,6 +313,10 @@ extension EnsembleHost {
         switch request.kind {
         case .transcript:
             return Int64(request.id).map(paths.transcript)
+        case .agentFile:
+            let parts = request.id.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let agentID = Int64(parts[0]), !parts[1].contains("..") else { return nil }
+            return paths.agentDirectory(agentID).appending(path: parts[1])
         case .attachment:
             guard !request.id.contains("/"), !request.id.contains("..") else { return nil }
             return paths.attachmentsDirectory.appending(path: request.id)

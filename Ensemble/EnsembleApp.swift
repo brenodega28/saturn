@@ -5,7 +5,7 @@ import SwiftUI
 @main
 struct EnsembleApp: App {
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
-    @State private var launch = Launch.start()
+    @State private var launch = Launch.connecting
     @State private var updater = Updater()
 
     var body: some Scene {
@@ -20,9 +20,13 @@ struct EnsembleApp: App {
                             if let link = ChatLink(url: url) { model.open(link) }
                         }
                 case .failed(let message):
-                    LaunchFailureView(message: message)
-                case .alreadyRunning:
-                    EmptyView()
+                    LaunchFailureView(message: message) {
+                        launch = .connecting
+                        launch = await Launch.start()
+                    }
+                case .connecting:
+                    ConnectingView()
+                        .task { launch = await Launch.start() }
                 }
             }
             .followsAppearance()
@@ -75,25 +79,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor var model: AppModel?
 
     @MainActor
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        guard Launch.isBlockedByAnotherInstance else { return }
-        NSApp.windows.forEach { $0.orderOut(nil) }
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Ensemble is already running with this data folder."
-        alert.informativeText = "Quit the other copy first."
-        alert.addButton(withTitle: "Quit")
-        NSApp.activate()
-        alert.runModal()
-        NSApp.terminate(nil)
-    }
-
-    @MainActor
     func applicationWillTerminate(_ notification: Notification) {
-        model?.engine.stopOrphanWatchdog()
         model?.stopAllAppsImmediately()
-        model?.agents.terminateAll()
-        model?.stopRemoteTunnels()
+        model?.connection.stop()
     }
 }
 
@@ -118,41 +106,46 @@ enum WindowID {
 }
 
 enum Launch {
+    case connecting
     case ready(AppModel)
     case failed(String)
-    case alreadyRunning
-
-    @MainActor private(set) static var instanceLock: InstanceLock?
-    @MainActor private(set) static var isBlockedByAnotherInstance = false
 
     @MainActor
-    static func start() -> Launch {
-        let paths = AppPaths.standard
+    static func start() async -> Launch {
+        let clientPaths = AppPaths.standard
         do {
-            instanceLock = try InstanceLock.acquire(paths: paths)
-        } catch InstanceLockError.alreadyRunning {
-            isBlockedByAnotherInstance = true
-            return .alreadyRunning
-        } catch {
-            return .failed(error.localizedDescription)
-        }
-        do {
-            let database = try AppDatabase.open(at: paths.database)
-            return .ready(AppModel(database: database, paths: paths, secrets: KeychainSecretStore(service: AppModel.keychainService)))
+            let connection = try await LocalDaemon.connect(clientPaths: clientPaths)
+            return .ready(AppModel(connection: connection, clientPaths: clientPaths, daemonPaths: LocalDaemon.paths))
         } catch {
             return .failed(error.localizedDescription)
         }
     }
 }
 
+struct ConnectingView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Connecting to the Ensemble daemon…").font(.title3)
+            Text("Ensemble runs your agents in a background service so they keep working when this window is closed.")
+                .foregroundStyle(Theme.secondaryText)
+                .multilineTextAlignment(.center)
+        }
+        .padding(40)
+        .frame(minWidth: 520, minHeight: 300)
+    }
+}
+
 struct LaunchFailureView: View {
     let message: String
+    let retry: () async -> Void
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("Ensemble couldn’t open its database").font(.title2.bold())
+            Text("Ensemble couldn’t reach its daemon").font(.title2.bold())
             Text(message).foregroundStyle(Theme.secondaryText).textSelection(.enabled)
-            Text(AppDatabase.defaultLocation.path).font(Theme.monospaced).foregroundStyle(Theme.tertiaryText)
+            Text(LocalDaemon.paths.root.path).font(Theme.monospaced).foregroundStyle(Theme.tertiaryText)
+            Button("Try Again") { Task { await retry() } }.buttonStyle(.pill)
         }
         .padding(40)
         .frame(minWidth: 520, minHeight: 300)

@@ -325,7 +325,7 @@ private struct AgentsSettings: View {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Max concurrent agents").font(.system(size: 13.5, weight: .semibold))
-                    Text("\(model.agents.runningCount(inProject: projectID)) running · \(model.agents.queuedSessions(inProject: projectID).count) queued")
+                    Text("\(model.connection.runningCount(inProject: projectID)) running · \(model.connection.queuedSessions(inProject: projectID).count) queued")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.secondaryText)
                 }

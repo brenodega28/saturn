@@ -51,28 +51,28 @@ extension AppModel {
     }
 
     func usageReport(period: UsagePeriod) -> UsageReport? {
-        _ = agents.usageRevision
+        _ = connection.usageRevision
         return try? database.usageReport(period: period, totalsCountingSince: usageResetPoint)
     }
 
     var displayedUsageTotals: UsageTotals {
-        _ = agents.usageRevision
+        _ = connection.usageRevision
         return (try? database.usageTotals(countingSince: usageResetPoint)) ?? UsageTotals()
     }
 
     var monthlySpend: Double {
-        _ = agents.usageRevision
+        _ = connection.usageRevision
         return (try? database.monthlySpend()) ?? 0
     }
 
     func budgetStatus(for project: Project) -> BudgetStatus {
-        _ = agents.usageRevision
+        _ = connection.usageRevision
         guard let id = project.id else { return BudgetStatus(budgetUSD: nil, spentUSD: 0) }
         return (try? database.projectBudgetStatus(projectId: id)) ?? BudgetStatus(budgetUSD: project.settings.monthlyBudgetUSD, spentUSD: 0)
     }
 
     func weeklyBudgetStatus(for project: Project) -> BudgetStatus {
-        _ = agents.usageRevision
+        _ = connection.usageRevision
         guard let id = project.id else { return BudgetStatus(budgetUSD: nil, spentUSD: 0) }
         return (try? database.projectWeeklyBudgetStatus(projectId: id)) ?? BudgetStatus(budgetUSD: project.settings.weeklyBudgetUSD, spentUSD: 0)
     }
@@ -108,46 +108,7 @@ extension AppModel {
         try database.checkProjectBudget(projectId: id)
     }
 
-    func startStallWatch(interval: Duration = .seconds(60)) {
-        Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: interval)
-                guard let self else { return }
-                reportStalledWorkers()
-            }
-        }
-    }
-
-    func reportStalledWorkers(now: Date = .now) {
-        var stalled: [StalledWorker] = []
-        for project in openProjects {
-            for session in agentSessions(in: project) where session.agent.kind != .lead {
-                guard let last = session.lastOutputAt, session.isRunning else { continue }
-                let step = session.agent.runId.flatMap { liveRun(id: $0) }.flatMap { run in runWorkflow(run)?.step(run.currentStep ?? "") }
-                stalled.append(StalledWorker(agent: session.agent, lastOutputAt: last, stallMinutes: WorkerState.stallMinutes(for: step)))
-            }
-        }
-        do {
-            try stallReporter.report(stalled, now: now)
-        } catch {
-            alert = AppAlert(title: "Couldn’t report a stuck worker", message: error.localizedDescription)
-        }
-    }
-
-    func startBudgetMonitor() {
-        checkBudgets()
-        withObservationTracking {
-            _ = agents.usageRevision
-        } onChange: { [weak self] in
-            Task { @MainActor [weak self] in self?.startBudgetMonitor() }
-        }
-    }
-
     func checkBudgets() {
-        do {
-            try database.recordBudgetNotices(globalBudgetUSD: globalMonthlyBudget, globalWeeklyBudgetUSD: globalWeeklyBudget)
-        } catch {
-            alert = AppAlert(title: "Couldn’t check budgets", message: error.localizedDescription)
-        }
+        dispatch("Couldn’t check budgets", SettingsCommands.SetBudgets(monthlyUSD: globalMonthlyBudget, weeklyUSD: globalWeeklyBudget))
     }
 }

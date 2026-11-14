@@ -16,7 +16,7 @@ extension SpecStatus {
 }
 
 extension AppModel {
-    var specStore: SpecStore { SpecStore(paths: agents.paths) }
+    var specStore: SpecStore { SpecStore(paths: daemonPaths) }
 
     func specDraft(for task: Chat) -> SpecFile? {
         guard let taskID = task.id else { return nil }

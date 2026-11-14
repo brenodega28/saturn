@@ -14,12 +14,12 @@ struct AgentGroup: Identifiable {
     let kind: Kind
     let title: String
     let meta: String
-    let sessions: [AgentSession]
+    let sessions: [LiveAgentSession]
 
     var id: Kind { kind }
 
     @MainActor
-    static func make(_ sessions: [AgentSession], runs: [Run], idleCleanupMinutes: Int = 0, describe: (Run) -> (workflow: String?, step: String?) = { ($0.workflow, $0.currentStep) }) -> [AgentGroup] {
+    static func make(_ sessions: [LiveAgentSession], runs: [Run], idleCleanupMinutes: Int = 0, describe: (Run) -> (workflow: String?, step: String?) = { ($0.workflow, $0.currentStep) }) -> [AgentGroup] {
         var groups: [AgentGroup] = []
         let runsByID = Dictionary(uniqueKeysWithValues: runs.compactMap { run in run.id.map { ($0, run) } })
         let runIDs = sessions.compactMap(\.agent.runId).reduce(into: [Int64]()) { ids, id in
@@ -112,7 +112,7 @@ struct AgentsView: View {
         }
     }
 
-    private func summary(_ sessions: [AgentSession]) -> some View {
+    private func summary(_ sessions: [LiveAgentSession]) -> some View {
         let working = sessions.filter { $0.agent.status == .working }.count
         let attention = sessions.filter { [.failed, .interrupted, .takenOver, .needsInput].contains($0.agent.status) }.count
         let queued = sessions.filter(\.isQueued).count
@@ -146,7 +146,7 @@ struct AgentsView: View {
 
 private struct AgentCard: View {
     @Environment(AppModel.self) private var model
-    let session: AgentSession
+    let session: LiveAgentSession
     let project: Project
     let isDimmed: Bool
     @State private var isConfirmingDelete = false
@@ -260,7 +260,7 @@ private struct AgentCard: View {
 }
 
 struct PinButton: View {
-    let session: AgentSession
+    let session: LiveAgentSession
 
     var body: some View {
         let pinned = session.agent.isPinned
@@ -296,7 +296,7 @@ struct Chip: View {
 }
 
 struct AgentControls: View {
-    let session: AgentSession
+    let session: LiveAgentSession
     var compact = false
 
     var body: some View {

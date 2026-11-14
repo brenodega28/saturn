@@ -37,7 +37,7 @@ extension AppModel {
     }
 
     private func skillPluginInstaller() throws -> SkillPluginInstaller {
-        guard let claude = agents.claudeExecutable else { throw SkillPluginAvailability.claudeMissing }
+        guard let claude = live.environment.claudePath.map(URL.init(fileURLWithPath:)) ?? locator.locate("claude") else { throw SkillPluginAvailability.claudeMissing }
         return SkillPluginInstaller(claude: claude, runner: runner)
     }
 }

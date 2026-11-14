@@ -93,9 +93,9 @@ struct StatusLabel: View {
     let status: AgentStatus
     var isQueued = false
     var retryingAt: Date?
-    var apiRetry: APIRetry?
+    var apiRetry: LiveRetry?
 
-    init(status: AgentStatus, isQueued: Bool = false, session: AgentSession? = nil) {
+    init(status: AgentStatus, isQueued: Bool = false, session: LiveAgentSession? = nil) {
         self.status = status
         self.isQueued = isQueued
         self.retryingAt = session?.retryingAt

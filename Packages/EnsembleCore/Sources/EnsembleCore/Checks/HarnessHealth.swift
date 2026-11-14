@@ -1,6 +1,6 @@
 import Foundation
 
-public struct HarnessReport: Sendable, Hashable {
+public struct HarnessReport: Sendable, Hashable, Codable {
     public var setupError: String?
     public var results: [CheckResult]
     public var problems: [String]

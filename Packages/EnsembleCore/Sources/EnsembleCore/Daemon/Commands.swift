@@ -51,6 +51,17 @@ public enum ProjectCommands {
         public init(path: String) { self.path = path }
     }
 
+    public struct OpenRemote: DaemonCommand {
+        public static let name = "project.openRemote"
+        public typealias Response = Project
+        public var host: String
+        public var path: String
+        public init(host: String, path: String) {
+            self.host = host
+            self.path = path
+        }
+    }
+
     public struct Clone: DaemonCommand {
         public static let name = "project.clone"
         public typealias Response = Project
@@ -97,6 +108,13 @@ public enum ProjectCommands {
     public struct Refresh: DaemonCommand {
         public static let name = "project.refresh"
         public typealias Response = ProjectStatus
+        public var projectID: Int64
+        public init(projectID: Int64) { self.projectID = projectID }
+    }
+
+    public struct CheckHarness: DaemonCommand {
+        public static let name = "project.checkHarness"
+        public typealias Response = HarnessReport
         public var projectID: Int64
         public init(projectID: Int64) { self.projectID = projectID }
     }
@@ -422,6 +440,52 @@ public enum RunCommands {
         public var runID: Int64
         public init(runID: Int64) { self.runID = runID }
     }
+
+    public struct DiffSummary: DaemonCommand {
+        public static let name = "run.diffSummary"
+        public typealias Response = DiffInfo
+        public var runID: Int64
+        public init(runID: Int64) { self.runID = runID }
+    }
+
+    public struct AskToCombine: DaemonCommand {
+        public static let name = "run.askToCombine"
+        public typealias Response = String
+        public var runID: Int64
+        public var conflict: MergeConflict
+        public init(runID: Int64, conflict: MergeConflict) {
+            self.runID = runID
+            self.conflict = conflict
+        }
+    }
+
+    public struct KeepBranch: DaemonCommand {
+        public static let name = "run.keepBranch"
+        public var runID: Int64
+        public var winner: String
+        public var conflict: MergeConflict
+        public init(runID: Int64, winner: String, conflict: MergeConflict) {
+            self.runID = runID
+            self.winner = winner
+            self.conflict = conflict
+        }
+    }
+
+    public struct StageForMergeTool: DaemonCommand {
+        public static let name = "run.stageForMergeTool"
+        public typealias Response = StagedMerge
+        public var runID: Int64
+        public var conflict: MergeConflict
+        public init(runID: Int64, conflict: MergeConflict) {
+            self.runID = runID
+            self.conflict = conflict
+        }
+    }
+}
+
+public struct StagedMerge: Codable, Sendable, Hashable {
+    public var worktree: String
+    public var files: [String]
 }
 
 public enum AgentAction: String, Codable, Sendable {
@@ -688,6 +752,124 @@ public enum CodeCommands {
             self.projectID = projectID
             self.arguments = arguments
             self.directory = directory
+        }
+    }
+
+    public struct Exec: DaemonCommand {
+        public static let name = "code.exec"
+        public typealias Response = ExecResult
+        public var projectID: Int64
+        public var arguments: [String]
+        public var directory: String?
+        public init(projectID: Int64, arguments: [String], directory: String?) {
+            self.projectID = projectID
+            self.arguments = arguments
+            self.directory = directory
+        }
+    }
+
+    public struct FileExists: DaemonCommand {
+        public static let name = "code.fileExists"
+        public typealias Response = Bool
+        public var path: String
+        public init(path: String) { self.path = path }
+    }
+
+    public struct CreateDirectory: DaemonCommand {
+        public static let name = "code.createDirectory"
+        public var path: String
+        public init(path: String) { self.path = path }
+    }
+
+    public struct Subdirectories: DaemonCommand {
+        public static let name = "code.subdirectories"
+        public typealias Response = [String]
+        public var path: String
+        public init(path: String) { self.path = path }
+    }
+
+    public struct RemoveItem: DaemonCommand {
+        public static let name = "code.removeItem"
+        public var path: String
+        public init(path: String) { self.path = path }
+    }
+
+    public struct UpdatePin: DaemonCommand {
+        public static let name = "code.updatePin"
+        public var pinID: Int64
+        public var status: PinStatus
+        public var response: String?
+        public init(pinID: Int64, status: PinStatus, response: String?) {
+            self.pinID = pinID
+            self.status = status
+            self.response = response
+        }
+    }
+
+    public struct CreateComment: DaemonCommand {
+        public static let name = "code.createComment"
+        public var runID: Int64
+        public var branchAgentID: Int64?
+        public var file: String
+        public var side: PinSide
+        public var startLine: Int
+        public var endLine: Int
+        public var text: String
+        public init(runID: Int64, branchAgentID: Int64?, file: String, side: PinSide, startLine: Int, endLine: Int, text: String) {
+            self.runID = runID
+            self.branchAgentID = branchAgentID
+            self.file = file
+            self.side = side
+            self.startLine = startLine
+            self.endLine = endLine
+            self.text = text
+        }
+    }
+
+    public struct UpdateComment: DaemonCommand {
+        public static let name = "code.updateComment"
+        public var pinID: Int64
+        public var text: String
+        public init(pinID: Int64, text: String) {
+            self.pinID = pinID
+            self.text = text
+        }
+    }
+
+    public struct DeletePin: DaemonCommand {
+        public static let name = "code.deletePin"
+        public var pinID: Int64
+        public init(pinID: Int64) { self.pinID = pinID }
+    }
+
+    public struct ApproveOpenPins: DaemonCommand {
+        public static let name = "code.approveOpenPins"
+        public typealias Response = Int
+        public var runID: Int64
+        public init(runID: Int64) { self.runID = runID }
+    }
+
+    public struct SetViewed: DaemonCommand {
+        public static let name = "code.setViewed"
+        public var runID: Int64
+        public var path: String
+        public var fingerprint: String
+        public var viewed: Bool
+        public init(runID: Int64, path: String, fingerprint: String, viewed: Bool) {
+            self.runID = runID
+            self.path = path
+            self.fingerprint = fingerprint
+            self.viewed = viewed
+        }
+    }
+
+    public struct EncodeCorrection: DaemonCommand {
+        public static let name = "code.encodeCorrection"
+        public var correctionID: Int64
+        public var encoding: CorrectionEncoding
+        public init(correctionID: Int64, encoding: CorrectionEncoding) {
+            self.correctionID = correctionID
+            self.encoding = encoding
         }
     }
 }

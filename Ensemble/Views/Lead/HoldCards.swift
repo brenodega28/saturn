@@ -29,7 +29,7 @@ struct HoldCard: View {
                     secondary: ("Stop here", "Stop the run here"),
                     failureTitle: "Couldn’t resolve the loop limit",
                     reload: reload
-                ) { engine, continueOnce in try engine.resolveLoopLimit(run, continueOnce: continueOnce) }
+                ) { model, continueOnce in model.resolveLoopLimit(run, continueOnce: continueOnce) }
             }
         case .runBudget:
             DecisionCard(title: hold.message, detail: timeline.holdItem?.body, isStuck: true) {
@@ -42,7 +42,7 @@ struct HoldCard: View {
                     secondary: ("Stop here", "Fail the run here"),
                     failureTitle: "Couldn’t resolve the budget",
                     reload: reload
-                ) { engine, proceed in try engine.resolveBudget(run, proceed: proceed) }
+                ) { model, proceed in model.resolveBudget(run, proceed: proceed) }
             }
         case .gates:
             DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
@@ -51,7 +51,7 @@ struct HoldCard: View {
                     secondary: ("Ask for an alternative", "Send the findings back to the authors to fix"),
                     failureTitle: "Couldn’t resolve the gate findings",
                     reload: reload
-                ) { engine, proceed in try engine.resolveGates(run, proceed: proceed) }
+                ) { model, proceed in model.resolveGates(run, proceed: proceed) }
             }
         case .stepFailed where hold.isChecksExhausted(in: run.snapshotWorkflow):
             ChecksExhaustedCard(run: run, project: project, rounds: run.checkRounds(at: hold.stepId, in: project), reload: reload)
@@ -62,7 +62,7 @@ struct HoldCard: View {
                     secondary: ("Stop here", "Stop the run here"),
                     failureTitle: "Couldn’t resolve the failure",
                     reload: reload
-                ) { engine, retry in try engine.resolveFailure(run, retry: retry) }
+                ) { model, retry in model.resolveFailure(run, retry: retry) }
             }
         }
     }
@@ -99,7 +99,7 @@ private struct DecisionButtons: View {
     let secondary: (title: String, help: String)
     let failureTitle: String
     let reload: () -> Void
-    let resolve: (RunEngine, Bool) throws -> Void
+    let resolve: (AppModel, Bool) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -113,7 +113,7 @@ private struct DecisionButtons: View {
     }
 
     private func decide(_ choice: Bool) {
-        model.performRunAction(failureTitle) { try resolve(model.engine, choice) }
+        resolve(model, choice)
         reload()
     }
 }
@@ -132,16 +132,14 @@ private struct RaiseBudgetControls: View {
                 .frame(width: 110)
                 .accessibilityLabel("New run budget in dollars")
             Button("Raise Budget") {
-                model.performRunAction("Couldn’t raise the budget") {
-                    try model.engine.resolveBudget(run, proceed: true, raiseRunBudgetTo: budget)
-                }
+                model.resolveBudget(run, proceed: true, raiseRunBudgetTo: budget)
                 reload()
             }
             .buttonStyle(PillButtonStyle(.primary, height: 30))
             .disabled((budget ?? 0) <= run.costUSD)
             .help("Raise the run’s budget and continue")
             Button("Stop") {
-                model.performRunAction("Couldn’t stop the run") { try model.engine.resolveBudget(run, proceed: false) }
+                model.resolveBudget(run, proceed: false)
                 reload()
             }
             .buttonStyle(PillButtonStyle(height: 30))
@@ -188,9 +186,7 @@ private struct ApprovalCard: View {
 
     private func resolve(approved: Bool) {
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        model.performRunAction("Couldn’t resolve the approval") {
-            try model.engine.resolveApproval(run, approved: approved, note: trimmed.isEmpty ? nil : trimmed)
-        }
+        model.resolveApproval(run, approved: approved, note: trimmed.isEmpty ? nil : trimmed)
         reload()
     }
 }

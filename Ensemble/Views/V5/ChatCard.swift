@@ -247,7 +247,7 @@ private struct ChangesRow: View {
         .help("Open Changes")
         .task(id: run.map { "\($0.id ?? 0)-\($0.status.rawValue)-\($0.currentStep ?? "")" } ?? "none") {
             if let run {
-                diff = await model.driver.diffInfo(run)
+                diff = await model.diffInfo(run)
             } else {
                 diff = nil
             }

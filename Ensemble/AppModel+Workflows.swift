@@ -4,7 +4,7 @@ import Foundation
 extension AppModel {
     func activeRuns(ofWorkflow workflowID: String, in project: Project) -> [Run] {
         guard let projectID = project.id else { return [] }
-        _ = engine.runs
+        _ = connection.revision
         let stored = (try? database.runs(projectId: projectID)) ?? []
         return stored.filter { $0.workflow == workflowID && $0.isActive }
     }
@@ -18,7 +18,7 @@ extension AppModel {
 
     func workflowHistory(_ workflowID: String, in project: Project) -> [WorkflowVersionStats] {
         guard let projectID = project.id else { return [] }
-        _ = engine.runs
+        _ = connection.revision
         let versions = ProjectConfigLoader.history(of: workflowID, repository: project.filesRoot)
         return (try? database.versionStats(of: workflowID, projectId: projectID, versions: versions)) ?? []
     }

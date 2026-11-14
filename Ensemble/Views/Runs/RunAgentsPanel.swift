@@ -46,7 +46,7 @@ private struct RunAgentRow: View {
     let project: Project
 
     var body: some View {
-        let session = model.agents.session(for: agent)
+        let session = model.connection.session(for: agent)
         let live = session?.agent ?? agent
         let role = model.role(for: live, in: project)
         VStack(alignment: .leading, spacing: 6) {

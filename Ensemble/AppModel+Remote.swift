@@ -21,8 +21,7 @@ extension AppModel {
     }
 
     func git(for project: Project) -> GitClient? {
-        guard let destination = project.host else { return git }
-        return GitClient(ssh: SSHClient(destination: destination, runner: runner))
+        connection.git(for: project)
     }
 
     func git(forAgent agent: Agent) -> GitClient? {
@@ -122,9 +121,7 @@ extension AppModel {
     }
 
     func openRemoteFolder(host destination: String, path: String) async throws {
-        let host = remoteHost(destination)
-        let root = try await host.repositoryRoot(containing: path)
-        let project = try database.openRemoteProject(path: root, host: destination)
+        let project = try await send(ProjectCommands.OpenRemote(host: destination, path: path))
         reloadProjects()
         if let id = project.id {
             selection = .project(id)
@@ -144,54 +141,16 @@ extension AppModel {
         }
     }
 
-    func remoteAgentHost(for project: Project) async throws -> RemoteAgentHost {
-        guard let destination = project.host else { throw RemoteProjectUnsupported("Running agents on the host") }
-        try await driver.ensureServer()
-        guard let localPort = agents.mcpServer.map({ Int($0.port) }) else { throw RemoteAgentSetupError.serverUnavailable }
+    func appRunnerHost(for project: Project) async throws -> RemoteAgentHost {
+        guard let destination = project.host else { throw RemoteProjectUnsupported("Running the app on the host") }
         let client = SSHClient(destination: destination, runner: runner)
-        var info = remoteHostInfos[destination]
-        if info?.claudePath == nil {
+        let info: RemoteHostInfo
+        if let known = remoteHostInfos[destination] {
+            info = known
+        } else {
             info = try await RemoteHost(client: client).probe()
             remoteHostInfos[destination] = info
         }
-        guard let info, let claudePath = info.claudePath else { throw RemoteAgentSetupError.claudeMissing(SSHDestination.displayName(destination)) }
-        let relayPort = try await openTunnel(to: destination, client: client, localPort: localPort)
-        return RemoteAgentHost(client: client, claudePath: claudePath, home: info.home, localPort: localPort, relayPort: relayPort)
-    }
-
-    private func openTunnel(to destination: String, client: SSHClient, localPort: Int) async throws -> Int {
-        if let opening = remoteTunnelOpenings[destination] { return try await opening.value }
-        let tunnel: RemoteTunnel
-        if let existing = remoteTunnels[destination], existing.localPort == localPort {
-            if let port = existing.remotePort { return port }
-            tunnel = existing
-        } else {
-            remoteTunnels[destination]?.stop()
-            tunnel = RemoteTunnel(client: client, localPort: localPort)
-            remoteTunnels[destination] = tunnel
-        }
-        let opening = Task { try await tunnel.open() }
-        remoteTunnelOpenings[destination] = opening
-        defer { remoteTunnelOpenings[destination] = nil }
-        return try await opening.value
-    }
-
-    func stopRemoteTunnels() {
-        for tunnel in remoteTunnels.values { tunnel.stop() }
-        remoteTunnels = [:]
-    }
-}
-
-enum RemoteAgentSetupError: LocalizedError {
-    case serverUnavailable
-    case claudeMissing(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .serverUnavailable:
-            "Ensemble’s agent tools aren’t running, so agents on the host couldn’t reach them. Restart Ensemble and try again."
-        case .claudeMissing(let host):
-            "Claude Code isn’t installed on \(host). Install it there (curl -fsSL https://claude.ai/install.sh | bash), sign in by running claude once on the host, then try again."
-        }
+        return RemoteAgentHost(client: client, claudePath: info.claudePath ?? "", home: info.home, localPort: 0, relayPort: 0)
     }
 }

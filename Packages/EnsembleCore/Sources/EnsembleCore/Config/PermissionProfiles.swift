@@ -20,6 +20,7 @@ public enum PermissionCapability: String, Sendable, Hashable, Codable, CaseItera
     case network
     case installPackages = "install_packages"
     case gitPush = "git_push"
+    case riskyCommands = "risky_commands"
 
     public var title: String {
         switch self {
@@ -28,7 +29,12 @@ public enum PermissionCapability: String, Sendable, Hashable, Codable, CaseItera
         case .network: "Network"
         case .installPackages: "Install packages"
         case .gitPush: "Git push"
+        case .riskyCommands: "Risky commands"
         }
+    }
+
+    public var defaultLevel: PermissionLevel {
+        self == .riskyCommands ? .ask : .never
     }
 
     public func describe(_ request: String) -> String {
@@ -38,6 +44,7 @@ public enum PermissionCapability: String, Sendable, Hashable, Codable, CaseItera
         case .network: request.hasPrefix("http") ? "fetch \(request)" : "use the network: \(request)"
         case .installPackages: "install packages: `\(request)`"
         case .gitPush: "push: `\(request)`"
+        case .riskyCommands: "run `\(request)`"
         }
     }
 }
@@ -56,7 +63,7 @@ public struct PermissionProfileDefinition: Sendable, Hashable, Codable, Identifi
     }
 
     public func level(_ capability: PermissionCapability) -> PermissionLevel {
-        levels[capability] ?? .never
+        levels[capability] ?? capability.defaultLevel
     }
 
     public var hasAsk: Bool { levels.values.contains(.ask) }
@@ -81,7 +88,7 @@ public struct PermissionProfileDefinition: Sendable, Hashable, Codable, Identifi
         let levels = try decoder.container(keyedBy: CapabilityKey.self)
         var parsed: [PermissionCapability: PermissionLevel] = [:]
         for capability in PermissionCapability.allCases {
-            parsed[capability] = try levels.decodeIfPresent(PermissionLevel.self, forKey: CapabilityKey(stringValue: capability.rawValue)) ?? .never
+            parsed[capability] = try levels.decodeIfPresent(PermissionLevel.self, forKey: CapabilityKey(stringValue: capability.rawValue)) ?? capability.defaultLevel
         }
         self.levels = parsed
     }
@@ -110,19 +117,19 @@ public struct PermissionsConfig: Sendable, Hashable, Codable {
 
     public static let builtIn: [PermissionProfileDefinition] = [
         PermissionProfileDefinition(id: "developer", name: "Developer", levels: [
-            .editFiles: .allow, .runShell: .allow, .network: .ask, .installPackages: .ask, .gitPush: .never,
+            .editFiles: .allow, .runShell: .allow, .network: .ask, .installPackages: .ask, .gitPush: .never, .riskyCommands: .ask,
         ]),
         PermissionProfileDefinition(id: "reviewer", name: "Reviewer", levels: [
-            .editFiles: .never, .runShell: .allow, .network: .allow, .installPackages: .never, .gitPush: .never,
+            .editFiles: .never, .runShell: .allow, .network: .allow, .installPackages: .never, .gitPush: .never, .riskyCommands: .ask,
         ]),
         PermissionProfileDefinition(id: "tester", name: "Tester", levels: [
-            .editFiles: .never, .runShell: .allow, .network: .allow, .installPackages: .never, .gitPush: .never,
+            .editFiles: .never, .runShell: .allow, .network: .allow, .installPackages: .never, .gitPush: .never, .riskyCommands: .ask,
         ]),
         PermissionProfileDefinition(id: "lead", name: "Lead", levels: [
-            .editFiles: .never, .runShell: .allow, .network: .allow, .installPackages: .never, .gitPush: .never,
+            .editFiles: .never, .runShell: .allow, .network: .allow, .installPackages: .never, .gitPush: .never, .riskyCommands: .ask,
         ]),
         PermissionProfileDefinition(id: "app_testing", name: "App testing", levels: [
-            .editFiles: .allow, .runShell: .allow, .network: .allow, .installPackages: .ask, .gitPush: .never,
+            .editFiles: .allow, .runShell: .allow, .network: .allow, .installPackages: .ask, .gitPush: .never, .riskyCommands: .ask,
         ], extraCommands: ["xcodegen", "open", "screencapture", "pkill", "killall"]),
     ]
 
@@ -171,23 +178,33 @@ public struct PermissionPolicy: Sendable, Hashable {
         return commands + (level(.runShell) == .never ? [] : profile.extraCommands)
     }
 
-    public func capability(ofTool tool: String, input: JSONValue?) -> (PermissionCapability, String)? {
+    public func assess(tool: String, input: JSONValue?, directory: String? = nil) -> PermissionAssessment? {
         switch tool {
         case "Edit", "MultiEdit", "Write", "NotebookEdit":
-            return (.editFiles, input?["file_path"]?.string ?? input?["notebook_path"]?.string ?? "a file")
+            let path = input?["file_path"]?.string ?? input?["notebook_path"]?.string ?? "a file"
+            return PermissionAssessment(request: path, needs: [PermissionNeed(capability: .editFiles, rule: "edit files", command: path)])
         case "WebFetch":
-            return (.network, input?["url"]?.string ?? "the web")
+            let url = input?["url"]?.string ?? "the web"
+            let host = URL(string: url)?.host() ?? url
+            return PermissionAssessment(request: url, needs: [PermissionNeed(capability: .network, rule: "fetch from \(host)", command: url)])
         case "WebSearch":
-            return (.network, "search “\(input?["query"]?.string ?? "")”")
+            let request = "search “\(input?["query"]?.string ?? "")”"
+            return PermissionAssessment(request: request, needs: [PermissionNeed(capability: .network, rule: "web search", command: request)])
         case "Bash":
             guard let command = input?["command"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines), !command.isEmpty else { return nil }
-            if command.hasPrefix("git push") { return (.gitPush, command) }
-            if AgentPermissions.installCommands.contains(where: { command == $0 || command.hasPrefix($0 + " ") }) { return (.installPackages, command) }
-            if AgentPermissions.networkCommands.contains(where: { command == $0 || command.hasPrefix($0 + " ") }) { return (.network, command) }
-            return (.runShell, command)
+            return PermissionAssessment(request: command, needs: shellNeeds(command, directory: directory))
         default:
             return nil
         }
+    }
+
+    public func shellNeeds(_ command: String, directory: String? = nil) -> [PermissionNeed] {
+        ShellCommandLine(command).commands
+            .flatMap { ShellRisk.needs(of: $0, readOnly: readOnly, directory: directory) }
+            .filter { need in
+                !profile.extraCommands.contains { Self.matches(need.command, $0) }
+                    && !(need.capability == .runShell && covers(need.command))
+            }
     }
 
     public var hasBash: Bool { level(.runShell) != .never || !commands.isEmpty }
@@ -200,81 +217,17 @@ public struct PermissionPolicy: Sendable, Hashable {
         return tools.isEmpty ? nil : tools.joined(separator: "|")
     }
 
-    public static func isCompound(_ command: String) -> Bool {
-        ShellCommandScan(command).isCompound
-    }
-
-    public static func commandName(of command: String) -> String {
-        command.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? command
-    }
-
     public func covers(_ command: String) -> Bool {
-        let command = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        return commands.contains { command == $0 || command.hasPrefix($0 + " ") }
+        commands.contains { Self.matches(command, $0) }
     }
 
-    public func coversEveryPart(of command: String) -> Bool {
-        let scan = ShellCommandScan(command)
-        return !scan.hasHiddenCommand && !scan.parts.isEmpty && scan.parts.allSatisfy(covers)
+    static func matches(_ command: String, _ prefix: String) -> Bool {
+        let command = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return command == prefix || command.hasPrefix(prefix + " ")
     }
 }
 
-struct ShellCommandScan {
-    private(set) var parts: [String] = []
-    private(set) var hasSeparator = false
-    private(set) var hasRedirect = false
-    private(set) var hasHiddenCommand = false
-
-    var isCompound: Bool { hasSeparator || hasRedirect || hasHiddenCommand }
-
-    init(_ command: String) {
-        let characters = Array(command)
-        var current = ""
-        var quote: Character?
-        var index = 0
-        func endPart() {
-            let part = current.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !part.isEmpty { parts.append(part) }
-            current = ""
-            hasSeparator = true
-        }
-        while index < characters.count {
-            let character = characters[index]
-            let next = index + 1 < characters.count ? characters[index + 1] : nil
-            if character == "\\", quote != "'", let next {
-                current.append(character)
-                current.append(next)
-                index += 2
-                continue
-            }
-            if let open = quote {
-                if character == open { quote = nil }
-                current.append(character)
-                index += 1
-                continue
-            }
-            switch (character, next) {
-            case ("'", _), ("\"", _):
-                quote = character
-            case ("&", "&"), ("|", "|"):
-                endPart()
-                index += 2
-                continue
-            case (";", _), ("|", _), ("\n", _):
-                endPart()
-                index += 1
-                continue
-            case ("`", _), ("$", "("), ("<", "<"):
-                hasHiddenCommand = true
-            case (">", _):
-                hasRedirect = true
-            default:
-                break
-            }
-            current.append(character)
-            index += 1
-        }
-        let last = current.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !last.isEmpty { parts.append(last) }
-    }
+public struct PermissionAssessment: Sendable, Hashable {
+    public var request: String
+    public var needs: [PermissionNeed]
 }

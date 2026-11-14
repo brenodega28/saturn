@@ -94,6 +94,7 @@ struct RealClaudePermissionTests {
     static let scriptedModel = #"""
     import http.server, json, sys
     log = sys.argv[2]
+    command = sys.argv[3] if len(sys.argv) > 3 else "git push --dry-run origin HEAD"
     def events(blocks, stop):
         out = [("message_start", {"type": "message_start", "message": {"id": "msg", "type": "message", "role": "assistant", "model": "claude-sonnet-4-5", "content": [], "stop_reason": None, "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}}})]
         for index, block in enumerate(blocks):
@@ -108,7 +109,7 @@ struct RealClaudePermissionTests {
         out.append(("message_stop", {"type": "message_stop"}))
         return "".join("event: %s\ndata: %s\n\n" % (name, json.dumps(data)) for name, data in out).encode()
     def push(tool_id):
-        return {"type": "tool_use", "id": tool_id, "name": "Bash", "input": {"command": "git push --dry-run origin HEAD"}}
+        return {"type": "tool_use", "id": tool_id, "name": "Bash", "input": {"command": command}}
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
         def do_POST(self):
@@ -136,16 +137,43 @@ struct RealClaudePermissionTests {
     http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
     """#
 
-    @Test(.timeLimit(.minutes(3))) func askHoldsAPushUntilTheUserAllowsIt() async throws {
-        let log = FileManager.default.temporaryDirectory.appending(path: "permission-model-\(UUID().uuidString).log")
-        defer { try? FileManager.default.removeItem(at: log) }
+    func startModel(log: URL, command: String? = nil) async throws -> (Process, Int) {
         let port = Int.random(in: 40000...49999)
         let model = Process()
         model.executableURL = URL(filePath: "/usr/bin/python3")
-        model.arguments = ["-I", "-c", Self.scriptedModel, String(port), log.path]
+        model.arguments = ["-I", "-c", Self.scriptedModel, String(port), log.path] + (command.map { [$0] } ?? [])
         try model.run()
-        defer { model.terminate() }
         try await Task.sleep(for: .milliseconds(800))
+        return (model, port)
+    }
+
+    @Test(.timeLimit(.minutes(3))) func aChainedEverydayCommandOffTheAllowListRunsWithoutAsking() async throws {
+        let log = FileManager.default.temporaryDirectory.appending(path: "permission-model-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        let (model, port) = try await startModel(log: log, command: "uname -s | tr a-z A-Z && printf ensemble-%s ran")
+        defer { model.terminate() }
+
+        let harness = try await RealClaudeAPIErrorTests().makeHarness(stubURL: "http://127.0.0.1:\(port)")
+        defer { harness.cleanUp() }
+        let driver = AgentWorkflowDriver(runtime: harness.runtime)
+        driver.gitProvider = { harness.repo.git }
+        try await driver.ensureServer()
+
+        let session = try await harness.spawn()
+        try await waitUntil(timeout: .seconds(60)) { (try? String(contentsOf: log, encoding: .utf8))?.contains("toolu_first") == true && session.agent.status == .idle }
+
+        let requests = try String(contentsOf: log, encoding: .utf8)
+        let result = try #require(requests.components(separatedBy: "toolu_first").last)
+        #expect(result.contains("ensemble-ran"))
+        #expect(!result.contains("Permission to use Bash"))
+        #expect(try harness.database.openInboxItems(projectId: try #require(harness.project.id)).isEmpty)
+    }
+
+    @Test(.timeLimit(.minutes(3))) func askHoldsAPushUntilTheUserAllowsIt() async throws {
+        let log = FileManager.default.temporaryDirectory.appending(path: "permission-model-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        let (model, port) = try await startModel(log: log)
+        defer { model.terminate() }
 
         let harness = try await RealClaudeAPIErrorTests().makeHarness(stubURL: "http://127.0.0.1:\(port)")
         defer { harness.cleanUp() }

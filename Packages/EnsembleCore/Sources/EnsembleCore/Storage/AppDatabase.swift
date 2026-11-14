@@ -354,6 +354,12 @@ public final class AppDatabase: Sendable {
             try db.rename(table: "project_new", to: "project")
             try db.execute(sql: "CREATE UNIQUE INDEX project_location ON project (ifnull(host, ''), path)")
         }
+        migrator.registerMigration("v22-permission-chat-rules") { db in
+            try db.alter(table: "permissionRequest") { t in
+                t.add(column: "taskId", .integer)
+                t.add(column: "rules", .text).notNull().defaults(to: "[]")
+            }
+        }
 
         return migrator
     }

@@ -10,11 +10,11 @@ public enum PermissionRequestStatus: String, Codable, Sendable {
 public enum PermissionScope: String, Codable, Sendable {
     case once
     case run
+    case chat
 }
 
 public enum PermissionDecision: String, Codable, Sendable, CaseIterable {
-    case allowOnce
-    case allowForRun
+    case allow
     case deny
 }
 
@@ -25,16 +25,15 @@ public struct PermissionRequest: Codable, Sendable, Hashable, Identifiable, Fetc
     public var projectId: Int64
     public var agentId: Int64
     public var runId: Int64?
+    public var taskId: Int64?
     public var capability: PermissionCapability
     public var request: String
+    public var rules: [String] = []
     public var status: PermissionRequestStatus
-    public var scope: PermissionScope = .once
+    public var scope: PermissionScope = .chat
     public var inboxItemId: Int64?
     public var createdAt: Date
     public var answeredAt: Date?
-    public var consumedAt: Date?
-
-    public var commandName: String { PermissionPolicy.commandName(of: request) }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
@@ -50,26 +49,14 @@ extension AppDatabase {
         try writer.read { db in try PermissionRequest.fetchOne(db, key: id) }
     }
 
-    func latestPermissionRequest(agentId: Int64, capability: PermissionCapability, request: String) throws -> PermissionRequest? {
+    func permissionRequests(taskId: Int64?, agentId: Int64) throws -> [PermissionRequest] {
         try writer.read { db in
-            try PermissionRequest
-                .filter(Column("agentId") == agentId)
-                .filter(Column("capability") == capability.rawValue)
-                .filter(Column("request") == request)
-                .order(Column("id").desc)
-                .fetchOne(db)
-        }
-    }
-
-    func runPermission(runId: Int64, capability: PermissionCapability, commandName: String) throws -> PermissionRequest? {
-        try writer.read { db in
-            try PermissionRequest
-                .filter(Column("runId") == runId)
-                .filter(Column("capability") == capability.rawValue)
-                .filter(Column("status") == PermissionRequestStatus.allowed.rawValue)
-                .filter(Column("scope") == PermissionScope.run.rawValue)
+            let scoped = taskId.map { PermissionRequest.filter(Column("taskId") == $0) }
+                ?? PermissionRequest.filter(Column("taskId") == nil && Column("agentId") == agentId)
+            return try scoped
+                .filter(Column("scope") == PermissionScope.chat.rawValue)
+                .order(Column("id"))
                 .fetchAll(db)
-                .first { $0.commandName == commandName }
         }
     }
 
@@ -89,10 +76,12 @@ extension AgentRuntime {
         return .object(["hookSpecificOutput": .object(output)])
     }
 
-    nonisolated static let chainedCommandReason = ClaudeLaunch.oneCommandRule + " Run the allowed command on its own instead."
     nonisolated static let waitingReason = "Still waiting for the user to answer. Carry on with other work or end your turn; Ensemble messages you with the answer."
     nonisolated static let inboxReason = "This needs the user’s OK, so Ensemble asked them in their Inbox. Carry on with other work or end your turn; you’ll get a message with the answer."
     nonisolated static let leadChatReason = "This needs the user’s OK, so Ensemble is asking them through the lead chat. Carry on with other work or end your turn; you’ll get a message with the answer."
+    nonisolated static let alreadyAllowedReason = "The user already allowed this kind of command."
+
+    nonisolated static let severity: [PermissionCapability] = [.gitPush, .riskyCommands, .installPackages, .network, .editFiles, .runShell]
 
     func owningTaskId(of agent: Agent) throws -> Int64? {
         var current = agent
@@ -106,54 +95,51 @@ extension AgentRuntime {
         }
     }
 
-    func permissionDecision(_ input: JSONValue, agent: Agent, policy: PermissionPolicy) throws -> JSONValue {
+    func permissionDecision(_ input: JSONValue, agent: Agent, policy: PermissionPolicy, directory: String? = nil) throws -> JSONValue {
         guard let tool = input["tool_name"]?.string, let id = agent.id,
-              let (capability, request) = policy.capability(ofTool: tool, input: input["tool_input"]) else { return .object([:]) }
-        let command = tool == "Bash" ? request : nil
-        switch policy.level(capability) {
-        case .never:
-            guard capability == .editFiles || (tool == "Bash" && capability != .runShell) else { return .object([:]) }
-            return Self.decision("deny", reason: "\(policy.profile.name) agents may never \(capability.describe(request)). Find another way, or explain in your summary why it’s needed.")
-        case .allow:
-            guard let command, !policy.coversEveryPart(of: command) else { return .object([:]) }
-        case .ask:
-            break
+              let assessment = policy.assess(tool: tool, input: input["tool_input"], directory: directory) else { return .object([:]) }
+        let shell = tool == "Bash"
+        if let blocked = assessment.needs.first(where: { policy.level($0.capability) == .never }) {
+            guard blocked.capability == .editFiles || (shell && blocked.capability != .runShell) else { return .object([:]) }
+            return Self.decision("deny", reason: "\(policy.profile.name) agents may never \(blocked.capability.describe(blocked.command)). Find another way, or explain in your summary why it’s needed.")
         }
-        if let command, PermissionPolicy.isCompound(command) {
-            return Self.decision("deny", reason: Self.chainedCommandReason)
+        let asks = assessment.needs.filter { policy.level($0.capability) == .ask }
+        guard !asks.isEmpty else { return shell ? Self.decision("allow") : .object([:]) }
+
+        let taskId = try owningTaskId(of: agent)
+        let history = try database.permissionRequests(taskId: taskId, agentId: id)
+        let denied = Set(history.filter { $0.status == .denied }.flatMap(\.rules))
+        if let refused = asks.first(where: { denied.contains($0.rule) }) {
+            return Self.decision("deny", reason: "The user said no to this kind of command (`\(refused.rule)`). Don’t ask again; find another way or explain why it’s needed in your summary.")
         }
-        let latest = try database.latestPermissionRequest(agentId: id, capability: capability, request: request)
-        if latest?.status == .denied {
-            return Self.decision("deny", reason: "The user said no to this. Don’t ask again; find another way or explain why it’s needed in your summary.")
-        }
-        if let runId = agent.runId, try database.runPermission(runId: runId, capability: capability, commandName: PermissionPolicy.commandName(of: request)) != nil {
-            return Self.decision("allow", reason: "The user allowed this for the run.")
-        }
-        if var granted = latest, granted.status == .allowed, granted.scope == .run || granted.consumedAt == nil {
-            if granted.scope == .once {
-                granted.consumedAt = .now
-                try database.save(granted)
+        let allowed = Set(history.filter { $0.status == .allowed }.flatMap(\.rules))
+        let missing = asks.filter { !allowed.contains($0.rule) }
+        guard !missing.isEmpty else { return Self.decision("allow", reason: Self.alreadyAllowedReason) }
+
+        let rules = missing.map(\.rule).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        let capability = Self.severity.first { severe in missing.contains { $0.capability == severe } } ?? missing[0].capability
+        let pending = history.filter { $0.status == .pending }
+        let request = PermissionRequest(
+            projectId: agent.projectId, agentId: id, runId: agent.runId, taskId: taskId, capability: capability,
+            request: assessment.request, rules: rules, status: .pending, createdAt: .now
+        )
+        if Set(rules).isSubset(of: pending.flatMap(\.rules)) {
+            if !pending.contains(where: { $0.agentId == id && Set(rules).isSubset(of: $0.rules) }) {
+                _ = try database.insert(request)
             }
-            return Self.decision("allow", reason: "The user allowed this.")
-        }
-        if latest?.status == .pending {
             return Self.decision("deny", reason: Self.waitingReason)
         }
-        return try ask(capability: capability, request: request, agent: agent, agentId: id, policy: policy)
+        return try ask(request, agent: agent, policy: policy)
     }
 
-    private func ask(capability: PermissionCapability, request: String, agent: Agent, agentId: Int64, policy: PermissionPolicy) throws -> JSONValue {
+    private func ask(_ pending: PermissionRequest, agent: Agent, policy: PermissionPolicy) throws -> JSONValue {
         let name = database.displayName(of: agent)
-        let action = capability.describe(request)
-        let pending = PermissionRequest(
-            projectId: agent.projectId, agentId: agentId, runId: agent.runId, capability: capability, request: request,
-            status: .pending, createdAt: .now
-        )
-        if let taskId = try owningTaskId(of: agent) {
+        let action = pending.capability.describe(pending.request)
+        if let taskId = pending.taskId {
             let record = try database.insert(pending)
             try database.insert(LeadMessage(
-                projectId: agent.projectId, taskId: taskId, kind: .permission, text: request, title: name, runId: agent.runId,
-                createdAt: .now, permissionRequestId: record.id, permissionStatus: .pending, capability: capability
+                projectId: agent.projectId, taskId: taskId, kind: .permission, text: pending.request, title: name, runId: agent.runId,
+                createdAt: .now, permissionRequestId: record.id, permissionStatus: .pending, capability: pending.capability
             ))
             if let lead = try database.leadAgent(taskId: taskId), lead.id != agent.id {
                 session(for: lead)?.send("\(name) asked to \(action). The user sees an Allow/Deny card in this chat; don’t answer it yourself.")
@@ -161,9 +147,9 @@ extension AgentRuntime {
             return Self.decision("deny", reason: Self.leadChatReason)
         }
         let item = try database.createInboxItem(InboxItem(
-            projectId: agent.projectId, runId: agent.runId, agentId: agentId, kind: .permission,
+            projectId: agent.projectId, runId: agent.runId, agentId: pending.agentId, kind: .permission,
             title: "\(name) asks to \(action)",
-            body: "\(policy.profile.name) agents need your OK to \(capability.title.lowercased()). Allow it once for this request, or say no.",
+            body: "\(policy.profile.name) agents need your OK for \(pending.capability.title.lowercased()). Allowing it also covers \(Self.similar(pending.rules)) from this agent later.",
             createdAt: .now
         ))
         var record = pending
@@ -174,41 +160,63 @@ extension AgentRuntime {
 
     public func answerPermission(inboxItemId: Int64, allow: Bool, now: Date = .now) throws {
         guard let request = try database.permissionRequest(inboxItemId: inboxItemId), let id = request.id else { return }
-        try answerPermission(requestId: id, decision: allow ? .allowOnce : .deny, now: now)
+        try answerPermission(requestId: id, decision: allow ? .allow : .deny, now: now)
     }
 
     public func answerPermission(requestId: Int64, decision: PermissionDecision, now: Date = .now) throws {
-        guard var request = try database.permissionRequest(id: requestId), request.status == .pending else { return }
+        guard let request = try database.permissionRequest(id: requestId), request.status == .pending else { return }
+        try resolve(request, decision: decision, now: now)
+        let history = try database.permissionRequests(taskId: request.taskId, agentId: request.agentId)
+        let allowed = Set(history.filter { $0.status == .allowed }.flatMap(\.rules))
+        let denied = Set(history.filter { $0.status == .denied }.flatMap(\.rules))
+        for waiting in history where waiting.status == .pending && !waiting.rules.isEmpty {
+            if waiting.rules.contains(where: denied.contains) {
+                try resolve(waiting, decision: .deny, now: now)
+            } else if waiting.rules.allSatisfy(allowed.contains) {
+                try resolve(waiting, decision: .allow, now: now)
+            }
+        }
+    }
+
+    private func resolve(_ pending: PermissionRequest, decision: PermissionDecision, now: Date) throws {
+        var request = pending
         request.status = decision == .deny ? .denied : .allowed
-        request.scope = decision == .allowForRun ? .run : .once
+        request.scope = .chat
         request.answeredAt = now
         try database.save(request)
         if let inboxItemId = request.inboxItemId {
             try database.resolveInboxItem(id: inboxItemId, response: decision == .deny ? "denied" : "allowed", now: now)
         }
-        let card = try database.permissionCard(requestId: requestId)
+        let card = try request.id.flatMap { try database.permissionCard(requestId: $0) }
         if var card {
             card.permissionStatus = PermissionCardStatus(decision)
             try database.save(card)
         }
         guard let agent = try database.agent(id: request.agentId) else { return }
         let action = request.capability.describe(request.request)
+        let similar = Self.similar(request.rules)
+        let place = request.taskId == nil ? "" : " in this chat"
         switch decision {
-        case .allowOnce:
-            session(for: agent)?.send("The user allowed you to \(action). Go ahead; this covers the next attempt only.")
-        case .allowForRun:
-            session(for: agent)?.send("The user allowed you to \(action), and any `\(request.commandName)` command for the rest of this run. Go ahead.")
+        case .allow:
+            session(for: agent)?.send("The user allowed you to \(action). Go ahead; \(similar) won’t need asking again\(place).")
         case .deny:
-            session(for: agent)?.send("The user said no to: \(action). Find another way, or explain in your summary why it’s needed.")
+            session(for: agent)?.send("The user said no to: \(action). Don’t retry it or \(similar)\(place); find another way, or explain in your summary why it’s needed.")
         }
         guard let card, let lead = try database.leadAgent(taskId: card.taskId), lead.id != agent.id else { return }
-        session(for: lead)?.send("The user answered \(database.displayName(of: agent))’s request to \(action): \(Self.describe(decision, commandName: request.commandName)). Nothing for you to do.")
+        session(for: lead)?.send("The user answered \(database.displayName(of: agent))’s request to \(action): \(Self.describe(decision, rules: request.rules)). Nothing for you to do.")
     }
 
-    nonisolated static func describe(_ decision: PermissionDecision, commandName: String) -> String {
+    nonisolated static func similar(_ rules: [String]) -> String {
+        rules.isEmpty ? "anything similar" : "anything similar (\(ruleList(rules)))"
+    }
+
+    nonisolated static func ruleList(_ rules: [String]) -> String {
+        rules.map { "`\($0)`" }.joined(separator: ", ")
+    }
+
+    nonisolated static func describe(_ decision: PermissionDecision, rules: [String]) -> String {
         switch decision {
-        case .allowOnce: "allowed once"
-        case .allowForRun: "allowed `\(commandName)` for every agent for the rest of this run"
+        case .allow: rules.isEmpty ? "allowed" : "allowed \(ruleList(rules)) for everyone in this chat"
         case .deny: "denied"
         }
     }

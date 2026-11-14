@@ -224,7 +224,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
         return AgentPermissions.tools + AgentPermissions.fileWritingTools.map { "\($0)(\(scope))" } + commands
     }
 
-    public static func readOnlySystemPrompt(agentName: String, directory: URL, canOpenWorktree: Bool = false, extraCommands: [String] = [], commands: [String]? = nil) -> String {
+    public static func readOnlySystemPrompt(agentName: String, directory: URL, canOpenWorktree: Bool = false, shellRules rules: String? = nil) -> String {
         let editing = canOpenWorktree
             ? "You start read-only and never edit, create or delete files here or commit. When you must change code yourself, "
                 + "call `\(HandoffTool.openWorktree.qualifiedName)` to get your own worktree and branch; your next turn runs there with write access."
@@ -235,27 +235,50 @@ public struct ClaudeLaunch: Sendable, Equatable {
 
         \(selfServiceRule)
 
-        \(shellRules(writing: false, extraCommands: extraCommands, commands: commands))
+        \(rules ?? shellRules(PermissionPolicy(profile: PermissionsConfig().resolve(for: nil, readOnly: true), readOnly: true)))
         """
     }
 
-    public static let oneCommandRule = "Run one command per Bash call; chains with &&, ;, |, subshells, heredocs and output redirection (>) are denied."
-
     public static let selfServiceRule = "Do everything you can yourself: run the commands, read the files, fix the environment. Hand a step to the user only as a last resort, when your tools or permissions can't do it. Whenever you need the user to do something, give the exact commands to run, each in its own code block, with the directory to run it from."
 
-    public static func shellRules(writing: Bool, extraCommands: [String] = [], commands override: [String]? = nil) -> String {
-        let commands = (override ?? ((writing ? AgentPermissions.commands : AgentPermissions.readOnlyCommands) + extraCommands))
-            .map { "`\($0)`" }
-            .joined(separator: ", ")
-        return """
-            Shell rules: only these commands are allowed, each with any arguments: \(commands). \
-            \(oneCommandRule) \
-            \(writing ? "Create and change files with the Edit and Write tools, never through the shell. " : "")\
-            If a command is denied, try the allowed equivalent on its own before giving up, and tell the user exactly what you couldn't run.
-            """
+    static let askingTopics: [(PermissionCapability, String)] = [
+        (.riskyCommands, "risky commands (deleting files with rm, git reset --hard or git clean; force-deleting branches; kill, sudo, chmod; publishing or changing things outside the repo such as gh pr create, npm publish, docker push, kubectl apply and cloud CLIs; writing outside your worktree)"),
+        (.installPackages, "installing or removing packages"),
+        (.network, "network tools such as curl, wget and ssh"),
+        (.gitPush, "git push"),
+    ]
+
+    public static func shellRules(_ policy: PermissionPolicy, guarded: Bool = true) -> String {
+        let writing = policy.level(.editFiles) != .never
+        let editRule = writing ? "Create and change files with the Edit and Write tools rather than through the shell. " : ""
+        guard guarded else {
+            let commands = policy.commands.map { "`\($0)`" }.joined(separator: ", ")
+            return "Shell rules: only these commands are allowed, each with any arguments: \(commands). \(editRule)"
+                + "If a command is denied, try the allowed equivalent before giving up, and tell the user exactly what you couldn't run."
+        }
+        var lines = ["Shell rules: run the commands you need; chaining, pipes, redirects and subshells are fine."]
+        if policy.level(.runShell) == .ask {
+            lines.append("Every command needs the user’s OK the first time, except " + policy.commands.map { "`\($0)`" }.joined(separator: ", ") + ".")
+        }
+        let asking = askingTopics.filter { policy.level($0.0) == .ask }.map(\.1)
+        if !asking.isEmpty {
+            lines.append("These need the user’s OK the first time: " + asking.joined(separator: "; ") + ".")
+        }
+        if policy.readOnly, policy.level(.riskyCommands) == .ask {
+            lines.append("Because you are read-only, commands that change files (mv, cp, mkdir, touch, sed -i, tee, > redirects, formatters that write, and git commands that change the repo) need the user’s OK too.")
+        }
+        let never = askingTopics.filter { policy.level($0.0) == .never }.map(\.1)
+        if !never.isEmpty {
+            lines.append("Never allowed: " + never.joined(separator: "; ") + ".")
+        }
+        if !policy.profile.extraCommands.isEmpty, policy.level(.runShell) != .never {
+            lines.append("Always allowed without asking: " + policy.profile.extraCommands.map { "`\($0)`" }.joined(separator: ", ") + ".")
+        }
+        lines.append(editRule + "If a command is denied, find another way and tell the user exactly what you couldn't run.")
+        return lines.joined(separator: " ")
     }
 
-    public static func systemPrompt(agentName: String, worktree: URL, branch: String?, extraCommands: [String] = [], commands: [String]? = nil) -> String {
+    public static func systemPrompt(agentName: String, worktree: URL, branch: String?, shellRules rules: String? = nil) -> String {
         """
         You are \(agentName), a coding agent run by Ensemble. You work alone in the git worktree at \(worktree.path)\
         \(branch.map { " on branch \($0)" } ?? ""). Keep all changes inside this worktree. \
@@ -263,7 +286,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
 
         \(selfServiceRule)
 
-        \(shellRules(writing: true, extraCommands: extraCommands, commands: commands))
+        \(rules ?? shellRules(PermissionPolicy(profile: PermissionsConfig().resolve(for: .builder), readOnly: false)))
         """
     }
 
@@ -271,6 +294,8 @@ public struct ClaudeLaunch: Sendable, Equatable {
         let asks = PermissionCapability.allCases.filter { policy.level($0) == .ask }
         guard !asks.isEmpty else { return nil }
         return "Some actions need the user’s OK first: " + asks.map { $0.title.lowercased() }.joined(separator: ", ")
-            + ". Just try the action; Ensemble holds it, asks the user in their Inbox or through your run’s lead chat and messages you with the answer. Carry on with other work or end your turn meanwhile."
+            + ". Just try the action; Ensemble holds it, asks the user once through your chat’s lead (or their Inbox) and messages you with the answer. "
+            + "Once the user allows a kind of command, you and every other agent in the chat can run similar commands without asking again; once they say no, don’t retry it. "
+            + "Carry on with other work or end your turn while you wait."
     }
 }

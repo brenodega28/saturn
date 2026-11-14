@@ -75,6 +75,24 @@ import Testing
         #expect(setup.harness.launches().last?.contains("sonnet") == true)
     }
 
+    @Test func aNewChatKeepsItsWorkflowAndLeadModelAndTellsTheLead() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+
+        let task = try await chat.createRequest("CHAT hi", in: setup.project, workflow: "small-task", leadModel: "haiku", leadEffort: .high)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+
+        let stored = try #require(try setup.harness.database.task(id: task.id!))
+        #expect(stored.workflow == "small-task" && stored.leadModel == "haiku" && stored.leadEffort == .high)
+        let lead = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
+        #expect(lead.model == "haiku")
+        let sent = setup.harness.runtime.session(for: lead)?.transcript.entries.compactMap { entry -> String? in
+            if case .user(let text) = entry.content { return text }
+            return nil
+        } ?? []
+        #expect(sent.contains { $0.contains("picked the `small-task` workflow") })
+    }
+
     @Test func theChatLeadMayFetchAndSearchTheWebAlongsideItsHandoffTools() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }

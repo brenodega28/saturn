@@ -44,6 +44,12 @@ extension AppDatabase {
         }
     }
 
+    public func setWorkflow(_ workflow: String?, chatId: Int64) throws {
+        try writer.write { db in
+            try db.execute(sql: "UPDATE task SET workflow = ? WHERE id = ?", arguments: [workflow, chatId])
+        }
+    }
+
     public func deleteChat(id: Int64) throws {
         try writer.write { db in
             _ = try Chat.deleteOne(db, id: id)

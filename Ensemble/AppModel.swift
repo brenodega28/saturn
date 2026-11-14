@@ -105,6 +105,8 @@ final class AppModel {
     var isNewChatPickerShown = false
     var isAppOutputShown = false
     var pendingChatDeletion: Chat?
+    var newChatOptionsByProject: [Int64: NewChatOptions] = [:]
+    var projectFileLists: [Int64: [String]] = [:]
     var activeClones: [String: Date] = [:]
     var listeningPorts: Set<Int> = []
     var isOffline = false

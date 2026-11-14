@@ -30,14 +30,15 @@ public final class LeadChat {
 
     @discardableResult
     public func createRequest(
-        _ text: String, attachments: [ChatAttachment] = [], in project: Project, now: Date = .now
+        _ text: String, attachments: [ChatAttachment] = [], in project: Project, workflow: String? = nil,
+        leadModel: String? = nil, leadEffort: LeadEffort? = nil, now: Date = .now
     ) async throws -> Chat {
         let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let projectId = project.id, !typed.isEmpty || !attachments.isEmpty else { throw AgentError.emptyTask }
         let task = try database.insert(Chat(
             projectId: projectId, title: Self.title(text: typed, attachments: attachments),
             body: ChatAttachment.prompt(text: typed, attachments: attachments), source: .chat,
-            status: .incoming, createdAt: now, updatedAt: now
+            workflow: workflow, status: .incoming, leadModel: leadModel, leadEffort: leadEffort, createdAt: now, updatedAt: now
         ))
         try await send(typed, attachments: attachments, to: task, in: project, now: now)
         return task
@@ -61,7 +62,7 @@ public final class LeadChat {
         #if DEBUG
         runtime.debugTrace?.chatMessage(body, direction: "user_to_agent", chat: "lead", agent: session.agent, at: now)
         #endif
-        let notes = [driver.specEditNote(projectId: task.projectId, taskId: taskId), try statusNote(taskId: taskId)].compactMap(\.self)
+        let notes = [driver.specEditNote(projectId: task.projectId, taskId: taskId), try workflowNote(taskId: taskId), try statusNote(taskId: taskId)].compactMap(\.self)
         let status = notes.isEmpty ? "" : (prompt.isEmpty ? "" : "\n\n---\n") + notes.joined(separator: "\n\n---\n")
         session.send(prompt + status, images: attachments.filter(\.isImage))
     }
@@ -176,6 +177,11 @@ public final class LeadChat {
         let session = try runtime.createLeadAgent(in: project, taskId: taskId)
         if let model = task.leadModel { session.setModel(model) }
         return session
+    }
+
+    func workflowNote(taskId: Int64) throws -> String? {
+        guard let workflow = try database.task(id: taskId)?.workflow else { return nil }
+        return "Ensemble note (not written by the user): the user picked the `\(workflow)` workflow for this chat. Propose runs with it unless they ask for another."
     }
 
     func statusNote(taskId: Int64) throws -> String? {

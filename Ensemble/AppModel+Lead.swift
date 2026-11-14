@@ -173,7 +173,10 @@ extension AppModel {
             if let request {
                 try await leadChat.send(text, attachments: attachments, to: request, in: project)
             } else {
-                let request = try await leadChat.createRequest(text, attachments: attachments, in: project)
+                let options = newChatOptions(for: project)
+                let request = try await leadChat.createRequest(
+                    text, attachments: attachments, in: project, workflow: options.workflow, leadModel: options.model, leadEffort: options.effort
+                )
                 if selectedRequest(in: project) == nil {
                     showRequest(request)
                 }

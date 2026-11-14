@@ -1,3 +1,4 @@
+import EnsembleCore
 import AppKit
 import Observation
 import SwiftUI
@@ -86,7 +87,7 @@ final class KeyBindings {
     private(set) var overrides: [String: StoredShortcut?] = [:]
 
     init() {
-        if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
+        if let data = AppDefaults.store.data(forKey: Self.defaultsKey),
            let decoded = try? JSONDecoder().decode([String: StoredShortcut?].self, from: data) {
             overrides = decoded
         }
@@ -133,7 +134,7 @@ final class KeyBindings {
 
     private func save() {
         if let data = try? JSONEncoder().encode(overrides) {
-            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+            AppDefaults.store.set(data, forKey: Self.defaultsKey)
         }
     }
 }

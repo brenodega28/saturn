@@ -105,7 +105,6 @@ public struct ClaudeLaunch: Sendable, Equatable {
     public var hooks: JSONValue?
     public var permissions: PermissionPolicy?
     public var askTools: [String]
-    public var remote: RemoteAgentLaunch?
 
     public init(
         executable: URL,
@@ -120,10 +119,8 @@ public struct ClaudeLaunch: Sendable, Equatable {
         extraAllowedTools: [String] = [],
         hooks: JSONValue? = nil,
         permissions: PermissionPolicy? = nil,
-        askTools: [String] = [],
-        remote: RemoteAgentLaunch? = nil
+        askTools: [String] = []
     ) {
-        self.remote = remote
         self.permissions = permissions
         self.askTools = askTools
         self.executable = executable
@@ -150,13 +147,11 @@ public struct ClaudeLaunch: Sendable, Equatable {
     public var workingDirectory: URL { worktree }
 
     func resolvedPath(of url: URL) -> String {
-        remote == nil ? realPath(of: url) : SSHFileSystem.normalize(url.path)
+        realPath(of: url)
     }
 
     public var invocation: (executable: URL, arguments: [String], environment: [String: String], directory: URL?) {
-        guard let remote else { return (executable, arguments, processEnvironment, worktree) }
-        let local = remote.host.client.runner.environment
-        return (remote.host.client.executable, remote.sshArguments(directory: worktree.path, environment: processEnvironment, arguments: arguments), local, nil)
+        (executable, arguments, processEnvironment, worktree)
     }
 
     public var processEnvironment: [String: String] {
@@ -214,9 +209,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
     var allowedTools: [String] {
         guard let permissions else {
             guard !readOnly else { return AgentPermissions.readOnlyAllowedTools() }
-            guard remote != nil else { return AgentPermissions.allowedTools(worktree: worktree) }
-            let scope = "/" + resolvedPath(of: worktree) + "/**"
-            return AgentPermissions.tools + AgentPermissions.fileWritingTools.map { "\($0)(\(scope))" } + AgentPermissions.commands.map { "Bash(\($0):*)" }
+            return AgentPermissions.allowedTools(worktree: worktree)
         }
         let commands = permissions.commands.map { "Bash(\($0):*)" }
         guard writes, permissions.level(.editFiles) == .allow else { return AgentPermissions.tools + commands }

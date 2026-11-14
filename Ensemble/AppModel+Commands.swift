@@ -59,7 +59,7 @@ extension AppModel {
         pauseAllAgents(in: project)
     }
 
-    func openAgent(_ session: AgentSession, in project: Project) {
+    func openAgent(_ session: LiveAgentSession, in project: Project) {
         guard let id = project.id else { return }
         selection = .project(id)
         select(session, in: project)

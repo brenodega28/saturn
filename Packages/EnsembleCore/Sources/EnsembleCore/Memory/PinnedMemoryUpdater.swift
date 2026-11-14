@@ -107,9 +107,7 @@ public final class PinnedMemoryUpdater {
             var started: [(AgentSession, AgentMemory)] = []
             for session in pinned where await canLaunch(session.agent, project: project) {
                 let memory = AgentMemory(repository: project.url, agentName: session.agent.name)
-                if !project.isRemote {
-                    try memory.prepareDirectory()
-                }
+                try memory.prepareDirectory()
                 runtime.memoryUpdateAgents.insert(session.id)
                 updatingAgentIDs.insert(session.id)
                 session.send(prompt(for: session.agent, memory: memory))
@@ -126,7 +124,6 @@ public final class PinnedMemoryUpdater {
                     lastError = "\(session.agent.name) couldn’t update its memory: \(session.agent.lastError ?? "unknown error")"
                 }
             }
-            if project.isRemote { runtime.remoteFilesChanged(project) }
         } catch {
             lastError = "Couldn’t update pinned memory: \(error.localizedDescription)"
         }

@@ -41,13 +41,13 @@ struct ChecksExhaustedCard: View {
                         .disabled(builders.first?.agent.worktreeURL == nil)
                         .help("Open the worktree in Terminal and fix it yourself")
                     Button("Retry Once More") {
-                        model.performRunAction("Couldn’t retry the checks") { try model.engine.resolveFailure(run, retry: true) }
+                        model.resolveFailure(run, retry: true)
                         reload()
                     }
                     .buttonStyle(PillButtonStyle(height: 30))
                     .help("Give the agents another round of check results")
                     Button("End, Keep Branch") {
-                        model.performRunAction("Couldn’t end the run") { try model.engine.resolveFailure(run, retry: false) }
+                        model.resolveFailure(run, retry: false)
                         reload()
                     }
                     .buttonStyle(PillButtonStyle(height: 30))
@@ -80,19 +80,19 @@ extension Run {
 }
 
 extension AppModel {
-    func exhaustedChecksRun(for session: AgentSession) -> Run? {
-        guard let runID = session.agent.runId, !session.agent.readOnly, let hold = engine.holds[runID],
-              let run = engine.runs[runID] ?? (try? database.run(id: runID)) ?? nil,
+    func exhaustedChecksRun(for session: LiveAgentSession) -> Run? {
+        guard let runID = session.agent.runId, !session.agent.readOnly, let hold = connection.holds[runID],
+              let run = (try? database.run(id: runID)) ?? nil,
               hold.isChecksExhausted(in: run.snapshotWorkflow) else { return nil }
         return run
     }
 
-    func checkBuilders(of run: Run, in project: Project) -> [AgentSession] {
+    func checkBuilders(of run: Run, in project: Project) -> [LiveAgentSession] {
         guard let runID = run.id, let projectID = project.id else { return [] }
-        return ((try? agents.runSessions(runId: runID, projectId: projectID)) ?? []).filter { !$0.agent.readOnly }
+        return ((try? connection.runSessions(runId: runID, projectId: projectID)) ?? []).filter { !$0.agent.readOnly }
     }
 
-    func takeOver(_ session: AgentSession?) {
+    func takeOver(_ session: LiveAgentSession?) {
         if let session, let worktree = session.agent.worktreeURL, isRemote(session.agent) {
             openRemoteShell(at: worktree, forAgent: session.agent)
             return
@@ -113,7 +113,7 @@ extension AppModel {
                 try? await Task.sleep(for: .seconds(1))
             }
             guard let self else { return }
-            performRunAction("Couldn’t run the checks again") { try engine.resolveFailure(run, retry: true) }
+            resolveFailure(run, retry: true)
         }
     }
 }

@@ -106,7 +106,7 @@ public enum AgentInstructions {
     }
 }
 
-public enum CorrectionEncoding: Sendable, Hashable {
+public enum CorrectionEncoding: Sendable, Hashable, Codable {
     case instruction(String)
     case check(CheckDefinition)
     case protectedPath(String)

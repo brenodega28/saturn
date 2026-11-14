@@ -18,7 +18,7 @@ import Testing
         try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
         let client = SSHClient(destination: "devbox", executable: host.executable, runner: CommandRunner(environment: ["LEAKED": "mac"]), controlDirectory: nil)
         let runner = AppRunner(projectId: 7, log: log, environment: ["LEAKED": "mac"], killGracePeriod: .seconds(2))
-        runner.remote = RemoteAgentHost(client: client, claudePath: "claude", home: host.home.path, localPort: 1, relayPort: 1)
+        runner.remote = RemoteAppHost(client: client, home: host.home.path)
 
         await runner.start(command: "echo \"in $(basename \"$PWD\") port=$PORT leaked=${LEAKED:-none}\"; sleep 30", in: worktree, branch: "main", port: 4321)
         try await waitUntil { messages().contains("in repo port=4321 leaked=none") }
@@ -36,7 +36,7 @@ import Testing
         defer { host.remove() }
         let client = SSHClient(destination: "devbox", executable: host.executable, controlDirectory: nil)
         let runner = AppRunner(projectId: 8, log: log, environment: [:], killGracePeriod: .seconds(2))
-        runner.remote = RemoteAgentHost(client: client, claudePath: "claude", home: host.home.path, localPort: 1, relayPort: 1)
+        runner.remote = RemoteAppHost(client: client, home: host.home.path)
 
         await runner.start(command: "echo bye; exit 3", in: host.home, branch: "main", port: nil)
         try await waitUntil { if case .stopped = runner.state { true } else { false } }
@@ -56,7 +56,7 @@ struct RealRemoteAppRunnerTests {
         _ = try await client.runChecked(arguments: ["sh", "-c", #"mkdir -p "$1" && printf 'hello from the host\n' > "$1/index.html""#, "ensemble", folder])
         let log = ActivityLog()
         let runner = AppRunner(projectId: 9, log: log, environment: [:], killGracePeriod: .seconds(3))
-        runner.remote = RemoteAgentHost(client: client, claudePath: info.claudePath ?? "claude", home: info.home, localPort: 1, relayPort: 1)
+        runner.remote = RemoteAppHost(client: client, home: info.home)
         let port = Int.random(in: 41_000...48_000)
 
         await runner.start(command: "python3 -m http.server $PORT --bind 127.0.0.1", in: URL(fileURLWithPath: folder, isDirectory: true), branch: "main", port: port)

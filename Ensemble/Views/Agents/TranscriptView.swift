@@ -4,7 +4,7 @@ import SwiftUI
 
 struct TranscriptView: View {
     @Environment(AppModel.self) private var model
-    let session: AgentSession
+    let session: LiveAgentSession
 
     var body: some View {
         let transcript = session.transcript

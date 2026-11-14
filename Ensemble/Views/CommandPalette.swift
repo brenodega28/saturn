@@ -246,12 +246,12 @@ struct CommandPalette: View {
     private var runCommands: [PaletteCommand] {
         model.openProjects.flatMap { project -> [PaletteCommand] in
             guard let projectID = project.id else { return [] }
-            let active = model.engine.activeRuns(projectID: projectID)
+            let active = model.connection.activeRuns(projectID: projectID)
             let recent = ((try? model.database.runs(projectId: projectID)) ?? []).sorted { $0.startedAt > $1.startedAt }.prefix(5)
             var seen = Set<Int64>()
             return (active + recent).compactMap { run in
                 guard let id = run.id, seen.insert(id).inserted else { return nil }
-                let live = model.engine.runs[id] ?? run
+                let live = run
                 let step = live.currentStep.flatMap { stepID in model.config(for: project).workflow(live.workflow)?.step(stepID)?.displayTitle }
                 let state = live.isActive ? step : live.status.rawValue.replacingOccurrences(of: "_", with: " ")
                 let meta = [project.name, state, live.costUSD > 0 ? String(format: "$%.2f", live.costUSD) : nil].compactMap(\.self).joined(separator: " · ")

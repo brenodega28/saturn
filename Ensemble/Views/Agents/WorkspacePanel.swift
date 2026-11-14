@@ -4,12 +4,12 @@ import SwiftUI
 
 struct WorkspacePanel: View {
     @Environment(AppModel.self) private var model
-    let session: AgentSession
+    let session: LiveAgentSession
     @State private var status: WorktreeStatus?
     @State private var errorMessage: String?
     @State private var selectedFile: ChangedFile?
-    @AppStorage("preferredEditor") private var preferredEditor = ""
-    @AppStorage("preferredTerminal") private var preferredTerminal = ""
+    @AppStorage("preferredEditor", store: AppDefaults.store) private var preferredEditor = ""
+    @AppStorage("preferredTerminal", store: AppDefaults.store) private var preferredTerminal = ""
 
     var body: some View {
         let agent = session.agent
@@ -169,7 +169,7 @@ struct WorkspacePanel: View {
 private struct FileDiffSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    let session: AgentSession
+    let session: LiveAgentSession
     let file: ChangedFile
     @State private var diff: String?
 

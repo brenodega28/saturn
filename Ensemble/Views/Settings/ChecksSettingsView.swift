@@ -164,7 +164,7 @@ struct ChecksSettingsView: View {
         Task {
             defer { isCheckingHealth = false }
             do {
-                report = try await model.agents.checkHarness(of: project, git: git)
+                report = try await model.send(ProjectCommands.CheckHarness(projectID: project.id ?? -1))
             } catch {
                 healthError = error.localizedDescription
             }

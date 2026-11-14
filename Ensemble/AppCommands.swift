@@ -13,6 +13,9 @@ struct AppCommands: Commands {
         CommandGroup(after: .appInfo) {
             Button("Check for Updates…") { updater.checkForUpdates() }
                 .disabled(!updater.isConfigured)
+            Divider()
+            Button("Stop Ensemble daemon") { model.confirmStopLocalDaemon() }
+                .help("Stop the background service that runs your agents. Running agents stop too.")
         }
 
         CommandGroup(replacing: .newItem) {

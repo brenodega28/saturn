@@ -8,7 +8,7 @@ enum CodeStyle {
     static let defaultFontSize = 12.5
 
     static var fontSize: Double {
-        let stored = UserDefaults.standard.double(forKey: fontSizeKey)
+        let stored = AppDefaults.store.double(forKey: fontSizeKey)
         return stored > 0 ? stored : defaultFontSize
     }
 

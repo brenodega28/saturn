@@ -35,7 +35,7 @@ struct ChangesView: View {
     }
 
     private func reloadKey(_ run: Run) -> String {
-        [run.id.map(String.init), run.currentStep, run.status.rawValue, model.engine.waitingReason(runID: run.id ?? -1)?.reason.rawValue]
+        [run.id.map(String.init), run.currentStep, run.status.rawValue, model.connection.waitingReason(runID: run.id ?? -1)?.reason.rawValue]
             .map { $0 ?? "-" }
             .joined(separator: "|")
     }
@@ -321,16 +321,16 @@ struct ConflictBanner: View {
     @ViewBuilder
     private func conflictActions(_ conflict: MergeConflict) -> some View {
         Button("Ask \(owner(of: conflict.branch)) to combine") {
-            perform { name in "\(name) is merging the branches and resolving the conflict." } action: { try await model.driver.askToCombine(conflict, in: run) }
+            perform { name in "\(name) is merging the branches and resolving the conflict." } action: { try await model.send(RunCommands.AskToCombine(runID: run.id ?? -1, conflict: conflict)) }
         }
         .buttonStyle(PillButtonStyle(.primary, height: 28))
         .help("Merge the other side into \(conflict.branch) and send its author the conflict to resolve")
         Button("Keep \(owner(of: conflict.branch))’s") {
-            perform { _ in "Kept \(conflict.branch)’s version." } action: { try await model.driver.keep(conflict.branch, resolving: conflict, in: run); return "" }
+            perform { _ in "Kept \(conflict.branch)’s version." } action: { try await model.send(RunCommands.KeepBranch(runID: run.id ?? -1, winner: conflict.branch, conflict: conflict)); return "" }
         }
         .buttonStyle(PillButtonStyle(height: 28))
         Button("Keep \(conflict.otherIsBase ? conflict.other : owner(of: conflict.other))’s") {
-            perform { _ in "Kept \(conflict.other)’s version." } action: { try await model.driver.keep(conflict.other, resolving: conflict, in: run); return "" }
+            perform { _ in "Kept \(conflict.other)’s version." } action: { try await model.send(RunCommands.KeepBranch(runID: run.id ?? -1, winner: conflict.other, conflict: conflict)); return "" }
         }
         .buttonStyle(PillButtonStyle(height: 28))
         Button("Open in Merge Tool") {
@@ -338,15 +338,16 @@ struct ConflictBanner: View {
             Task {
                 defer { busy = false }
                 do {
-                    let staged = try await model.driver.stageForMergeTool(conflict, in: run)
-                    if let builder = model.agents(inRun: run).first(where: { $0.worktreeURL == staged.worktree }), model.isRemote(builder) {
-                        model.openRemoteShell(at: staged.worktree, forAgent: builder)
+                    let staged = try await model.send(RunCommands.StageForMergeTool(runID: run.id ?? -1, conflict: conflict))
+                    let worktree = URL(fileURLWithPath: staged.worktree, isDirectory: true)
+                    if let builder = model.agents(inRun: run).first(where: { $0.worktreeURL?.path == staged.worktree }), model.isRemote(builder) {
+                        model.openRemoteShell(at: worktree, forAgent: builder)
                     } else if let editor = ExternalApp.installed(ExternalApp.editorCandidates).first {
-                        editor.open(staged.worktree)
+                        editor.open(worktree)
                     } else {
-                        NSWorkspace.shared.activateFileViewerSelecting([staged.worktree])
+                        NSWorkspace.shared.activateFileViewerSelecting([worktree])
                     }
-                    note = "Resolve \(staged.files.joined(separator: ", ")) in \(staged.worktree.path), then commit. Ensemble picks it up when you reload."
+                    note = "Resolve \(staged.files.joined(separator: ", ")) in \(staged.worktree), then commit. Ensemble picks it up when you reload."
                 } catch {
                     model.alert = AppAlert(title: "Couldn’t stage the merge", message: error.localizedDescription)
                 }

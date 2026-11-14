@@ -43,12 +43,9 @@ extension AppModel {
             setNewChatOptions(options, for: project)
             return
         }
-        do {
-            try leadChat.setLead(model: model, effort: effort, for: chat)
-            leadChatRevision += 1
-        } catch {
-            alert = AppAlert(title: "Couldn’t change the Lead’s model", message: error.localizedDescription)
-        }
+        guard let chatID = chat.id else { return }
+        dispatch("Couldn’t change the Lead’s model", ChatCommands.SetLead(chatID: chatID, model: model, effort: effort))
+        leadChatRevision += 1
     }
 
     func setWorkflow(_ workflow: String, for chat: Chat?, in project: Project) {
@@ -58,12 +55,8 @@ extension AppModel {
             setNewChatOptions(options, for: project)
             return
         }
-        do {
-            try database.setWorkflow(workflow, chatId: chatID)
-            leadChatRevision += 1
-        } catch {
-            alert = AppAlert(title: "Couldn’t change the workflow", message: error.localizedDescription)
-        }
+        dispatch("Couldn’t change the workflow", ChatCommands.SetWorkflow(chatID: chatID, workflow: workflow))
+        leadChatRevision += 1
     }
 
     func isLeadBusy(_ chat: Chat?) -> Bool {
@@ -86,7 +79,7 @@ extension AppModel {
                 alert = AppAlert(title: "Nothing to retry", message: "No step in this chat is waiting after a failure.")
                 return
             }
-            performRunAction("Couldn’t retry the step") { try engine.resolveFailure(run, retry: true) }
+            resolveFailure(run, retry: true)
         default:
             return
         }

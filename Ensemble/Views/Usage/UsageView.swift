@@ -4,11 +4,11 @@ import SwiftUI
 
 struct UsageView: View {
     @Environment(AppModel.self) private var model
-    @AppStorage("usage.period") private var period: UsagePeriod = .month
-    @AppStorage(AppModel.globalMonthlyBudgetKey) private var globalBudget: Double = 0
-    @AppStorage(AppModel.globalWeeklyBudgetKey) private var globalWeeklyBudget: Double = 0
-    @AppStorage("usage.budgetPeriod") private var budgetPeriod: BudgetPeriodKind = .week
-    @AppStorage(AppModel.usageResetPointKey) private var usageResetPoint: Double = 0
+    @AppStorage("usage.period", store: AppDefaults.store) private var period: UsagePeriod = .month
+    @AppStorage(AppModel.globalMonthlyBudgetKey, store: AppDefaults.store) private var globalBudget: Double = 0
+    @AppStorage(AppModel.globalWeeklyBudgetKey, store: AppDefaults.store) private var globalWeeklyBudget: Double = 0
+    @AppStorage("usage.budgetPeriod", store: AppDefaults.store) private var budgetPeriod: BudgetPeriodKind = .week
+    @AppStorage(AppModel.usageResetPointKey, store: AppDefaults.store) private var usageResetPoint: Double = 0
     @State private var isConfirmingReset = false
 
     var body: some View {

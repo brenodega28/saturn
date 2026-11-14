@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "EnsembleCore", targets: ["EnsembleCore"]),
+        .executable(name: "ensembled", targets: ["ensembled"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.0"),
@@ -20,9 +21,13 @@ let package = Package(
             ],
             resources: [.copy("Resources/Defaults"), .copy("Resources/Templates")]
         ),
+        .executableTarget(
+            name: "ensembled",
+            dependencies: ["EnsembleCore"]
+        ),
         .testTarget(
             name: "EnsembleCoreTests",
-            dependencies: ["EnsembleCore"]
+            dependencies: ["EnsembleCore", "ensembled"]
         ),
     ]
 )

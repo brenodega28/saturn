@@ -40,7 +40,7 @@ public final class AppRunner {
     public var environment: [String: String]
     public var killGracePeriod: Duration
     public var portWait: Duration
-    public var remote: RemoteAgentHost?
+    public var remote: RemoteAppHost?
     public private(set) var forwardedPorts: [Int: Int] = [:]
 
     @ObservationIgnored private let log: ActivityLog
@@ -53,7 +53,7 @@ public final class AppRunner {
     @ObservationIgnored private var exitTask: Task<Void, Never>?
     @ObservationIgnored private var forwards: [Int: SSHPortForward] = [:]
     @ObservationIgnored private var remotePidFile: String?
-    @ObservationIgnored private var runningRemote: RemoteAgentHost?
+    @ObservationIgnored private var runningRemote: RemoteAppHost?
 
     public init(projectId: Int64, log: ActivityLog, environment: [String: String], killGracePeriod: Duration = .seconds(5), portWait: Duration = .seconds(30)) {
         self.projectId = projectId
@@ -287,7 +287,7 @@ public final class AppRunner {
     exit 0
     """#
 
-    private func forwardedListeningPorts(on remote: RemoteAgentHost, pidFile: String, generation current: Int) async -> [Int] {
+    private func forwardedListeningPorts(on remote: RemoteAppHost, pidFile: String, generation current: Int) async -> [Int] {
         let candidates = urlPorts.map(String.init)
         guard let result = try? await remote.client.run(arguments: ["sh", "-c", Self.remoteListeningScript, "ensemble", pidFile] + candidates) else { return [] }
         var remotePorts: [Int] = []
@@ -317,14 +317,14 @@ public final class AppRunner {
         forwardedPorts = [:]
     }
 
-    private static func signal(_ remote: RemoteAgentHost, pidFile: String, _ name: String) async {
-        _ = try? await remote.client.run(arguments: ["sh", "-c", RemoteAgentLaunch.killScript(signal: name), "ensemble", pidFile])
+    private static func signal(_ remote: RemoteAppHost, pidFile: String, _ name: String) async {
+        _ = try? await remote.client.run(arguments: ["sh", "-c", RemoteAppHost.killScript(signal: name), "ensemble", pidFile])
     }
 
-    private static func signalAndWait(_ remote: RemoteAgentHost, pidFile: String, _ name: String) {
+    private static func signalAndWait(_ remote: RemoteAppHost, pidFile: String, _ name: String) {
         let process = Process()
         process.executableURL = remote.client.executable
-        process.arguments = remote.client.arguments(for: ShellQuote.command(["sh", "-c", RemoteAgentLaunch.killScript(signal: name), "ensemble", pidFile]))
+        process.arguments = remote.client.arguments(for: ShellQuote.command(["sh", "-c", RemoteAppHost.killScript(signal: name), "ensemble", pidFile]))
         process.environment = remote.client.runner.environment
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice

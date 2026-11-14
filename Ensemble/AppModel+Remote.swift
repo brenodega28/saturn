@@ -15,27 +15,26 @@ extension AppModel {
         RemoteHost(client: SSHClient(destination: destination, runner: runner))
     }
 
-    func remoteWorktreeManager(for project: Project, destination: String) async -> WorktreeManager {
-        let client = SSHClient(destination: destination, runner: runner)
-        return await WorktreeManager.make(repository: project.url, git: GitClient(ssh: client), fileSystem: SSHFileSystem(client: client))
-    }
-
     func git(for project: Project) -> GitClient? {
-        guard let destination = project.host else { return git }
-        return GitClient(ssh: SSHClient(destination: destination, runner: runner))
+        connection.git(for: project)
     }
 
     func git(forAgent agent: Agent) -> GitClient? {
-        guard let project = try? database.project(id: agent.projectId) else { return git }
+        guard let project = try? database.project(id: agent.projectId) else { return nil }
         return git(for: project)
     }
 
+    func shellDestination(for project: Project?) -> String? {
+        connection.destination ?? project?.host
+    }
+
     func isRemote(_ agent: Agent) -> Bool {
-        ((try? database.project(id: agent.projectId)) ?? nil)?.isRemote ?? false
+        connection.isRemote || (((try? database.project(id: agent.projectId)) ?? nil)?.isRemote ?? false)
     }
 
     func openRemoteShell(at directory: URL, forAgent agent: Agent) {
-        guard let project = try? database.project(id: agent.projectId), let destination = project.host else { return }
+        let project = (try? database.project(id: agent.projectId)) ?? nil
+        guard let destination = shellDestination(for: project) else { return }
         let command = "exec /usr/bin/ssh -t -- " + ShellQuote.quote(destination) + " " + ShellQuote.quote("cd -- " + ShellQuote.quote(directory.path) + " && exec \"${SHELL:-/bin/sh}\" -l")
         let file = FileManager.default.temporaryDirectory.appending(path: "ensemble-ssh-\(UUID().uuidString.prefix(8)).command")
         do {
@@ -47,69 +46,35 @@ extension AppModel {
         }
     }
 
-    func remoteMirror(for project: Project) -> RemoteMirror? {
-        guard let id = project.id, let destination = project.host else { return nil }
-        let location = RemoteMirror.location(forProject: id)
-        return RemoteMirror(
-            directory: location.directory, manifestFile: location.manifest,
-            repository: project.path, client: SSHClient(destination: destination, runner: runner)
-        )
-    }
-
     func pullRemoteFiles(_ project: Project) async throws {
-        guard let mirror = remoteMirror(for: project) else { return }
-        try await exclusively(project) {
-            try await self.pushRemoteFiles(project, mirror: mirror)
-            try await mirror.pull()
-            self.reloadConfig(for: project)
-        }
+        await pullConfigFiles(project)
+        reloadConfig(for: project)
     }
 
     func pullAllRemoteFiles() async {
-        for project in openProjects where project.isRemote {
-            try? await pullRemoteFiles(project)
+        guard connection.isRemote else { return }
+        for project in openProjects {
+            await pullConfigFiles(project)
+            reloadConfig(for: project)
         }
     }
 
     func syncRemoteFiles(_ project: Project) async throws {
-        guard let mirror = remoteMirror(for: project) else { return }
-        try await exclusively(project) {
-            try await self.pushRemoteFiles(project, mirror: mirror)
-        }
-    }
-
-    private func exclusively(_ project: Project, _ work: @escaping @MainActor () async throws -> Void) async throws {
-        guard let id = project.id else { return }
-        while let running = remoteFileSyncs[id] {
-            _ = await running.result
-        }
-        let task = Task { try await work() }
-        remoteFileSyncs[id] = task
-        defer { remoteFileSyncs[id] = nil }
-        try await task.value
-    }
-
-    private func pushRemoteFiles(_ project: Project, mirror: RemoteMirror) async throws {
-        do {
-            let pushed = try await mirror.push()
-            if !pushed.isEmpty { reloadConfig(for: project) }
-        } catch let conflict as RemoteMirrorConflict {
-            alert = AppAlert(title: "\(project.name) changed on \(project.host.map(SSHDestination.displayName) ?? "the host")", message: conflict.localizedDescription)
-            try await mirror.pull()
-            reloadConfig(for: project)
-        }
+        try await pushConfigFiles(project)
     }
 
     func startRemoteFileSync() {
         Task { [weak self] in
             while let self, !Task.isCancelled {
-                for project in self.openProjects where project.isRemote && self.remoteStatus(for: project).filesPulledAt != nil {
-                    guard let id = project.id else { continue }
-                    do {
-                        try await self.syncRemoteFiles(project)
-                        if self.remoteStatuses[id]?.syncError != nil { self.remoteStatuses[id]?.syncError = nil }
-                    } catch {
-                        self.remoteStatuses[id]?.syncError = "Couldn’t save changes to the host: \(error.localizedDescription)"
+                if self.connection.isRemote, self.connection.isConnected {
+                    for project in self.openProjects {
+                        guard let id = project.id else { continue }
+                        do {
+                            try await self.pushConfigFiles(project)
+                            if self.remoteStatuses[id]?.syncError != nil { self.remoteStatuses[id]?.syncError = nil }
+                        } catch {
+                            self.remoteStatuses[id, default: RemoteProjectStatus()].syncError = "Couldn’t save changes to the server: \(error.localizedDescription)"
+                        }
                     }
                 }
                 try? await Task.sleep(for: .seconds(2))
@@ -121,15 +86,15 @@ extension AppModel {
         project.id.flatMap { remoteStatuses[$0] } ?? RemoteProjectStatus()
     }
 
+    func refreshLegacySSHProject(_ project: Project) {
+        guard let id = project.id, let host = project.host else { return }
+        remoteStatuses[id] = RemoteProjectStatus(
+            error: "This project ran agents over SSH, which Ensemble no longer does. Move it to \(SSHDestination.displayName(host))’s daemon to keep working on it there; its history stays here, read-only."
+        )
+    }
+
     func openRemoteFolder(host destination: String, path: String) async throws {
-        let host = remoteHost(destination)
-        let root = try await host.repositoryRoot(containing: path)
-        let project = try database.openRemoteProject(path: root, host: destination)
-        reloadProjects()
-        if let id = project.id {
-            selection = .project(id)
-        }
-        await refresh(project)
+        try await openOnServer(destination, path: path)
     }
 
     func reopen(_ project: Project) async {
@@ -144,54 +109,16 @@ extension AppModel {
         }
     }
 
-    func remoteAgentHost(for project: Project) async throws -> RemoteAgentHost {
-        guard let destination = project.host else { throw RemoteProjectUnsupported("Running agents on the host") }
-        try await driver.ensureServer()
-        guard let localPort = agents.mcpServer.map({ Int($0.port) }) else { throw RemoteAgentSetupError.serverUnavailable }
+    func appRunnerHost(for project: Project) async throws -> RemoteAppHost {
+        guard let destination = shellDestination(for: project) else { throw RemoteProjectUnsupported("Running the app on the host") }
         let client = SSHClient(destination: destination, runner: runner)
-        var info = remoteHostInfos[destination]
-        if info?.claudePath == nil {
+        let info: RemoteHostInfo
+        if let known = remoteHostInfos[destination] {
+            info = known
+        } else {
             info = try await RemoteHost(client: client).probe()
             remoteHostInfos[destination] = info
         }
-        guard let info, let claudePath = info.claudePath else { throw RemoteAgentSetupError.claudeMissing(SSHDestination.displayName(destination)) }
-        let relayPort = try await openTunnel(to: destination, client: client, localPort: localPort)
-        return RemoteAgentHost(client: client, claudePath: claudePath, home: info.home, localPort: localPort, relayPort: relayPort)
-    }
-
-    private func openTunnel(to destination: String, client: SSHClient, localPort: Int) async throws -> Int {
-        if let opening = remoteTunnelOpenings[destination] { return try await opening.value }
-        let tunnel: RemoteTunnel
-        if let existing = remoteTunnels[destination], existing.localPort == localPort {
-            if let port = existing.remotePort { return port }
-            tunnel = existing
-        } else {
-            remoteTunnels[destination]?.stop()
-            tunnel = RemoteTunnel(client: client, localPort: localPort)
-            remoteTunnels[destination] = tunnel
-        }
-        let opening = Task { try await tunnel.open() }
-        remoteTunnelOpenings[destination] = opening
-        defer { remoteTunnelOpenings[destination] = nil }
-        return try await opening.value
-    }
-
-    func stopRemoteTunnels() {
-        for tunnel in remoteTunnels.values { tunnel.stop() }
-        remoteTunnels = [:]
-    }
-}
-
-enum RemoteAgentSetupError: LocalizedError {
-    case serverUnavailable
-    case claudeMissing(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .serverUnavailable:
-            "Ensemble’s agent tools aren’t running, so agents on the host couldn’t reach them. Restart Ensemble and try again."
-        case .claudeMissing(let host):
-            "Claude Code isn’t installed on \(host). Install it there (curl -fsSL https://claude.ai/install.sh | bash), sign in by running claude once on the host, then try again."
-        }
+        return RemoteAppHost(client: client, home: info.home)
     }
 }

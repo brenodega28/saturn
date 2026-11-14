@@ -31,13 +31,6 @@ extension AppModel {
             }
             requestNotifier.post(wanted, projectName: { [weak self] id in self?.project(withID: id)?.name })
         }
-        agents.observeTurnEnds { [weak self] session in
-            guard let self, session.agent.kind == .lead, session.agent.status == .idle, let taskID = session.agent.taskId,
-                  !session.isRunning, !session.isQueued else { return }
-            chatNotifications.leadTurnEnded(taskId: taskID) { [weak self] run in
-                run.id.flatMap { self?.engine.runs[$0] } ?? run
-            }
-        }
         requests.start()
         chatNotifications.start()
         pendingPermissions.start()
@@ -72,30 +65,18 @@ extension AppModel {
 
     func answerPermission(_ item: ChatRequest, allow: Bool) {
         guard let id = item.id else { return }
-        do {
-            try agents.answerPermission(requestId: id, allow: allow)
-        } catch {
-            alert = AppAlert(title: "Couldn’t answer “\(item.title)”", message: error.localizedDescription)
-        }
+        dispatch("Couldn’t answer “\(item.title)”", ApprovalCommands.AnswerPermission(chatRequestID: id, decision: allow ? .allow : .deny))
     }
 
     func answerPermission(_ card: LeadMessage, decision: PermissionDecision) {
         guard let requestID = card.permissionRequestId else { return }
-        do {
-            try agents.answerPermission(requestId: requestID, decision: decision)
-            leadChatRevision += 1
-        } catch {
-            alert = AppAlert(title: "Couldn’t answer the permission request", message: error.localizedDescription)
-        }
+        dispatch("Couldn’t answer the permission request", ApprovalCommands.AnswerPermission(permissionRequestID: requestID, decision: decision))
+        leadChatRevision += 1
     }
 
     func dismissRequest(_ item: ChatRequest) {
         guard let id = item.id else { return }
-        do {
-            try database.resolveChatRequest(id: id, status: .dismissed)
-        } catch {
-            alert = AppAlert(title: "Couldn’t dismiss “\(item.title)”", message: error.localizedDescription)
-        }
+        dispatch("Couldn’t dismiss “\(item.title)”", ApprovalCommands.Dismiss(requestID: id))
     }
 
     func openRequest(_ item: ChatRequest) {
@@ -163,7 +144,6 @@ extension AppModel {
 
     func runTitle(for item: ChatRequest) -> String? {
         guard let runID = item.runId else { return nil }
-        if let live = engine.runs[runID] { return live.title }
         return (try? database.run(id: runID))?.title
     }
 }

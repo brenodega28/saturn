@@ -30,13 +30,10 @@ extension AgentRuntime {
         let settings = project.settings
         let script = settings.setupScript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !script.isEmpty else { return }
-        var runner = SetupScriptRunner(
+        let runner = SetupScriptRunner(
             environment: setupEnvironment(),
             timeout: .seconds(max(1, settings.setupTimeoutMinutes) * 60)
         )
-        if project.isRemote {
-            runner.remote = try await remoteHostProvider(project)
-        }
         try await runner.run(script: script, in: preparation.worktree, variables: preparation.variables, logDirectory: preparation.logDirectory)
     }
 

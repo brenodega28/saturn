@@ -76,21 +76,13 @@ public final class AgentRuntime {
     public var handoffTools: @MainActor (Agent) -> Set<HandoffTool> = { _ in [] }
     public var worktreePrepared: (@MainActor (WorktreePreparation) async throws -> Void)?
     public var gitProvider: @MainActor () -> GitClient? = { nil }
-    public var remoteHostProvider: @MainActor (Project) async throws -> RemoteAgentHost = { _ in throw RemoteProjectUnsupported("Running agents on the host") }
-    public var remoteFilesChanged: @MainActor (Project) -> Void = { _ in }
-
-    func hostGit(_ git: GitClient, for project: Project) -> GitClient {
-        guard let client = project.sshClient, !git.isRemote else { return git }
-        return GitClient(ssh: client)
-    }
-
     func projectGit(_ project: Project) -> GitClient? {
-        project.sshClient.map(GitClient.init(ssh:)) ?? gitProvider()
+        project.isRemote ? nil : gitProvider()
     }
 
-    func remoteProject(of agent: Agent) -> Project? {
-        guard let project = try? database.project(id: agent.projectId), project.isRemote else { return nil }
-        return project
+    static func refuseSSHProject(_ project: Project?) throws {
+        guard let project, project.isRemote else { return }
+        throw RemoteProjectUnsupported("Running agents over SSH")
     }
     public var pluginSkills: @MainActor (Project) -> Set<String> = { _ in [] }
     @ObservationIgnored public var willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
@@ -184,7 +176,7 @@ public final class AgentRuntime {
         git: GitClient,
         now: Date = .now
     ) async throws -> AgentSession {
-        let git = hostGit(git, for: project)
+        try Self.refuseSSHProject(project)
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let task = task.trimmingCharacters(in: .whitespacesAndNewlines)
         guard providerMode != nil else { throw AgentError.providerNotChosen }
@@ -246,7 +238,7 @@ public final class AgentRuntime {
         spawnedBy spawner: Agent? = nil,
         now: Date = .now
     ) async throws -> [AgentSession] {
-        let git = hostGit(git, for: project)
+        try Self.refuseSSHProject(project)
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
         let role = kind.builtInRole
@@ -301,9 +293,10 @@ public final class AgentRuntime {
         return spawned
     }
 
-    func turnSetup(for agent: Agent, remote: RemoteAgentHost? = nil) throws -> TurnSetup {
+    func turnSetup(for agent: Agent) throws -> TurnSetup {
         try checkMonthlyBudget(for: agent)
         let project = try database.project(id: agent.projectId)
+        try Self.refuseSSHProject(project)
         let repository = project?.url
         let files = project?.filesRoot
         let directory: URL
@@ -316,7 +309,7 @@ public final class AgentRuntime {
             guard let worktree = agent.worktreeURL else { throw AgentLaunchError.missingWorktree(agent.name) }
             directory = worktree
         }
-        guard remote != nil || FileManager.default.fileExists(atPath: directory.path) else {
+        guard FileManager.default.fileExists(atPath: directory.path) else {
             throw agent.readOnly ? AgentLaunchError.missingProject(agent.name) : AgentLaunchError.missingWorktree(agent.name)
         }
 
@@ -357,12 +350,12 @@ public final class AgentRuntime {
 
         var additional: [URL] = []
         if agent.readOnly || isLead, let runId = agent.runId {
-            let resolve: (URL) -> String = { remote == nil ? realPath(of: $0) : SSHFileSystem.normalize($0.path) }
+            let resolve: (URL) -> String = { realPath(of: $0) }
             let root = resolve(directory) + "/"
             additional = try database.agents(inProject: agent.projectId)
                 .filter { $0.runId == runId && $0.id != agent.id }
                 .compactMap(\.worktreeURL)
-                .filter { (remote != nil || FileManager.default.fileExists(atPath: $0.path)) && !(resolve($0) + "/").hasPrefix(root) }
+                .filter { FileManager.default.fileExists(atPath: $0.path) && !(resolve($0) + "/").hasPrefix(root) }
         }
         var setup = TurnSetup(directory: directory, systemPrompt: prompt, readOnly: agent.readOnly, additionalDirectories: additional)
         setup.permissions = policy
@@ -379,22 +372,14 @@ public final class AgentRuntime {
         if let server = mcpServer, let agentID = agent.id {
             server.revokeAll(agent: agentID)
             let registered = server.register(agent: agentID, tools: tools)
-            let endpoint = remote.map { MCPEndpoint(agentID: registered.agentID, token: registered.token, url: $0.relay(registered.url), tools: registered.tools) } ?? registered
+            let endpoint = registered
             if !tools.isEmpty {
-                if let remote {
-                    setup.extraArguments = ["--mcp-config", remote.stateDirectory(forAgent: agentID) + "/mcp.json", "--strict-mcp-config"]
-                    setup.mcpConfiguration = endpoint.configuration.compactJSON
-                } else {
-                    setup.extraArguments = try endpoint.launchArguments(configDirectory: paths.agentDirectory(agentID))
-                }
+                setup.extraArguments = try endpoint.launchArguments(configDirectory: paths.agentDirectory(agentID))
                 setup.extraAllowedTools += endpoint.allowedTools
                 setup.systemPrompt += "\n\n" + Self.handoffGuide(tools)
             }
             let hookURL = server.hookURL(for: registered)
-            setup.hooks = Self.hookSettings(checks: hookChecks, policy: policy, url: remote?.relay(hookURL) ?? hookURL)
-        }
-        if remote != nil {
-            return addingRemoteMemoryAccess(to: setup, for: agent, repository: repository)
+            setup.hooks = Self.hookSettings(checks: hookChecks, policy: policy, url: hookURL)
         }
         return try addingMemoryAccess(to: setup, for: agent, repository: files)
     }
@@ -514,7 +499,7 @@ public final class AgentRuntime {
     }
 
     public func delete(_ session: AgentSession, in project: Project, git: GitClient, deleteBranch: Bool) async throws {
-        let git = hostGit(git, for: project)
+        try Self.refuseSSHProject(project)
         dequeue(session)
         session.terminateForDeletion()
         let manager = WorktreeManager(project: project, git: git)
@@ -601,7 +586,7 @@ extension AgentRuntime {
         git: GitClient,
         now: Date = .now
     ) async throws -> AgentSession {
-        let git = hostGit(git, for: project)
+        try Self.refuseSSHProject(project)
         guard providerMode != nil else { throw AgentError.providerNotChosen }
         guard let projectId = project.id else { throw AgentError.emptyTask }
         let role = kind.builtInRole
@@ -659,7 +644,7 @@ extension AgentRuntime {
     }
 
     public func openWorktree(for session: AgentSession, in project: Project, git: GitClient) async throws {
-        let git = hostGit(git, for: project)
+        try Self.refuseSSHProject(project)
         let agent = session.agent
         let baseBranch = try await git.baseBranch(of: project.url)
         let taskSlug = Slug.make((agent.task.nilIfEmpty ?? "lead").split(whereSeparator: \.isWhitespace).prefix(6).joined(separator: " "))
@@ -710,7 +695,7 @@ extension AgentRuntime {
     public func reassign(
         _ session: AgentSession, toRun runId: Int64, runStepId: Int64?, planTaskId: String, task: String, skills: [String] = [], in project: Project, git: GitClient
     ) async throws {
-        let git = hostGit(git, for: project)
+        try Self.refuseSSHProject(project)
         let agent = session.agent
         let manager = WorktreeManager(project: project, git: git)
         let base = try await git.baseBranch(of: project.url) ?? "HEAD"

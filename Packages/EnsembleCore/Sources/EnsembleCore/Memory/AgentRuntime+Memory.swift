@@ -24,19 +24,6 @@ extension AgentRuntime {
         return updated
     }
 
-    func addingRemoteMemoryAccess(to setup: TurnSetup, for agent: Agent, repository: URL?) -> TurnSetup {
-        guard agent.isPinned, let id = agent.id, memoryUpdateAgents.contains(id), let repository else { return setup }
-        let memory = AgentMemory(repository: repository, agentName: agent.name)
-        let directory = AgentMemory.directory(in: repository)
-        let file = "/" + SSHFileSystem.normalize(memory.url.path)
-        var updated = setup
-        updated.additionalDirectories.append(directory)
-        if !setup.readOnly {
-            updated.extraAllowedTools += ["Write(\(file))", "Edit(\(file))"]
-        }
-        return updated
-    }
-
     public func checkMonthlyBudget(for agent: Agent, at date: Date = .now) throws {
         try database.checkProjectBudget(projectId: agent.projectId, at: date)
     }

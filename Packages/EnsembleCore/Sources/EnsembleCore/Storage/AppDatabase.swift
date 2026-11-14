@@ -4,9 +4,21 @@ import GRDB
 public final class AppDatabase: Sendable {
     public let writer: any DatabaseWriter
 
+    public let isReplica: Bool
+
     public init(_ writer: any DatabaseWriter) throws {
         self.writer = writer
+        self.isReplica = false
         try Self.migrator.migrate(writer)
+    }
+
+    init(replicaWriter writer: any DatabaseWriter) {
+        self.writer = writer
+        self.isReplica = true
+    }
+
+    public static var latestMigration: String {
+        migrator.migrations.last ?? ""
     }
 
     public static func open(at url: URL) throws -> AppDatabase {
@@ -383,6 +395,16 @@ public final class AppDatabase: Sendable {
                 t.add(column: "viewedAt", .datetime)
                 t.add(column: "leadModel", .text)
                 t.add(column: "leadEffort", .text)
+            }
+        }
+
+        migrator.registerMigration("v26-change-log") { db in
+            try db.create(table: ChangeLog.tableName) { t in
+                t.autoIncrementedPrimaryKey("seq")
+                t.column("tableName", .text).notNull()
+                t.column("op", .text).notNull()
+                t.column("rowID", .integer).notNull()
+                t.column("row", .text)
             }
         }
 

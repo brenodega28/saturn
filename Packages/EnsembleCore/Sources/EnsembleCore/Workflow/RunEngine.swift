@@ -321,7 +321,7 @@ public final class RunEngine {
                 step.endedAt = now
                 try step.update(db)
             }
-            for var item in try InboxItem.filter(InboxItem.Columns.runId == runID).fetchAll(db)
+            for var item in try ChatRequest.filter(ChatRequest.Columns.runId == runID).fetchAll(db)
             where item.status == .open && item.kind != .notice {
                 item.status = .dismissed
                 item.resolvedAt = now
@@ -441,17 +441,17 @@ public final class RunEngine {
     public nonisolated static let reminderPrefix = "Still waiting for you: "
 
     @discardableResult
-    public func postApprovalReminders(now: Date = .now) throws -> [InboxItem] {
-        var posted: [InboxItem] = []
+    public func postApprovalReminders(now: Date = .now) throws -> [ChatRequest] {
+        var posted: [ChatRequest] = []
         for run in try database.runs(status: [.waitingOnYou]) {
             guard let id = run.id, let hold = try database.engineState(runId: id).hold, hold.reason == .approval,
                   (try? workflow(for: run))?.step(hold.stepId)?.remindDaily == true else { continue }
-            let items = try database.inboxItems(runId: id)
-            guard let opened = items.first(where: { $0.id == hold.inboxItemId })?.createdAt else { continue }
+            let items = try database.chatRequests(runId: id)
+            guard let opened = items.first(where: { $0.id == hold.requestId })?.createdAt else { continue }
             let lastNudge = items.filter { $0.title.hasPrefix(Self.reminderPrefix) }.map(\.createdAt).max() ?? opened
             guard now.timeIntervalSince(lastNudge) >= 86_400 else { continue }
             let days = Int(now.timeIntervalSince(opened) / 86_400)
-            posted.append(try database.createInboxItem(InboxItem(
+            posted.append(try database.createChatRequest(ChatRequest(
                 projectId: run.projectId, runId: id, kind: .notice, title: Self.reminderPrefix + run.title,
                 body: "“\(hold.message)” has waited \(days) day\(days == 1 ? "" : "s") for your approval.", createdAt: now
             )))
@@ -536,16 +536,16 @@ extension RunEngine {
         return hold
     }
 
-    func commit(_ loaded: LoadedRun, steps: [RunStep] = [], inbox: InboxItem? = nil) throws {
+    func commit(_ loaded: LoadedRun, steps: [RunStep] = [], request inbox: ChatRequest? = nil) throws {
         let runID = try loaded.id
         let run = loaded.run
         let now = clock()
         let taskStatus = Self.taskStatus(for: run.status)
         let state = try database.writer.write { db in
             var state = loaded.state
-            if var inbox {
-                try inbox.insert(db)
-                state.hold?.inboxItemId = inbox.id
+            if let inbox {
+                let request = try ChatRequest.insertAttached(inbox, db)
+                state.hold?.requestId = request.id
             }
             try run.update(db)
             try db.execute(sql: "UPDATE run SET engineState = ? WHERE id = ?", arguments: [try RunEngineState.encode(state), runID])
@@ -585,8 +585,8 @@ extension RunEngine {
         #if DEBUG
         traceReleased(loaded, response: response, decision: decision)
         #endif
-        if let inboxID = loaded.state.hold?.inboxItemId {
-            try database.resolveInboxItem(id: inboxID, response: response, now: clock())
+        if let inboxID = loaded.state.hold?.requestId {
+            try database.resolveChatRequest(id: inboxID, response: response, now: clock())
         }
         loaded.state.hold = nil
         loaded.run.status = .running

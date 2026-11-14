@@ -79,19 +79,19 @@ public struct ChatNotification: Sendable, Hashable {
 
 public enum NotificationTarget: Equatable, Sendable {
     case chat(projectId: Int64, taskId: Int64)
-    case inboxItem(id: Int64)
+    case chatRequest(id: Int64)
 
     static let kindKey = "target"
     static let projectKey = "projectId"
     static let taskKey = "taskId"
-    static let itemKey = "inboxItemId"
+    static let itemKey = "requestId"
 
     public var userInfo: [String: Any] {
         switch self {
         case .chat(let projectId, let taskId):
             [Self.kindKey: "chat", Self.projectKey: projectId, Self.taskKey: taskId]
-        case .inboxItem(let id):
-            [Self.kindKey: "inboxItem", Self.itemKey: id]
+        case .chatRequest(let id):
+            [Self.kindKey: "chatRequest", Self.itemKey: id]
         }
     }
 
@@ -100,9 +100,9 @@ public enum NotificationTarget: Equatable, Sendable {
         case "chat":
             guard let projectId = Self.int64(userInfo[Self.projectKey]), let taskId = Self.int64(userInfo[Self.taskKey]) else { return nil }
             self = .chat(projectId: projectId, taskId: taskId)
-        case "inboxItem":
+        case "chatRequest":
             guard let id = Self.int64(userInfo[Self.itemKey]) else { return nil }
-            self = .inboxItem(id: id)
+            self = .chatRequest(id: id)
         default:
             return nil
         }

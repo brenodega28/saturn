@@ -19,7 +19,7 @@ struct PermissionsSettingsView: View {
 
     var body: some View {
         let saved = model.config(for: project).permissions
-        SettingsPage("Permissions", subtitle: "What each kind of agent may do on its own. Ask holds the agent and puts the request in your Inbox; Never blocks it outright.") {
+        SettingsPage("Permissions", subtitle: "What each kind of agent may do on its own. Ask holds the agent and asks you in the chat; Never blocks it outright.") {
             matrixCard
             ForEach($draft.profiles) { $profile in
                 commandsCard($profile)

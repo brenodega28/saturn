@@ -37,10 +37,10 @@ public struct RunTimeline: Sendable, Hashable {
     public var stages: [Stage]
     public var currentStepTitle: String?
     public var pendingPlan: Plan?
-    public var questions: [InboxItem]
-    public var holdItem: InboxItem?
+    public var questions: [ChatRequest]
+    public var holdItem: ChatRequest?
 
-    public init(run: Run, workflow: WorkflowDefinition, steps: [RunStep], hold: RunHold?, inbox: [InboxItem] = []) {
+    public init(run: Run, workflow: WorkflowDefinition, steps: [RunStep], hold: RunHold?, inbox: [ChatRequest] = []) {
         self.entries = steps.compactMap { step in
             guard let id = step.id else { return nil }
             let output = Self.decodeOutput(step.output)
@@ -59,7 +59,7 @@ public struct RunTimeline: Sendable, Hashable {
             self.pendingPlan = nil
         }
         self.questions = inbox.filter { $0.kind == .question && $0.status == .open }
-        self.holdItem = hold?.inboxItemId.flatMap { id in inbox.first { $0.id == id } }
+        self.holdItem = hold?.requestId.flatMap { id in inbox.first { $0.id == id } }
     }
 
     public var approvedPlan: Plan? {
@@ -107,7 +107,7 @@ extension AppDatabase {
         guard let runID = run.id else { throw RunEngineError.runNotFound }
         return RunTimeline(
             run: run, workflow: workflow, steps: try runSteps(runId: runID),
-            hold: try engineState(runId: runID).hold, inbox: try inboxItems(runId: runID)
+            hold: try engineState(runId: runID).hold, inbox: try chatRequests(runId: runID)
         )
     }
 }

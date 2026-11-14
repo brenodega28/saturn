@@ -466,7 +466,6 @@ extension CommandRegistry {
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             NSApp.activate()
         })
-        register(MenuCommand(id: "window.inbox", title: "Inbox", menu: "Window", section: 1, order: 0) { $0.model.open(.inbox) })
         register(MenuCommand(id: "window.usage", title: "Usage", menu: "Window", section: 1, order: 1) { $0.model.open(.usage) })
         register(MenuCommand(id: "window.quality", title: "Quality", menu: "Window", section: 1, order: 2) { context in
             context.model.mainWindow.spec = nil

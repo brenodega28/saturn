@@ -25,7 +25,7 @@ import Testing
         #expect(try h.hold(id)?.reason == .planApproval)
         #expect(h.engine.waitingReason(runID: id)?.reason == .planApproval)
         #expect(h.engine.activeRuns(projectID: try #require(h.project.id)).map(\.id) == [id])
-        #expect(try h.database.openInboxItems(projectId: try #require(h.project.id)).map(\.kind) == [.planApproval])
+        #expect(try h.database.openChatRequests(projectId: try #require(h.project.id)).map(\.kind) == [.planApproval])
 
         try h.engine.approvePlan(try h.run(id), plan: H.plan)
         await h.settle(id)
@@ -71,7 +71,7 @@ import Testing
 
         let state = try h.database.engineState(runId: id)
         #expect(state.loopCounts["review->changes_requested"] == 1)
-        #expect(try h.database.openInboxItems(projectId: try #require(h.project.id)).isEmpty)
+        #expect(try h.database.openChatRequests(projectId: try #require(h.project.id)).isEmpty)
     }
 
     @Test func planApprovalUsesTheEditedPlanAndRejectionReplans() async throws {
@@ -98,8 +98,8 @@ import Testing
         let planRow = try #require(try h.steps(id).last { $0.stepId == "plan" })
         #expect(planRow.status == .succeeded)
         #expect(planRow.output?.contains("Refund API (cents)") == true)
-        let inbox = try h.database.inboxItems(runId: id)
-        #expect(inbox.map(\.status) == [.resolved, .resolved])
+        let inbox = try h.database.chatRequests(runId: id)
+        #expect(inbox.map(\.status) == [.answered, .answered])
         #expect(inbox.map(\.response) == ["Split the UI out", "approved"])
         try await h.engine.cancel(try h.run(id))
     }
@@ -123,7 +123,7 @@ import Testing
         #expect(hold.reason == .loopLimit)
         #expect(hold.outcome == StepOutcome.failed)
         #expect(try h.run(id).status == .waitingOnYou)
-        #expect(try h.database.inboxItems(runId: id).last?.kind == .loopLimit)
+        #expect(try h.database.chatRequests(runId: id).last?.kind == .loopLimit)
         #expect(h.driver.calledSteps.filter { $0 == "build" }.count == 2)
 
         try h.engine.resolveLoopLimit(try h.run(id), continueOnce: true)
@@ -204,7 +204,7 @@ import Testing
         #expect(try h.run(id).status == .failed)
         #expect(try h.task(of: id).status == .failed)
         #expect(try h.hold(id) == nil)
-        #expect(try h.database.inboxItems(runId: id).map(\.status) == [.resolved])
+        #expect(try h.database.chatRequests(runId: id).map(\.status) == [.answered])
     }
 
     @Test func runBudgetStopsAndAsksBeforeSpendingMore() async throws {
@@ -228,7 +228,7 @@ import Testing
         #expect(h.driver.calledSteps == ["one", "two"])
         #expect(try h.run(id).costUSD == 1.2)
         #expect(h.driver.agentCalls.last?.runBudgetRemainingUSD == 0.4)
-        #expect(try h.database.inboxItems(runId: id).last?.kind == .budget)
+        #expect(try h.database.chatRequests(runId: id).last?.kind == .budget)
 
         try h.engine.resolveBudget(try h.run(id), proceed: true, raiseRunBudgetTo: 5)
         await h.settle(id)
@@ -266,7 +266,7 @@ import Testing
 
         let id = try await h.start(workflow)
         #expect(try h.hold(id)?.reason == .approval)
-        #expect(try h.database.inboxItems(runId: id).last?.kind == .approval)
+        #expect(try h.database.chatRequests(runId: id).last?.kind == .approval)
 
         try h.engine.resolveApproval(try h.run(id), approved: false, note: "Add a confirmation dialog")
         await h.settle(id)
@@ -348,14 +348,14 @@ import Testing
         let id = try await h.start(workflow)
 
         #expect(try h.run(id).status == .succeeded)
-        let notices = try h.database.openInboxItems(projectId: try #require(h.project.id))
+        let notices = try h.database.openChatRequests(projectId: try #require(h.project.id))
         #expect(notices.map(\.kind) == [.notice])
         #expect(notices.first?.title == "Heads up")
         #expect(notices.first?.body == "Build starting")
         #expect(h.driver.finishCalls.map(\.action) == [.leave])
         let notice = try #require(notices.first?.id)
-        try h.database.resolveInboxItem(id: notice, status: .dismissed)
-        #expect(try h.database.openInboxItems(projectId: try #require(h.project.id)).isEmpty)
+        try h.database.resolveChatRequest(id: notice, status: .dismissed)
+        #expect(try h.database.openChatRequests(projectId: try #require(h.project.id)).isEmpty)
     }
 
     @Test func failingStepRetriesOnceThenAsks() async throws {
@@ -374,7 +374,7 @@ import Testing
         let hold = try #require(try h.hold(id))
         #expect(hold.reason == .stepFailed)
         #expect(try h.run(id).lastError == "boom 2")
-        #expect(try h.database.inboxItems(runId: id).last?.kind == .failure)
+        #expect(try h.database.chatRequests(runId: id).last?.kind == .failure)
 
         try h.engine.resolveFailure(try h.run(id), retry: true)
         await h.settle(id)
@@ -433,7 +433,7 @@ import Testing
 
         try h.engine.resolveFailure(try h.run(id), retry: false)
         #expect(try h.run(id).status == .failed)
-        #expect(try h.database.inboxItems(runId: id).map(\.response) == ["fail"])
+        #expect(try h.database.chatRequests(runId: id).map(\.response) == ["fail"])
     }
 
     @Test func timeoutPausesAndAsks() async throws {
@@ -555,7 +555,7 @@ import Testing
         let id = try await h.start(try h.workflow("feature-delivery"))
         try h.engine.approvePlan(try h.run(id), plan: H.plan)
         try await waitUntil { h.driver.spawnCalls.count == 1 }
-        try h.database.createInboxItem(InboxItem(projectId: try #require(h.project.id), runId: id, kind: .question, title: "Which currency?", createdAt: .now))
+        try h.database.createChatRequest(ChatRequest(projectId: try #require(h.project.id), runId: id, kind: .question, title: "Which currency?", createdAt: .now))
 
         try await h.engine.cancel(try h.run(id))
 
@@ -565,7 +565,7 @@ import Testing
         #expect(try h.task(of: id).status == .incoming)
         #expect(h.driver.cancelledRuns == [id])
         #expect(try h.steps(id).map(\.status) == [.succeeded, .cancelled])
-        #expect(try h.database.openInboxItems(projectId: try #require(h.project.id)).isEmpty)
+        #expect(try h.database.openChatRequests(projectId: try #require(h.project.id)).isEmpty)
         #expect(h.engine.activeRuns(projectID: try #require(h.project.id)).isEmpty)
         #expect(!h.engine.isDriving(runID: id))
         await #expect(throws: RunEngineError.self) { try await h.engine.cancel(try h.run(id)) }

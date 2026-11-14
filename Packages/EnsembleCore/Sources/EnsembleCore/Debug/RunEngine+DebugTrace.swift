@@ -98,8 +98,8 @@ extension RunEngine {
         guard let trace = debugTrace, let hold = loaded.state.hold else { return }
         trace.runEvent("hold", runId: loaded.run.id ?? -1, title: loaded.run.title, stepId: hold.stepId, runStepId: hold.runStepId, fields: [
             "reason": JSONValue(hold.reason.rawValue),
-            "inboxKind": JSONValue(hold.reason.inboxKind.rawValue),
-            "inboxItemId": JSONValue(hold.inboxItemId),
+            "requestKind": JSONValue(hold.reason.requestKind.rawValue),
+            "requestId": JSONValue(hold.requestId),
             "outcome": JSONValue(hold.outcome),
             "title": JSONValue(title),
             "body": JSONValue(body),
@@ -113,8 +113,8 @@ extension RunEngine {
         ], at: clock())
     }
 
-    func traceInboxItem(_ loaded: LoadedRun, stepId: String, kind: InboxKind, title: String, body: String) {
-        debugTrace?.runEvent("inbox_item", runId: loaded.run.id ?? -1, title: loaded.run.title, stepId: stepId, fields: [
+    func traceChatRequest(_ loaded: LoadedRun, stepId: String, kind: ChatRequestKind, title: String, body: String) {
+        debugTrace?.runEvent("chat_request", runId: loaded.run.id ?? -1, title: loaded.run.title, stepId: stepId, fields: [
             "kind": JSONValue(kind.rawValue),
             "title": JSONValue(title),
             "body": JSONValue(body),
@@ -128,9 +128,9 @@ extension RunEngine {
             "reason": JSONValue(hold.reason.rawValue),
             "decision": JSONValue(decision ?? response),
             "response": JSONValue(response),
-            "inboxItemId": JSONValue(hold.inboxItemId),
+            "requestId": JSONValue(hold.requestId),
         ]
-        if let id = hold.inboxItemId, let item = try? database.inboxItem(id: id) {
+        if let id = hold.requestId, let item = try? database.chatRequest(id: id) {
             fields["waitMS"] = JSONValue(Int(now.timeIntervalSince(item.createdAt) * 1000))
         }
         trace.runEvent("hold_resolved", runId: loaded.run.id ?? -1, title: loaded.run.title, stepId: hold.stepId, runStepId: hold.runStepId, fields: fields, at: now)

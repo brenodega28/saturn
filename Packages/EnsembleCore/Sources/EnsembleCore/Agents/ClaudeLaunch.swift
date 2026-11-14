@@ -294,7 +294,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
         let asks = PermissionCapability.allCases.filter { policy.level($0) == .ask }
         guard !asks.isEmpty else { return nil }
         return "Some actions need the user’s OK first: " + asks.map { $0.title.lowercased() }.joined(separator: ", ")
-            + ". Just try the action; Ensemble holds it, asks the user once through your chat’s lead (or their Inbox) and messages you with the answer. "
+            + ". Just try the action; Ensemble holds it, asks the user once in your chat and messages you with the answer. "
             + "Once the user allows a kind of command, you and every other agent in the chat can run similar commands without asking again; once they say no, don’t retry it. "
             + "Carry on with other work or end your turn while you wait."
     }

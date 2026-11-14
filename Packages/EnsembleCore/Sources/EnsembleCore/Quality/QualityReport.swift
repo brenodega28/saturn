@@ -81,7 +81,7 @@ extension AppDatabase {
             (
                 try Run.filter(projectIds.contains(Column("projectId"))).fetchAll(db),
                 try RunStep.fetchAll(db),
-                try InboxItem.filter(projectIds.contains(Column("projectId"))).filter(Column("kind") == InboxKind.approval.rawValue).fetchAll(db),
+                try ChatRequest.filter(projectIds.contains(Column("projectId"))).filter(Column("kind") == ChatRequestKind.approval.rawValue).fetchAll(db),
                 try Correction.filter(projectIds.contains(Column("projectId"))).filter(Column("encodedAt") != nil).fetchAll(db)
             )
         }
@@ -134,7 +134,7 @@ extension AppDatabase {
                 }
             }
         }
-        for item in items where item.status == .resolved {
+        for item in items where item.status == .answered {
             guard let resolved = item.resolvedAt, let index = bucket(resolved) else { continue }
             weeks[index].approvalMinutes.append(resolved.timeIntervalSince(item.createdAt) / 60)
         }

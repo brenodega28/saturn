@@ -129,7 +129,7 @@ import Testing
 
         #expect(try h.steps(id).map(\.stepId) == ["build", "review", "build", "review", "approve"])
         #expect(try h.hold(id)?.reason == .approval)
-        let approval = try #require(try h.database.inboxItems(runId: id).last)
+        let approval = try #require(try h.database.chatRequests(runId: id).last)
         #expect(approval.body.contains("Reviewer comments that weren’t addressed:\n• Lock the order row (refunds.py)"))
         #expect(!approval.body.contains("Cap refunds"))
 
@@ -148,7 +148,7 @@ import Testing
 
         let id = try await h.start(workflow)
         #expect(try h.steps(id).map(\.stepId) == ["build", "review", "approve"])
-        let approval = try #require(try h.database.inboxItems(runId: id).last)
+        let approval = try #require(try h.database.chatRequests(runId: id).last)
         #expect(approval.body.hasSuffix("• Nit"))
     }
 }
@@ -186,7 +186,7 @@ import Testing
 
         let id = try await h.start(workflow)
         #expect(try h.hold(id)?.reason == .gates)
-        let item = try #require(try h.database.inboxItems(runId: id).last)
+        let item = try #require(try h.database.chatRequests(runId: id).last)
         #expect(item.kind == .gate)
         #expect(item.body.contains("• Decide: New dependency: left-padder (Dev 1 · package.json)"))
 

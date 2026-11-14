@@ -57,7 +57,7 @@ import Testing
     }
 
     @Test func structuredQuestionsWinOverTheBody() {
-        let item = InboxItem(
+        let item = ChatRequest(
             projectId: 1, kind: .question, title: "Lead asks", body: "Two decisions for the API.",
             questions: [HumanQuestion(question: "REST or GraphQL?", options: ["REST", "GraphQL"]), HumanQuestion(question: "Version the URLs?")],
             createdAt: .now
@@ -86,7 +86,7 @@ import Testing
         let database = try AppDatabase.inMemory()
         let project = try database.openProject(at: URL(fileURLWithPath: "/tmp/shop"))
         let questions = [HumanQuestion(question: "REST or GraphQL?", options: ["REST", "GraphQL"])]
-        let item = try database.createInboxItem(InboxItem(projectId: try #require(project.id), kind: .question, title: "Lead asks", questions: questions, createdAt: .now))
-        #expect(try database.inboxItem(id: try #require(item.id))?.questions == questions)
+        let item = try database.createChatRequest(ChatRequest(projectId: try #require(project.id), kind: .question, title: "Lead asks", questions: questions, createdAt: .now))
+        #expect(try database.chatRequest(id: try #require(item.id))?.questions == questions)
     }
 }

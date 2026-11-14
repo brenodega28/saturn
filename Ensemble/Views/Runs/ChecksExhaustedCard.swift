@@ -19,7 +19,7 @@ struct ChecksExhaustedCard: View {
             Label("Checks still failing after \(rounds) round\(rounds == 1 ? "" : "s")", systemImage: "tray.full")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Theme.danger)
-            Text("\(names.isEmpty ? "The builders are" : ListFormatter.localizedString(byJoining: names) + (names.count == 1 ? " is" : " are")) stopped and the failing output is in your Inbox. Nothing unverified reached Changes.")
+            Text("\(names.isEmpty ? "The builders are" : ListFormatter.localizedString(byJoining: names) + (names.count == 1 ? " is" : " are")) stopped and the failing output is in this chat. Nothing unverified reached Changes.")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

@@ -9,7 +9,7 @@ import Testing
         let tables = try database.writer.read { db in
             try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%' ORDER BY name")
         }
-        #expect(tables == ["agent", "correction", "evidence", "inboxItem", "leadMessage", "permissionRequest", "pin", "project", "reviewViewedFile", "run", "runStep", "task", "usage"])
+        #expect(tables == ["agent", "chatRequest", "correction", "evidence", "leadMessage", "permissionRequest", "pin", "project", "reviewViewedFile", "run", "runStep", "task", "usage"])
     }
 
     @Test func chatFirstMigrationTurnsGitHubTasksIntoChatsAndDropsGitHubAndDirectMessages() throws {
@@ -33,6 +33,39 @@ import Testing
         #expect(!tables.contains("directMessage"))
         let runColumns = try database.writer.read { db in try db.columns(in: "run").map(\.name) }
         #expect(runColumns.contains("pushedAt"))
+    }
+
+    @Test func chatRequestsMigrationMovesEveryInboxItemIntoAChatAndKeepsItsID() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v23-chat-first")
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO project (id, name, path, isOpen, createdAt, lastOpenedAt) VALUES (1, 'shop', '/tmp/shop', 1, ?, ?), (2, 'docs', '/tmp/docs', 1, ?, ?)", arguments: [at, at, at, at])
+            try db.execute(sql: "INSERT INTO task (id, projectId, title, source, status, createdAt, updatedAt) VALUES (10, 1, 'Refunds', 'chat', 'running', ?, ?), (11, 1, 'Newest', 'chat', 'running', ?, ?)", arguments: [at, at, at, at.addingTimeInterval(60)])
+            try db.execute(sql: "INSERT INTO run (id, projectId, taskId, workflow, status, costUSD, startedAt, title, workflowSnapshot, engineState) VALUES (5, 1, 10, 'w', 'waitingOnYou', 0, ?, '', '', ?)", arguments: [at, #"{"hold":{"inboxItemId":40,"message":"Approve?","reason":"approval","stepId":"approve"}}"#])
+            try db.execute(sql: """
+                INSERT INTO inboxItem (id, projectId, runId, kind, title, body, status, createdAt, resolvedAt) VALUES
+                (40, 1, 5, 'approval', 'Approve?', '', 'open', ?, NULL),
+                (41, 1, NULL, 'question', 'Old answer', '', 'resolved', ?, ?),
+                (42, 2, NULL, 'notice', 'Set up checks', 'No checks yet', 'open', ?, NULL),
+                (43, 2, NULL, 'notice', 'Old notice', '', 'dismissed', ?, ?)
+                """, arguments: [at, at, at, at, at, at])
+            try db.execute(sql: "INSERT INTO permissionRequest (projectId, agentId, capability, request, status, createdAt, inboxItemId) SELECT 1, 7, 'run_shell', 'make', 'pending', ?, 40", arguments: [at])
+        }
+
+        let database = try AppDatabase(queue)
+
+        let requests = try database.writer.read { db in try ChatRequest.order(Column("id")).fetchAll(db) }
+        #expect(requests.map(\.id) == [40, 41, 42, 43])
+        #expect(requests.map(\.taskId) == [10, 11, requests[2].taskId, requests[2].taskId])
+        #expect(requests.map(\.status) == [.open, .answered, .open, .dismissed])
+        let startedID = try #require(requests[2].taskId)
+        let started = try #require(try database.task(id: startedID))
+        #expect(started.projectId == 2 && started.title == "Set up checks" && started.status == .waitingOnYou)
+        #expect(try database.engineState(runId: 5).hold?.requestId == 40)
+        #expect(try database.permissionRequest(requestId: 40) != nil)
+        let tables = try database.writer.read { db in try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'") }
+        #expect(!tables.contains("inboxItem"))
     }
 
     @Test func reopeningAProjectUpdatesInsteadOfDuplicating() throws {

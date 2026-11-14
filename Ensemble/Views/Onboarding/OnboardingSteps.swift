@@ -208,7 +208,7 @@ struct OnboardingRailsStep: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Divider().overlay(Theme.hairline)
-            OnboardingRow(title: "Retries before the Inbox", detail: "Failing output goes back to the agent. After the last round, the task waits for you.") {
+            OnboardingRow(title: "Retries before asking you", detail: "Failing output goes back to the agent. After the last round, the task waits for you.") {
                 Stepper("\(retries) round\(retries == 1 ? "" : "s")", value: Binding(get: { retries }, set: { setRetries($0) }), in: 1...5)
                     .fixedSize()
                     .disabled(draft.setup.checks == nil)
@@ -235,7 +235,7 @@ struct OnboardingRailsStep: View {
                 Toggle("Run tests and linters while working", isOn: $draft.setup.testsWithoutAsking).toggleStyle(.switch).labelsHidden()
             }
             Divider().overlay(Theme.hairline)
-            OnboardingRow(title: "Use the network", detail: "Off: agents ask in Inbox before fetching anything") {
+            OnboardingRow(title: "Use the network", detail: "Off: agents ask you in the chat before fetching anything") {
                 Toggle("Use the network", isOn: $draft.setup.networkWithoutAsking).toggleStyle(.switch).labelsHidden()
             }
             Divider().overlay(Theme.hairline)

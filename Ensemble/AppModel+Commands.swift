@@ -66,15 +66,11 @@ extension AppModel {
     }
 
     func goToSection(_ index: Int) {
-        if index == 0 {
-            selection = .inbox
-            return
-        }
         let tabs = ProjectTab.sidebarOrder
-        guard let project = currentProject, let id = project.id, tabs.indices.contains(index - 1) else { return }
+        guard let project = currentProject, let id = project.id, tabs.indices.contains(index) else { return }
         selection = .project(id)
         runDetailIDs[id] = nil
-        setTab(tabs[index - 1], for: project)
+        setTab(tabs[index], for: project)
     }
 
     func sendToLead(_ text: String) {

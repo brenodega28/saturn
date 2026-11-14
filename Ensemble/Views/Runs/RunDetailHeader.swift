@@ -101,8 +101,8 @@ private struct HoldBanner: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: hold.reason.inboxKind.symbol)
-                .foregroundStyle(hold.reason.inboxKind.tint)
+            Image(systemName: hold.reason.requestKind.symbol)
+                .foregroundStyle(hold.reason.requestKind.tint)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(hold.reason.title).font(.system(size: 12.5, weight: .semibold))
@@ -115,7 +115,7 @@ private struct HoldBanner: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(hold.reason.inboxKind.tint.opacity(0.1), in: .rect(cornerRadius: 10, style: .continuous))
+        .background(hold.reason.requestKind.tint.opacity(0.1), in: .rect(cornerRadius: 10, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }

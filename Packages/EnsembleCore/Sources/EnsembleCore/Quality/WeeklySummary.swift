@@ -9,18 +9,18 @@ public enum WeeklySummary {
     }
 
     @discardableResult
-    public static func postIfDue(for project: Project, database: AppDatabase, now: Date = .now, calendar: Calendar = .current) throws -> InboxItem? {
+    public static func postIfDue(for project: Project, database: AppDatabase, now: Date = .now, calendar: Calendar = .current) throws -> ChatRequest? {
         guard let projectId = project.id,
               let thisWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start,
               let lastWeek = calendar.date(byAdding: .weekOfYear, value: -1, to: thisWeek) else { return nil }
         let title = title(project: project, weekStart: lastWeek, calendar: calendar)
         let posted = try database.writer.read { db in
-            try InboxItem.filter(Column("projectId") == projectId).filter(Column("title") == title).fetchCount(db) > 0
+            try ChatRequest.filter(Column("projectId") == projectId).filter(Column("title") == title).fetchCount(db) > 0
         }
         guard !posted else { return nil }
         let report = try database.qualityReport(projectIds: [projectId], weeks: 2, now: now, calendar: calendar)
         guard let week = report.weeks.first, week.start == lastWeek, week.finishedRuns > 0 || week.checkRuns > 0 || week.rulesAdded > 0 else { return nil }
-        return try database.createInboxItem(InboxItem(projectId: projectId, kind: .notice, title: title, body: body(for: week), createdAt: now))
+        return try database.createChatRequest(ChatRequest(projectId: projectId, kind: .notice, title: title, body: body(for: week), createdAt: now))
     }
 
     public static func body(for week: QualityWeek) -> String {

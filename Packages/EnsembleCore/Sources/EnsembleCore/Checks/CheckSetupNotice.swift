@@ -7,18 +7,18 @@ public enum CheckSetupNotice {
     }
 
     @discardableResult
-    public static func postIfNeeded(for project: Project, config: ProjectConfig, database: AppDatabase, now: Date = .now) throws -> InboxItem? {
+    public static func postIfNeeded(for project: Project, config: ProjectConfig, database: AppDatabase, now: Date = .now) throws -> ChatRequest? {
         guard let projectId = project.id, config.checks == nil, ProjectConfigLoader.hasConfig(repository: project.url) else { return nil }
         let title = title(for: project)
         let alreadyPosted = try database.writer.read { db in
-            try InboxItem
-                .filter(InboxItem.Columns.projectId == projectId)
+            try ChatRequest
+                .filter(ChatRequest.Columns.projectId == projectId)
                 .filter(Column("title") == title)
                 .fetchCount(db) > 0
         }
         guard !alreadyPosted else { return nil }
         let suggestions = CheckDetector.suggest(repository: project.url)
-        return try database.createInboxItem(InboxItem(
+        return try database.createChatRequest(ChatRequest(
             projectId: projectId, kind: .notice, title: title, body: body(for: suggestions), createdAt: now
         ))
     }

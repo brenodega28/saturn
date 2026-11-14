@@ -45,7 +45,7 @@ struct ChecksSettingsView: View {
                 if !checks.hasTestCheck {
                     warning("No check of kind test, so agents’ work isn’t verified by tests.")
                 }
-                Text("Failing work goes back to its agent up to \(checks.maxRounds) round\(checks.maxRounds == 1 ? "" : "s"), then to your Inbox.")
+                Text("Failing work goes back to its agent up to \(checks.maxRounds) round\(checks.maxRounds == 1 ? "" : "s"), then to you in the chat.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
             } else {

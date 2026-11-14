@@ -112,8 +112,6 @@ struct MiddleColumn: View {
     @ViewBuilder
     private func toolContent(_ tool: MainTool, project: Project) -> some View {
         switch tool {
-        case .inbox:
-            InboxView()
         case .usage:
             if model.selection == .quality { QualityView() } else { UsageView() }
         default:

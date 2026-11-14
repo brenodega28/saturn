@@ -87,20 +87,20 @@ enum DebugTraceReadme {
       step), `result`.
     - `routed`: `from`, `to`, `outcome`, `isLoopBack`, `loopCount` (times this route was taken), `maxLoops`,
       `nextIteration`, `feedback` (what a loop-back sends to the earlier step).
-    - `hold`: the run waits for the user and an inbox item was created. `reason` (plan_approval, approval,
-      loop_limit, step_budget, run_budget, step_failed, timed_out), `inboxKind`, `inboxItemId`, `outcome`, `title`,
+    - `hold`: the run waits for the user and a chat request was created. `reason` (plan_approval, approval,
+      loop_limit, step_budget, run_budget, step_failed, timed_out), `requestKind`, `requestId`, `outcome`, `title`,
       `body`.
-    - `inbox_item`: an inbox item created without holding the run (notify steps). `kind`, `title`, `body`.
+    - `chat_request`: a chat request created without holding the run (notify steps). `kind`, `title`, `body`.
     - `hold_resolved`: the user answered a hold. `reason`, `decision` (approved, rejected, changes_requested,
       continue, retry, fail), `response` (the user's text, such as a rejection note or change request), `waitMS`
-      (since the inbox item was created), `inboxItemId`.
+      (since the inbox item was created), `requestId`.
     - `budget`: `event` exceeded (with `runCostUSD`, `runBudgetUSD`) or decision (`proceed`, `previousBudgetUSD`,
       `newBudgetUSD`, `runCostUSD`).
     - `step_failed`: `error`, `errorType`, `onFailure` (the step's setting), `attempt`.
     - `failure_action`: what the engine did next: `action` retry, fail, ask, or ask_after_timeout.
     - `question_relayed`: an agent called ask_human. `target` lead (batched to the request lead) or user (inbox),
       `body`, `questions`.
-    - `questions_delivered`: a batch of relayed questions was sent. `target` lead or user_inbox, `count`, `agents`,
+    - `questions_delivered`: a batch of relayed questions was sent. `target` lead or user_chat, `count`, `agents`,
       `agentIds`.
     - `question_answered`: `via` lead (its message_agent reply) or user (inbox answer), `answer`, `waitMS` (since the
       question was asked).

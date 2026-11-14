@@ -11,7 +11,7 @@ public enum HoldReason: String, Sendable, Hashable, Codable, CaseIterable {
     case timedOut = "timed_out"
     case gates
 
-    public var inboxKind: InboxKind {
+    public var requestKind: ChatRequestKind {
         switch self {
         case .planApproval: .planApproval
         case .approval: .approval
@@ -27,15 +27,15 @@ public struct RunHold: Sendable, Hashable, Codable {
     public var reason: HoldReason
     public var stepId: String
     public var runStepId: Int64?
-    public var inboxItemId: Int64?
+    public var requestId: Int64?
     public var outcome: String?
     public var message: String
 
-    public init(reason: HoldReason, stepId: String, runStepId: Int64? = nil, inboxItemId: Int64? = nil, outcome: String? = nil, message: String) {
+    public init(reason: HoldReason, stepId: String, runStepId: Int64? = nil, requestId: Int64? = nil, outcome: String? = nil, message: String) {
         self.reason = reason
         self.stepId = stepId
         self.runStepId = runStepId
-        self.inboxItemId = inboxItemId
+        self.requestId = requestId
         self.outcome = outcome
         self.message = message
     }

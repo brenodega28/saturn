@@ -189,15 +189,13 @@ extension AppDatabase {
         }
     }
 
-    public func requestQuestions(taskId: Int64) throws -> [InboxItem] {
+    public func requestQuestions(taskId: Int64) throws -> [ChatRequest] {
         try writer.read { db in
-            try InboxItem.fetchAll(db, sql: """
-                SELECT inboxItem.* FROM inboxItem
-                WHERE inboxItem.kind = 'question'
-                  AND (inboxItem.runId IN (SELECT id FROM run WHERE run.taskId = ?)
-                       OR inboxItem.agentId IN (SELECT id FROM agent WHERE agent.taskId = ?))
-                ORDER BY inboxItem.createdAt, inboxItem.id
-                """, arguments: [taskId, taskId])
+            try ChatRequest
+                .filter(ChatRequest.Columns.taskId == taskId)
+                .filter(Column("kind") == ChatRequestKind.question.rawValue)
+                .order(ChatRequest.Columns.createdAt, Column("id"))
+                .fetchAll(db)
         }
     }
 

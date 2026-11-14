@@ -166,7 +166,7 @@ struct RealClaudePermissionTests {
         let result = try #require(requests.components(separatedBy: "toolu_first").last)
         #expect(result.contains("ensemble-ran"))
         #expect(!result.contains("Permission to use Bash"))
-        #expect(try harness.database.openInboxItems(projectId: try #require(harness.project.id)).isEmpty)
+        #expect(try harness.database.openChatRequests(projectId: try #require(harness.project.id)).isEmpty)
     }
 
     @Test(.timeLimit(.minutes(3))) func askHoldsAPushUntilTheUserAllowsIt() async throws {
@@ -187,14 +187,14 @@ struct RealClaudePermissionTests {
         let session = try await harness.spawn()
         try await waitUntil(timeout: .seconds(60)) { session.agent.status == .idle || session.agent.status == .failed }
         let projectId = try #require(harness.project.id)
-        let item = try #require(try harness.database.openInboxItems(projectId: projectId).first { $0.kind == .permission })
+        let item = try #require(try harness.database.openChatRequests(projectId: projectId).first { $0.kind == .permission })
         #expect(item.title.contains("git push --dry-run origin HEAD"))
 
-        try harness.runtime.answerPermission(inboxItemId: try #require(item.id), allow: true)
+        try harness.runtime.answerPermission(requestId: try #require(item.id), allow: true)
         try await waitUntil(timeout: .seconds(60)) { (try? String(contentsOf: log, encoding: .utf8))?.contains("toolu_second") == true && session.agent.status == .idle }
 
         let requests = try String(contentsOf: log, encoding: .utf8)
-        #expect(requests.contains("so Ensemble asked them in their Inbox"))
+        #expect(requests.contains("so Ensemble asked them in the chat"))
         let second = try #require(requests.components(separatedBy: "toolu_second").last)
         #expect(!second.contains("Permission to use Bash has been denied"))
     }

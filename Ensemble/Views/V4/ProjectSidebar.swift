@@ -162,7 +162,7 @@ private struct ProjectGroup: View {
             count = model.agentSessions(in: project).count
             color = V4.secondary
         case .changes:
-            count = ProjectOutline.changesBadge(waiting: model.inbox.items.filter { $0.projectId == project.id })?.count ?? 0
+            count = ProjectOutline.changesBadge(waiting: model.requests.items.filter { $0.projectId == project.id })?.count ?? 0
             color = V4.orange
         default:
             return nil
@@ -208,7 +208,7 @@ private struct ProjectGroup: View {
     }
 
     private var attentionColor: Color? {
-        let items = model.inbox.items.filter { $0.projectId == project.id }
+        let items = model.requests.items.filter { $0.projectId == project.id }
         if model.projectHasPendingApprovals(project) || items.contains(where: { AppModel.needsYouKinds.contains($0.kind) }) { return V4.orange }
         if items.contains(where: { $0.kind == .failure }) { return Color(hex: 0xFF5A4E) }
         return nil
@@ -356,7 +356,6 @@ private struct ToolRow: View {
     var body: some View {
         let screen = model.mainScreen
         HStack(spacing: 4) {
-            ToolButton(title: "Inbox", glyph: .inbox, badge: model.inboxCount, isActive: screen == .tool(.inbox)) { model.open(.inbox) }
             ToolButton(title: "Search ⌘K", glyph: .search, badge: 0, isActive: false) { model.openPalette() }
             ToolButton(title: "Usage", glyph: .usage, badge: 0, isActive: screen == .tool(.usage)) { model.open(.usage) }
             ToolButton(title: "App settings ⌘,", glyph: .settings, badge: 0, isActive: false) { openSettings() }

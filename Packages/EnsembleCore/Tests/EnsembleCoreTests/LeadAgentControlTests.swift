@@ -146,8 +146,8 @@ import Testing
 
         runner.send("CHAT anything else?")
         let projectId = try #require(setup.project.id)
-        try await waitUntil { (try? setup.harness.database.openInboxItems(projectId: projectId))?.contains { $0.agentId == runner.id } == true }
-        let item = try #require(try setup.harness.database.openInboxItems(projectId: projectId).first { $0.agentId == runner.id })
+        try await waitUntil { (try? setup.harness.database.openChatRequests(projectId: projectId))?.contains { $0.agentId == runner.id } == true }
+        let item = try #require(try setup.harness.database.openChatRequests(projectId: projectId).first { $0.agentId == runner.id })
         #expect(item.kind == .notice)
         #expect(item.title == "Report from Runner")
         #expect(item.body == "The repo only has a README.")
@@ -189,7 +189,7 @@ import Testing
         try await waitUntil { userMessages(lead).contains { $0.hasPrefix("A question from Runner") && $0.contains("Should I run the slow tests?") } }
         try await waitUntil { !lead.isRunning }
         let projectId = try #require(setup.project.id)
-        #expect(try setup.harness.database.openInboxItems(projectId: projectId).isEmpty)
+        #expect(try setup.harness.database.openChatRequests(projectId: projectId).isEmpty)
 
         let reportsBefore = userMessages(lead).filter { $0.hasPrefix("Report from Runner") }.count
         setup.driver.reportToSpawner(runner)

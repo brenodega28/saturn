@@ -42,11 +42,9 @@ enum V4Glyph {
     case laptop
     case server
     case chat
-    case inbox
     case changes
     case search
     case agents
-    case tasks
     case workflows
     case code
     case usage
@@ -85,9 +83,6 @@ enum V4Glyph {
             circle(8, 16.5, 0.6)
         case .chat:
             line((4, 5), (20, 5), (20, 16), (9, 16), (4, 20), (4, 5))
-        case .inbox:
-            line((3, 13), (6, 5), (18, 5), (21, 13), (21, 19), (3, 19), (3, 13))
-            line((3, 13), (8, 13), (9, 15), (15, 15), (16, 13), (21, 13))
         case .changes:
             line((12, 4), (12, 12))
             line((8, 8), (16, 8))
@@ -103,9 +98,6 @@ enum V4Glyph {
             arc(16, 8, 2.8, from: -90, to: 90)
             path.move(to: point(17.5, 14.2))
             path.addQuadCurve(to: point(21, 20), control: point(21, 15.5))
-        case .tasks:
-            path.addRoundedRect(in: CGRect(x: rect.minX + 4 * scale, y: rect.minY + 4 * scale, width: 16 * scale, height: 16 * scale), cornerSize: CGSize(width: 3 * scale, height: 3 * scale))
-            line((8.5, 12), (11, 14.5), (15.5, 9.5))
         case .workflows:
             box(4, 3, 6, 6)
             box(14, 15, 6, 6)

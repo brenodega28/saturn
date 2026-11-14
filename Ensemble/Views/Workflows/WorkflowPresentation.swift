@@ -106,7 +106,7 @@ extension StepType {
         case .spawn: "One agent builds each of the plan’s tasks in its own worktree"
         case .condition: "Route on labels, changed paths, diff size or an earlier outcome"
         case .approval: "Pause until you approve or send the work back"
-        case .notify: "Post a message to your Inbox and continue"
+        case .notify: "Post a message in the chat and continue"
         case .check: "Ensemble runs the project’s checks on every branch and sends failures back to their authors"
         case .gates: "Scan for secrets, new dependencies, oversized changes, duplication and complexity before review"
         }

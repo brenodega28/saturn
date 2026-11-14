@@ -67,7 +67,7 @@ import Testing
             WorkflowStep(id: "approve", type: .approval, remindDaily: true, routes: [StepOutcome.approved: WorkflowRoute(to: "end")]),
         ])
         let id = try await h.start(workflow)
-        let opened = try #require(try h.database.inboxItems(runId: id).first).createdAt
+        let opened = try #require(try h.database.chatRequests(runId: id).first).createdAt
 
         #expect(try h.engine.postApprovalReminders(now: opened.addingTimeInterval(3600)).isEmpty)
         let first = try h.engine.postApprovalReminders(now: opened.addingTimeInterval(90_000))
@@ -254,18 +254,18 @@ import Testing
 
         let first = await harness.runtime.handleHook(install, agentID: session.id)
         #expect(first["hookSpecificOutput"]?["permissionDecision"] == .string("deny"))
-        let item = try #require(try harness.database.openInboxItems(projectId: projectId).first { $0.kind == .permission })
+        let item = try #require(try harness.database.openChatRequests(projectId: projectId).first { $0.kind == .permission })
         #expect(item.title == "Dev 1 asks to install packages: `npm install left-pad`")
         let again = await harness.runtime.handleHook(install, agentID: session.id)
         #expect(again["hookSpecificOutput"]?["permissionDecisionReason"]?.string?.hasPrefix("Still waiting") == true)
-        #expect(try harness.database.openInboxItems(projectId: projectId).count { $0.kind == .permission } == 1)
+        #expect(try harness.database.openChatRequests(projectId: projectId).count { $0.kind == .permission } == 1)
 
-        try harness.runtime.answerPermission(inboxItemId: try #require(item.id), allow: true)
+        try harness.runtime.answerPermission(requestId: try #require(item.id), allow: true)
         try await waitUntil { harness.launches().count == 2 }
         #expect(session.transcript.entries.contains { if case .user(let text) = $0.content { text.contains("The user allowed you to install packages") } else { false } })
         let allowed = await harness.runtime.handleHook(install, agentID: session.id)
         #expect(allowed["hookSpecificOutput"]?["permissionDecision"] == .string("allow"))
-        #expect(try harness.database.openInboxItems(projectId: projectId).allSatisfy { $0.kind != .permission })
+        #expect(try harness.database.openChatRequests(projectId: projectId).allSatisfy { $0.kind != .permission })
     }
 
     @Test func neverDeniesWithoutAsking() async throws {
@@ -277,7 +277,7 @@ import Testing
         let reply = await harness.runtime.handleHook(push, agentID: session.id)
         #expect(reply["hookSpecificOutput"]?["permissionDecision"] == .string("deny"))
         #expect(reply["hookSpecificOutput"]?["permissionDecisionReason"]?.string?.hasPrefix("Developer agents may never push") == true)
-        #expect(try harness.database.openInboxItems(projectId: try #require(harness.project.id)).isEmpty)
+        #expect(try harness.database.openChatRequests(projectId: try #require(harness.project.id)).isEmpty)
         let test: JSONValue = .object(["hook_event_name": .string("PreToolUse"), "tool_name": .string("Bash"), "tool_input": .object(["command": .string("pytest -q")])])
         #expect(await harness.runtime.handleHook(test, agentID: session.id)["hookSpecificOutput"]?["permissionDecision"] == .string("allow"))
     }

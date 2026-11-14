@@ -485,15 +485,15 @@ import Testing
 
     @Test func itemsAreInTimeOrderWithLiveItemsAtTheBottom() throws {
         let run = Run(id: 7, projectId: 1, taskId: 1, workflow: "feature-delivery", status: .waitingOnYou, startedAt: at(3))
-        let answered = InboxItem(id: 20, projectId: 1, runId: 7, kind: .question, title: "Q", status: .resolved, response: "Yes", createdAt: at(4), resolvedAt: at(5))
-        let open = InboxItem(id: 21, projectId: 1, runId: 7, kind: .question, title: "Q2", createdAt: at(1))
+        let answered = ChatRequest(id: 20, projectId: 1, runId: 7, kind: .question, title: "Q", status: .answered, response: "Yes", createdAt: at(4), resolvedAt: at(5))
+        let open = ChatRequest(id: 21, projectId: 1, runId: 7, kind: .question, title: "Q2", createdAt: at(1))
         let timeline = RunTimeline(run: run, workflow: WorkflowDefinition(id: "w", name: "W", steps: []), steps: [], hold: nil)
         var withEntries = timeline
         withEntries.entries = [entry(30, status: .succeeded, ended: 4.5), entry(31, status: .running, ended: nil)]
 
         let thread = RequestThread(
             task: task, messages: [message(1, .user, 1), message(2, .lead, 2), message(3, .proposal, 2.5), message(4, .user, 6)],
-            runs: [run], timelines: [7: withEntries], questions: [answered, open], heldRunIDs: [7]
+            runs: [run], timelines: [7: withEntries], requests: [answered, open], heldRunIDs: [7]
         )
 
         #expect(thread.items.map(\.id) == ["message-1", "message-2", "message-3", "run-7", "step-30", "answer-20", "message-4", "question-21", "hold-7"])
@@ -503,7 +503,7 @@ import Testing
     @Test func aProposalShowsAfterTheLeadsReplyFromTheSameTurn() {
         let thread = RequestThread(
             task: task, messages: [message(1, .user, 1), message(2, .proposal, 2), message(3, .lead, 3), message(4, .user, 4), message(5, .proposal, 5)],
-            runs: [], timelines: [:], questions: [], heldRunIDs: []
+            runs: [], timelines: [:], requests: [], heldRunIDs: []
         )
         #expect(thread.items.map(\.id) == ["message-1", "message-3", "message-2", "message-4", "message-5"])
     }
@@ -511,14 +511,32 @@ import Testing
     @Test func permissionCardsStayOutOfTheThread() {
         let thread = RequestThread(
             task: task, messages: [message(1, .user, 1), message(2, .proposal, 2), message(3, .permission, 3), message(4, .lead, 4)],
-            runs: [], timelines: [:], questions: [], heldRunIDs: []
+            runs: [], timelines: [:], requests: [], heldRunIDs: []
         )
         #expect(thread.items.map(\.id) == ["message-1", "message-4", "message-2"])
     }
 
+    @Test func requestsThatAreNotQuestionsOrHoldsShowAsNotices() {
+        let run = Run(id: 7, projectId: 1, taskId: 1, workflow: "w", status: .waitingOnYou, startedAt: at(1))
+        let holdRequest = ChatRequest(id: 40, projectId: 1, taskId: 1, runId: 7, kind: .approval, title: "Approve?", createdAt: at(2))
+        let timeline = RunTimeline(run: run, workflow: WorkflowDefinition(id: "w", name: "W", steps: []), steps: [], hold: RunHold(reason: .approval, stepId: "approve", requestId: 40, message: "Approve?"), inbox: [holdRequest])
+        let budget = ChatRequest(id: 41, projectId: 1, taskId: 1, kind: .budget, title: "Budget reached", createdAt: at(3))
+        let oldNotice = ChatRequest(id: 42, projectId: 1, taskId: 1, kind: .notice, title: "Set up checks", status: .dismissed, createdAt: at(0.5))
+        let permission = ChatRequest(id: 43, projectId: 1, taskId: 1, kind: .permission, title: "Run make?", createdAt: at(4))
+
+        let thread = RequestThread(
+            task: task, messages: [message(1, .user, 0)], runs: [run], timelines: [7: timeline],
+            requests: [holdRequest, budget, oldNotice, permission], heldRunIDs: [7]
+        )
+
+        #expect(thread.items.map(\.id) == ["message-1", "notice-42", "run-7", "hold-7", "notice-41"])
+        #expect(thread.items.last?.isLive == true)
+        #expect(thread.items[1].isLive == false)
+    }
+
     @Test func olderRequestsWithoutMessagesStartWithTheirBodyAndEndWithTheResult() {
         let run = Run(id: 8, projectId: 1, taskId: 1, workflow: "small-task", status: .succeeded, startedAt: at(1), endedAt: at(9))
-        let thread = RequestThread(task: task, messages: [], runs: [run], timelines: [:], questions: [], heldRunIDs: [8])
+        let thread = RequestThread(task: task, messages: [], runs: [run], timelines: [:], requests: [], heldRunIDs: [8])
         #expect(thread.items.map(\.id) == ["request-1", "run-8", "end-8"])
     }
 }

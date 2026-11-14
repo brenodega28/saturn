@@ -219,7 +219,7 @@ extension AppModel {
             messages: messages,
             runs: runs,
             timelines: timelines,
-            questions: (try? database.requestQuestions(taskId: taskID)) ?? [],
+            requests: (try? database.chatRequests(taskId: taskID)) ?? [],
             heldRunIDs: Set(runs.compactMap(\.id).filter { engine.holds[$0] != nil })
         )
         thread.items = Self.placingPermissions(messages.filter { $0.kind == .permission }, in: thread.items)
@@ -248,6 +248,7 @@ extension AppModel {
         case .answeredQuestion(let question): question.resolvedAt ?? question.createdAt
         case .runEnded(let run): run.endedAt
         case .openQuestion, .hold: nil
+        case .notice(let request): request.status == .open ? nil : request.createdAt
         }
     }
 
@@ -279,11 +280,11 @@ extension AppModel {
         try? database.agent(id: id)
     }
 
-    func answerQuestion(item: InboxItem, text: String) {
+    func answerQuestion(item: ChatRequest, text: String) {
         let answer = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let itemID = item.id, !answer.isEmpty else { return }
         do {
-            try database.resolveInboxItem(id: itemID, response: answer)
+            try database.resolveChatRequest(id: itemID, response: answer)
         } catch {
             alert = AppAlert(title: "Couldn’t send the answer", message: error.localizedDescription)
             return

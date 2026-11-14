@@ -2,9 +2,9 @@ import EnsembleCore
 import EnsembleUI
 import SwiftUI
 
-struct InboxItemCard: View {
+struct ChatRequestCard: View {
     @Environment(AppModel.self) private var model
-    let item: InboxItem
+    let item: ChatRequest
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -13,7 +13,7 @@ struct InboxItemCard: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(item.kind.tint)
                     .accessibilityHidden(true)
-                Text(InboxNotifier.kindTitle(item.kind))
+                Text(RequestNotifier.kindTitle(item.kind))
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(item.kind.tint)
                 if let runTitle = model.runTitle(for: item), !runTitle.isEmpty {
@@ -27,64 +27,44 @@ struct InboxItemCard: View {
             Text(item.title)
                 .font(.system(size: 13.5, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
-            if !item.body.isEmpty && item.kind != .question {
+            if !item.body.isEmpty {
                 Text(item.body)
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.secondaryText)
                     .lineLimit(6)
                     .textSelection(.enabled)
             }
-            actions
+            if item.status == .open {
+                actions
+            } else {
+                Text(item.status == .answered ? "Done" : item.status == .expired ? "Expired" : "Dismissed")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.tertiaryText)
+            }
         }
         .padding(14)
         .frame(maxWidth: 760, alignment: .leading)
         .card(cornerRadius: 14)
+        .opacity(item.status == .open ? 1 : 0.75)
         .accessibilityElement(children: .contain)
     }
 
-    @ViewBuilder
     private var actions: some View {
-        switch item.kind {
-        case .question:
-            QuestionFormView(form: QuestionForm(item: item), recipient: nil, compact: true) { reply in
-                model.answerInboxQuestion(item: item, text: reply)
-            }
-            .id(item.id)
-        case .notice:
-            HStack {
-                Spacer()
-                Button("Dismiss") { model.dismissInboxItem(item) }
-                    .buttonStyle(PillButtonStyle(height: 28))
-                    .help("Remove this notice from the Inbox")
-            }
-        case .pinReview:
-            openButton(help: "Review the pins in the Changes tab")
-        case .permission:
-            HStack {
-                Spacer()
-                Button("Deny") { model.answerPermission(item, allow: false) }
-                    .buttonStyle(PillButtonStyle(height: 28))
-                    .help("Tell the agent to find another way")
-                Button("Allow") { model.answerPermission(item, allow: true) }
-                    .buttonStyle(PillButtonStyle(.primary, height: 28))
-                    .help("Let the agent do this once")
-            }
-        case .planApproval, .approval, .loopLimit, .budget, .failure, .gate:
-            openButton(help: "Decide in the project’s Lead tab")
-        }
-    }
-
-    private func openButton(help: String) -> some View {
         HStack {
             Spacer()
-            Button("Open") { model.openInboxItem(item) }
-                .buttonStyle(PillButtonStyle(.primary, height: 28))
-                .help(help)
+            if item.kind == .pinReview {
+                Button("Open in Changes") { model.openRequest(item) }
+                    .buttonStyle(PillButtonStyle(height: 28))
+                    .help("Review the pins in Changes")
+            }
+            Button("Dismiss") { model.dismissRequest(item) }
+                .buttonStyle(PillButtonStyle(height: 28))
+                .help("Mark this as handled")
         }
     }
 }
 
-extension InboxKind {
+extension ChatRequestKind {
     var symbol: String {
         switch self {
         case .question: "questionmark.bubble"

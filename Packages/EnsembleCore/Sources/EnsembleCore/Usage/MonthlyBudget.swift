@@ -190,9 +190,9 @@ extension AppDatabase {
         let start = BudgetWeek.start(of: date, calendar: calendar)
         let week = BudgetWeek.title(for: date, calendar: calendar)
         return try writer.read { db in
-            let sent = Set(try InboxItem
-                .filter(InboxItem.Columns.createdAt >= start)
-                .filter(Column("kind") == InboxKind.notice.rawValue)
+            let sent = Set(try ChatRequest
+                .filter(ChatRequest.Columns.createdAt >= start)
+                .filter(Column("kind") == ChatRequestKind.notice.rawValue)
                 .fetchAll(db)
                 .map { BudgetNoticeKey(projectId: $0.projectId, title: $0.title) })
             let globalSent = Set(sent.map(\.title))
@@ -249,9 +249,9 @@ extension AppDatabase {
         let start = BudgetMonth.start(of: date, calendar: calendar)
         let month = BudgetMonth.title(for: date, calendar: calendar)
         return try writer.read { db in
-            let sent = Set(try InboxItem
-                .filter(InboxItem.Columns.createdAt >= start)
-                .filter(Column("kind") == InboxKind.notice.rawValue)
+            let sent = Set(try ChatRequest
+                .filter(ChatRequest.Columns.createdAt >= start)
+                .filter(Column("kind") == ChatRequestKind.notice.rawValue)
                 .fetchAll(db)
                 .map { BudgetNoticeKey(projectId: $0.projectId, title: $0.title) })
             let globalSent = Set(sent.map(\.title))
@@ -300,11 +300,11 @@ extension AppDatabase {
     }
 
     @discardableResult
-    public func recordBudgetNotices(globalBudgetUSD: Double?, globalWeeklyBudgetUSD: Double? = nil, at date: Date = .now, calendar: Calendar = .current) throws -> [InboxItem] {
+    public func recordBudgetNotices(globalBudgetUSD: Double?, globalWeeklyBudgetUSD: Double? = nil, at date: Date = .now, calendar: Calendar = .current) throws -> [ChatRequest] {
         let notices = try pendingWeeklyBudgetNotices(globalBudgetUSD: globalWeeklyBudgetUSD, at: date, calendar: calendar)
             + pendingBudgetNotices(globalBudgetUSD: globalBudgetUSD, at: date, calendar: calendar)
         return try notices.map { notice in
-            try createInboxItem(InboxItem(projectId: notice.projectId, kind: .notice, title: notice.title, body: notice.body, createdAt: date))
+            try createChatRequest(ChatRequest(projectId: notice.projectId, kind: .notice, title: notice.title, body: notice.body, createdAt: date))
         }
     }
 

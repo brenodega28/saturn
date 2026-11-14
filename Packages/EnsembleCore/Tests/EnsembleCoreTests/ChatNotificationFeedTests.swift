@@ -226,7 +226,7 @@ import Testing
 
     @Test(arguments: [
         NotificationTarget.chat(projectId: 3, taskId: 9),
-        NotificationTarget.inboxItem(id: 42),
+        NotificationTarget.chatRequest(id: 42),
     ])
     func targetRoundTripsThroughUserInfo(target: NotificationTarget) {
         #expect(NotificationTarget(userInfo: target.userInfo) == target)
@@ -237,8 +237,8 @@ import Testing
         #expect(NotificationTarget(userInfo: bridged) == .chat(projectId: 3, taskId: 9))
         #expect(NotificationTarget(userInfo: [:]) == nil)
         #expect(NotificationTarget(userInfo: ["target": "chat", "projectId": 3]) == nil)
-        #expect(NotificationTarget(userInfo: ["target": "inboxItem"]) == nil)
-        #expect(NotificationTarget(userInfo: ["target": "other", "inboxItemId": 1]) == nil)
+        #expect(NotificationTarget(userInfo: ["target": "chatRequest"]) == nil)
+        #expect(NotificationTarget(userInfo: ["target": "other", "requestId": 1]) == nil)
     }
 
     @Test func suppressionTruthTable() {

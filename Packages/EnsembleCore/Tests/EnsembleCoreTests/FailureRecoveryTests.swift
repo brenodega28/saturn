@@ -176,7 +176,7 @@ import Testing
         try setup.engine.approvePlan(run, plan: plan)
 
         try await workflow.waitForHold(setup, run: run, .stepFailed)
-        let item = try #require(try setup.harness.database.openInboxItems(projectId: projectID).last)
+        let item = try #require(try setup.harness.database.openChatRequests(projectId: projectID).last)
         #expect(item.body.contains("The setup script failed in"))
         #expect(item.body.contains("npm ERR! registry unreachable"))
         #expect(item.body.contains("Settings › Workspaces"))

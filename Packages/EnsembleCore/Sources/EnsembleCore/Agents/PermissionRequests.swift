@@ -31,7 +31,7 @@ public struct PermissionRequest: Codable, Sendable, Hashable, Identifiable, Fetc
     public var rules: [String] = []
     public var status: PermissionRequestStatus
     public var scope: PermissionScope = .chat
-    public var inboxItemId: Int64?
+    public var requestId: Int64?
     public var createdAt: Date
     public var answeredAt: Date?
 
@@ -41,8 +41,8 @@ public struct PermissionRequest: Codable, Sendable, Hashable, Identifiable, Fetc
 }
 
 extension AppDatabase {
-    public func permissionRequest(inboxItemId: Int64) throws -> PermissionRequest? {
-        try writer.read { db in try PermissionRequest.filter(Column("inboxItemId") == inboxItemId).fetchOne(db) }
+    public func permissionRequest(requestId: Int64) throws -> PermissionRequest? {
+        try writer.read { db in try PermissionRequest.filter(Column("requestId") == requestId).fetchOne(db) }
     }
 
     public func permissionRequest(id: Int64) throws -> PermissionRequest? {
@@ -77,7 +77,7 @@ extension AgentRuntime {
     }
 
     nonisolated static let waitingReason = "Still waiting for the user to answer. Carry on with other work or end your turn; Ensemble messages you with the answer."
-    nonisolated static let inboxReason = "This needs the user’s OK, so Ensemble asked them in their Inbox. Carry on with other work or end your turn; you’ll get a message with the answer."
+    nonisolated static let askedReason = "This needs the user’s OK, so Ensemble asked them in the chat. Carry on with other work or end your turn; you’ll get a message with the answer."
     nonisolated static let leadChatReason = "This needs the user’s OK, so Ensemble is asking them through the lead chat. Carry on with other work or end your turn; you’ll get a message with the answer."
     nonisolated static let alreadyAllowedReason = "The user already allowed this kind of command."
 
@@ -146,20 +146,20 @@ extension AgentRuntime {
             }
             return Self.decision("deny", reason: Self.leadChatReason)
         }
-        let item = try database.createInboxItem(InboxItem(
+        let item = try database.createChatRequest(ChatRequest(
             projectId: agent.projectId, runId: agent.runId, agentId: pending.agentId, kind: .permission,
             title: "\(name) asks to \(action)",
             body: "\(policy.profile.name) agents need your OK for \(pending.capability.title.lowercased()). Allowing it also covers \(Self.similar(pending.rules)) from this agent later.",
             createdAt: .now
         ))
         var record = pending
-        record.inboxItemId = item.id
+        record.requestId = item.id
         _ = try database.insert(record)
-        return Self.decision("deny", reason: Self.inboxReason)
+        return Self.decision("deny", reason: Self.askedReason)
     }
 
-    public func answerPermission(inboxItemId: Int64, allow: Bool, now: Date = .now) throws {
-        guard let request = try database.permissionRequest(inboxItemId: inboxItemId), let id = request.id else { return }
+    public func answerPermission(requestId: Int64, allow: Bool, now: Date = .now) throws {
+        guard let request = try database.permissionRequest(requestId: requestId), let id = request.id else { return }
         try answerPermission(requestId: id, decision: allow ? .allow : .deny, now: now)
     }
 
@@ -184,8 +184,8 @@ extension AgentRuntime {
         request.scope = .chat
         request.answeredAt = now
         try database.save(request)
-        if let inboxItemId = request.inboxItemId {
-            try database.resolveInboxItem(id: inboxItemId, response: decision == .deny ? "denied" : "allowed", now: now)
+        if let requestId = request.requestId {
+            try database.resolveChatRequest(id: requestId, response: decision == .deny ? "denied" : "allowed", now: now)
         }
         let card = try request.id.flatMap { try database.permissionCard(requestId: $0) }
         if var card {

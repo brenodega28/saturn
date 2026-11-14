@@ -299,9 +299,7 @@ struct CommandPalette: View {
     }
 
     private var goToCommands: [PaletteCommand] {
-        var commands = [
-            PaletteCommand(id: "go-inbox", title: "Inbox", meta: model.inboxCount > 0 ? "\(model.inboxCount) waiting" : "", glyph: .symbol("tray")) { model.open(.inbox) },
-        ]
+        var commands: [PaletteCommand] = []
         if let project = model.currentProject {
             commands += ProjectTab.sidebarOrder.map { tab in
                 PaletteCommand(id: "go-\(tab.rawValue)", title: tab.title, meta: project.name, glyph: .symbol(tab.paletteSymbol)) {

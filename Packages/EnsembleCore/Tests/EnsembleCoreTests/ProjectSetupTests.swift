@@ -115,7 +115,7 @@ import Testing
         await h.settle(id)
 
         #expect(try h.hold(id)?.reason == .approval)
-        #expect(try h.database.openInboxItems(projectId: try #require(h.project.id)).map(\.kind) == [.approval])
+        #expect(try h.database.openChatRequests(projectId: try #require(h.project.id)).map(\.kind) == [.approval])
     }
 
     @Test func leadGuideMarksTheDefaultWorkflow() {

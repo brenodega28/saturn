@@ -4,14 +4,12 @@ import Foundation
 import Observation
 
 enum SidebarItem: Hashable, Codable {
-    case inbox
     case usage
     case quality
     case project(Int64)
 }
 
 enum SidebarDestination: Hashable {
-    case inbox
     case usage
     case quality
     case section(project: Int64, tab: ProjectTab)
@@ -71,8 +69,8 @@ final class AppModel {
     let secrets: any SecretStore
     let locator: ToolLocator
     let runner: CommandRunner
-    let inbox: InboxFeed
-    let inboxNotifier = InboxNotifier()
+    let requests: ChatRequestFeed
+    let requestNotifier = RequestNotifier()
     let chatNotifications: ChatNotificationFeed
     let pendingPermissions: PendingPermissionFeed
     var runDetailIDs: [Int64: Int64] = [:]
@@ -155,7 +153,7 @@ final class AppModel {
         self.driver = driver
         self.engine = RunEngine(database: database, driver: driver)
         self.leadChat = LeadChat(runtime: agents, engine: engine, driver: driver)
-        self.inbox = InboxFeed(database: database)
+        self.requests = ChatRequestFeed(database: database)
         self.chatNotifications = ChatNotificationFeed(database: database)
         self.pendingPermissions = PendingPermissionFeed(database: database)
         self.idleCleanup = IdleCleanupScheduler(runtime: agents)
@@ -196,7 +194,6 @@ final class AppModel {
     var sidebarDestination: SidebarDestination? {
         get {
             switch selection {
-            case .inbox: .inbox
             case .usage: .usage
             case .quality: .quality
             case .project(let id):
@@ -214,8 +211,6 @@ final class AppModel {
         }
         set {
             switch newValue {
-            case .inbox:
-                selection = .inbox
             case .usage:
                 selection = .usage
             case .quality:
@@ -262,7 +257,7 @@ final class AppModel {
         perform("Couldn’t recover runs") { try engine.recover() }
         engine.startOrphanWatchdog()
         await deleteAgentsOfClosedRequests()
-        startInbox()
+        startRequests()
         startBudgetMonitor()
         startMemoryUpdates()
         idleCleanup.start()
@@ -371,7 +366,7 @@ final class AppModel {
         guard let id = project.id, !notices.isEmpty else { return }
         let body = "Roles are now built-in Lead, Builder and Checker agents. Ensemble updated this project:\n\n"
             + notices.map { "- \($0.file): \($0.message)" }.joined(separator: "\n")
-        _ = try? database.createInboxItem(InboxItem(
+        _ = try? database.createChatRequest(ChatRequest(
             projectId: id, kind: .notice, title: "\(project.name) moved from roles to agent kinds", body: body, createdAt: .now
         ))
     }

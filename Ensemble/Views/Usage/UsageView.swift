@@ -108,7 +108,7 @@ struct UsageView: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Monthly budgets").font(.system(size: 15, weight: .semibold))
-                Text("You get an Inbox notice at 80% and 100%. A project at 100% stops starting runs and agent turns until you raise its budget or allow the rest of the month.")
+                Text("You get a notice in a chat at 80% and 100%. A project at 100% stops starting runs and agent turns until you raise its budget or allow the rest of the month.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)

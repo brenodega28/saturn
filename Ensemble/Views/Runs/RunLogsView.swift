@@ -10,7 +10,7 @@ struct RunLogsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            InboxHistory(items: snapshot.inbox.sorted { $0.createdAt > $1.createdAt }, agents: snapshot.agents)
+            RequestHistory(items: snapshot.requests.sorted { $0.createdAt > $1.createdAt }, agents: snapshot.agents)
             if snapshot.agents.isEmpty {
                 Text("Agent transcripts show up here once agents join the run.")
                     .font(.system(size: 13))
@@ -23,13 +23,13 @@ struct RunLogsView: View {
     }
 }
 
-private struct InboxHistory: View {
-    let items: [InboxItem]
+private struct RequestHistory: View {
+    let items: [ChatRequest]
     let agents: [Agent]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Holds and inbox")
+            Text("What this run asked you")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.secondaryText)
                 .padding(.vertical, 8)
@@ -41,7 +41,7 @@ private struct InboxHistory: View {
                     .padding(.bottom, 10)
             }
             ForEach(items) { item in
-                InboxHistoryRow(item: item, agentName: item.agentId.flatMap { id in agents.first { $0.id == id }?.name })
+                RequestHistoryRow(item: item, agentName: item.agentId.flatMap { id in agents.first { $0.id == id }?.name })
                 if item.id != items.last?.id {
                     Divider().overlay(Color.white.opacity(0.05))
                 }
@@ -53,8 +53,8 @@ private struct InboxHistory: View {
     }
 }
 
-private struct InboxHistoryRow: View {
-    let item: InboxItem
+private struct RequestHistoryRow: View {
+    let item: ChatRequest
     let agentName: String?
 
     var body: some View {

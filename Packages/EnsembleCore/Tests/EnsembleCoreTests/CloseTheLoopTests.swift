@@ -80,11 +80,11 @@ import Testing
         #expect(try setup.database.corrections(projectId: setup.project.id!).map(\.text) == ["Use Decimal for money amounts, never floats"])
 
         _ = try setup.database.createComment(runId: first, branchAgentId: nil, file: "shop/tax.py", side: .new, startLine: 1, endLine: 1, text: "Money amounts must use Decimal, never float")
-        #expect(try setup.database.openInboxItems(projectId: setup.project.id!).isEmpty)
+        #expect(try setup.database.openChatRequests(projectId: setup.project.id!).isEmpty)
 
         let second = try makeRun(setup, title: "Invoices")
         _ = try setup.database.createComment(runId: second, branchAgentId: nil, file: "shop/invoices.py", side: .new, startLine: 9, endLine: 9, text: "Again: money amounts need Decimal, not float")
-        let notice = try #require(try setup.database.openInboxItems(projectId: setup.project.id!).last)
+        let notice = try #require(try setup.database.openChatRequests(projectId: setup.project.id!).last)
         #expect(notice.title == "You’ve asked for this before")
         #expect(notice.body.contains("Settings › Learned Rules"))
         #expect(try setup.database.repeatedCorrections(projectId: setup.project.id!).count == 3)
@@ -164,8 +164,8 @@ import Testing
             _ = try database.insert(RunStep(runId: runId, stepId: "approve", iteration: 1, status: .succeeded, outcome: StepOutcome.changesRequested, startedAt: ended, endedAt: ended))
         }
         _ = try database.insert(RunStep(runId: runId, stepId: "approve", iteration: sentBack ? 2 : 1, status: .succeeded, outcome: StepOutcome.approved, startedAt: ended, endedAt: ended))
-        var item = try database.createInboxItem(InboxItem(projectId: project, runId: runId, kind: .approval, title: "Approve", body: "", createdAt: ended.addingTimeInterval(-approvalMinutes * 60)))
-        item.status = .resolved
+        var item = try database.createChatRequest(ChatRequest(projectId: project, runId: runId, kind: .approval, title: "Approve", body: "", createdAt: ended.addingTimeInterval(-approvalMinutes * 60)))
+        item.status = .answered
         item.resolvedAt = ended
         try database.writer.write { db in try item.update(db) }
     }

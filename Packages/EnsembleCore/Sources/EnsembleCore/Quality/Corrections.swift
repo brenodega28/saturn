@@ -86,7 +86,7 @@ extension AppDatabase {
         }
         guard let correction else { return nil }
         if let earlier = try repeatOf(correction) {
-            try createInboxItem(InboxItem(
+            try createChatRequest(ChatRequest(
                 projectId: correction.projectId, runId: correction.runId, kind: .notice,
                 title: "You’ve asked for this before",
                 body: "“\(correction.text)”\n\nLooks like your earlier correction “\(earlier.text)”. Encode it as a rule, a check or a protected path in Settings › Learned Rules so agents stop repeating the mistake.",

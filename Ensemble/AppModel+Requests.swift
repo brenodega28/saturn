@@ -4,11 +4,11 @@ import Foundation
 import UserNotifications
 
 extension AppModel {
-    var inboxCount: Int { inbox.count }
+    var needsYouCount: Int { requests.count }
 
-    func startInbox() {
-        inboxNotifier.onOpen = { [weak self] target in self?.openNotification(target) }
-        inbox.onNewItems = { [weak self] items in
+    func startRequests() {
+        requestNotifier.onOpen = { [weak self] target in self?.openNotification(target) }
+        requests.onNewItems = { [weak self] items in
             guard let self else { return }
             let visibleChat = visibleChat()
             let wanted = items.filter { item in
@@ -17,7 +17,7 @@ extension AppModel {
                         appActive: NSApp.isActive, visibleChat: visibleChat, target: (item.projectId, taskID(of: item))
                     )
             }
-            inboxNotifier.post(wanted, projectName: { [weak self] id in self?.project(withID: id)?.name })
+            requestNotifier.post(wanted, projectName: { [weak self] id in self?.project(withID: id)?.name })
         }
         chatNotifications.onNew = { [weak self] notifications in
             guard let self else { return }
@@ -28,7 +28,7 @@ extension AppModel {
                         appActive: NSApp.isActive, visibleChat: visibleChat, target: (notification.projectId, notification.taskId)
                     )
             }
-            inboxNotifier.post(wanted, projectName: { [weak self] id in self?.project(withID: id)?.name })
+            requestNotifier.post(wanted, projectName: { [weak self] id in self?.project(withID: id)?.name })
         }
         agents.observeTurnEnds { [weak self] session in
             guard let self, session.agent.kind == .lead, session.agent.status == .idle, let taskID = session.agent.taskId,
@@ -37,10 +37,10 @@ extension AppModel {
                 run.id.flatMap { self?.engine.runs[$0] } ?? run
             }
         }
-        inbox.start()
+        requests.start()
         chatNotifications.start()
         pendingPermissions.start()
-        inboxNotifier.requestAuthorization()
+        requestNotifier.requestAuthorization()
     }
 
     func visibleChat() -> (projectId: Int64, taskId: Int64)? {
@@ -50,9 +50,8 @@ extension AppModel {
         return (projectID, taskID)
     }
 
-    func taskID(of item: InboxItem) -> Int64? {
-        if let runID = item.runId, let run = liveRun(id: runID) { return run.taskId }
-        return item.agentId.flatMap { agent(id: $0) }?.taskId
+    func taskID(of item: ChatRequest) -> Int64? {
+        item.taskId
     }
 
     func openNotification(_ target: NotificationTarget?) {
@@ -62,34 +61,18 @@ extension AppModel {
             selection = .project(projectID)
             tabs[projectID] = .lead
             showRequest(id: taskID, inProjectID: projectID)
-        case .inboxItem(let id):
-            guard let item = try? database.inboxItem(id: id) else {
-                selection = .inbox
-                return
-            }
-            openInboxItem(item)
+        case .chatRequest(let id):
+            guard let item = try? database.chatRequest(id: id) else { return }
+            openRequest(item)
         case nil:
-            selection = .inbox
+            return
         }
     }
 
-    func answerInboxQuestion(item: InboxItem, text: String) {
-        let reply = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let id = item.id, !reply.isEmpty else { return }
-        do {
-            try database.resolveInboxItem(id: id, response: reply)
-            if let agentID = item.agentId, let agent = try database.agent(id: agentID) {
-                agents.session(for: agent)?.send(reply)
-            }
-        } catch {
-            alert = AppAlert(title: "Couldn’t send the answer", message: error.localizedDescription)
-        }
-    }
-
-    func answerPermission(_ item: InboxItem, allow: Bool) {
+    func answerPermission(_ item: ChatRequest, allow: Bool) {
         guard let id = item.id else { return }
         do {
-            try agents.answerPermission(inboxItemId: id, allow: allow)
+            try agents.answerPermission(requestId: id, allow: allow)
         } catch {
             alert = AppAlert(title: "Couldn’t answer “\(item.title)”", message: error.localizedDescription)
         }
@@ -105,32 +88,31 @@ extension AppModel {
         }
     }
 
-    func dismissInboxItem(_ item: InboxItem) {
+    func dismissRequest(_ item: ChatRequest) {
         guard let id = item.id else { return }
         do {
-            try database.resolveInboxItem(id: id, status: .dismissed)
+            try database.resolveChatRequest(id: id, status: .dismissed)
         } catch {
             alert = AppAlert(title: "Couldn’t dismiss “\(item.title)”", message: error.localizedDescription)
         }
     }
 
-    func openInboxItem(_ item: InboxItem) {
+    func openRequest(_ item: ChatRequest) {
         if item.kind == .pinReview {
             selection = .project(item.projectId)
             tabs[item.projectId] = .changes
-        } else if item.runId == nil, let taskID = item.agentId.flatMap({ agent(id: $0) })?.taskId {
+        } else if let taskID = item.taskId {
+            runDetailIDs[item.projectId] = nil
             selection = .project(item.projectId)
-            showRequest(id: taskID, inProjectID: item.projectId)
             tabs[item.projectId] = .lead
-        } else {
-            openLead(forRun: item.runId, in: item.projectId)
+            showRequest(id: taskID, inProjectID: item.projectId)
         }
     }
 
-    static let needsYouKinds: Set<InboxKind> = [.question, .planApproval, .approval, .permission]
+    static let needsYouKinds: Set<ChatRequestKind> = [.question, .planApproval, .approval, .permission]
 
-    var needsYouItems: [InboxItem] {
-        inbox.items.filter { Self.needsYouKinds.contains($0.kind) }
+    var needsYouItems: [ChatRequest] {
+        requests.items.filter { Self.needsYouKinds.contains($0.kind) }
     }
 
     func runNeedsYou(_ run: Run) -> Bool {
@@ -162,15 +144,7 @@ extension AppModel {
     }
 
     func needsYouTaskIDs() -> Set<Int64> {
-        var taskIDs: Set<Int64> = []
-        for item in needsYouItems {
-            if let runID = item.runId, let run = liveRun(id: runID) {
-                taskIDs.insert(run.taskId)
-            } else if let taskID = item.agentId.flatMap({ agent(id: $0) })?.taskId {
-                taskIDs.insert(taskID)
-            }
-        }
-        return taskIDs
+        Set(needsYouItems.compactMap(\.taskId))
     }
 
     func pendingApprovalCount(of task: ProjectTask) -> Int {
@@ -186,7 +160,7 @@ extension AppModel {
         return task.id.map(needsYouTaskIDs.contains) == true
     }
 
-    func runTitle(for item: InboxItem) -> String? {
+    func runTitle(for item: ChatRequest) -> String? {
         guard let runID = item.runId else { return nil }
         if let live = engine.runs[runID] { return live.title }
         return (try? database.run(id: runID))?.title
@@ -194,7 +168,7 @@ extension AppModel {
 }
 
 @MainActor
-final class InboxNotifier: NSObject, UNUserNotificationCenterDelegate {
+final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
     var onOpen: (@MainActor (NotificationTarget?) -> Void)?
     private var hasRequestedAuthorization = false
     private var center: UNUserNotificationCenter { .current() }
@@ -206,7 +180,7 @@ final class InboxNotifier: NSObject, UNUserNotificationCenterDelegate {
         center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
-    func post(_ items: [InboxItem], projectName: (Int64) -> String?) {
+    func post(_ items: [ChatRequest], projectName: (Int64) -> String?) {
         for item in items {
             guard let id = item.id else { continue }
             let content = UNMutableNotificationContent()
@@ -215,7 +189,7 @@ final class InboxNotifier: NSObject, UNUserNotificationCenterDelegate {
             content.body = item.body
             content.sound = .default
             content.threadIdentifier = "project-\(item.projectId)"
-            content.userInfo = NotificationTarget.inboxItem(id: id).userInfo
+            content.userInfo = NotificationTarget.chatRequest(id: id).userInfo
             center.add(UNNotificationRequest(identifier: "inbox-\(id)", content: content, trigger: nil))
         }
     }
@@ -242,7 +216,7 @@ final class InboxNotifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    static func kindTitle(_ kind: InboxKind) -> String {
+    static func kindTitle(_ kind: ChatRequestKind) -> String {
         switch kind {
         case .question: "Question"
         case .planApproval: "Plan approval"
@@ -272,12 +246,3 @@ final class InboxNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
-extension AppModel {
-    func openLead(forRun runID: Int64?, in projectID: Int64) {
-        selection = .project(projectID)
-        if let runID, let run = engine.runs[runID] ?? (try? database.run(id: runID)) ?? nil {
-            showRequest(id: run.taskId, inProjectID: projectID)
-        }
-        tabs[projectID] = .lead
-    }
-}

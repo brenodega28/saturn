@@ -160,7 +160,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
                 session.send(QuestionRelay.spawnedAgentMessage(agentName: displayName(of: agent), body: question, questions: questions))
                 return "Your question was sent to \(displayName(of: spawner)), who started you and will answer it or ask the user. End your turn now; the answer arrives as your next message."
             }
-            _ = try runtime.database.createInboxItem(InboxItem(
+            _ = try runtime.database.createChatRequest(ChatRequest(
                 projectId: agent.projectId, runId: agent.runId, agentId: agentID, kind: .question,
                 title: "\(displayName(of: agent)) asks", body: question, questions: questions.isEmpty ? nil : questions, createdAt: .now
             ))
@@ -292,10 +292,10 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             return
         }
         #if DEBUG
-        traceDelivery(batch, runId: runId, to: "user_inbox")
+        traceDelivery(batch, runId: runId, to: "user_chat")
         #endif
         for question in batch {
-            _ = try? runtime.database.createInboxItem(InboxItem(
+            _ = try? runtime.database.createChatRequest(ChatRequest(
                 projectId: question.projectId, runId: question.runId, agentId: question.agentId, kind: .question,
                 title: "\(question.agentName) asks", body: question.body, questions: question.questions.isEmpty ? nil : question.questions, createdAt: .now
             ))
@@ -321,7 +321,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             spawnerSession.send("Report from \(name):\n\n\(report)")
             return
         }
-        _ = try? runtime.database.createInboxItem(InboxItem(
+        _ = try? runtime.database.createChatRequest(ChatRequest(
             projectId: agent.projectId, agentId: agentID, kind: .notice,
             title: "Report from \(name)", body: report, createdAt: .now
         ))
@@ -642,7 +642,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             if try hasOpenQuestion(session) {
                 #if DEBUG
                 let waitStart = Date()
-                defer { traceInboxAnswer(for: session, since: waitStart) }
+                defer { traceRequestAnswer(for: session, since: waitStart) }
                 #endif
                 try await waitForAnswer(session)
                 awaitingLead.remove(session.id)
@@ -674,7 +674,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     private func hasOpenQuestion(_ session: AgentSession) throws -> Bool {
         if awaitingLead.contains(session.id) { return true }
-        return try runtime.database.openInboxItems(projectId: session.agent.projectId)
+        return try runtime.database.openChatRequests(projectId: session.agent.projectId)
             .contains { $0.agentId == session.id && $0.kind == .question }
     }
 

@@ -74,7 +74,7 @@ import Testing
         #expect(testChange.startLine == 2)
     }
 
-    @Test func checksThatStayRedHoldTheRunInTheInbox() async throws {
+    @Test func checksThatStayRedHoldTheRunInItsChat() async throws {
         let setup = try await makeSetup(checks: ChecksConfig(
             checks: [CheckDefinition(name: "unit", kind: .test, command: "echo 'FAILED test_refund_cap'; exit 1")]
         ))
@@ -83,7 +83,7 @@ import Testing
         let run = try start(setup)
         _ = try await waitForEnd(setup, run: run)
         #expect(setup.engine.holds[run.id!]?.reason == .stepFailed)
-        let item = try #require(try setup.harness.database.openInboxItems(projectId: setup.project.id!).last)
+        let item = try #require(try setup.harness.database.openChatRequests(projectId: setup.project.id!).last)
         #expect(item.title == "“checks” failed")
         #expect(item.body.hasPrefix("Checks still fail after 2 rounds."))
         #expect(item.body.contains("FAILED test_refund_cap"))
@@ -143,7 +143,7 @@ import Testing
 
         let run = try start(setup)
         _ = try await waitForEnd(setup, run: run)
-        let item = try #require(try setup.harness.database.openInboxItems(projectId: setup.project.id!).last)
+        let item = try #require(try setup.harness.database.openChatRequests(projectId: setup.project.id!).last)
         #expect(item.body.contains("already passes unit, so its test doesn’t reproduce the problem"))
     }
 

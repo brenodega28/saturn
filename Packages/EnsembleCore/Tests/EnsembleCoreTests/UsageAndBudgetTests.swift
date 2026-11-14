@@ -164,7 +164,7 @@ import Testing
         #expect(warning.first?.projectId == project.id)
         #expect(try database.recordBudgetNotices(globalBudgetUSD: nil, at: now, calendar: calendar).isEmpty)
 
-        try database.resolveInboxItem(id: warning[0].id!, status: .dismissed)
+        try database.resolveChatRequest(id: warning[0].id!, status: .dismissed)
         try spend(database, project, 2, at: "2026-10-04T10:00:00Z")
         let reached = try database.recordBudgetNotices(globalBudgetUSD: nil, at: now, calendar: calendar)
         #expect(reached.map(\.title) == ["Monthly budget reached"])

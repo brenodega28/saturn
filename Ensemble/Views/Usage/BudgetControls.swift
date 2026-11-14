@@ -166,7 +166,7 @@ struct ProjectBudgetCard: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Budgets").font(.system(size: 13.5, weight: .semibold))
-                Text("Spend across every run and agent in \(project.name). You get an Inbox notice at 80% and 100% of either cap; at 100% new runs and agent turns are refused until you raise it or allow the rest of the period.")
+                Text("Spend across every run and agent in \(project.name). You get a notice in a chat at 80% and 100% of either cap; at 100% new runs and agent turns are refused until you raise it or allow the rest of the period.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)

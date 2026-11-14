@@ -8,7 +8,7 @@ struct RunDetailSnapshot {
     var steps: [RunStep]
     var state: RunEngineState
     var agents: [Agent]
-    var inbox: [InboxItem]
+    var requests: [ChatRequest]
     var graph: RunGraph?
     var history: RunHistory?
 
@@ -58,7 +58,7 @@ extension AppModel {
         let agents = (try? database.agents(inRun: runID)) ?? []
         return RunDetailSnapshot(
             run: run, task: requestTask(for: run), workflow: workflow, steps: steps, state: state, agents: agents,
-            inbox: (try? database.inboxItems(runId: runID)) ?? [],
+            requests: (try? database.chatRequests(runId: runID)) ?? [],
             graph: workflow.map { RunGraph(workflow: $0, run: run, steps: steps, hold: state.hold) },
             history: workflow.map { RunHistory(workflow: $0, steps: steps, agents: agents) }
         )

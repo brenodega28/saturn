@@ -65,8 +65,8 @@ extension StepType {
         case .spawn: "Starts one builder per task in the approved plan, each on its own branch with the skills the Lead chose, and waits for them all."
         case .condition: "Routes the run by an outcome, a label or a fact about the change, without running an agent."
         case .approval: "Stops the run until you approve or send it back. Nothing merges without this."
-        case .notify: "Posts a note to your Inbox and keeps going."
-        case .check: "Runs your commands in a fresh worktree. Failing output goes back to the author, then the Inbox after the last round."
+        case .notify: "Posts a note in the chat and keeps going."
+        case .check: "Runs your commands in a fresh worktree. Failing output goes back to the author, then you in the chat after the last round."
         case .gates: "Looks for secrets, new dependencies, duplication and complexity. Findings can block or just warn."
         }
     }

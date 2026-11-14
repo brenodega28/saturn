@@ -142,7 +142,7 @@ import Testing
         let reply = try await setup.driver.receive(.question("Which database?"), from: lead.id!)
 
         #expect(reply.contains("End your turn"))
-        let open = try setup.harness.database.openInboxItems(projectId: setup.project.id!).filter { $0.kind == .question }
+        let open = try setup.harness.database.openChatRequests(projectId: setup.project.id!).filter { $0.kind == .question }
         #expect(open.map(\.body) == ["Which database?"])
         #expect(open.first?.agentId == lead.id)
     }

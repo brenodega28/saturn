@@ -192,7 +192,7 @@ import Testing
         #expect(notice.kind == .notice)
         #expect(notice.body.contains("• lint: npm run lint"))
         #expect(notice.body.contains("There is no test command among them"))
-        _ = try harness.database.resolveInboxItem(id: try #require(notice.id))
+        _ = try harness.database.resolveChatRequest(id: try #require(notice.id))
         #expect(try CheckSetupNotice.postIfNeeded(for: harness.project, config: config, database: harness.database) == nil)
 
         var withChecks = config

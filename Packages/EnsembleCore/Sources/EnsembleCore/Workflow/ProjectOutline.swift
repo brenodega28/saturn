@@ -22,20 +22,14 @@ public enum ProjectOutline {
         public let tone: Tone
     }
 
-    public static let defaultExpanded: Set<String> = ["lead", "tasks", "changes"]
+    public static let defaultExpanded: Set<String> = ["lead", "changes"]
 
-    public static func attention(_ waiting: [InboxItem]) -> Tone {
+    public static func attention(_ waiting: [ChatRequest]) -> Tone {
         if waiting.contains(where: { $0.kind == .failure }) { return .danger }
         return waiting.isEmpty ? .quiet : .warning
     }
 
-    public static func tasksBadge(waiting: [InboxItem]) -> Badge? {
-        let items = waiting.filter { $0.kind != .pinReview }
-        guard !items.isEmpty else { return nil }
-        return Badge(count: items.count, tone: attention(items))
-    }
-
-    public static func changesBadge(waiting: [InboxItem]) -> Badge? {
+    public static func changesBadge(waiting: [ChatRequest]) -> Badge? {
         let pins = waiting.filter { $0.kind == .pinReview }.count
         return pins > 0 ? Badge(count: pins, tone: .warning) : nil
     }

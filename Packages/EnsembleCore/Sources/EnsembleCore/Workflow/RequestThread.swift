@@ -6,10 +6,11 @@ public struct RequestThread: Sendable, Hashable {
         case message(LeadMessage)
         case runStarted(Run)
         case step(Run, RunTimeline.Entry)
-        case answeredQuestion(InboxItem)
+        case answeredQuestion(ChatRequest)
         case runEnded(Run)
-        case openQuestion(InboxItem)
+        case openQuestion(ChatRequest)
         case hold(Run)
+        case notice(ChatRequest)
 
         public var id: String {
             switch self {
@@ -21,12 +22,14 @@ public struct RequestThread: Sendable, Hashable {
             case .runEnded(let run): "end-\(run.id ?? 0)"
             case .openQuestion(let item): "question-\(item.id ?? 0)"
             case .hold(let run): "hold-\(run.id ?? 0)"
+            case .notice(let request): "notice-\(request.id ?? 0)"
             }
         }
 
         public var isLive: Bool {
             switch self {
             case .openQuestion, .hold: true
+            case .notice(let request): request.status == .open
             default: false
             }
         }
@@ -39,9 +42,14 @@ public struct RequestThread: Sendable, Hashable {
         messages: [LeadMessage],
         runs: [Run],
         timelines: [Int64: RunTimeline],
-        questions: [InboxItem],
+        requests: [ChatRequest],
         heldRunIDs: Set<Int64>
     ) {
+        let questions = requests.filter { $0.kind == .question }
+        let holdRequestIDs = Set(timelines.values.compactMap { $0.holdItem?.id })
+        let notices = requests.filter { request in
+            request.kind != .question && request.kind != .permission && !holdRequestIDs.contains(request.id ?? -1)
+        }
         var dated: [(date: Date, order: Int, item: Item)] = []
         func add(_ date: Date, _ item: Item) { dated.append((date, dated.count, item)) }
 
@@ -80,10 +88,14 @@ public struct RequestThread: Sendable, Hashable {
         for question in questions where question.status != .open {
             add(question.resolvedAt ?? question.createdAt, .answeredQuestion(question))
         }
+        for notice in notices where notice.status != .open {
+            add(notice.createdAt, .notice(notice))
+        }
 
         var items = dated.sorted { ($0.date, $0.order) < ($1.date, $1.order) }.map(\.item)
         items += questions.filter { $0.status == .open }.sorted { $0.createdAt < $1.createdAt }.map(Item.openQuestion)
         items += runs.filter { run in run.isActive && run.id.map(heldRunIDs.contains) == true }.map(Item.hold)
+        items += notices.filter { $0.status == .open }.sorted { $0.createdAt < $1.createdAt }.map(Item.notice)
         self.items = items
     }
 }

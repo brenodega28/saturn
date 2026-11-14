@@ -216,7 +216,7 @@ public struct Evidence: Codable, Sendable, Hashable, Identifiable, FetchableReco
     public var url: URL { URL(filePath: file) }
 }
 
-public enum InboxKind: String, Codable, Sendable, CaseIterable {
+public enum ChatRequestKind: String, Codable, Sendable, CaseIterable {
     case question
     case planApproval = "plan_approval"
     case pinReview = "pin_review"
@@ -229,35 +229,38 @@ public enum InboxKind: String, Codable, Sendable, CaseIterable {
     case permission
 }
 
-public enum InboxStatus: String, Codable, Sendable, CaseIterable {
+public enum ChatRequestState: String, Codable, Sendable, CaseIterable {
     case open
-    case resolved
+    case answered
     case dismissed
+    case expired
 }
 
-public struct InboxItem: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
-    public static let databaseTableName = "inboxItem"
+public struct ChatRequest: Codable, Sendable, Hashable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "chatRequest"
 
     public var id: Int64?
     public var projectId: Int64
+    public var taskId: Int64?
     public var runId: Int64?
     public var agentId: Int64?
-    public var kind: InboxKind
+    public var kind: ChatRequestKind
     public var title: String
     public var body: String
-    public var status: InboxStatus
+    public var status: ChatRequestState
     public var response: String?
     public var questions: [HumanQuestion]?
     public var createdAt: Date
     public var resolvedAt: Date?
 
     public init(
-        id: Int64? = nil, projectId: Int64, runId: Int64? = nil, agentId: Int64? = nil, kind: InboxKind,
-        title: String, body: String = "", status: InboxStatus = .open, response: String? = nil,
+        id: Int64? = nil, projectId: Int64, taskId: Int64? = nil, runId: Int64? = nil, agentId: Int64? = nil, kind: ChatRequestKind,
+        title: String, body: String = "", status: ChatRequestState = .open, response: String? = nil,
         questions: [HumanQuestion]? = nil, createdAt: Date, resolvedAt: Date? = nil
     ) {
         self.id = id
         self.projectId = projectId
+        self.taskId = taskId
         self.runId = runId
         self.agentId = agentId
         self.kind = kind
@@ -276,6 +279,7 @@ public struct InboxItem: Codable, Sendable, Hashable, Identifiable, FetchableRec
 
     public enum Columns {
         public static let projectId = Column(CodingKeys.projectId)
+        public static let taskId = Column(CodingKeys.taskId)
         public static let runId = Column(CodingKeys.runId)
         public static let status = Column(CodingKeys.status)
         public static let createdAt = Column(CodingKeys.createdAt)

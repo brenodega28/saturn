@@ -78,12 +78,13 @@ extension StepType {
     }
 }
 
-extension InboxStatus {
+extension ChatRequestState {
     var label: String {
         switch self {
         case .open: "Open"
-        case .resolved: "Resolved"
+        case .answered: "Answered"
         case .dismissed: "Dismissed"
+        case .expired: "Expired"
         }
     }
 }

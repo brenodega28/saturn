@@ -354,7 +354,7 @@ final class SpecGateDriver: WorkflowDriver {
         let steps = try setup.harness.database.runSteps(runId: runID)
         #expect(steps.map(\.stepId) == ["plan", "build", "checks", "gates", "review", "criteria"])
         #expect(steps.first { $0.stepId == "gates" }?.outcome == StepOutcome.passed)
-        let item = try #require(try setup.harness.database.inboxItems(runId: runID).last)
+        let item = try #require(try setup.harness.database.chatRequests(runId: runID).last)
         #expect(item.body.contains("Decide: Criterion 1 failed: alpha.txt exists"))
         #expect(!item.body.contains("beta.txt exists"))
 
@@ -363,7 +363,7 @@ final class SpecGateDriver: WorkflowDriver {
         let decided = try #require(try setup.harness.database.runSteps(runId: runID).last { $0.stepId == "criteria" })
         #expect(decided.outcome == StepOutcome.passed)
         #expect(decided.output?.contains("You continued past them.") == true)
-        #expect(try setup.harness.database.inboxItems(runId: runID).first { $0.id == item.id }?.response == "Accept it for now")
+        #expect(try setup.harness.database.chatRequests(runId: runID).first { $0.id == item.id }?.response == "Accept it for now")
         try await engine.cancel(try #require(engine.runs[runID]))
     }
 

@@ -4,11 +4,11 @@ import EnsembleUI
 import SwiftUI
 
 enum NotificationPreferences {
-    static func key(_ kind: InboxKind) -> String {
+    static func key(_ kind: ChatRequestKind) -> String {
         "notify.\(kind.rawValue)"
     }
 
-    static func isEnabled(_ kind: InboxKind) -> Bool {
+    static func isEnabled(_ kind: ChatRequestKind) -> Bool {
         UserDefaults.standard.object(forKey: key(kind)) as? Bool ?? true
     }
 
@@ -91,8 +91,8 @@ private struct NotificationSettings: View {
         SettingsPane {
             Text("Notify me about").font(.system(size: 13, weight: .semibold))
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(InboxKind.allCases, id: \.self) { kind in
-                    Toggle(InboxNotifier.kindTitle(kind), isOn: Binding(
+                ForEach(ChatRequestKind.allCases, id: \.self) { kind in
+                    Toggle(RequestNotifier.kindTitle(kind), isOn: Binding(
                         get: { _ = revision; return NotificationPreferences.isEnabled(kind) },
                         set: {
                             UserDefaults.standard.set($0, forKey: NotificationPreferences.key(kind))
@@ -104,7 +104,7 @@ private struct NotificationSettings: View {
             Text("Lead chat").font(.system(size: 13, weight: .semibold))
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(ChatNotificationEvent.allCases, id: \.self) { event in
-                    Toggle(InboxNotifier.eventTitle(event), isOn: Binding(
+                    Toggle(RequestNotifier.eventTitle(event), isOn: Binding(
                         get: { _ = revision; return NotificationPreferences.isEnabled(event) },
                         set: {
                             UserDefaults.standard.set($0, forKey: NotificationPreferences.key(event))

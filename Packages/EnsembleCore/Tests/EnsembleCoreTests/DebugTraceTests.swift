@@ -248,7 +248,7 @@ import Testing
         let events = try Self.events(trace.runsDirectory.appending(path: "\(id)-refunds-v2/trace.jsonl"))
         let hold = try #require(events.first { $0["type"]?.string == "hold" })
         #expect(hold["reason"]?.string == HoldReason.planApproval.rawValue)
-        #expect(hold["inboxItemId"]?.int != nil)
+        #expect(hold["requestId"]?.int != nil)
         let resolved = try #require(events.first { $0["type"]?.string == "hold_resolved" })
         #expect(resolved["decision"]?.string == "rejected")
         #expect(resolved["response"]?.string == "Split the UI out")

@@ -269,7 +269,7 @@ private struct StepSection: View {
                 }
             }
             if [.approval, .notify].contains(step.type) {
-                InspectorField(step.type == .notify ? "Message" : "Inbox message") {
+                InspectorField(step.type == .notify ? "Message" : "Message in the chat") {
                     TextField("Message", text: $step.message.orEmpty, axis: .vertical)
                         .textFieldStyle(.roundedBorder)
                         .labelsHidden()
@@ -281,7 +281,7 @@ private struct StepSection: View {
             }
             if step.type == .approval {
                 Toggle("Remind me daily", isOn: $step.remindDaily)
-                    .help("Post a reminder to your Inbox each day this approval waits")
+                    .help("Post a reminder in the chat each day this approval waits")
             }
             if step.type == .condition {
                 ConditionEditor(condition: Binding(get: { step.condition ?? StepCondition() }, set: { step.condition = $0 }), workflow: editor.draft, stepID: step.id)
@@ -339,7 +339,7 @@ private struct StepSection: View {
             case .condition:
                 Text("Ensemble checks the rule below").font(.system(size: 13, weight: .medium))
             case .notify:
-                Text("Ensemble posts to your Inbox").font(.system(size: 13, weight: .medium))
+                Text("Ensemble posts in the chat").font(.system(size: 13, weight: .medium))
             case .check:
                 Text("Ensemble runs the project’s checks").font(.system(size: 13, weight: .medium))
             case .gates:
@@ -630,12 +630,12 @@ enum StepInputsDescription {
         case .approval:
             return "The run’s branches, pins and the latest verdict. Approve to continue or send it back with changes."
         case .notify:
-            return "The run so far. Posts the message to your Inbox and continues."
+            return "The run so far. Posts the message in the chat and continues."
         case .gates:
             return "Every branch built in this run. Secrets, new dependencies and oversized changes wait for your decision; duplication, complexity and missing evidence are shown as warnings in Changes. Limits come from \(ProjectConfig.directoryName)/\(ReviewPolicy.fileName)."
         case .check:
             let rounds = step.maxRounds.map { "\($0)" } ?? "the project’s"
-            return "Every branch built in this run. Failing checks go back to the branch’s author with their output, up to \(rounds) rounds, then to your Inbox."
+            return "Every branch built in this run. Failing checks go back to the branch’s author with their output, up to \(rounds) rounds, then to you in the chat."
         }
     }
 

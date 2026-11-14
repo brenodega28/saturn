@@ -24,8 +24,8 @@ import Testing
             try database.leadMessages(taskId: run.taskId).filter { $0.kind == .permission }
         }
 
-        func permissionItems() throws -> [InboxItem] {
-            try database.openInboxItems(projectId: projectId).filter { $0.kind == .permission }
+        func permissionItems() throws -> [ChatRequest] {
+            try database.openChatRequests(projectId: projectId).filter { $0.kind == .permission }
         }
 
         func requests() throws -> [PermissionRequest] {
@@ -116,7 +116,7 @@ import Testing
         let request = try #require(try setup.requests().first)
         #expect(request.status == .pending && request.capability == .riskyCommands && request.request == "rm -rf build")
         #expect(request.rules == ["rm"] && request.taskId == setup.run.taskId)
-        #expect(request.runId == setup.runId && request.inboxItemId == nil)
+        #expect(request.runId == setup.runId && request.requestId == nil)
         let card = try #require(try setup.cards().first)
         #expect(try setup.cards().count == 1)
         #expect(card.permissionRequestId == request.id && card.permissionStatus == .pending)
@@ -279,7 +279,7 @@ import Testing
         #expect(try setup.cards().count == 1)
         #expect(card.permissionStatus == .pending && card.text == "rm -rf build")
         #expect(try setup.permissionItems().isEmpty)
-        #expect(try setup.requests().first?.inboxItemId == nil)
+        #expect(try setup.requests().first?.requestId == nil)
 
         try setup.answerLatestCard(.allow)
 
@@ -364,7 +364,7 @@ import Testing
         #expect(Self.decision(await setup.hook("rm -rf build", from: setup.builders[1])) == "allow")
     }
 
-    @Test func anAgentOutsideALeadChatRunAsksInTheInbox() async throws {
+    @Test func anAgentOutsideALeadChatRunAsksInTheChat() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
         let projectId = try #require(harness.project.id)
@@ -373,17 +373,17 @@ import Testing
 
         let reply = await harness.runtime.handleHook(Self.bash("rm -rf build"), agentID: session.id)
 
-        #expect(Self.reason(reply) == AgentRuntime.inboxReason)
-        let item = try #require(try harness.database.openInboxItems(projectId: projectId).first { $0.kind == .permission })
+        #expect(Self.reason(reply) == AgentRuntime.askedReason)
+        let item = try #require(try harness.database.openChatRequests(projectId: projectId).first { $0.kind == .permission })
         #expect(item.title == "Dev 1 asks to run `rm -rf build`")
-        try harness.runtime.answerPermission(inboxItemId: try #require(item.id), allow: true)
+        try harness.runtime.answerPermission(requestId: try #require(item.id), allow: true)
         try await waitUntil { Self.userTexts(session).contains("The user allowed you to run `rm -rf build`. Go ahead; anything similar (`rm`) won’t need asking again.") }
         #expect(Self.decision(await harness.runtime.handleHook(Self.bash("rm -rf dist"), agentID: session.id)) == "allow")
-        #expect(try harness.database.openInboxItems(projectId: projectId).allSatisfy { $0.kind != .permission })
+        #expect(try harness.database.openChatRequests(projectId: projectId).allSatisfy { $0.kind != .permission })
 
         _ = await harness.runtime.handleHook(Self.bash("git reset --hard"), agentID: session.id)
-        let denied = try #require(try harness.database.openInboxItems(projectId: projectId).first { $0.kind == .permission })
-        try harness.runtime.answerPermission(inboxItemId: try #require(denied.id), allow: false)
+        let denied = try #require(try harness.database.openChatRequests(projectId: projectId).first { $0.kind == .permission })
+        try harness.runtime.answerPermission(requestId: try #require(denied.id), allow: false)
         #expect(Self.reason(await harness.runtime.handleHook(Self.bash("git reset --hard HEAD~1"), agentID: session.id))?.hasPrefix("The user said no to this") == true)
     }
 

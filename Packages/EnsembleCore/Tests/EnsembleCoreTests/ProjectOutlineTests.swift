@@ -3,23 +3,8 @@ import Testing
 @testable import EnsembleCore
 
 struct ProjectOutlineTests {
-    func item(_ kind: InboxKind) -> InboxItem {
-        InboxItem(projectId: 1, kind: kind, title: "Item", createdAt: Date(timeIntervalSince1970: 0))
-    }
-
-    @Test func theTasksBadgeCountsWaitingItemsExceptPinReviews() {
-        let badge = ProjectOutline.tasksBadge(waiting: [item(.question), item(.planApproval), item(.pinReview)])
-        #expect(badge == ProjectOutline.Badge(count: 2, tone: .warning))
-    }
-
-    @Test func aFailureTurnsTheTasksBadgeRed() {
-        let badge = ProjectOutline.tasksBadge(waiting: [item(.question), item(.failure)])
-        #expect(badge == ProjectOutline.Badge(count: 2, tone: .danger))
-    }
-
-    @Test func theTasksBadgeIsHiddenWithOnlyPinReviews() {
-        #expect(ProjectOutline.tasksBadge(waiting: [item(.pinReview)]) == nil)
-        #expect(ProjectOutline.tasksBadge(waiting: []) == nil)
+    func item(_ kind: ChatRequestKind) -> ChatRequest {
+        ChatRequest(projectId: 1, kind: kind, title: "Item", createdAt: Date(timeIntervalSince1970: 0))
     }
 
     @Test func theChangesBadgeCountsPinReviews() {
@@ -57,15 +42,15 @@ struct ProjectOutlineTests {
         #expect(ProjectOutline.pinsLabel(6) == "6 pins")
     }
 
-    @Test func chatTasksAndChangesStartExpanded() {
-        #expect(ProjectOutline.decodeExpanded(nil) == ["lead", "tasks", "changes"])
+    @Test func chatAndChangesStartExpanded() {
+        #expect(ProjectOutline.decodeExpanded(nil) == ["lead", "changes"])
     }
 
     @Test func togglingASectionRoundTripsThroughStorage() {
-        let collapsed = ProjectOutline.toggling("tasks", in: nil)
-        #expect(ProjectOutline.decodeExpanded(collapsed) == ["lead", "changes"])
+        let collapsed = ProjectOutline.toggling("changes", in: nil)
+        #expect(ProjectOutline.decodeExpanded(collapsed) == ["lead"])
         let expanded = ProjectOutline.toggling("agents", in: collapsed)
-        #expect(ProjectOutline.decodeExpanded(expanded) == ["lead", "changes", "agents"])
+        #expect(ProjectOutline.decodeExpanded(expanded) == ["lead", "agents"])
         #expect(ProjectOutline.decodeExpanded(ProjectOutline.toggling("lead", in: ProjectOutline.toggling("changes", in: "lead,changes"))).isEmpty)
     }
 }

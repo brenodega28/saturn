@@ -127,7 +127,7 @@ Each phase ends with the app building, tests passing and the app usable.
     - Default end action becomes `merge`. Workflow files and project setup that say `pull_request` are read as `merge`, and a `github` trigger source is ignored.
     - `RunEngine.push(_:)` pushes the base branch after a local merge and records `Run.pushedAt`; it fails clearly when there is no `origin`.
     - Migration `v23-chat-first`: GitHub-sourced chats become ordinary chats; the `githubWriteBack` and `directMessage` tables are dropped; `run.pushedAt` is added.
-2. **Replace the Inbox with chat requests.**
+2. **Replace the Inbox with chat requests (done).**
     - New record `ChatRequest` attached to a chat (and its run and agent when there is one). Fields: kind, title, body, options, state (open, answered, expired), answer, timestamps.
     - Kinds: question, choice, plan approval, permission, gate, checks out of retries, budget, loop limit, setup.
     - Each kind's answers are the buttons on its ask card (see Chat below). Expired requests offer "Ask again".

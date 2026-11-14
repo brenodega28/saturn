@@ -4,7 +4,7 @@ import SwiftUI
 
 struct QuestionCard: View {
     @Environment(AppModel.self) private var model
-    let item: InboxItem
+    let item: ChatRequest
     let project: Project
     let reload: () -> Void
 

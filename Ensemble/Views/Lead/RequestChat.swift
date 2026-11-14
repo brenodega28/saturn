@@ -182,6 +182,9 @@ struct RequestChat: View {
                     HoldCard(run: current, project: project, hold: hold, timeline: timeline, reload: reload)
                 }
             }
+        case .notice(let request):
+            ChatRequestCard(item: request)
+                .padding(.leading, 42)
         }
     }
 
@@ -536,14 +539,14 @@ private struct StepEvent: View {
 
 private struct AnsweredQuestion: View {
     @Environment(AppModel.self) private var model
-    let item: InboxItem
+    let item: ChatRequest
 
     var body: some View {
         let form = QuestionForm(item: item)
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "questionmark.bubble").font(.system(size: 11)).foregroundStyle(Theme.secondaryText).accessibilityHidden(true)
-                Text(item.status == .resolved ? "\(item.title) — you answered" : "\(item.title) — dismissed")
+                Text(item.status == .answered ? "\(item.title) — you answered" : "\(item.title) — dismissed")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.secondaryText)
             }

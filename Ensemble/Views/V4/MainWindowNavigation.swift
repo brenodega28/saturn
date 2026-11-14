@@ -3,7 +3,6 @@ import Foundation
 import Observation
 
 enum MainTool: String, CaseIterable, Identifiable, Hashable {
-    case inbox
     case changes
     case agents
     case workflows
@@ -15,7 +14,6 @@ enum MainTool: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .inbox: "Inbox"
         case .changes: "Changes"
         case .agents: "Agents"
         case .workflows: "Workflows"
@@ -27,7 +25,7 @@ enum MainTool: String, CaseIterable, Identifiable, Hashable {
 
     var projectTab: ProjectTab? {
         switch self {
-        case .inbox, .usage: nil
+        case .usage: nil
         case .changes: .changes
         case .agents: .agents
         case .workflows: .workflows
@@ -85,7 +83,6 @@ final class MainWindowNavigation {
 extension AppModel {
     var baseScreen: MainScreen {
         switch selection {
-        case .inbox: return .tool(.inbox)
         case .usage, .quality: return .tool(.usage)
         case .project(let id):
             if let run = runDetailIDs[id] { return .run(run) }
@@ -112,8 +109,6 @@ extension AppModel {
     func open(_ tool: MainTool) {
         mainWindow.spec = nil
         switch tool {
-        case .inbox:
-            selection = .inbox
         case .usage:
             selection = .usage
         default:

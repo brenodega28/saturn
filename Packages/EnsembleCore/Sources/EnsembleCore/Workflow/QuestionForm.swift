@@ -11,7 +11,7 @@ public struct QuestionForm: Sendable, Hashable {
         self.questions = questions
     }
 
-    public init(item: InboxItem) {
+    public init(item: ChatRequest) {
         if let questions = item.questions, !questions.isEmpty {
             self.init(intro: item.body.trimmingCharacters(in: .whitespacesAndNewlines), questions: questions)
         } else {

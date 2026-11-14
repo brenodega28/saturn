@@ -377,7 +377,62 @@ public final class AppDatabase: Sendable {
                 t.add(column: "pushedAt", .datetime)
             }
         }
+        migrator.registerMigration("v24-chat-requests", migrate: moveInboxIntoChats)
 
         return migrator
+    }
+
+    static func moveInboxIntoChats(_ db: Database) throws {
+        try db.create(table: "chatRequest") { t in
+            t.autoIncrementedPrimaryKey("id")
+            t.belongsTo("project", onDelete: .cascade).notNull()
+            t.belongsTo("task", onDelete: .cascade).notNull()
+            t.belongsTo("run", onDelete: .cascade)
+            t.belongsTo("agent", onDelete: .setNull)
+            t.column("kind", .text).notNull()
+            t.column("title", .text).notNull()
+            t.column("body", .text).notNull().defaults(to: "")
+            t.column("status", .text).notNull().indexed()
+            t.column("response", .text)
+            t.column("questions", .text)
+            t.column("createdAt", .datetime).notNull()
+            t.column("resolvedAt", .datetime)
+        }
+        let rows = try Row.fetchAll(db, sql: "SELECT * FROM inboxItem ORDER BY id")
+        for row in rows {
+            let status: String = row["status"] == "resolved" ? "answered" : row["status"]
+            let projectId: Int64 = row["projectId"]
+            let runId: Int64? = row["runId"]
+            let agentId: Int64? = row["agentId"]
+            var chatId = try runId.flatMap { try Int64.fetchOne(db, sql: "SELECT taskId FROM run WHERE id = ?", arguments: [$0]) }
+            if chatId == nil, let agentId {
+                chatId = try Int64.fetchOne(db, sql: "SELECT taskId FROM agent WHERE id = ?", arguments: [agentId])
+            }
+            if chatId == nil {
+                chatId = try Int64.fetchOne(db, sql: """
+                    SELECT id FROM task WHERE projectId = ? AND closedAt IS NULL ORDER BY updatedAt DESC, id DESC LIMIT 1
+                    """, arguments: [projectId])
+            }
+            if chatId == nil, status == "open" {
+                try db.execute(sql: """
+                    INSERT INTO task (projectId, title, body, source, status, createdAt, updatedAt)
+                    VALUES (?, ?, ?, 'chat', 'waitingOnYou', ?, ?)
+                    """, arguments: [projectId, row["title"], row["body"], row["createdAt"], row["createdAt"]])
+                chatId = db.lastInsertedRowID
+            }
+            guard let chatId else { continue }
+            try db.execute(sql: """
+                INSERT INTO chatRequest (id, projectId, taskId, runId, agentId, kind, title, body, status, response, questions, createdAt, resolvedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, arguments: [
+                    row["id"], projectId, chatId, runId, agentId, row["kind"], row["title"], row["body"], status,
+                    row["response"], row["questions"], row["createdAt"], row["resolvedAt"],
+                ])
+        }
+        try db.drop(table: "inboxItem")
+        try db.alter(table: "permissionRequest") { t in
+            t.rename(column: "inboxItemId", to: "requestId")
+        }
+        try db.execute(sql: "UPDATE run SET engineState = replace(engineState, '\"inboxItemId\"', '\"requestId\"')")
     }
 }

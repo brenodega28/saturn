@@ -198,9 +198,9 @@ struct LeadRequestTests {
         let id = try await h.start(try h.workflow("small-task"))
         let projectID = try #require(h.project.id)
         let agent = try h.database.insert(Agent(projectId: projectID, runId: id, role: "claude-code", name: "Dev 1", status: .working, createdAt: .now, updatedAt: .now))
-        try h.database.createInboxItem(InboxItem(projectId: projectID, runId: id, agentId: agent.id, kind: .question, title: "Squash migrations?", createdAt: .now))
-        let answered = try h.database.createInboxItem(InboxItem(projectId: projectID, runId: id, kind: .question, title: "Old question", createdAt: .now))
-        try h.database.resolveInboxItem(id: try #require(answered.id), response: "Yes")
+        try h.database.createChatRequest(ChatRequest(projectId: projectID, runId: id, agentId: agent.id, kind: .question, title: "Squash migrations?", createdAt: .now))
+        let answered = try h.database.createChatRequest(ChatRequest(projectId: projectID, runId: id, kind: .question, title: "Old question", createdAt: .now))
+        try h.database.resolveChatRequest(id: try #require(answered.id), response: "Yes")
 
         let run = try h.run(id)
         let timeline = try h.database.timeline(for: run, workflow: try h.engine.workflow(for: run))

@@ -168,12 +168,12 @@ extension RunEngine {
     private func executeNotify(_ loaded: inout LoadedRun, step: WorkflowStep, cursor: RunCursor) throws -> Bool {
         var runStep = try beginStep(&loaded, stepId: step.id, cursor: cursor, status: .running)
         let message = step.message ?? step.displayTitle
-        try database.createInboxItem(InboxItem(
+        try database.createChatRequest(ChatRequest(
             projectId: loaded.run.projectId, runId: loaded.run.id, kind: .notice,
             title: step.displayTitle, body: message, createdAt: clock()
         ))
         #if DEBUG
-        traceInboxItem(loaded, stepId: step.id, kind: .notice, title: step.displayTitle, body: message)
+        traceChatRequest(loaded, stepId: step.id, kind: .notice, title: step.displayTitle, body: message)
         #endif
         let output = StepOutput(summary: message)
         runStep.status = .succeeded
@@ -344,8 +344,8 @@ extension RunEngine {
     ) throws {
         loaded.state.hold = RunHold(reason: reason, stepId: stepId, runStepId: runStepId, outcome: outcome, message: title)
         loaded.run.status = .waitingOnYou
-        let item = InboxItem(projectId: loaded.run.projectId, runId: loaded.run.id, kind: reason.inboxKind, title: title, body: body, createdAt: clock())
-        try commit(loaded, steps: steps, inbox: item)
+        let item = ChatRequest(projectId: loaded.run.projectId, runId: loaded.run.id, kind: reason.requestKind, title: title, body: body, createdAt: clock())
+        try commit(loaded, steps: steps, request: item)
         loaded.state = try database.engineState(runId: try loaded.id)
         #if DEBUG
         traceHold(loaded, title: title, body: body)

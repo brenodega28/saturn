@@ -30,7 +30,7 @@ struct CheckStepEditor: View {
         InspectorField("Rounds") {
             VStack(alignment: .leading, spacing: 8) {
                 Stepper(value: Binding(get: { step.maxRounds ?? ChecksConfig.defaultMaxRounds }, set: { step.maxRounds = $0 }), in: 1...10) {
-                    Text("Up to \(step.maxRounds ?? ChecksConfig.defaultMaxRounds) rounds, then your Inbox").font(.system(size: 12.5))
+                    Text("Up to \(step.maxRounds ?? ChecksConfig.defaultMaxRounds) rounds, then you decide in the chat").font(.system(size: 12.5))
                 }
                 .help("How many times checks run before failing work comes to you")
                 Toggle("Test first", isOn: $step.testFirst)

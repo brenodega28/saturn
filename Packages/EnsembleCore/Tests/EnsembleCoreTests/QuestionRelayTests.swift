@@ -93,8 +93,8 @@ import Testing
             (try? String(contentsOf: harness.runtime.paths.transcript(lead.id!), encoding: .utf8)) ?? ""
         }
 
-        func questionItems() throws -> [InboxItem] {
-            try database.openInboxItems(projectId: harness.project.id!).filter { $0.kind == .question }
+        func questionItems() throws -> [ChatRequest] {
+            try database.openChatRequests(projectId: harness.project.id!).filter { $0.kind == .question }
         }
     }
 
@@ -135,7 +135,7 @@ import Testing
         return LeadRun(harness: harness, driver: driver, run: run, lead: lead.agent, builders: builders)
     }
 
-    @Test func aRunAgentsQuestionGoesToTheLeadInsteadOfTheInbox() async throws {
+    @Test func aRunAgentsQuestionGoesToTheLeadInsteadOfTheUser() async throws {
         let setup = try await makeLeadRun()
         defer { setup.harness.cleanUp() }
 

@@ -68,6 +68,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     private var serverStart: Task<EnsembleMCPServer, Error>?
     var specCommits: [Int64: Task<Void, Error>] = [:]
     var closingTasks: Set<Int64> = []
+    public weak var specReviews: (any SpecReviewHost)?
     private(set) lazy var questionRelay = QuestionRelay { [weak self] runId, batch in self?.deliverQuestions(batch, runId: runId) }
 
     public var questionWindow: Duration {
@@ -93,7 +94,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         var leadTools: Set<HandoffTool> = isLead ? HandoffTool.leadTools : []
         if isLead, agent.readOnly, agent.worktreePath == nil { leadTools.insert(.openWorktree) }
         var chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .draftSpec, .messageAgent, .askHuman]
-        if isLead, agent.taskId != nil { chatTools.insert(.setChatStatus) }
+        if isLead, agent.taskId != nil { chatTools.formUnion([.setChatStatus, .replySpec]) }
         let spawnedTools: Set<HandoffTool> = agent.spawnedById == nil ? [] : [.messageAgent, .askHuman, .submitResult]
         let requestTools = chatTools.union(leadTools).union(spawnedTools).union([.readChat])
         guard agent.runId != nil else { return requestTools }
@@ -270,9 +271,15 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         case .readChat(let request):
             return try ChatReader(database: runtime.database, paths: runtime.paths).read(request)
         case .draftSpec(let request):
-            return try draftSpec(request, from: agent)
+            let reply = try draftSpec(request, from: agent)
+            if let taskId = agent.taskId { await specReviews?.specDrafted(projectId: agent.projectId, taskId: taskId) }
+            return reply
+        case .replySpec(let text):
+            return try await replySpec(text, from: agent)
         case .setChatStatus(let status, let reason):
-            return try setChatStatus(status, reason: reason, from: agent)
+            let reply = try setChatStatus(status, reason: reason, from: agent)
+            if status.closeReason != nil, let taskId = agent.taskId { await specReviews?.endSpecReview(taskId: taskId) }
+            return reply
         }
     }
 

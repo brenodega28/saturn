@@ -9,15 +9,6 @@ extension AgentWorkflowDriver {
         let url = store.draftURL(projectId: agent.projectId, taskId: taskId)
         var document = SpecDocument(title: request.title, owner: request.owner ?? "")
         if let text = try? String(contentsOf: url, encoding: .utf8) {
-            if let edited = store.unseenEdit(of: url) {
-                store.markSeen(url)
-                throw HandoffError.notAllowed("""
-                    The user edited the spec draft since you last saw it, so nothing was written. The file is the source of truth; here it is as it stands now:
-
-                    \(edited)
-                    Keep the user’s edits and call `\(HandoffTool.draftSpec.qualifiedName)` again with the complete merged spec.
-                    """)
-            }
             if let existing = try? SpecDocument(markdown: text) {
                 if existing.status == .done {
                     throw HandoffError.notAllowed("This request’s spec “\(existing.title)” is done. Start a new request for a new spec.")
@@ -41,13 +32,21 @@ extension AgentWorkflowDriver {
         }
         document.verification = request.verification
         try store.write(document, to: url)
-        store.markSeen(url)
 
         let folder = (try? runtime.database.project(id: agent.projectId)).flatMap { $0 }.map { ProjectConfigLoader.loadSpecs(repository: $0.url).folder } ?? SpecsConfig.defaultFolder
         let count = document.acceptanceCriteria.count
         return """
-            Saved the spec draft “\(document.title)” with \(count) acceptance criteri\(count == 1 ? "on" : "a"). The user sees it in the chat and can open and edit it. That file is the source of truth: if the user edits it, the current text comes with their next message, and you must build on it rather than on what you sent before. When the user starts a run you propose, Ensemble commits it as \(folder)/\(Slug.make(document.title).nilIfEmpty ?? "spec").md on the run branch.
+            Saved spec v\(document.version) “\(document.title)” with \(count) acceptance criteri\(count == 1 ? "on" : "a") and \(document.version == 1 ? "rendered" : "re-rendered") its review page, which Ensemble opens for the user in Lavish. The user annotates the page; their notes arrive as chat messages tagged as spec feedback. Revise with this tool and answer on the page with `\(HandoffTool.replySpec.qualifiedName)`. When the user starts a run you propose, Ensemble commits it as \(folder)/\(Slug.make(document.title).nilIfEmpty ?? "spec").md on the run branch.
             """
+    }
+
+    func replySpec(_ text: String, from agent: Agent) async throws -> String {
+        guard agent.kind == .lead, let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can reply on its spec review page.") }
+        guard let reviews = specReviews else {
+            throw HandoffError.notAllowed("No Lavish review is open for this request’s spec, so there’s nothing to reply on. Answer in the chat instead.")
+        }
+        try await reviews.replySpec(taskId: taskId, text: text)
+        return "Your reply shows on the spec review page and the notes you received are marked done."
     }
 
     public func rejectSpec(projectId: Int64, taskId: Int64) throws {
@@ -57,21 +56,12 @@ extension AgentWorkflowDriver {
         var document = try SpecDocument(markdown: text)
         document.status = .rejected
         try store.write(document, to: url)
-        store.markSeen(url)
     }
 
     func rejectionNote(projectId: Int64, taskId: Int64) -> String? {
         let url = specStore.draftURL(projectId: projectId, taskId: taskId)
         guard let text = try? String(contentsOf: url, encoding: .utf8), let document = try? SpecDocument(markdown: text), document.status == .rejected else { return nil }
         return "Ensemble note (not written by the user): the user rejected spec v\(document.version) “\(document.title)”. This message says why. Write the next version with `\(HandoffTool.draftSpec.qualifiedName)` before proposing a run."
-    }
-
-    func specEditNote(projectId: Int64, taskId: Int64) -> String? {
-        let store = specStore
-        let url = store.draftURL(projectId: projectId, taskId: taskId)
-        guard let edited = store.unseenEdit(of: url) else { return nil }
-        store.markSeen(url)
-        return "Ensemble note (not written by the user): the user edited this request’s spec draft. The file is the source of truth; it now reads:\n\n\(edited)\nBuild on this text when you revise the spec."
     }
 
     func runSpec(runId: Int64?) -> PlanSpec? {
@@ -186,7 +176,6 @@ extension AgentWorkflowDriver {
         draft.acceptanceCriteria = done.acceptanceCriteria.count == draft.acceptanceCriteria.count ? done.acceptanceCriteria : draft.acceptanceCriteria
         if !draft.linkedRuns.contains(runId) { draft.linkedRuns.append(runId) }
         try specStore.write(draft, to: spec.url)
-        specStore.markSeen(spec.url)
     }
 }
 
@@ -203,7 +192,6 @@ extension LeadChat {
         )
         let url = store.draftURL(projectId: projectId, taskId: taskId)
         try store.write(started, to: url)
-        store.markSeen(url)
         try store.save(RunSpecLink(projectId: projectId, taskId: taskId, path: path, branch: RunSpecLink.branch(runId: runId)), runId: runId)
     }
 

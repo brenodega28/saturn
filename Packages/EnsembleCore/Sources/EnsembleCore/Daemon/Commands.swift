@@ -225,6 +225,13 @@ public enum ChatCommands {
         }
     }
 
+    public struct ReviewSpec: DaemonCommand {
+        public static let name = "chat.reviewSpec"
+        public typealias Response = SpecReviewStatus
+        public var chatID: Int64
+        public init(chatID: Int64) { self.chatID = chatID }
+    }
+
     public struct Finish: DaemonCommand {
         public static let name = "chat.finish"
         public var chatID: Int64

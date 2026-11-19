@@ -197,16 +197,13 @@ struct RequestChat: View {
             }
         case .proposal:
             let hasActiveRun = data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil
-            if let spec, let document = ProposalCard.attachedSpec(spec, to: message) {
-                let workflow = message.workflow.flatMap { model.config(for: project).workflow($0) }
-                SpecCard(
-                    spec: spec, document: document, proposal: message, project: project,
-                    canStart: !hasActiveRun && !task.isClosed && workflow != nil,
-                    startHelp: ProposalCard.startHelp(hasActiveRun: hasActiveRun, isRequestClosed: task.isClosed)
-                )
-            } else {
-                ProposalCard(proposal: message, project: project, hasActiveRun: hasActiveRun, isRequestClosed: task.isClosed)
-            }
+            let document = spec.flatMap { ProposalCard.attachedSpec($0, to: message) }
+            ProposalCard(
+                proposal: message, project: project, spec: document.flatMap { _ in spec }, document: document,
+                hasActiveRun: hasActiveRun, isRequestClosed: task.isClosed
+            )
+        case .specFeedback:
+            SpecFeedbackBubble(message: message) { model.openSpecTab(for: task, in: project) }
         case .note:
             ChatNote(text: message.text)
         case .permission:
@@ -301,6 +298,8 @@ struct ProposalCard: View {
     @Environment(AppModel.self) private var model
     let proposal: LeadMessage
     let project: Project
+    var spec: SpecFile? = nil
+    var document: SpecDocument? = nil
     let hasActiveRun: Bool
     let isRequestClosed: Bool
     @State private var showsBrief = false
@@ -329,17 +328,26 @@ struct ProposalCard: View {
                 statusLabel
             }
             Text(proposal.title ?? "Run").font(.system(size: 14, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+            if let workers = document?.workers, !workers.isEmpty {
+                ProposalAgents(workers: workers, project: project)
+            }
             if showsBrief {
                 ChatText(proposal.text)
                     .foregroundStyle(Theme.secondaryText)
             }
-            Button(showsBrief ? "Show less" : "Show more") {
-                withAnimation(.snappy(duration: 0.2)) { showsBrief.toggle() }
+            HStack(spacing: 14) {
+                if let spec {
+                    Button("Spec attached") { model.openSpec(spec, in: project) }
+                        .help("Open the spec in its review tab")
+                }
+                Button(showsBrief ? "Show less" : "Show more") {
+                    withAnimation(.snappy(duration: 0.2)) { showsBrief.toggle() }
+                }
+                .help(showsBrief ? "Hide the full brief" : "Show the full brief the run will start from")
             }
             .buttonStyle(.plain)
             .font(.system(size: 12.5, weight: .medium))
             .foregroundStyle(Tokens.link)
-            .help(showsBrief ? "Hide the full brief" : "Show the full brief the run will start from")
             if proposal.status == .open {
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
@@ -357,15 +365,77 @@ struct ProposalCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Tokens.hover, in: .rect(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(proposal.status == .open ? Tokens.hair2 : Tokens.hair))
+        .opacity(document?.status == .rejected ? 0.6 : 1)
+        .contextMenu {
+            if let spec { Button("Open Spec") { model.openSpec(spec, in: project) } }
+            if proposal.status == .open, spec != nil {
+                Button("Reject Spec") { model.rejectProposal(proposal) }
+            }
+        }
     }
 
     @ViewBuilder
     private var statusLabel: some View {
-        switch proposal.status {
-        case .started: Text("Started").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.done)
-        case .dismissed: Text("Dismissed").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.tertiaryText)
-        default: EmptyView()
+        if document?.status == .rejected {
+            Text("Spec rejected").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.tertiaryText)
+        } else {
+            switch proposal.status {
+            case .started: Text("Started").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.done)
+            case .dismissed: Text("Dismissed").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.tertiaryText)
+            default: EmptyView()
+            }
         }
+    }
+}
+
+private struct ProposalAgents: View {
+    @Environment(AppModel.self) private var model
+    let workers: [SpecWorker]
+    let project: Project
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("\(workers.count) agent\(workers.count == 1 ? "" : "s")")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Tokens.text2)
+            ForEach(Array(workers.enumerated()), id: \.offset) { _, worker in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    RobotFace(kind: RobotFace.Kind(icon: model.config(for: project).role(worker.role)?.icon ?? worker.role), size: 14)
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                    Text(line(for: worker))
+                        .font(.system(size: 13))
+                        .foregroundStyle(Tokens.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(line(for: worker))
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func line(for worker: SpecWorker) -> String {
+        let who = worker.role.isEmpty || worker.role.caseInsensitiveCompare(worker.name) == .orderedSame ? worker.name : "\(worker.name) (\(worker.role))"
+        return worker.reason.map { "\(who) — \($0)" } ?? who
+    }
+}
+
+private struct SpecFeedbackBubble: View {
+    let message: LeadMessage
+    let openSpec: () -> Void
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Button(action: openSpec) {
+                Label("Spec feedback", systemImage: "text.bubble")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Tokens.link)
+            }
+            .buttonStyle(.plain)
+            .help("Open the spec review page these notes came from")
+            RequestBubble(text: message.text, date: message.createdAt)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 

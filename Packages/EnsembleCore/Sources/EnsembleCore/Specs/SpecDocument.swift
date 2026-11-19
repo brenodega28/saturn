@@ -28,20 +28,23 @@ public enum SpecStatus: String, Sendable, Hashable, Codable, CaseIterable {
 public struct SpecWorker: Sendable, Hashable, Codable {
     public var role: String
     public var name: String
+    public var reason: String?
 
-    public init(role: String, name: String) {
+    public init(role: String, name: String, reason: String? = nil) {
         self.role = role
         self.name = name
+        self.reason = reason?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 
     enum CodingKeys: String, CodingKey {
-        case role, name
+        case role, name, reason
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.role = try container.decode(String.self, forKey: .role).trimmingCharacters(in: .whitespacesAndNewlines)
         self.name = try container.decode(String.self, forKey: .name).trimmingCharacters(in: .whitespacesAndNewlines)
+        self.reason = try container.decodeIfPresent(String.self, forKey: .reason)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 }
 
@@ -190,7 +193,10 @@ public struct SpecDocument: Sendable, Hashable {
             "created: \(Self.dayFormatter.string(from: created))",
         ]
         if !workers.isEmpty {
-            let lines = ["workers:"] + workers.map { "  - {role: \(Self.yamlScalar($0.role)), name: \(Self.yamlScalar($0.name))}" }
+            let lines = ["workers:"] + workers.map { worker in
+                let reason = worker.reason.map { ", reason: \(Self.yamlScalar($0))" } ?? ""
+                return "  - {role: \(Self.yamlScalar(worker.role)), name: \(Self.yamlScalar(worker.name))\(reason)}"
+            }
             front.insert(contentsOf: lines, at: 3)
         }
         let extraFront = extraFrontMatter.trimmingCharacters(in: .newlines)
@@ -328,7 +334,7 @@ public struct SpecDocument: Sendable, Hashable {
         guard let items = value as? [Any] else { return [] }
         return items.compactMap { item in
             if let map = item as? [String: Any], let name = string(map["name"])?.nilIfEmpty {
-                return SpecWorker(role: string(map["role"]) ?? "", name: name)
+                return SpecWorker(role: string(map["role"]) ?? "", name: name, reason: string(map["reason"]))
             }
             return string(item)?.nilIfEmpty.map { SpecWorker(role: "", name: $0) }
         }

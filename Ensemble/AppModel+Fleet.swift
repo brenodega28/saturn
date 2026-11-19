@@ -256,11 +256,10 @@ extension AppModel {
         return true
     }
 
-    func cachedDaemonFile(_ kind: FileKind, id: String, name: String, remotePath: String? = nil, maximumAge: TimeInterval = .infinity) -> URL {
+    func cachedDaemonFile(_ kind: FileKind, id: String, name: String, maximumAge: TimeInterval = .infinity) -> URL {
         let url = clientPaths.replicaFiles(connection.id)
             .appending(path: "\(kind.rawValue)/\(id.replacingOccurrences(of: "/", with: "-"))", directoryHint: .isDirectory)
             .appending(path: name)
-        if let remotePath { remoteFilePaths[url.path] = remotePath }
         let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? nil
         let isStale = modified.map { Date.now.timeIntervalSince($0) > maximumAge } ?? true
         guard isStale, fetchingFiles.insert(url.path).inserted else { return url }
@@ -279,11 +278,5 @@ extension AppModel {
     func localURL(forEvidence item: Evidence) -> URL {
         guard connection.isRemote, let id = item.id else { return item.url }
         return cachedDaemonFile(.evidence, id: "\(id)", name: item.url.lastPathComponent)
-    }
-
-    func saveDaemonFile(_ text: String, at localPath: String) async throws {
-        try text.write(to: URL(fileURLWithPath: localPath), atomically: true, encoding: .utf8)
-        guard let remotePath = remoteFilePaths[localPath] else { return }
-        try await send(CodeCommands.WriteFile(path: remotePath, data: Data(text.utf8)))
     }
 }

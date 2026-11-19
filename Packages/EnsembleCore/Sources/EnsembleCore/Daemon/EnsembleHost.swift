@@ -11,6 +11,7 @@ public struct HostOptions: Sendable {
     public var livePublishInterval: Duration
     public var runsBackgroundLoops: Bool
     public var providerMode: ProviderMode?
+    public var lavishLauncher: LavishLauncher?
 
     public init(
         claudeExecutable: URL? = nil,
@@ -22,8 +23,10 @@ public struct HostOptions: Sendable {
         pollInterval: Duration? = nil,
         livePublishInterval: Duration = .milliseconds(200),
         runsBackgroundLoops: Bool = true,
-        providerMode: ProviderMode? = nil
+        providerMode: ProviderMode? = nil,
+        lavishLauncher: LavishLauncher? = nil
     ) {
+        self.lavishLauncher = lavishLauncher
         self.claudeExecutable = claudeExecutable
         self.processEnvironment = processEnvironment
         self.changeRetention = changeRetention
@@ -49,6 +52,7 @@ public final class EnsembleHost {
     public let leadChat: LeadChat
     public let idleCleanup: IdleCleanupScheduler
     public let stallReporter: StallReporter
+    public let specReviews: SpecReviews
     public let options: HostOptions
     public private(set) var settings: DaemonSettings
     public private(set) var environment = DaemonEnvironment()
@@ -114,6 +118,7 @@ public final class EnsembleHost {
         self.leadChat = LeadChat(runtime: runtime, engine: engine, driver: driver)
         self.idleCleanup = IdleCleanupScheduler(runtime: runtime)
         self.stallReporter = StallReporter(database: database)
+        self.specReviews = SpecReviews(paths: paths, database: database) { throw LavishError.packageMissing }
     }
 
     private func wire() {
@@ -140,6 +145,7 @@ public final class EnsembleHost {
         let updater = PinnedMemoryUpdater(runtime: runtime)
         driver.memoryUpdater = updater
         updater.observe(engine)
+        wireSpecReviews()
         registerCommands()
     }
 
@@ -179,6 +185,9 @@ public final class EnsembleHost {
 
     private func startLoops() {
         idleCleanup.start()
+        loops.append(Task { [weak self] in
+            await self?.specReviews.resume()
+        })
         loops.append(Task { [weak self] in
             await self?.deleteAgentsOfClosedRequests()
         })
@@ -220,6 +229,7 @@ public final class EnsembleHost {
         loops.forEach { $0.cancel() }
         loops = []
         idleCleanup.stop()
+        specReviews.stopListening()
         engine.stopOrphanWatchdog()
         runtime.terminateAll()
         changeLog.waitUntilFlushed()

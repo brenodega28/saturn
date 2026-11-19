@@ -133,7 +133,7 @@ private struct PageContent: View {
             }
         case .spec(let path, _):
             ToolScreen(title: model.title(of: page.kind), project: project) {
-                SpecEditor(path: path)
+                SpecReviewPage(path: path, project: project)
             }
         }
     }

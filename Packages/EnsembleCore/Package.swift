@@ -19,7 +19,7 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Yams", package: "Yams"),
             ],
-            resources: [.copy("Resources/Defaults"), .copy("Resources/Templates")]
+            resources: [.copy("Resources/Defaults"), .copy("Resources/Templates"), .copy("Resources/Lavish")]
         ),
         .executableTarget(
             name: "ensembled",

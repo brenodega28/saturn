@@ -62,10 +62,16 @@ final class SpecGateDriver: WorkflowDriver {
         #expect(launch.contains("mcp__ensemble__draft_spec"))
 
         let reply = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
-        #expect(reply.contains("source of truth"))
+        #expect(reply.contains("rendered its review page"))
+        #expect(reply.contains("spec feedback"))
+        #expect(reply.contains(HandoffTool.replySpec.qualifiedName))
         #expect(reply.contains("spec/alpha-and-beta-files.md"))
         let url = draftURL(setup, task)
         #expect(url.path.hasPrefix(setup.harness.data.path))
+        let page = SpecPageRenderer.pageURL(for: url)
+        #expect(page.lastPathComponent == "\(task.id!).html")
+        let html = try String(contentsOf: page, encoding: .utf8)
+        #expect(html.contains("Alpha and beta files") && html.components(separatedBy: "data-criterion=").count == 3)
         let first = try SpecDocument(markdown: String(contentsOf: url, encoding: .utf8))
         #expect(first.title == "Alpha and beta files" && first.status == .draft && first.owner == "Sam")
         #expect(first.version == 1 && first.workers.isEmpty)
@@ -87,29 +93,19 @@ final class SpecGateDriver: WorkflowDriver {
         #expect(drafts.map(\.url.lastPathComponent) == [url.lastPathComponent])
         #expect(drafts.map(\.taskId) == [task.id] && drafts.first?.document?.title == "Alpha, beta and gamma")
 
-        var edited = second
-        edited.acceptanceCriteria[2].text = "gamma.txt exists and says hello"
-        try edited.markdown.write(to: url, atomically: true, encoding: .utf8)
-        await #expect {
-            try await setup.driver.receive(.draftSpec(revised), from: leadAgent.id!)
-        } throws: { error in
-            (error as? HandoffError)?.errorDescription?.contains("gamma.txt exists and says hello") == true
-        }
-        #expect(try String(contentsOf: url, encoding: .utf8) == edited.markdown)
+        #expect(try String(contentsOf: page, encoding: .utf8).contains("gamma.txt exists"))
+        #expect(!FileManager.default.fileExists(atPath: url.deletingPathExtension().appendingPathExtension("seen").path))
 
         revised.acceptanceCriteria[2] = "gamma.txt exists and says hello"
-        _ = try await setup.driver.receive(.draftSpec(revised), from: leadAgent.id!)
+        let third = try await setup.driver.receive(.draftSpec(revised), from: leadAgent.id!)
+        #expect(third.contains("re-rendered"))
         #expect(try SpecDocument(markdown: String(contentsOf: url, encoding: .utf8)).acceptanceCriteria.last?.text == "gamma.txt exists and says hello")
+        #expect(try String(contentsOf: page, encoding: .utf8).contains("gamma.txt exists and says hello"))
 
-        edited = try SpecDocument(markdown: String(contentsOf: url, encoding: .utf8))
-        edited.verification = "Open each file"
-        try edited.markdown.write(to: url, atomically: true, encoding: .utf8)
         try await chat.send("CHAT what changed?", to: task, in: setup.project)
         try await waitUntil { messages(setup, task).filter { $0.kind == .lead }.count == 2 }
         let transcript = try String(contentsOf: setup.harness.runtime.paths.transcript(leadAgent.id!), encoding: .utf8)
-        #expect(transcript.contains("the user edited this request’s spec draft"))
-        #expect(transcript.contains("Open each file"))
-        _ = try await setup.driver.receive(.draftSpec(revised), from: leadAgent.id!)
+        #expect(!transcript.contains("the user edited this request’s spec draft"))
         #expect(try await mainCheckoutStatus(setup).isEmpty)
     }
 

@@ -50,7 +50,7 @@ public struct ChatNotification: Sendable, Hashable {
                 event: .leadReply, projectId: message.projectId, taskId: message.taskId,
                 title: "The lead replied", body: Self.excerpt(message.text), dedupeKey: key
             )
-        case .user, .note:
+        case .user, .note, .specFeedback:
             return nil
         }
     }

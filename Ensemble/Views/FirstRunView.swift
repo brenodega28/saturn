@@ -29,6 +29,10 @@ struct FirstRunView: View {
                     }
                     Divider().overlay(Theme.hairline)
                     ProviderRow(status: report.provider)
+                    if let node = report.node {
+                        Divider().overlay(Theme.hairline)
+                        NodeRow(check: node, warning: report.nodeWarning)
+                    }
                 }
                 .card(cornerRadius: 16)
 
@@ -104,6 +108,35 @@ private struct ToolRow<Hint: View>: View {
                     Text(message).foregroundStyle(Theme.secondaryText).textSelection(.enabled)
                 }
             }
+        }
+    }
+}
+
+private struct NodeRow: View {
+    let check: ToolCheck
+    let warning: String?
+
+    var body: some View {
+        CheckRow(title: EnvironmentReport.nodeCheckTitle, isOK: warning == nil, summary: summary) {
+            VStack(alignment: .leading, spacing: 4) {
+                if let path = check.path {
+                    Text(path.path.abbreviatingHome).font(Theme.monospaced).foregroundStyle(Theme.tertiaryText)
+                }
+                Text(warning ?? "Specs open for review in Lavish.")
+                    .foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                if warning != nil {
+                    Text("Optional: everything else works without it.").foregroundStyle(Theme.tertiaryText)
+                }
+            }
+        }
+    }
+
+    private var summary: String {
+        switch check {
+        case .found(_, let version): warning == nil ? version : "\(version) · too old"
+        case .missing: "Not found"
+        case .broken: "Fails to run"
         }
     }
 }

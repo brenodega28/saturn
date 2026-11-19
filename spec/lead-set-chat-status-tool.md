@@ -1,6 +1,6 @@
 ---
 title: Lead set_chat_status tool
-status: in-progress
+status: done
 version: 2
 workers:
   - {role: builder, name: Builder}
@@ -36,19 +36,19 @@ Give chat cards four statuses: Open, Finished, Resolved and Closed. Add a `set_c
 
 ## Acceptance criteria
 
-- [ ] set_chat_status {status: finished} sets finishedAt; the card shows "Finished", stays in the open list, and every request agent, worktree and branch still exists
-- [ ] set_chat_status {status: resolved} closes with reason done; the card shows "Resolved" in the closed list; after the lead's turn ends the request's agents, worktrees and branches are deleted
-- [ ] set_chat_status {status: closed} closes with reason dropped; the card shows "Closed"; cleanup runs as for resolved
-- [ ] set_chat_status {status: open} on a Finished, Resolved or Closed chat clears finishedAt, closedAt and closeReason; the card shows "Open"
-- [ ] The lead's session is never deleted during the tool call; the tool returns a result and the turn ends normally
-- [ ] finished/resolved/closed are refused with a clear message while a run for the request is active
-- [ ] An unknown status returns an error naming open, finished, resolved, closed
-- [ ] The tool isn't listed for agents without a taskId
-- [ ] A user message to a Finished or closed chat returns it to Open
-- [ ] An open chat whose latest run succeeded shows "Finished", not "Done"; the sidebar and menu show the labels Open, Finished, Resolved, Closed; no "Done" or "Dropped" chat labels remain
-- [ ] The user can mark a chat Finished, Resolve it, Close it and Reopen it from the chat row menu
-- [ ] Existing rows with closeReason done/dropped load and show as Resolved/Closed
-- [ ] EnsembleCoreTests cover each status transition via FakeClaude call_tool set_chat_status, the active-run refusal, the tool list, the ChatStage precedence for .finished and the migration; swift test passes
+- [x] set_chat_status {status: finished} sets finishedAt; the card shows "Finished", stays in the open list, and every request agent, worktree and branch still exists
+- [x] set_chat_status {status: resolved} closes with reason done; the card shows "Resolved" in the closed list; after the lead's turn ends the request's agents, worktrees and branches are deleted
+- [x] set_chat_status {status: closed} closes with reason dropped; the card shows "Closed"; cleanup runs as for resolved
+- [x] set_chat_status {status: open} on a Finished, Resolved or Closed chat clears finishedAt, closedAt and closeReason; the card shows "Open"
+- [x] The lead's session is never deleted during the tool call; the tool returns a result and the turn ends normally
+- [x] finished/resolved/closed are refused with a clear message while a run for the request is active
+- [x] An unknown status returns an error naming open, finished, resolved, closed
+- [x] The tool isn't listed for agents without a taskId
+- [x] A user message to a Finished or closed chat returns it to Open
+- [x] An open chat whose latest run succeeded shows "Finished", not "Done"; the sidebar and menu show the labels Open, Finished, Resolved, Closed; no "Done" or "Dropped" chat labels remain
+- [x] The user can mark a chat Finished, Resolve it, Close it and Reopen it from the chat row menu
+- [x] Existing rows with closeReason done/dropped load and show as Resolved/Closed
+- [x] EnsembleCoreTests cover each status transition via FakeClaude call_tool set_chat_status, the active-run refusal, the tool list, the ChatStage precedence for .finished and the migration; swift test passes
 
 ## Verification
 

@@ -38,7 +38,7 @@ extension AppModel {
                 let hold = latest?.id.flatMap { connection.holds[$0] }
                 let lead = leadSession(for: chat)
                 let facts = ChatStage.Facts(
-                    closeReason: chat.closeReason, isClosed: chat.isClosed, latestRun: latest,
+                    closeReason: chat.closeReason, isClosed: chat.isClosed, isFinished: chat.isFinished, latestRun: latest,
                     currentStep: latest.flatMap { run in run.currentStep.flatMap { runWorkflow(run)?.step($0) } },
                     hold: hold, openRequests: openRequests[chatID]?.map(\.kind) ?? [],
                     pendingPermissions: pendingPermissions.count(taskId: chatID), hasOpenProposal: proposals.contains(chatID),
@@ -97,6 +97,12 @@ extension AppModel {
         leadChatRevision += 1
     }
 
+    func finishChat(_ chat: Chat) {
+        guard let id = chat.id else { return }
+        dispatch("Couldn’t mark the chat as finished", ChatCommands.Finish(chatID: id))
+        leadChatRevision += 1
+    }
+
     func reopenChat(_ chat: Chat) {
         guard let id = chat.id else { return }
         dispatch("Couldn’t reopen the chat", ChatCommands.Reopen(chatID: id))
@@ -129,8 +135,9 @@ extension ChatStage {
         case .stuck: "Stuck · needs you"
         case .building: "Building"
         case .inReview: "In review"
-        case .done: "Done"
-        case .dropped: "Dropped"
+        case .finished: "Finished"
+        case .done: "Resolved"
+        case .dropped: "Closed"
         case .idle: "Open"
         }
     }
@@ -141,7 +148,7 @@ extension ChatStage {
         case .stuck: Tokens.stuck
         case .building: Tokens.build
         case .inReview: Tokens.review
-        case .done: Tokens.done
+        case .finished, .done: Tokens.done
         case .dropped, .idle: Tokens.text2
         }
     }
@@ -152,8 +159,8 @@ extension ChatStage {
         case .stuck: Tokens.stuckBackground
         case .building: Tokens.buildBackground
         case .inReview: Tokens.reviewBackground
-        case .done: Tokens.doneBackground
-        case .dropped, .idle: Tokens.fill
+        case .finished: Tokens.doneBackground
+        case .done, .dropped, .idle: Tokens.fill
         }
     }
 }

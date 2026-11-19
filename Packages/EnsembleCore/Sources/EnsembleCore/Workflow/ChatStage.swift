@@ -5,6 +5,7 @@ public enum ChatStage: String, Sendable, Hashable, CaseIterable {
     case stuck
     case building
     case inReview
+    case finished
     case done
     case dropped
     case idle
@@ -14,6 +15,7 @@ public enum ChatStage: String, Sendable, Hashable, CaseIterable {
     public struct Facts: Sendable, Hashable {
         public var closeReason: RequestCloseReason?
         public var isClosed: Bool
+        public var isFinished: Bool
         public var latestRun: Run?
         public var currentStep: WorkflowStep?
         public var hold: RunHold?
@@ -23,12 +25,13 @@ public enum ChatStage: String, Sendable, Hashable, CaseIterable {
         public var leadIsWorking: Bool
 
         public init(
-            closeReason: RequestCloseReason? = nil, isClosed: Bool = false, latestRun: Run? = nil, currentStep: WorkflowStep? = nil,
+            closeReason: RequestCloseReason? = nil, isClosed: Bool = false, isFinished: Bool = false, latestRun: Run? = nil, currentStep: WorkflowStep? = nil,
             hold: RunHold? = nil, openRequests: [ChatRequestKind] = [], pendingPermissions: Int = 0, hasOpenProposal: Bool = false,
             leadIsWorking: Bool = false
         ) {
             self.closeReason = closeReason
             self.isClosed = isClosed
+            self.isFinished = isFinished
             self.latestRun = latestRun
             self.currentStep = currentStep
             self.hold = hold
@@ -54,7 +57,8 @@ public enum ChatStage: String, Sendable, Hashable, CaseIterable {
             return facts.currentStep?.agent == .checker || facts.currentStep?.type == .gates ? .inReview : .building
         }
         if facts.leadIsWorking { return .building }
-        if let run = facts.latestRun, run.status == .succeeded { return .done }
+        if facts.isFinished { return .finished }
+        if let run = facts.latestRun, run.status == .succeeded { return .finished }
         return .idle
     }
 }

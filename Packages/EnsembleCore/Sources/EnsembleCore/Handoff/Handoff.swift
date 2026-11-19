@@ -344,6 +344,31 @@ public enum HandoffMessage: Sendable, Hashable {
     case openWorktree
     case readChat(ChatReadRequest)
     case draftSpec(SpecDraftRequest)
+    case setChatStatus(ChatStatusTarget, reason: String?)
+}
+
+public enum ChatStatusTarget: String, Sendable, Hashable, CaseIterable {
+    case open
+    case finished
+    case resolved
+    case closed
+
+    public var title: String {
+        switch self {
+        case .open: "Open"
+        case .finished: "Finished"
+        case .resolved: "Resolved"
+        case .closed: "Closed"
+        }
+    }
+
+    public var closeReason: RequestCloseReason? {
+        switch self {
+        case .resolved: .done
+        case .closed: .dropped
+        case .open, .finished: nil
+        }
+    }
 }
 
 public struct ChatReadRequest: Sendable, Hashable {
@@ -430,6 +455,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     case openWorktree = "open_worktree"
     case readChat = "read_chat"
     case draftSpec = "draft_spec"
+    case setChatStatus = "set_chat_status"
 
     public static let leadTools: Set<HandoffTool> = [.messageAgent, .listAgents, .spawnAgent, .stopAgent, .deleteAgent]
 
@@ -469,6 +495,8 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             "Read an Ensemble request chat from any project: its messages, runs, run step history and agent transcripts. A link ensemble://chat/<request_id>?message=<message_id> maps to request_id and message_id; call this tool whenever a message contains such a link. Start with the overview section, then page with offset and limit or pull the messages, run or transcript section."
         case .draftSpec:
             "Create or replace this request’s spec draft: a Markdown file with a summary, interfaces, out of scope, checkable acceptance criteria, how to verify the whole change, and the workers you will start once it is approved, in start order. The user can open and edit it from the chat, and that file is the source of truth: when the user edited it, you get the current text, so keep their edits and send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it."
+        case .setChatStatus:
+            "Set this request chat’s status. finished: the work is done and waits on the user; agents, worktrees and branches stay. resolved: the user confirmed the goal is met. closed: the user abandoned it. Resolving or closing deletes the request’s agents, worktrees and branches after your turn ends. open: work resumes. Only open works while a run is going."
         }
     }
 
@@ -603,6 +631,11 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                     "name": string("The worker's display name, such as Django Dev 1"),
                 ], required: ["role", "name"])),
             ], required: ["title", "summary", "acceptance_criteria", "workers"])
+        case .setChatStatus:
+            return object([
+                "status": .object(["type": .string("string"), "enum": .array(ChatStatusTarget.allCases.map { JSONValue.string($0.rawValue) })]),
+                "reason": string("One line shown to the user"),
+            ], required: ["status"])
         }
     }
 
@@ -667,6 +700,15 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             let request = try decoder.decode(SpecDraftRequest.self, from: data)
             guard !request.title.isEmpty else { throw HandoffError.missing("title") }
             return .draftSpec(request)
+        case .setChatStatus:
+            let name = arguments["status"]?.string?.trimmingCharacters(in: .whitespaces).lowercased()
+            guard let name, !name.isEmpty else { throw HandoffError.missing("status") }
+            guard let status = ChatStatusTarget(rawValue: name) else {
+                let names = ChatStatusTarget.allCases.map(\.rawValue).joined(separator: ", ")
+                throw HandoffError.notAllowed("Unknown status “\(name)”. Use one of: \(names).")
+            }
+            let reason = arguments["reason"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            return .setChatStatus(status, reason: reason)
         }
     }
 }

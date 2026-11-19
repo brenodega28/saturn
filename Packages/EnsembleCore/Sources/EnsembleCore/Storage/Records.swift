@@ -70,8 +70,8 @@ public enum RequestCloseReason: String, Codable, Sendable, CaseIterable {
 
     public var title: String {
         switch self {
-        case .done: "Done"
-        case .dropped: "Dropped"
+        case .done: "Resolved"
+        case .dropped: "Closed"
         }
     }
 }
@@ -89,6 +89,7 @@ public struct Chat: Codable, Sendable, Hashable, Identifiable, FetchableRecord, 
     public var labels: [String]
     public var closedAt: Date?
     public var closeReason: RequestCloseReason?
+    public var finishedAt: Date?
     public var viewedAt: Date?
     public var leadModel: String?
     public var leadEffort: LeadEffort?
@@ -98,7 +99,7 @@ public struct Chat: Codable, Sendable, Hashable, Identifiable, FetchableRecord, 
     public init(
         id: Int64? = nil, projectId: Int64, title: String, body: String, source: ChatSource,
         workflow: String? = nil, status: ChatStatus, labels: [String] = [], closedAt: Date? = nil, closeReason: RequestCloseReason? = nil,
-        viewedAt: Date? = nil, leadModel: String? = nil, leadEffort: LeadEffort? = nil,
+        finishedAt: Date? = nil, viewedAt: Date? = nil, leadModel: String? = nil, leadEffort: LeadEffort? = nil,
         createdAt: Date, updatedAt: Date
     ) {
         self.viewedAt = viewedAt
@@ -106,6 +107,7 @@ public struct Chat: Codable, Sendable, Hashable, Identifiable, FetchableRecord, 
         self.leadEffort = leadEffort
         self.closedAt = closedAt
         self.closeReason = closeReason
+        self.finishedAt = finishedAt
         self.labels = labels
         self.id = id
         self.projectId = projectId
@@ -119,6 +121,7 @@ public struct Chat: Codable, Sendable, Hashable, Identifiable, FetchableRecord, 
     }
 
     public var isClosed: Bool { closedAt != nil }
+    public var isFinished: Bool { finishedAt != nil && closedAt == nil }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID

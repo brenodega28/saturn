@@ -407,6 +407,11 @@ public final class AppDatabase: Sendable {
                 t.column("row", .text)
             }
         }
+        migrator.registerMigration("v27-chat-finished") { db in
+            try db.alter(table: "task") { t in
+                t.add(column: "finishedAt", .datetime)
+            }
+        }
 
         return migrator
     }

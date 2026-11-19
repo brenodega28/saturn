@@ -239,7 +239,7 @@ import Testing
         try #require(try setup.harness.database.task(id: task.id!))
     }
 
-    @Test func closingAsDoneOrDroppedRecordsTheReason() async throws {
+    @Test func closingAsResolvedOrClosedRecordsTheReason() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }
         let finished = try await chat.createRequest("CHAT finished", in: setup.project)
@@ -255,7 +255,7 @@ import Testing
         #expect(dropped.isClosed && dropped.closeReason == .dropped && dropped.closedAt == droppedAt)
         #expect(try stored(setup, finished) == done)
         #expect(try stored(setup, abandoned) == dropped)
-        #expect(RequestCloseReason.allCases.map(\.title) == ["Done", "Dropped"])
+        #expect(RequestCloseReason.allCases.map(\.title) == ["Resolved", "Closed"])
     }
 
     @Test func closingIsRefusedWhileARunIsActiveAndARunEndingKeepsTheClosedState() async throws {

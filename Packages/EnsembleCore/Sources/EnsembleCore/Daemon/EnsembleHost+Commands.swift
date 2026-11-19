@@ -192,6 +192,10 @@ extension EnsembleHost {
             let project = try requireProject(chat.projectId)
             return try await leadChat.close(chat, as: command.reason, in: project, git: try requireGit(for: project))
         }
+        router.register(ChatCommands.Finish.self) { [unowned self] command in
+            try leadChat.finish(try requireChat(command.chatID))
+            return Done()
+        }
         router.register(ChatCommands.Reopen.self) { [unowned self] command in
             try leadChat.reopen(try requireChat(command.chatID))
             return Done()

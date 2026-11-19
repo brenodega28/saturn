@@ -225,6 +225,12 @@ public enum ChatCommands {
         }
     }
 
+    public struct Finish: DaemonCommand {
+        public static let name = "chat.finish"
+        public var chatID: Int64
+        public init(chatID: Int64) { self.chatID = chatID }
+    }
+
     public struct Reopen: DaemonCommand {
         public static let name = "chat.reopen"
         public var chatID: Int64

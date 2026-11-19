@@ -278,9 +278,11 @@ struct ChatRowMenu: View {
     var body: some View {
         Button("Rename", action: rename)
         if !chat.isClosed, let project = model.project(withID: chat.projectId) {
-            Button("Mark as done") { Task { await model.closeRequest(chat, as: .done, in: project) } }
-            Button("Drop chat") { Task { await model.closeRequest(chat, as: .dropped, in: project) } }
-        } else {
+            if !chat.isFinished { Button("Mark as finished") { model.finishChat(chat) } }
+            Button("Resolve") { Task { await model.closeRequest(chat, as: .done, in: project) } }
+            Button("Close") { Task { await model.closeRequest(chat, as: .dropped, in: project) } }
+        }
+        if chat.isClosed || chat.isFinished {
             Button("Reopen") { model.reopenChat(chat) }
         }
         Divider()

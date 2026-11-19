@@ -1,6 +1,6 @@
 ---
 title: Review specs in Lavish
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Swift Dev}
@@ -38,18 +38,18 @@ Replace the Markdown spec editor with a Lavish (lavish-axi) review page. The fea
 ## Acceptance criteria
 
 - [ ] Calling `draft_spec` writes the Markdown draft and a rendered HTML page, and opens (or focuses) a Spec tab in Ensemble that shows the page inside Lavish with annotation controls working
-- [ ] Every lavish-axi process Ensemble starts has LAVISH_AXI_TELEMETRY=0, listens only on loopback, never opens an external browser, and keeps its state under Ensemble's data directory
-- [ ] Lavish runs from the bundled, version-pinned copy inside the app bundle. Nothing is fetched from npm at runtime
-- [ ] Annotating the page and pressing Send to Agent delivers one message to the lead chat with each note's text and the criterion or section it targets. The lead wakes on it, and the message shows in the chat as spec feedback
-- [ ] Only one poll listener runs per spec session, and it survives the lead's turns. Restarting ensembled resumes listening for open sessions without losing queued feedback
-- [ ] The lead's `reply_spec` text appears in the Lavish conversation panel, and that note shows as done
+- [x] Every lavish-axi process Ensemble starts has LAVISH_AXI_TELEMETRY=0, listens only on loopback, never opens an external browser, and keeps its state under Ensemble's data directory
+- [x] Lavish runs from the bundled, version-pinned copy inside the app bundle. Nothing is fetched from npm at runtime
+- [x] Annotating the page and pressing Send to Agent delivers one message to the lead chat with each note's text and the criterion or section it targets. The lead wakes on it, and the message shows in the chat as spec feedback
+- [x] Only one poll listener runs per spec session, and it survives the lead's turns. Restarting ensembled resumes listening for open sessions without losing queued feedback
+- [x] The lead's `reply_spec` text appears in the Lavish conversation panel, and that note shows as done
 - [ ] After the lead calls `draft_spec` again, the open tab live-reloads to the new version without losing the user's unsent annotation text
-- [ ] Starting the run ends the Lavish session (the page becomes read-only) and commits the Markdown spec to the run branch exactly as today. Criteria gating and spec completion are unchanged
-- [ ] The Markdown SpecEditor is gone, and no UI writes the spec draft except the lead's `draft_spec`
-- [ ] The proposal card shows the title, workflow, 'N agents' with a one-line reason per agent, and Dismiss/Start. The full brief is only behind Show more
-- [ ] Without Node, or for a remote project, the Spec tab shows the rendered page read-only with a clear reason, and the environment check warns about Node
-- [ ] No code comments are added. React-style rules don't apply. Swift naming stays short and descriptive
-- [ ] `swift test --package-path Packages/EnsembleCore` passes, with new tests for SpecPageRenderer, the LavishRuntime env/args, feedback-to-message mapping and the reply_spec tool. The app builds with `xcodegen generate && xcodebuild -scheme Ensemble build`
+- [x] Starting the run ends the Lavish session (the page becomes read-only) and commits the Markdown spec to the run branch exactly as today. Criteria gating and spec completion are unchanged
+- [x] The Markdown SpecEditor is gone, and no UI writes the spec draft except the lead's `draft_spec`
+- [x] The proposal card shows the title, workflow, 'N agents' with a one-line reason per agent, and Dismiss/Start. The full brief is only behind Show more
+- [x] Without Node, or for a remote project, the Spec tab shows the rendered page read-only with a clear reason, and the environment check warns about Node
+- [x] No code comments are added. React-style rules don't apply. Swift naming stays short and descriptive
+- [x] `swift test --package-path Packages/EnsembleCore` passes, with new tests for SpecPageRenderer, the LavishRuntime env/args, feedback-to-message mapping and the reply_spec tool. The app builds with `xcodegen generate && xcodebuild -scheme Ensemble build`
 
 ## Verification
 

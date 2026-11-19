@@ -176,8 +176,19 @@ extension AppDatabase {
     public func setClosed(taskId: Int64, reason: RequestCloseReason?, at date: Date) throws -> Chat? {
         try writer.write { db in
             try db.execute(
-                sql: "UPDATE task SET closedAt = ?, closeReason = ?, updatedAt = ? WHERE id = ?",
+                sql: "UPDATE task SET closedAt = ?, closeReason = ?, finishedAt = NULL, updatedAt = ? WHERE id = ?",
                 arguments: [reason == nil ? nil : date, reason?.rawValue, date, taskId]
+            )
+            return try Chat.fetchOne(db, id: taskId)
+        }
+    }
+
+    @discardableResult
+    public func setFinished(taskId: Int64, at date: Date) throws -> Chat? {
+        try writer.write { db in
+            try db.execute(
+                sql: "UPDATE task SET finishedAt = ?, closedAt = NULL, closeReason = NULL, updatedAt = ? WHERE id = ?",
+                arguments: [date, date, taskId]
             )
             return try Chat.fetchOne(db, id: taskId)
         }

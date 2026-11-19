@@ -26,6 +26,7 @@ public final class LeadChat {
         self.engine = engine
         self.driver = driver
         runtime.observeReplies { [weak self] agent, reply in self?.record(reply: reply, from: agent) }
+        runtime.observeTurnEnds { [weak self] session in self?.cleanUpAfterLeadTurn(session) }
     }
 
     @discardableResult
@@ -51,8 +52,9 @@ public final class LeadChat {
         guard let taskId = task.id, !body.isEmpty || !attachments.isEmpty else { return }
         try await driver.ensureServer()
         let session = try leadSession(for: task, in: project)
-        if try database.task(id: taskId)?.isClosed == true {
+        if let current = try database.task(id: taskId), current.isClosed || current.isFinished {
             try database.setClosed(taskId: taskId, reason: nil, at: now)
+            driver.closingTasks.remove(taskId)
         }
         try database.insert(LeadMessage(
             projectId: task.projectId, taskId: taskId, kind: .user, text: body, createdAt: now,
@@ -92,14 +94,33 @@ public final class LeadChat {
         return closed
     }
 
+    @discardableResult
+    public func finish(_ task: Chat, now: Date = .now) throws -> Chat {
+        guard let taskId = task.id else { throw ChatActionError.notFound }
+        guard !(try hasActiveRun(taskId: taskId)) else { throw LeadChatError.runInProgress }
+        guard let finished = try database.setFinished(taskId: taskId, at: now) else { throw ChatActionError.notFound }
+        return finished
+    }
+
     public func deleteAgentsOfClosedRequests(in project: Project, git: GitClient) async {
         guard let projectId = project.id, let tasks = try? database.closedTasks(projectId: projectId) else { return }
-        for taskId in tasks.compactMap(\.id) where (try? hasActiveRun(taskId: taskId)) == false {
-            for agent in (try? database.requestAgents(taskId: taskId)) ?? [] {
-                guard let session = runtime.session(for: agent) else { continue }
-                try? await runtime.delete(session, in: project, git: git, deleteBranch: true)
-            }
+        for taskId in tasks.compactMap(\.id) {
+            await deleteAgents(ofClosedTask: taskId, in: project, git: git)
         }
+    }
+
+    func deleteAgents(ofClosedTask taskId: Int64, in project: Project, git: GitClient) async {
+        guard (try? database.task(id: taskId))??.isClosed == true, (try? hasActiveRun(taskId: taskId)) == false else { return }
+        for agent in (try? database.requestAgents(taskId: taskId)) ?? [] {
+            guard let session = runtime.session(for: agent) else { continue }
+            try? await runtime.delete(session, in: project, git: git, deleteBranch: true)
+        }
+    }
+
+    func cleanUpAfterLeadTurn(_ session: AgentSession) {
+        guard session.agent.kind == .lead, let taskId = session.agent.taskId, driver.closingTasks.remove(taskId) != nil,
+              let project = try? database.project(id: session.agent.projectId), let git = try? driver.requireGit(for: project) else { return }
+        Task { await deleteAgents(ofClosedTask: taskId, in: project, git: git) }
     }
 
     private func hasActiveRun(taskId: Int64) throws -> Bool {
@@ -137,7 +158,7 @@ public final class LeadChat {
         guard let workflow = config.workflow(workflowID) else { throw LeadChatError.unknownWorkflow(workflowID) }
         let lead = try database.leadAgent(taskId: proposal.taskId)
         let spec = try pendingSpec(taskId: proposal.taskId, projectId: task.projectId)
-        if task.isClosed {
+        if task.isClosed || task.isFinished {
             try database.setClosed(taskId: proposal.taskId, reason: nil, at: .now)
         }
         let run = try engine.start(task: task, workflow: workflow, project: project, title: proposal.title, brief: proposal.text)

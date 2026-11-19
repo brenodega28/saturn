@@ -126,13 +126,16 @@ import Testing
         let (projectID, chatID, runID) = try await legacy.write { db -> (Int64, Int64, Int64) in
             var project = Project(name: "Legacy", path: repo.root.path, isOpen: true, createdAt: now, lastOpenedAt: now)
             try project.insert(db)
-            var chat = Chat(projectId: project.id!, title: "Old chat", body: "", source: .chat, status: .done, createdAt: now, updatedAt: now)
-            try chat.insert(db)
-            var run = Run(projectId: project.id!, taskId: chat.id!, workflow: "feature-delivery", status: .succeeded, startedAt: now, endedAt: now, title: "Old run")
+            try db.execute(
+                sql: "INSERT INTO task (projectId, title, body, source, status, labels, createdAt, updatedAt) VALUES (?, 'Old chat', '', 'chat', 'done', '[]', ?, ?)",
+                arguments: [project.id!, now, now]
+            )
+            let chatID = db.lastInsertedRowID
+            var run = Run(projectId: project.id!, taskId: chatID, workflow: "feature-delivery", status: .succeeded, startedAt: now, endedAt: now, title: "Old run")
             try run.insert(db)
-            var message = LeadMessage(projectId: project.id!, taskId: chat.id!, kind: .lead, text: "Done before the update", createdAt: now)
+            var message = LeadMessage(projectId: project.id!, taskId: chatID, kind: .lead, text: "Done before the update", createdAt: now)
             try message.insert(db)
-            return (project.id!, chat.id!, run.id!)
+            return (project.id!, chatID, run.id!)
         }
         try legacy.close()
 

@@ -45,7 +45,7 @@ struct ChatColumn: View {
                             .padding(.horizontal, 28)
                     }
                     LeadComposer(project: project, request: selected)
-                        .frame(maxWidth: Tokens.Size.composer)
+                        .frame(maxWidth: Tokens.Size.transcript)
                         .padding(.horizontal, 28)
                 }
                 .padding(.bottom, 16)

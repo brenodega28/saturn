@@ -52,7 +52,7 @@ struct RequestChat: View {
                     }
                 }
                 .animation(.snappy(duration: 0.25), value: data?.thread.items.map(\.id))
-                .frame(maxWidth: 760)
+                .frame(maxWidth: Tokens.Size.transcript)
                 .frame(maxWidth: .infinity)
                 .padding(EdgeInsets(top: 22, leading: 28, bottom: 16, trailing: 28))
             }

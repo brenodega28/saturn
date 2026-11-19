@@ -121,7 +121,6 @@ public enum Tokens {
         public static let chatCard: CGFloat = 300
         public static let chatCardReserve: CGFloat = 340
         public static let transcript: CGFloat = 760
-        public static let composer: CGFloat = 780
         public static let workerPanel: CGFloat = 380
         public static let narrowWindow: CGFloat = 1180
     }

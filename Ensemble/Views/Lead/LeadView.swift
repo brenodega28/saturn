@@ -64,7 +64,7 @@ struct NewRequestHeldSends: View {
                     RequestBubble(held: send, onCancel: model.cancelHeldSend)
                 }
             }
-            .frame(maxWidth: 760)
+            .frame(maxWidth: Tokens.Size.transcript)
             .frame(maxWidth: .infinity)
             .padding(EdgeInsets(top: 22, leading: 28, bottom: 16, trailing: 28))
         }

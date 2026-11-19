@@ -80,6 +80,12 @@ enum FakeClaude {
         say "I proposed a run for that."
         return
       fi
+      if printf '%s' "$1" | grep -q 'CHAT-STATUS'; then
+        status=$(printf '%s' "$1" | sed -E 's/.*CHAT-STATUS ([a-z]+).*/\1/' | head -n 1)
+        call_tool set_chat_status "{\"status\":\"$status\",\"reason\":\"Tests pass\"}"
+        say "Status set."
+        return
+      fi
       if printf '%s' "$1" | grep -q 'CHAT-RELAY'; then
         target=$(printf '%s' "$1" | sed -E 's/.*CHAT-RELAY ([A-Za-z]+ [A-Za-z]+ [0-9]+).*/\1/')
         call_tool message_agent "{\"agent\":\"$target\",\"message\":\"Also add a gamma line\"}"

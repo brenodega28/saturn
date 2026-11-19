@@ -13,7 +13,7 @@ struct ChatStageTests {
         RunHold(reason: reason, stepId: "s", message: "m")
     }
 
-    @Test func closedChatsAreDoneOrDropped() {
+    @Test func closedChatsAreResolvedOrClosed() {
         #expect(ChatStage.of(Facts(closeReason: .done, isClosed: true, hold: hold(.approval))) == .done)
         #expect(ChatStage.of(Facts(closeReason: .dropped, isClosed: true)) == .dropped)
     }
@@ -41,14 +41,24 @@ struct ChatStageTests {
         #expect(ChatStage.of(Facts(latestRun: run(.running), currentStep: WorkflowStep(id: "gates", type: .gates))) == .inReview)
     }
 
+    @Test func finishedRanksBelowClosedAndAttentionStates() {
+        #expect(ChatStage.of(Facts(closeReason: .done, isClosed: true, isFinished: true)) == .done)
+        #expect(ChatStage.of(Facts(isFinished: true, latestRun: run(.failed))) == .stuck)
+        #expect(ChatStage.of(Facts(isFinished: true, openRequests: [.question])) == .needsYou)
+        #expect(ChatStage.of(Facts(isFinished: true, latestRun: run(.waitingOnYou), hold: hold(.approval))) == .inReview)
+        #expect(ChatStage.of(Facts(isFinished: true, leadIsWorking: true)) == .building)
+        #expect(ChatStage.of(Facts(isFinished: true, latestRun: run(.cancelled))) == .finished)
+    }
+
     @Test func runningWorkOrAWorkingLeadIsBuilding() {
         let build = WorkflowStep(id: "build", type: .agent, agent: .builder)
         #expect(ChatStage.of(Facts(latestRun: run(.running), currentStep: build)) == .building)
         #expect(ChatStage.of(Facts(leadIsWorking: true)) == .building)
     }
 
-    @Test func aFinishedRunIsDoneAndAQuietChatIsIdle() {
-        #expect(ChatStage.of(Facts(latestRun: run(.succeeded))) == .done)
+    @Test func aSucceededRunOrAFinishedChatIsFinishedAndAQuietChatIsIdle() {
+        #expect(ChatStage.of(Facts(latestRun: run(.succeeded))) == .finished)
+        #expect(ChatStage.of(Facts(isFinished: true)) == .finished)
         #expect(ChatStage.of(Facts()) == .idle)
         #expect(ChatStage.needsYou.needsAttention && ChatStage.stuck.needsAttention && !ChatStage.building.needsAttention)
     }

@@ -248,6 +248,10 @@ public enum RoleMigration {
         on their version. Skip the spec only when the request fits in one sentence.
         """,
         """
+        Set the chat's status with set_chat_status: finished when the work is done and waits on the user, resolved
+        when the user confirms the goal is met, closed when the user abandons it, and open when work resumes.
+        """,
+        """
         You are the Tech Lead. When planning, read the request and the codebase, then split the work into
         independent tasks that can be built in parallel without touching the same files. Assign each task to the
         role best suited to it and say which files or folders it owns. Prefer fewer, well-scoped tasks.

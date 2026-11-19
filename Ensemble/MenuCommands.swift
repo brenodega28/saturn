@@ -381,18 +381,22 @@ extension CommandRegistry {
             context.model.focusedChat
         }
         register(MenuCommand(id: "chat.new", title: "New Chat…", menu: "Chat", section: 0, order: 0) { $0.model.requestNewChat() })
-        register(MenuCommand(id: "chat.done", title: "Mark as Done", menu: "Chat", section: 1, order: 0,
+        register(MenuCommand(id: "chat.finish", title: "Mark as Finished", menu: "Chat", section: 1, order: 0,
+                             isEnabled: { selected($0).map { !$0.isClosed && !$0.isFinished } ?? false }) { context in
+            if let chat = selected(context) { context.model.finishChat(chat) }
+        })
+        register(MenuCommand(id: "chat.done", title: "Resolve Chat", menu: "Chat", section: 1, order: 1,
                              isEnabled: { selected($0).map { !$0.isClosed } ?? false }) { context in
             guard let chat = selected(context), let project = context.model.currentProject else { return }
             Task { await context.model.closeRequest(chat, as: .done, in: project) }
         })
-        register(MenuCommand(id: "chat.drop", title: "Drop Chat", menu: "Chat", section: 1, order: 1,
+        register(MenuCommand(id: "chat.drop", title: "Close Chat", menu: "Chat", section: 1, order: 2,
                              isEnabled: { selected($0).map { !$0.isClosed } ?? false }) { context in
             guard let chat = selected(context), let project = context.model.currentProject else { return }
             Task { await context.model.closeRequest(chat, as: .dropped, in: project) }
         })
-        register(MenuCommand(id: "chat.reopen", title: "Reopen Chat", menu: "Chat", section: 1, order: 2,
-                             isEnabled: { selected($0)?.isClosed ?? false }) { context in
+        register(MenuCommand(id: "chat.reopen", title: "Reopen Chat", menu: "Chat", section: 1, order: 3,
+                             isEnabled: { selected($0).map { $0.isClosed || $0.isFinished } ?? false }) { context in
             if let chat = selected(context) { context.model.reopenChat(chat) }
         })
         register(MenuCommand(id: "chat.stop-lead", title: "Stop the Lead", menu: "Chat", section: 2, order: 0,

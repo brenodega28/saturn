@@ -35,6 +35,30 @@ import Testing
         #expect(runColumns.contains("pushedAt"))
     }
 
+    @Test func chatFinishedMigrationAddsFinishedAtAndKeepsClosedChats() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v26-change-log")
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO project (id, name, path, isOpen, createdAt, lastOpenedAt) VALUES (1, 'shop', '/tmp/shop', 1, ?, ?)", arguments: [at, at])
+            try db.execute(sql: """
+                INSERT INTO task (id, projectId, title, source, status, closedAt, closeReason, createdAt, updatedAt) VALUES
+                (1, 1, 'Met', 'chat', 'incoming', ?, 'done', ?, ?),
+                (2, 1, 'Abandoned', 'chat', 'incoming', ?, 'dropped', ?, ?),
+                (3, 1, 'Going', 'chat', 'incoming', NULL, NULL, ?, ?)
+                """, arguments: [at, at, at, at, at, at, at, at])
+        }
+
+        let database = try AppDatabase(queue)
+
+        let columns = try database.writer.read { db in try db.columns(in: "task").map(\.name) }
+        #expect(columns.contains("finishedAt"))
+        let chats = try [1, 2, 3].map { try #require(try database.task(id: $0)) }
+        #expect(chats.map { $0.closeReason?.title } == ["Resolved", "Closed", nil])
+        #expect(chats.map(\.finishedAt) == [nil, nil, nil])
+        #expect(chats.map(\.isClosed) == [true, true, false])
+    }
+
     @Test func chatRequestsMigrationMovesEveryInboxItemIntoAChatAndKeepsItsID() throws {
         let queue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(queue, upTo: "v23-chat-first")

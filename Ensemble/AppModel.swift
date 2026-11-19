@@ -69,7 +69,6 @@ final class AppModel {
     var serverChecks: Set<String> = []
     var addingServers: Set<String> = []
     @ObservationIgnored var fetchingFiles: Set<String> = []
-    @ObservationIgnored var remoteFilePaths: [String: String] = [:]
     let locator: ToolLocator
     let runner: CommandRunner
     var requests: ChatRequestFeed
@@ -220,6 +219,8 @@ final class AppModel {
             Task { await stopApp(runningIn: URL(fileURLWithPath: path, isDirectory: true)) }
         case .leadTurnEnded(let taskId):
             chatNotifications.leadTurnEnded(taskId: taskId)
+        case .specDrafted(let projectId, let taskId, _):
+            specDrafted(projectId: projectId, taskId: taskId)
         case .agentReplied, .shuttingDown:
             break
         }

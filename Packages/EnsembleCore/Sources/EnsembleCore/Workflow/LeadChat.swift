@@ -65,11 +65,22 @@ public final class LeadChat {
         runtime.debugTrace?.chatMessage(body, direction: "user_to_agent", chat: "lead", agent: session.agent, at: now)
         #endif
         let notes = [
-            driver.specEditNote(projectId: task.projectId, taskId: taskId), driver.rejectionNote(projectId: task.projectId, taskId: taskId),
+            driver.rejectionNote(projectId: task.projectId, taskId: taskId),
             try workflowNote(taskId: taskId), try statusNote(taskId: taskId),
         ].compactMap(\.self)
         let status = notes.isEmpty ? "" : (prompt.isEmpty ? "" : "\n\n---\n") + notes.joined(separator: "\n\n---\n")
         session.send(prompt + status, images: attachments.filter(\.isImage))
+    }
+
+    public func deliverSpecFeedback(_ message: String, taskId: Int64, now: Date = .now) async throws {
+        guard let task = try database.task(id: taskId), let project = try database.project(id: task.projectId) else { return }
+        try await driver.ensureServer()
+        let session = try leadSession(for: task, in: project)
+        try database.insert(LeadMessage(projectId: task.projectId, taskId: taskId, kind: .specFeedback, text: message, createdAt: now))
+        #if DEBUG
+        runtime.debugTrace?.chatMessage(message, direction: "user_to_agent", chat: "lead", agent: session.agent, at: now)
+        #endif
+        session.send(SpecFeedback.leadPrompt(message))
     }
 
     static func title(text: String, attachments: [ChatAttachment]) -> String {
@@ -91,6 +102,7 @@ public final class LeadChat {
         guard !(try hasActiveRun(taskId: taskId)), let closed = try database.setClosed(taskId: taskId, reason: reason, at: now) else {
             throw LeadChatError.runInProgress
         }
+        await driver.specReviews?.endSpecReview(taskId: taskId)
         return closed
     }
 
@@ -164,6 +176,8 @@ public final class LeadChat {
         let run = try engine.start(task: task, workflow: workflow, project: project, title: proposal.title, brief: proposal.text)
         if let spec {
             try attachSpec(to: run, taskId: proposal.taskId, document: spec, project: project, config: config)
+            let taskId = proposal.taskId
+            Task { [weak self] in await self?.driver.specReviews?.endSpecReview(taskId: taskId) }
         }
         if let lead, let runID = run.id {
             runtime.session(for: lead)?.attach(toRun: runID)

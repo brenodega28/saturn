@@ -61,21 +61,26 @@ public struct SpecStore: Sendable {
     public func write(_ document: SpecDocument, to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try document.markdown.write(to: url, atomically: true, encoding: .utf8)
+        try writePage(document, for: url)
     }
 
-    func seenURL(for draft: URL) -> URL {
-        draft.deletingPathExtension().appendingPathExtension("seen")
+    public func writePage(_ document: SpecDocument, for draft: URL) throws {
+        let page = SpecPageRenderer.pageURL(for: draft)
+        let html = SpecPageRenderer().render(document)
+        guard (try? String(contentsOf: page, encoding: .utf8)) != html else { return }
+        try html.write(to: page, atomically: false, encoding: .utf8)
     }
 
-    public func markSeen(_ draft: URL) {
-        guard let text = try? String(contentsOf: draft, encoding: .utf8) else { return }
-        try? text.write(to: seenURL(for: draft), atomically: true, encoding: .utf8)
+    public func pageURL(projectId: Int64, taskId: Int64) -> URL {
+        SpecPageRenderer.pageURL(for: draftURL(projectId: projectId, taskId: taskId))
     }
 
-    public func unseenEdit(of draft: URL) -> String? {
-        guard let text = try? String(contentsOf: draft, encoding: .utf8) else { return nil }
-        let seen = try? String(contentsOf: seenURL(for: draft), encoding: .utf8)
-        return seen == text ? nil : text
+    public func ensurePage(projectId: Int64, taskId: Int64) -> URL? {
+        let page = pageURL(projectId: projectId, taskId: taskId)
+        if FileManager.default.fileExists(atPath: page.path) { return page }
+        guard let document = try? draft(projectId: projectId, taskId: taskId) else { return nil }
+        try? writePage(document, for: draftURL(projectId: projectId, taskId: taskId))
+        return FileManager.default.fileExists(atPath: page.path) ? page : nil
     }
 
     public func link(runId: Int64) -> RunSpecLink? {

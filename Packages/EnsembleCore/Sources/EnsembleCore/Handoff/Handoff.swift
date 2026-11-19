@@ -344,6 +344,7 @@ public enum HandoffMessage: Sendable, Hashable {
     case openWorktree
     case readChat(ChatReadRequest)
     case draftSpec(SpecDraftRequest)
+    case replySpec(String)
     case setChatStatus(ChatStatusTarget, reason: String?)
 }
 
@@ -455,6 +456,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     case openWorktree = "open_worktree"
     case readChat = "read_chat"
     case draftSpec = "draft_spec"
+    case replySpec = "reply_spec"
     case setChatStatus = "set_chat_status"
 
     public static let leadTools: Set<HandoffTool> = [.messageAgent, .listAgents, .spawnAgent, .stopAgent, .deleteAgent]
@@ -494,7 +496,9 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .readChat:
             "Read an Ensemble request chat from any project: its messages, runs, run step history and agent transcripts. A link ensemble://chat/<request_id>?message=<message_id> maps to request_id and message_id; call this tool whenever a message contains such a link. Start with the overview section, then page with offset and limit or pull the messages, run or transcript section."
         case .draftSpec:
-            "Create or replace this request’s spec draft: a Markdown file with a summary, interfaces, out of scope, checkable acceptance criteria, how to verify the whole change, and the workers you will start once it is approved, in start order. The user can open and edit it from the chat, and that file is the source of truth: when the user edited it, you get the current text, so keep their edits and send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it."
+            "Create or replace this request’s spec draft: a summary, interfaces, out of scope, checkable acceptance criteria, how to verify the whole change, and the workers you will start once it is approved, in start order, each with a one-line reason. Ensemble renders it as a review page the user annotates in Lavish; their notes arrive as chat messages tagged as spec feedback. Send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it."
+        case .replySpec:
+            "Answer the user on this request’s spec review page in Lavish, after you handled their spec feedback. The reply shows in the page’s conversation panel and marks the notes you received as done. Keep it short."
         case .setChatStatus:
             "Set this request chat’s status. finished: the work is done and waits on the user; agents, worktrees and branches stay. resolved: the user confirmed the goal is met. closed: the user abandoned it. Resolving or closing deletes the request’s agents, worktrees and branches after your turn ends. open: work resumes. Only open works while a run is going."
         }
@@ -629,8 +633,11 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "workers": array(object([
                     "role": string("The role id from .ensemble/roles that does this part"),
                     "name": string("The worker's display name, such as Django Dev 1"),
+                    "reason": string("One short line on what this worker does and why it is needed"),
                 ], required: ["role", "name"])),
             ], required: ["title", "summary", "acceptance_criteria", "workers"])
+        case .replySpec:
+            return object(["text": string("Your answer to the user's spec feedback, shown on the review page")], required: ["text"])
         case .setChatStatus:
             return object([
                 "status": .object(["type": .string("string"), "enum": .array(ChatStatusTarget.allCases.map { JSONValue.string($0.rawValue) })]),
@@ -700,6 +707,9 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             let request = try decoder.decode(SpecDraftRequest.self, from: data)
             guard !request.title.isEmpty else { throw HandoffError.missing("title") }
             return .draftSpec(request)
+        case .replySpec:
+            guard let text = arguments["text"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { throw HandoffError.missing("text") }
+            return .replySpec(text)
         case .setChatStatus:
             let name = arguments["status"]?.string?.trimmingCharacters(in: .whitespaces).lowercased()
             guard let name, !name.isEmpty else { throw HandoffError.missing("status") }

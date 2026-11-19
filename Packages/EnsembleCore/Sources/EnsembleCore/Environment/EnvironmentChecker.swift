@@ -44,8 +44,36 @@ public struct EnvironmentReport: Sendable, Hashable, Codable {
     public let git: ToolCheck
     public let claude: ToolCheck
     public let provider: ProviderStatus
+    public var node: ToolCheck?
+
+    public init(git: ToolCheck, claude: ToolCheck, provider: ProviderStatus, node: ToolCheck? = nil) {
+        self.git = git
+        self.claude = claude
+        self.provider = provider
+        self.node = node
+    }
 
     public var isReady: Bool { git.isOK && claude.isOK && provider.isOK }
+
+    public static let nodeCheckTitle = "Node for Lavish"
+
+    public var nodeWarning: String? {
+        Self.nodeWarning(node, required: LavishRuntime.requiredNodeMajor)
+    }
+
+    public static func nodeWarning(_ node: ToolCheck?, required: Int) -> String? {
+        switch node {
+        case nil:
+            return nil
+        case .missing?:
+            return "Node.js isn’t installed, so specs open read-only instead of in Lavish. Install Node \(required) or newer."
+        case .broken(_, let message)?:
+            return "Node.js didn’t run (\(message)), so specs open read-only instead of in Lavish."
+        case .found(_, let version)?:
+            guard let major = LavishRuntime.major(of: version), major < required else { return nil }
+            return "Node \(version) is older than the \(required) Lavish needs, so specs open read-only. Install Node \(required) or newer."
+        }
+    }
 }
 
 public struct EnvironmentChecker: Sendable {
@@ -64,11 +92,13 @@ public struct EnvironmentChecker: Sendable {
     public func check() async -> EnvironmentReport {
         async let git = checkTool("git", versionArguments: ["--version"])
         async let claude = checkTool("claude", versionArguments: ["--version"])
+        async let node = checkTool("node", versionArguments: ["--version"])
         let claudeCheck = await claude
         return EnvironmentReport(
             git: await git,
             claude: claudeCheck,
-            provider: await providerStatus(claude: claudeCheck)
+            provider: await providerStatus(claude: claudeCheck),
+            node: await node
         )
     }
 

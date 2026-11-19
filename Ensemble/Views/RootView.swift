@@ -43,8 +43,11 @@ struct RootView: View {
                 FirstRunView(report: environment)
             } else if model.openProjects.isEmpty {
                 WelcomeView()
-            } else if let project = model.onboardingProject {
-                OnboardingView(project: project).id(project.id)
+            } else if let project = model.pendingSetupProject {
+                ProgressView("Setting up \(project.name)…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Backdrop())
+                    .task(id: project.id) { await model.applyRecommendedSetup(project) }
             } else {
                 MainWindowView()
             }

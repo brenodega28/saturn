@@ -110,6 +110,8 @@ final class AppModel {
     var newChatOptionsByProject: [Int64: NewChatOptions] = [:]
     var projectFileLists: [Int64: [String]] = [:]
     var activeClones: [String: Date] = [:]
+    var setupAttempts: Set<Int64> = []
+    var setupsInFlight: Set<Int64> = []
     var listeningPorts: Set<Int> = []
     var isOffline = false
     var focusedPinIDs: [Int64: Int64] = [:]
@@ -499,6 +501,7 @@ final class AppModel {
             let project = try await send(ProjectCommands.Open(path: url.path))
             reloadProjects()
             showChat(in: project)
+            await applyRecommendedSetup(project)
             await refresh(project)
         } catch {
             alert = AppAlert(title: "Couldn’t open \(url.lastPathComponent)", message: error.localizedDescription)

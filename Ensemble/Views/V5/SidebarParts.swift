@@ -102,10 +102,6 @@ struct NewChatPicker: View {
 }
 
 enum NewChatFilter {
-    static func match(_ projects: [Project], filter: String) -> [Project] {
-        match(projects, name: \.name, filter: filter)
-    }
-
     static func match<Item>(_ items: [Item], name: (Item) -> String, filter: String) -> [Item] {
         let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
         guard !needle.isEmpty else { return items }

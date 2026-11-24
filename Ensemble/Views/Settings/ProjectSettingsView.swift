@@ -85,13 +85,14 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
 struct ProjectSettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let branch: String?
 
     var body: some View {
         SettingsContainer(project: project, branch: branch, section: Binding(
-            get: { project.id.flatMap { model.settingsSections[$0] } ?? .general },
-            set: { section in project.id.map { model.settingsSections[$0] = section } }
+            get: { project.id.flatMap { workspace.settingsSections[$0] } ?? .general },
+            set: { section in project.id.map { workspace.settingsSections[$0] = section } }
         ))
     }
 }
@@ -265,11 +266,12 @@ struct IssueList: View {
 
 private struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let branch: String?
 
     var body: some View {
-        let config = model.config(for: project)
+        let config = workspace.config(for: project)
         SettingsPage("General", subtitle: "Where this project lives and the state of its Ensemble config.") {
             if project.isRemote {
                 RemoteHostCard(project: project)
@@ -284,9 +286,9 @@ private struct GeneralSettings: View {
                     }
                 }
                 row("Branch") { Text(branch ?? "detached").font(Theme.monospaced) }
-                row("Worktrees") { Text("\(model.state(for: project).worktrees.count) in \(WorktreeManager.directoryName)/") }
+                row("Worktrees") { Text("\(workspace.state(for: project).worktrees.count) in \(WorktreeManager.directoryName)/") }
                 row("Config") {
-                    Text(model.hasConfig(project)
+                    Text(workspace.hasConfig(project)
                          ? "\(config.workflows.count) workflows · \(config.docs.docs.count) documents"
                          : "No \(ProjectConfig.directoryName)/ folder yet")
                 }
@@ -294,11 +296,11 @@ private struct GeneralSettings: View {
             .padding(16)
             .card(cornerRadius: 16)
 
-            if !model.hasConfig(project) {
+            if !workspace.hasConfig(project) {
                 InstallDefaultsCard(project: project)
             }
             IssueList(issues: config.issues)
-            Button("Reload Config") { model.reloadConfig(for: project) }
+            Button("Reload Config") { workspace.reloadConfig(for: project) }
                 .buttonStyle(.pill)
                 .help("Read .ensemble/ again from disk")
         }
@@ -316,6 +318,7 @@ private struct GeneralSettings: View {
 
 private struct AgentsSettings: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     var body: some View {
@@ -325,7 +328,7 @@ private struct AgentsSettings: View {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Max concurrent agents").font(.system(size: 13.5, weight: .semibold))
-                    Text("\(model.connection.runningCount(inProject: projectID)) running · \(model.connection.queuedSessions(inProject: projectID).count) queued")
+                    Text("\(workspace.connection.runningCount(inProject: projectID)) running · \(workspace.connection.queuedSessions(inProject: projectID).count) queued")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.secondaryText)
                 }
@@ -335,7 +338,7 @@ private struct AgentsSettings: View {
                     set: { newValue in
                         var settings = project.settings
                         settings.maxConcurrentAgents = newValue
-                        model.updateSettings(settings, for: project)
+                        workspace.updateSettings(settings, for: project)
                     }
                 ), range: 1...16)
                 .help("Agents allowed to run at once in this project")
@@ -359,7 +362,7 @@ private struct AgentsSettings: View {
                     set: { newValue in
                         var settings = project.settings
                         settings.reviewCapacity = newValue
-                        model.updateSettings(settings, for: project)
+                        workspace.updateSettings(settings, for: project)
                     }
                 ), range: 0...20)
                 .help("Changes that may wait for your approval before new runs hold off building; 0 means no limit")

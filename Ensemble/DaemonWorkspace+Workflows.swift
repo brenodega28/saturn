@@ -1,7 +1,7 @@
 import EnsembleCore
 import Foundation
 
-extension AppModel {
+extension DaemonWorkspace {
     func activeRuns(ofWorkflow workflowID: String, in project: Project) -> [Run] {
         guard let projectID = project.id else { return [] }
         _ = connection.revision

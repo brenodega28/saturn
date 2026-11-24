@@ -50,14 +50,30 @@ extension AppModel {
         AppDefaults.store.removeObject(forKey: Self.usageResetPointKey)
     }
 
+    func checkBudgets() {
+        for workspace in workspaces.values { workspace.checkBudgets() }
+    }
+
+    func usageReport(period: UsagePeriod) -> UsageReport? {
+        local.usageReport(period: period)
+    }
+
+    var displayedUsageTotals: UsageTotals { local.displayedUsageTotals }
+
+    var monthlySpend: Double { local.monthlySpend }
+
+    var weeklySpend: Double { local.weeklySpend }
+}
+
+extension DaemonWorkspace {
     func usageReport(period: UsagePeriod) -> UsageReport? {
         _ = connection.usageRevision
-        return try? database.usageReport(period: period, totalsCountingSince: usageResetPoint)
+        return try? database.usageReport(period: period, totalsCountingSince: app.usageResetPoint)
     }
 
     var displayedUsageTotals: UsageTotals {
         _ = connection.usageRevision
-        return (try? database.usageTotals(countingSince: usageResetPoint)) ?? UsageTotals()
+        return (try? database.usageTotals(countingSince: app.usageResetPoint)) ?? UsageTotals()
     }
 
     var monthlySpend: Double {
@@ -81,7 +97,7 @@ extension AppModel {
         var settings = project.settings
         settings.weeklyBudgetUSD = budget.flatMap { $0 > 0 ? $0 : nil }
         updateSettings(settings, for: project)
-        checkBudgets()
+        app.checkBudgets()
     }
 
     func allowOverBudgetThisWeek(_ project: Project) {
@@ -94,7 +110,7 @@ extension AppModel {
         var settings = project.settings
         settings.monthlyBudgetUSD = budget.flatMap { $0 > 0 ? $0 : nil }
         updateSettings(settings, for: project)
-        checkBudgets()
+        app.checkBudgets()
     }
 
     func allowOverBudgetThisMonth(_ project: Project) {
@@ -109,6 +125,19 @@ extension AppModel {
     }
 
     func checkBudgets() {
-        dispatch("Couldn’t check budgets", SettingsCommands.SetBudgets(monthlyUSD: globalMonthlyBudget, weeklyUSD: globalWeeklyBudget))
+        dispatch("Couldn’t check budgets", SettingsCommands.SetBudgets(monthlyUSD: app.globalMonthlyBudget, weeklyUSD: app.globalWeeklyBudget))
+    }
+
+    func migrateSettingsToDaemon() async {
+        let migratedKey = "daemon.settingsMigrated.\(id.uuidString.lowercased())"
+        guard !AppDefaults.store.bool(forKey: migratedKey),
+              let settings = try? await send(SettingsCommands.Get()) else { return }
+        if settings.providerMode == nil, let mode = app.providerMode {
+            _ = try? await send(SettingsCommands.SetProviderMode(mode: mode))
+        }
+        if settings.globalMonthlyBudgetUSD == nil, settings.globalWeeklyBudgetUSD == nil, app.globalMonthlyBudget != nil || app.globalWeeklyBudget != nil {
+            _ = try? await send(SettingsCommands.SetBudgets(monthlyUSD: app.globalMonthlyBudget, weeklyUSD: app.globalWeeklyBudget))
+        }
+        AppDefaults.store.set(true, forKey: migratedKey)
     }
 }

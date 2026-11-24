@@ -7,14 +7,14 @@ enum PaletteMode: Equatable {
 }
 
 struct TestRunRequest: Equatable {
-    let project: Int64
+    let project: ProjectRef
     let workflow: String
 }
 
 enum DetailDestination: Codable, Hashable {
-    case run(project: Int64, run: Int64)
-    case agent(project: Int64, agent: Int64)
-    case file(project: Int64, path: String)
+    case run(project: ProjectRef, run: Int64)
+    case agent(project: ProjectRef, agent: Int64)
+    case file(project: ProjectRef, path: String)
 }
 
 extension ProjectTab {
@@ -27,22 +27,7 @@ extension AppModel {
             newProject()
             return
         }
-        newChat(in: project)
-    }
-
-    func newChat(in project: Project) {
-        startNewLeadRequest(in: project)
-        composerFocusToken += 1
-    }
-
-    func showChat(in project: Project) {
-        guard let id = project.id else { return }
-        if let page = pages.pages.first(where: { if case .chat(_, id) = $0.kind { true } else { false } }) {
-            requestPageProjectIDs.remove(id)
-            pages.focus(page.id)
-        } else {
-            showChatPage(selectedRequest(in: project)?.id, inProjectID: id)
-        }
+        currentWorkspace.newChat(in: project)
     }
 
     func openPalette(_ mode: PaletteMode = .everything) {
@@ -51,29 +36,59 @@ extension AppModel {
     }
 
     func spawnAgent() {
-        guard let id = currentProject?.id else { return }
-        selection = .project(id)
+        guard let ref = currentRef else { return }
+        selection = .project(ref)
         isNewAgentPresented = true
     }
 
     func pauseAllAgentsInSelectedProject() {
         guard let project = currentProject else { return }
-        pauseAllAgents(in: project)
+        currentWorkspace.pauseAllAgents(in: project)
+    }
+
+    func goToSection(_ index: Int) {
+        let tabs = ProjectTab.sidebarOrder
+        guard let project = currentProject, tabs.indices.contains(index) else { return }
+        currentWorkspace.setTab(tabs[index], for: project)
+    }
+
+    func sendToLead(_ text: String) {
+        guard let project = currentProject else { return }
+        currentWorkspace.sendToLead(text, in: project)
+    }
+
+    func openFileFinder() {
+        guard let project = currentProject else { return }
+        let browser = currentWorkspace.codeBrowser(for: project)
+        isPageFinderShown = mainScreen != .tool(.code)
+        browser.presentFinder()
+        if browser.snapshot == nil { Task { await browser.refreshSources() } }
+    }
+}
+
+extension DaemonWorkspace {
+    func newChat(in project: Project) {
+        startNewLeadRequest(in: project)
+        composerFocusToken += 1
+    }
+
+    func showChat(in project: Project) {
+        guard let id = project.id else { return }
+        if let page = pages.pages.first(where: { if case .chat(_, ref(id)) = $0.kind { true } else { false } }) {
+            requestPageProjectIDs.remove(id)
+            pages.focus(page.id)
+        } else {
+            showChatPage(selectedRequest(in: project)?.id, inProjectID: id)
+        }
     }
 
     func openAgent(_ session: LiveAgentSession, in project: Project) {
         select(session, in: project)
     }
 
-    func goToSection(_ index: Int) {
-        let tabs = ProjectTab.sidebarOrder
-        guard let project = currentProject, tabs.indices.contains(index) else { return }
-        setTab(tabs[index], for: project)
-    }
-
-    func sendToLead(_ text: String) {
+    func sendToLead(_ text: String, in project: Project) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let project = currentProject else { return }
+        guard !trimmed.isEmpty else { return }
         startNewLeadRequest(in: project)
         Task { await sendLeadMessage(trimmed, lead: leadRole(in: project), to: nil, in: project) }
     }
@@ -82,8 +97,8 @@ extension AppModel {
         guard let id = project.id else { return }
         let root = codeBrowser(for: project).source?.root ?? project.url
         let absolute = path.hasPrefix("/") ? path : root.appending(path: path).path
-        if let line { pendingCodeLines[absolute] = line }
-        showPage(.code(projectID: id, path: absolute))
+        if let line { app.pendingCodeLines[absolute] = line }
+        showPage(.code(project: ref(id), path: absolute))
     }
 
     func revealInCode(_ path: String, in project: Project) {
@@ -91,17 +106,9 @@ extension AppModel {
         codeBrowser(for: project).open(path)
     }
 
-    func openFileFinder() {
-        guard let project = currentProject else { return }
-        let browser = codeBrowser(for: project)
-        isPageFinderShown = mainScreen != .tool(.code)
-        browser.presentFinder()
-        if browser.snapshot == nil { Task { await browser.refreshSources() } }
-    }
-
     func testRun(_ workflow: WorkflowDefinition, in project: Project) {
         guard let id = project.id else { return }
-        testRunRequest = TestRunRequest(project: id, workflow: workflow.id)
+        app.testRunRequest = TestRunRequest(project: ref(id), workflow: workflow.id)
         setTab(.workflows, for: project)
     }
 

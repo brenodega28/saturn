@@ -4,6 +4,7 @@ import SwiftUI
 
 struct WelcomeView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
 
     var body: some View {
         ScrollView {
@@ -81,12 +82,12 @@ struct WelcomeView: View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 6) {
                 SectionLabel("Recent projects").padding(.bottom, 4)
-                if model.recentProjects.isEmpty {
+                if workspace.recentProjects.isEmpty {
                     Text("Projects you open show up here.")
                         .foregroundStyle(Theme.tertiaryText)
                         .padding(.vertical, 10)
                 } else {
-                    ForEach(model.recentProjects) { project in
+                    ForEach(workspace.recentProjects) { project in
                         RecentProjectRow(project: project)
                     }
                 }
@@ -122,12 +123,13 @@ private struct LauncherButton: View {
 
 private struct RecentProjectRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var isHovered = false
 
     var body: some View {
         Button {
-            Task { await model.reopen(project) }
+            Task { await workspace.reopen(project) }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: project.isRemote ? "network" : "folder")
@@ -143,7 +145,7 @@ private struct RecentProjectRow: View {
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 8)
-                if let activity = model.recentActivity(of: project) {
+                if let activity = workspace.recentActivity(of: project) {
                     Text(activity.text)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(activity.isFailure ? Theme.danger : Theme.successText)
@@ -163,7 +165,7 @@ private struct RecentProjectRow: View {
             if !project.isRemote {
                 Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
             }
-            Button("Remove from Recents") { model.forgetRecent(project) }
+            Button("Remove from Recents") { workspace.forgetRecent(project) }
         }
     }
 }

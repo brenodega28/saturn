@@ -4,6 +4,7 @@ import SwiftUI
 
 struct NewAgentSheet: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.dismiss) private var dismiss
     let project: Project
 
@@ -44,12 +45,12 @@ struct NewAgentSheet: View {
         }
         .padding(26)
         .frame(width: 720)
-        .onAppear { model.reloadConfig(for: project) }
-        .task(id: project.path) { try? await model.loadSkillPlugins(for: project) }
+        .onAppear { workspace.reloadConfig(for: project) }
+        .task(id: project.path) { try? await workspace.loadSkillPlugins(for: project) }
     }
 
     private func skillsField() -> some View {
-        let installed = SkillLibrary.skills(in: project.filesRoot, pluginSkills: model.pluginSkills(for: project))
+        let installed = SkillLibrary.skills(in: project.filesRoot, pluginSkills: workspace.pluginSkills(for: project))
         let names = Set(installed.map(\.name))
         return VStack(alignment: .leading, spacing: 8) {
             Text("Skills").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
@@ -100,7 +101,7 @@ struct NewAgentSheet: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Workspace").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
-                WorkspaceLine(role: role, branch: model.state(for: project).branch)
+                WorkspaceLine(role: role, branch: workspace.state(for: project).branch)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -172,7 +173,7 @@ struct NewAgentSheet: View {
     }
 
     private func previewNames(for role: RoleDefinition) -> [String] {
-        model.agentNames(for: baseName(for: role), count: count, in: project)
+        workspace.agentNames(for: baseName(for: role), count: count, in: project)
     }
 
     private func baseName(for role: RoleDefinition) -> String {
@@ -186,7 +187,7 @@ struct NewAgentSheet: View {
         errorMessage = nil
         defer { isCreating = false }
         do {
-            try await model.spawnAgents(in: project, kind: kind, count: count, name: baseName(for: role), model: trimmedModel, skills: skills, pinned: isPinned, task: task)
+            try await workspace.spawnAgents(in: project, kind: kind, count: count, name: baseName(for: role), model: trimmedModel, skills: skills, pinned: isPinned, task: task)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -196,6 +197,7 @@ struct NewAgentSheet: View {
 
 struct InstallDefaultsCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     var body: some View {
@@ -212,7 +214,7 @@ struct InstallDefaultsCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Button("Add default workflows") { model.installDefaultConfig(in: project) }
+            Button("Add default workflows") { workspace.installDefaultConfig(in: project) }
                 .buttonStyle(.primaryPill)
                 .fixedSize()
         }

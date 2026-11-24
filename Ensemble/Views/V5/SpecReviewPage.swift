@@ -6,13 +6,14 @@ import WebKit
 
 struct SpecReviewPage: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let path: String
     let project: Project
     @State private var review: SpecReviewStatus?
 
     var body: some View {
         let _ = model.leadChatRevision
-        let document = model.specDocument(atPath: path)
+        let document = workspace.specDocument(atPath: path)
         Group {
             if let link = review?.url.flatMap(URL.init(string:)) {
                 SpecWebView(content: .link(link))
@@ -38,11 +39,11 @@ struct SpecReviewPage: View {
     }
 
     private func load() async {
-        guard let chatID = model.specChatID(atPath: path) else {
+        guard let chatID = workspace.specChatID(atPath: path) else {
             review = SpecReviewStatus(reason: "This spec isn’t linked to a chat, so it opens read-only.")
             return
         }
-        review = await model.specReview(chatID: chatID, in: project)
+        review = await workspace.specReview(chatID: chatID, in: project)
     }
 }
 

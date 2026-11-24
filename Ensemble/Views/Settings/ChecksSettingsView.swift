@@ -5,6 +5,7 @@ import SwiftUI
 
 struct ChecksSettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var suggestions: CheckSuggestions?
     @State private var report: HarnessReport?
@@ -12,7 +13,7 @@ struct ChecksSettingsView: View {
     @State private var healthError: String?
 
     var body: some View {
-        let checks = model.config(for: project).checks
+        let checks = workspace.config(for: project).checks
         SettingsPage("Checks", subtitle: "Commands Ensemble runs on every agent’s worktree before work reaches you: format, lint, type check, tests and scans. Failures go back to the agent, never to review.") {
             checksCard(checks)
             if let checks, !checks.protectedPaths.isEmpty {
@@ -35,7 +36,7 @@ struct ChecksSettingsView: View {
                     .buttonStyle(.pill)
                     .disabled(checks == nil)
                     .help("Edit the checks in your editor; Ensemble reloads them when you come back")
-                Button("Reload") { model.reloadConfig(for: project) }
+                Button("Reload") { workspace.reloadConfig(for: project) }
                     .buttonStyle(.pill)
             }
             if let checks, !checks.checks.isEmpty {
@@ -147,7 +148,7 @@ struct ChecksSettingsView: View {
         } catch {
             model.alert = AppAlert(title: "Couldn’t write \(ChecksConfig.fileName)", message: error.localizedDescription)
         }
-        model.reloadConfig(for: project)
+        workspace.reloadConfig(for: project)
     }
 
     private func openChecksFile() {
@@ -155,7 +156,7 @@ struct ChecksSettingsView: View {
     }
 
     private func runHealthCheck() {
-        guard let git = model.git(for: project) else {
+        guard let git = workspace.git(for: project) else {
             healthError = "git isn’t available."
             return
         }
@@ -164,7 +165,7 @@ struct ChecksSettingsView: View {
         Task {
             defer { isCheckingHealth = false }
             do {
-                report = try await model.send(ProjectCommands.CheckHarness(projectID: project.id ?? -1))
+                report = try await workspace.send(ProjectCommands.CheckHarness(projectID: project.id ?? -1))
             } catch {
                 healthError = error.localizedDescription
             }

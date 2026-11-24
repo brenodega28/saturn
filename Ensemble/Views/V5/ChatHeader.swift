@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ClosedChatBanner: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let chat: Chat
 
     var body: some View {
@@ -13,7 +14,7 @@ struct ClosedChatBanner: View {
                 .foregroundStyle(Tokens.text2)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
-            Button("Reopen") { model.reopenChat(chat) }.buttonStyle(SecondaryPillStyle())
+            Button("Reopen") { workspace.reopenChat(chat) }.buttonStyle(SecondaryPillStyle())
         }
         .padding(12)
         .background(Tokens.fill, in: .rect(cornerRadius: 12, style: .continuous))

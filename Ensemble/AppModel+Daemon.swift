@@ -4,7 +4,7 @@ import Foundation
 
 extension AppModel {
     func confirmStopLocalDaemon() {
-        let running = live.agents.values.filter(\.isRunning).count
+        let running = local.live.agents.values.filter(\.isRunning).count
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Stop the Ensemble daemon?"
@@ -16,7 +16,7 @@ extension AppModel {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         Task {
             do {
-                try await LocalDaemon.stop(connection)
+                try await LocalDaemon.stop(local.connection)
                 NSApp.terminate(nil)
             } catch {
                 self.alert = AppAlert(title: "Couldn’t stop the Ensemble daemon", message: error.localizedDescription)

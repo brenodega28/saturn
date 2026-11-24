@@ -21,13 +21,6 @@ extension AppModel {
         await openFolder(folder)
     }
 
-    func recentActivity(of project: Project) -> (text: String, isFailure: Bool)? {
-        guard let id = project.id, let runs = try? database.runs(projectId: id), let latest = runs.max(by: { $0.startedAt < $1.startedAt }) else { return nil }
-        let running = runs.count(where: \.isActive)
-        if running > 0 { return ("\(running) running", false) }
-        return latest.status == .failed ? ("last run failed", true) : nil
-    }
-
     func newProject() {
         let panel = NSSavePanel()
         panel.title = "New Project"
@@ -60,5 +53,14 @@ extension AppModel {
             return
         }
         await openFolder(root)
+    }
+}
+
+extension DaemonWorkspace {
+    func recentActivity(of project: Project) -> (text: String, isFailure: Bool)? {
+        guard let id = project.id, let runs = try? database.runs(projectId: id), let latest = runs.max(by: { $0.startedAt < $1.startedAt }) else { return nil }
+        let running = runs.count(where: \.isActive)
+        if running > 0 { return ("\(running) running", false) }
+        return latest.status == .failed ? ("last run failed", true) : nil
     }
 }

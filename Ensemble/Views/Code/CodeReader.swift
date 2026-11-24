@@ -4,6 +4,7 @@ import SwiftUI
 
 struct CodeReader: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let browser: CodeBrowser
     let project: Project
     var showsTabs = true
@@ -19,7 +20,7 @@ struct CodeReader: View {
                 let symbols = CodeOutline.symbols(lines, language: language)
                 let current = symbols.last { $0.line <= browser.focusLine }
                 FileBar(browser: browser, path: path, symbol: markdownMode == .rendered ? nil : current, markdownMode: markdownModeBinding(for: path, mode: markdownMode)) {
-                    model.setTab(.changes, for: project)
+                    workspace.setTab(.changes, for: project)
                 }
                 GeometryReader { proxy in
                     HStack(spacing: 0) {
@@ -28,7 +29,7 @@ struct CodeReader: View {
                             MarkdownDocumentView(text: lines.joined(separator: "\n"))
                         case .text(let lines):
                             CodeLines(browser: browser, path: path, lines: lines, language: language) {
-                                model.setTab(.changes, for: project)
+                                workspace.setTab(.changes, for: project)
                             }
                         case .binary:
                             unreadable("Binary file", "Ensemble shows text files only.")

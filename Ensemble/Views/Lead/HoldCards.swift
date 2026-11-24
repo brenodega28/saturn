@@ -3,6 +3,7 @@ import EnsembleUI
 import SwiftUI
 
 struct HoldCard: View {
+    @Environment(DaemonWorkspace.self) private var workspace
     let run: Run
     let project: Project
     let hold: RunHold
@@ -29,7 +30,7 @@ struct HoldCard: View {
                     secondary: ("Stop here", "Stop the run here"),
                     failureTitle: "Couldn’t resolve the loop limit",
                     reload: reload
-                ) { model, continueOnce in model.resolveLoopLimit(run, continueOnce: continueOnce) }
+                ) { model, continueOnce in workspace.resolveLoopLimit(run, continueOnce: continueOnce) }
             }
         case .runBudget:
             DecisionCard(title: hold.message, detail: timeline.holdItem?.body, isStuck: true) {
@@ -42,7 +43,7 @@ struct HoldCard: View {
                     secondary: ("Stop here", "Fail the run here"),
                     failureTitle: "Couldn’t resolve the budget",
                     reload: reload
-                ) { model, proceed in model.resolveBudget(run, proceed: proceed) }
+                ) { model, proceed in workspace.resolveBudget(run, proceed: proceed) }
             }
         case .gates:
             DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
@@ -51,7 +52,7 @@ struct HoldCard: View {
                     secondary: ("Ask for an alternative", "Send the findings back to the authors to fix"),
                     failureTitle: "Couldn’t resolve the gate findings",
                     reload: reload
-                ) { model, proceed in model.resolveGates(run, proceed: proceed) }
+                ) { model, proceed in workspace.resolveGates(run, proceed: proceed) }
             }
         case .stepFailed where hold.isChecksExhausted(in: run.snapshotWorkflow):
             ChecksExhaustedCard(run: run, project: project, rounds: run.checkRounds(at: hold.stepId, in: project), reload: reload)
@@ -62,7 +63,7 @@ struct HoldCard: View {
                     secondary: ("Stop here", "Stop the run here"),
                     failureTitle: "Couldn’t resolve the failure",
                     reload: reload
-                ) { model, retry in model.resolveFailure(run, retry: retry) }
+                ) { model, retry in workspace.resolveFailure(run, retry: retry) }
             }
         }
     }
@@ -120,6 +121,7 @@ private struct DecisionButtons: View {
 
 private struct RaiseBudgetControls: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let run: Run
     let reload: () -> Void
     @State private var budget: Double?
@@ -132,14 +134,14 @@ private struct RaiseBudgetControls: View {
                 .frame(width: 110)
                 .accessibilityLabel("New run budget in dollars")
             Button("Raise Budget") {
-                model.resolveBudget(run, proceed: true, raiseRunBudgetTo: budget)
+                workspace.resolveBudget(run, proceed: true, raiseRunBudgetTo: budget)
                 reload()
             }
             .buttonStyle(PillButtonStyle(.primary, height: 30))
             .disabled((budget ?? 0) <= run.costUSD)
             .help("Raise the run’s budget and continue")
             Button("Stop") {
-                model.resolveBudget(run, proceed: false)
+                workspace.resolveBudget(run, proceed: false)
                 reload()
             }
             .buttonStyle(PillButtonStyle(height: 30))
@@ -153,6 +155,7 @@ private struct RaiseBudgetControls: View {
 
 private struct ApprovalCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let run: Run
     let title: String
     let detail: String?
@@ -174,7 +177,7 @@ private struct ApprovalCard: View {
                     Button("Request changes") { isRequestingChanges = true }
                         .buttonStyle(SecondaryPillStyle())
                         .help("Send the work back with a note")
-                    Button("Open in Changes →") { model.openChanges(for: run) }
+                    Button("Open in Changes →") { workspace.openChanges(for: run) }
                         .buttonStyle(.plain)
                         .foregroundStyle(Tokens.link)
                         .font(.system(size: 13.5))
@@ -186,7 +189,7 @@ private struct ApprovalCard: View {
 
     private func resolve(approved: Bool) {
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        model.resolveApproval(run, approved: approved, note: trimmed.isEmpty ? nil : trimmed)
+        workspace.resolveApproval(run, approved: approved, note: trimmed.isEmpty ? nil : trimmed)
         reload()
     }
 }

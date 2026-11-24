@@ -8,21 +8,13 @@ extension AppModel {
     }
 
     func open(_ link: ChatLink) {
-        guard let task = try? database.task(id: link.requestID),
-              (try? database.leadRequests(projectId: task.projectId))?.contains(where: { $0.id == link.requestID }) == true,
-              let project = projectForLink(id: task.projectId) else {
+        let preferred = activePage.flatMap { workspace(of: $0.kind) }
+        let candidates = [preferred, local].compactMap(\.self) + orderedWorkspaces
+        guard let workspace = candidates.first(where: { $0.hasChat(link.requestID) }) else {
             alert = Self.missingChatAlert
             return
         }
-        guard let projectID = project.id else { return }
-        let messageIDs = Set(((try? database.leadMessages(taskId: link.requestID)) ?? []).compactMap(\.id))
-        chatHighlight = ChatLink(requestID: link.requestID, messageID: link.messageID.flatMap { messageIDs.contains($0) ? $0 : nil })
-        showRequest(id: link.requestID, inProjectID: projectID)
-    }
-
-    func copyLink(to task: Chat, message: LeadMessage? = nil) {
-        guard let requestID = task.id else { return }
-        copyToPasteboard(ChatLink(requestID: requestID, messageID: message?.id).url.absoluteString)
+        workspace.open(link)
     }
 
     var chatRequestForLink: Chat? {
@@ -30,7 +22,7 @@ extension AppModel {
     }
 
     func copyLinkToSelectedChat() {
-        if let request = chatRequestForLink { copyLink(to: request) }
+        if let request = chatRequestForLink { currentWorkspace.copyLink(to: request) }
     }
 
     var chatLinkOpenURLAction: OpenURLAction {
@@ -41,11 +33,34 @@ extension AppModel {
         }
     }
 
+}
+
+extension DaemonWorkspace {
+    func hasChat(_ chatID: Int64) -> Bool {
+        guard let task = try? database.task(id: chatID) else { return false }
+        return (try? database.leadRequests(projectId: task.projectId))?.contains { $0.id == chatID } == true
+    }
+
+    func open(_ link: ChatLink) {
+        guard let task = try? database.task(id: link.requestID), let project = projectForLink(id: task.projectId), let projectID = project.id else {
+            alert = AppModel.missingChatAlert
+            return
+        }
+        let messageIDs = Set(((try? database.leadMessages(taskId: link.requestID)) ?? []).compactMap(\.id))
+        app.chatHighlight = ChatLink(requestID: link.requestID, messageID: link.messageID.flatMap { messageIDs.contains($0) ? $0 : nil })
+        showRequest(id: link.requestID, inProjectID: projectID)
+    }
+
+    func copyLink(to task: Chat, message: LeadMessage? = nil) {
+        guard let requestID = task.id else { return }
+        copyToPasteboard(ChatLink(requestID: requestID, messageID: message?.id).url.absoluteString)
+    }
+
     private func projectForLink(id: Int64) -> Project? {
         if let project = project(withID: id) { return project }
         reloadProjects()
         if let project = project(withID: id) { return project }
-        guard let stored = try? database.project(id: id), FileManager.default.fileExists(atPath: stored.path) else { return nil }
+        guard !isRemote, let stored = try? database.project(id: id), FileManager.default.fileExists(atPath: stored.path) else { return nil }
         Task { await openFolder(stored.url) }
         return stored
     }

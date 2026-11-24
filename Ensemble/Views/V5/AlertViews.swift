@@ -66,6 +66,7 @@ enum AlertCopy {
 
 struct MenuBarStatus: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -77,7 +78,7 @@ struct MenuBarStatus: View {
                 ForEach(waiting) { summary in
                     Button("\(summary.chat.title) · \(summary.stage.title)") {
                         NSApp.activate()
-                        model.openChat(summary.chat)
+                        workspace.openChat(summary.chat)
                     }
                 }
             }

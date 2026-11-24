@@ -9,6 +9,7 @@ struct RootView: View {
     var body: some View {
         @Bindable var model = model
         content
+            .environment(model.local)
             .frame(minWidth: 960, minHeight: 620)
             .environment(\.openURL, model.chatLinkOpenURLAction)
             .task { await model.launch() }
@@ -41,13 +42,13 @@ struct RootView: View {
         if let environment = model.environment {
             if !environment.isReady {
                 FirstRunView(report: environment)
-            } else if model.openProjects.isEmpty {
+            } else if !model.hasOpenProjects {
                 WelcomeView()
-            } else if let project = model.pendingSetupProject {
-                ProgressView("Setting up \(project.name)…")
+            } else if let setup = model.pendingSetup {
+                ProgressView("Setting up \(setup.project.name)…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Backdrop())
-                    .task(id: project.id) { await model.applyRecommendedSetup(project) }
+                    .task(id: setup.workspace.ref(of: setup.project)) { await setup.workspace.applyRecommendedSetup(setup.project) }
             } else {
                 MainWindowView()
             }

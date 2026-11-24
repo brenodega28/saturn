@@ -21,11 +21,11 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .newItem) {
             RegistryMenuItems(menu: "File", context: context)
             Menu("Open Recent") {
-                ForEach(model.recentProjects) { project in
+                ForEach(model.local.recentProjects) { project in
                     Button(project.name) { Task { await model.openFolder(project.url) } }
                 }
             }
-            .disabled(model.recentProjects.isEmpty)
+            .disabled(model.local.recentProjects.isEmpty)
         }
 
         Group {
@@ -76,9 +76,10 @@ struct AppCommands: Commands {
                 .keyboardShortcut("w", modifiers: [.command, .option])
             Button("Create Debug Worktree") {
                 guard let project = model.selectedProject else { return }
+                let workspace = model.currentWorkspace
                 Task {
                     do {
-                        try await model.createWorktree(in: project, agent: model.nextDebugAgentName(in: project), slug: "scratch")
+                        try await workspace.createWorktree(in: project, agent: workspace.nextDebugAgentName(in: project), slug: "scratch")
                     } catch {
                         model.alert = AppAlert(title: "Couldn’t create worktree", message: error.localizedDescription)
                     }
@@ -87,7 +88,7 @@ struct AppCommands: Commands {
             .keyboardShortcut("n", modifiers: [.command, .option])
             .disabled(model.selectedProject == nil)
             Button("Recover Worktrees") {
-                Task { await model.refreshAllProjects() }
+                Task { for workspace in model.orderedWorkspaces { await workspace.refreshAllProjects() } }
             }
         }
     }

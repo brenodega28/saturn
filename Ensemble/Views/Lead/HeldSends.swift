@@ -58,22 +58,24 @@ extension View {
 
 private struct ReturnedSendRestorer: ViewModifier {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let target: PendingSendTarget?
     let restore: (PendingMessage) -> Void
 
     func body(content: Content) -> some View {
-        content.onChange(of: target.flatMap { model.pendingSends.returned[$0] }, initial: true) {
-            if let target, let message = model.pendingSends.takeReturned(for: target) { restore(message) }
+        content.onChange(of: target.flatMap { workspace.pendingSends.returned[$0] }, initial: true) {
+            if let target, let message = workspace.pendingSends.takeReturned(for: target) { restore(message) }
         }
     }
 }
 
 private struct HeldSendEscapeCanceller: ViewModifier {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let target: PendingSendTarget?
 
     func body(content: Content) -> some View {
-        let isHolding = target.map { !model.pendingSends.holds(for: $0).isEmpty } ?? false
+        let isHolding = target.map { !workspace.pendingSends.holds(for: $0).isEmpty } ?? false
         content.background {
             if isHolding {
                 EscapeKeyMonitor(onEscape: cancelLatest)
@@ -83,6 +85,6 @@ private struct HeldSendEscapeCanceller: ViewModifier {
 
     private func cancelLatest() -> Bool {
         guard !model.isPalettePresented, let target else { return false }
-        return model.pendingSends.cancelLatest(for: target)
+        return workspace.pendingSends.cancelLatest(for: target)
     }
 }

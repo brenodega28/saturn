@@ -10,9 +10,9 @@ struct RemoteProjectStatus: Equatable {
     var syncError: String?
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func remoteHost(_ destination: String) -> RemoteHost {
-        RemoteHost(client: SSHClient(destination: destination, runner: runner))
+        RemoteHost(client: SSHClient(destination: destination, runner: app.runner))
     }
 
     func git(for project: Project) -> GitClient? {
@@ -93,17 +93,13 @@ extension AppModel {
         )
     }
 
-    func openRemoteFolder(host destination: String, path: String) async throws {
-        try await openOnServer(destination, path: path)
-    }
-
     func reopen(_ project: Project) async {
         guard let destination = project.host else {
             await openFolder(project.url)
             return
         }
         do {
-            try await openRemoteFolder(host: destination, path: project.path)
+            try await app.openOnServer(destination, path: project.path)
         } catch {
             alert = AppAlert(title: "Couldn’t open \(project.name) on \(SSHDestination.displayName(destination))", message: error.localizedDescription)
         }
@@ -111,13 +107,13 @@ extension AppModel {
 
     func appRunnerHost(for project: Project) async throws -> RemoteAppHost {
         guard let destination = shellDestination(for: project) else { throw RemoteProjectUnsupported("Running the app on the host") }
-        let client = SSHClient(destination: destination, runner: runner)
+        let client = SSHClient(destination: destination, runner: app.runner)
         let info: RemoteHostInfo
-        if let known = remoteHostInfos[destination] {
+        if let known = app.remoteHostInfos[destination] {
             info = known
         } else {
             info = try await RemoteHost(client: client).probe()
-            remoteHostInfos[destination] = info
+            app.remoteHostInfos[destination] = info
         }
         return RemoteAppHost(client: client, home: info.home)
     }

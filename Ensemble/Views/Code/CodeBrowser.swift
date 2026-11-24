@@ -48,23 +48,23 @@ struct CodeFinderResult: Identifiable, Hashable {
 @MainActor
 @Observable
 final class CodeBrowser {
-    private static var browsers: [Int64: CodeBrowser] = [:]
+    private static var browsers: [ProjectRef: CodeBrowser] = [:]
     static let resultLimit = 50
 
-    static func shared(for project: Project, model: AppModel) -> CodeBrowser {
-        let key = project.id ?? -1
+    static func shared(for project: Project, workspace: DaemonWorkspace) -> CodeBrowser {
+        let key = workspace.ref(project.id ?? -1)
         if let browser = browsers[key] { return browser }
-        let browser = CodeBrowser(project: project, model: model)
+        let browser = CodeBrowser(project: project, workspace: workspace)
         browsers[key] = browser
         return browser
     }
 
-    static func standalone(for project: Project, model: AppModel) -> CodeBrowser {
-        CodeBrowser(project: project, model: model)
+    static func standalone(for project: Project, workspace: DaemonWorkspace) -> CodeBrowser {
+        CodeBrowser(project: project, workspace: workspace)
     }
 
     let project: Project
-    @ObservationIgnored private unowned let model: AppModel
+    @ObservationIgnored private unowned let workspace: DaemonWorkspace
 
     private(set) var sources: [CodeSource] = []
     private(set) var source: CodeSource?
@@ -90,13 +90,13 @@ final class CodeBrowser {
     private var fetching: Set<String> = []
     private var searchTask: Task<Void, Never>?
 
-    private init(project: Project, model: AppModel) {
+    private init(project: Project, workspace: DaemonWorkspace) {
         self.project = project
-        self.model = model
+        self.workspace = workspace
     }
 
     func refreshSources() async {
-        sources = model.codeSources(for: project)
+        sources = workspace.codeSources(for: project)
         let current = sources.first { $0.id == source?.id } ?? sources.first
         if current != source || snapshot == nil {
             await select(current)
@@ -119,7 +119,7 @@ final class CodeBrowser {
     }
 
     func show(file absolutePath: String, line: Int? = nil) async {
-        sources = model.codeSources(for: project)
+        sources = workspace.codeSources(for: project)
         let path = (absolutePath as NSString).standardizingPath
         let match = sources
             .filter { path.hasPrefix(($0.root.path as NSString).standardizingPath + "/") }
@@ -131,18 +131,18 @@ final class CodeBrowser {
     }
 
     func reload() async {
-        guard let source, let workspace = model.codeWorkspace(for: source, in: project) else { return }
+        guard let source, let codeWorkspace = workspace.codeWorkspace(for: source, in: project) else { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            let loaded = try await workspace.snapshot()
+            let loaded = try await codeWorkspace.snapshot()
             guard source.id == self.source?.id else { return }
             snapshot = loaded
             tree = CodeTree(files: loaded.files)
             loadError = nil
             documents = [:]
             symbolIndex = nil
-            pins = Dictionary(grouping: model.codePins(for: source), by: \.file)
+            pins = Dictionary(grouping: workspace.codePins(for: source), by: \.file)
             tabs = tabs.filter { loaded.files.contains($0) }
             if let activePath, !loaded.files.contains(activePath) { self.activePath = tabs.first }
             if expanded.isEmpty { expanded = Self.directoriesToExpand(loaded) }
@@ -227,11 +227,11 @@ final class CodeBrowser {
 
     private func fetch(_ path: String) {
         guard !fetching.contains(path) else { return }
-        let source = source ?? model.codeSources(for: project).first
-        guard let source, let workspace = model.codeWorkspace(for: source, in: project) else { return }
+        let source = source ?? workspace.codeSources(for: project).first
+        guard let source, let codeWorkspace = workspace.codeWorkspace(for: source, in: project) else { return }
         fetching.insert(path)
         Task {
-            let loaded = await workspace.loadDocument(path)
+            let loaded = await codeWorkspace.loadDocument(path)
             fetching.remove(path)
             guard source.id == (self.source ?? source).id else { return }
             documents[path] = loaded
@@ -263,7 +263,7 @@ final class CodeBrowser {
     private func scheduleTextSearch() {
         searchTask?.cancel()
         let query = finderQuery
-        guard let source, let files = snapshot?.files, let workspace = model.codeWorkspace(for: source, in: project),
+        guard let source, let files = snapshot?.files, let codeWorkspace = workspace.codeWorkspace(for: source, in: project),
               query.trimmingCharacters(in: .whitespaces).count >= 2 else {
             textHits = []
             return
@@ -271,7 +271,7 @@ final class CodeBrowser {
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled else { return }
-            let hits = await workspace.search(query, in: files, limit: Self.resultLimit)
+            let hits = await codeWorkspace.search(query, in: files, limit: Self.resultLimit)
             guard !Task.isCancelled else { return }
             self?.textHits = hits
         }

@@ -13,7 +13,7 @@ struct RequestThreadData {
     var leadName: String
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func leadRole(in project: Project) -> RoleDefinition {
         config(for: project).lead
     }
@@ -57,8 +57,8 @@ extension AppModel {
         if selectedAgent(in: project) == nil { select(nil, in: project) }
         guard let projectID = project.id else { return }
         let next = LeadRequest.partition(leadRequests(in: project)).open.first { $0.id != task.id }
-        if let page = pages.page(showing: chatID) {
-            pages.replace(page.id, with: .chat(chatID: next?.id, projectID: projectID))
+        if let page = pages.page(showing: chatID, on: id) {
+            pages.replace(page.id, with: .chat(chatID: next?.id, project: ref(projectID)))
         } else if leadSelections[projectID] == .request(chatID) {
             leadSelections[projectID] = next?.id.map(LeadSelection.request) ?? .newRequest
         }
@@ -89,8 +89,8 @@ extension AppModel {
 
     func adoptNewChat(_ request: Chat) {
         guard let id = request.id else { return }
-        if let page = pages.pages.first(where: { $0.kind == .chat(chatID: nil, projectID: request.projectId) }) {
-            pages.replace(page.id, with: .chat(chatID: id, projectID: request.projectId))
+        if let page = pages.pages.first(where: { $0.kind == .chat(chatID: nil, project: ref(request.projectId)) }) {
+            pages.replace(page.id, with: .chat(chatID: id, project: ref(request.projectId)))
         } else if let project = project(withID: request.projectId), selectedRequest(in: project) == nil {
             showRequest(request)
         }
@@ -303,7 +303,7 @@ extension AppModel {
     }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func runGroupDescription(_ run: Run) -> (workflow: String?, step: String?) {
         let live = run
         return (runWorkflow(live)?.displayName ?? live.workflow, live.isActive ? currentStepTitle(of: live) : live.status.label)

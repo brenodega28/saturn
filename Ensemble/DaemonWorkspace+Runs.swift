@@ -15,14 +15,14 @@ struct RunDetailSnapshot {
     var hold: RunHold? { state.hold }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func openRunDetail(_ run: Run) {
         guard let runID = run.id else { return }
         openRunDetail(runID: runID, in: run.projectId)
     }
 
     func openRunDetail(runID: Int64, in projectID: Int64) {
-        showPage(.run(runID))
+        showPage(.run(runID, daemon: id))
     }
 
     func runDetailID(in project: Project) -> Int64? {
@@ -30,7 +30,7 @@ extension AppModel {
     }
 
     func closeRunDetail(in project: Project) {
-        guard let page = activePage, case .run = page.kind else { return }
+        guard let page = app.activePage, case .run = page.kind else { return }
         pages.close(page.id)
     }
 
@@ -41,7 +41,7 @@ extension AppModel {
     func openAgentSession(_ agent: Agent, in project: Project) {
         guard let projectID = project.id, let agentID = agent.id else { return }
         selectedAgents[projectID] = agentID
-        showPage(.agent(agentID))
+        showPage(.agent(agentID, daemon: id))
     }
 
     func liveRun(id: Int64) -> Run? {

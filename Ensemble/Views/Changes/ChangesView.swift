@@ -5,6 +5,7 @@ import SwiftUI
 
 struct ChangesView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var store = ChangesStore()
 
@@ -17,25 +18,25 @@ struct ChangesView: View {
     }
 
     private var requestedRunID: Int64? {
-        project.id.flatMap { model.changesRunSelections[$0] }
+        project.id.flatMap { workspace.changesRunSelections[$0] }
     }
 
     @ViewBuilder
     private var reviewContent: some View {
-        let runs = model.reviewableRuns(in: project)
+        let runs = workspace.reviewableRuns(in: project)
         if let run = store.selectedRun(from: runs) {
             content(run: run, runs: runs)
-                .task(id: reloadKey(run)) { await store.load(run, in: project, model: model) }
+                .task(id: reloadKey(run)) { await store.load(run, in: project, workspace: workspace) }
                 .task(id: run.id) { await observePins(of: run) }
         } else {
             EmptyState("Nothing to review", message: "Diffs across a run’s branches and the pins agents flag for you appear here before anything reaches main. Ask the Lead in a chat to start a run.") {
-                Button("New Chat") { model.newChat(in: project) }.buttonStyle(.pill)
+                Button("New Chat") { workspace.newChat(in: project) }.buttonStyle(.pill)
             }
         }
     }
 
     private func reloadKey(_ run: Run) -> String {
-        [run.id.map(String.init), run.currentStep, run.status.rawValue, model.connection.waitingReason(runID: run.id ?? -1)?.reason.rawValue]
+        [run.id.map(String.init), run.currentStep, run.status.rawValue, workspace.connection.waitingReason(runID: run.id ?? -1)?.reason.rawValue]
             .map { $0 ?? "-" }
             .joined(separator: "|")
     }
@@ -43,23 +44,23 @@ struct ChangesView: View {
     private func observePins(of run: Run) async {
         guard let id = run.id else { return }
         do {
-            for try await pins in model.database.pinUpdates(runId: id) where store.selectedRunID == id || store.selectedRunID == nil {
+            for try await pins in workspace.database.pinUpdates(runId: id) where store.selectedRunID == id || store.selectedRunID == nil {
                 store.pins = pins
             }
         } catch {
-            store.pins = (try? model.database.pins(runId: id)) ?? []
+            store.pins = (try? workspace.database.pins(runId: id)) ?? []
         }
     }
 
     private func content(run: Run, runs: [Run]) -> some View {
-        let agents = model.agents(inRun: run)
+        let agents = workspace.agents(inRun: run)
         let context = ReviewContext(
             project: project,
             agentsByID: Dictionary(agents.compactMap { agent in agent.id.map { ($0, agent) } }, uniquingKeysWith: { first, _ in first }),
-            holdsApproval: model.holdsForApproval(run),
+            holdsApproval: workspace.holdsForApproval(run),
             appearance: { id in
                 guard let id, let agent = agents.first(where: { $0.id == id }) else { return .claude }
-                return RoleAppearance(role: model.role(for: agent, in: project))
+                return RoleAppearance(role: workspace.role(for: agent, in: project))
             }
         )
         return VStack(alignment: .leading, spacing: 14) {
@@ -94,12 +95,12 @@ struct ChangesView: View {
         } else if let changeSet = store.changeSet, changeSet.branches.isEmpty {
             EmptyState("No code changes yet", message: "This run hasn’t started any coding agents. Their branches show up here as soon as they begin work.")
         } else {
-            let reviews = model.reviews(for: run)
+            let reviews = workspace.reviews(for: run)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     if let changeSet = store.changeSet {
                         ConflictBanner(changeSet: changeSet, run: run) {
-                            Task { await store.load(run, in: project, model: model) }
+                            Task { await store.load(run, in: project, workspace: workspace) }
                         }
                     }
                     if let gates = store.gates, !gates.findings.isEmpty {
@@ -131,6 +132,7 @@ struct ChangesView: View {
 
 struct ChangesToolbar: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let runs: [Run]
     let selected: Run
@@ -168,7 +170,7 @@ struct ChangesToolbar: View {
             Text("Run").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
             ForEach(chipRuns) { run in
                 ChipButton(isSelected: run.id == selected.id, action: { store.select(run, replacing: selected) }) {
-                    StatusDot(model.statusColor(of: run))
+                    StatusDot(workspace.statusColor(of: run))
                     Text(run.reviewTitle).fontWeight(.semibold).lineLimit(1)
                     Text(run.reviewMeta).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
                 }
@@ -209,9 +211,9 @@ struct ChangesToolbar: View {
             ForEach(store.codingAgents) { agent in
                 ChipButton(isSelected: store.agentFilter == agent.id, height: 30, action: { store.agentFilter = agent.id }) {
                     AgentAvatar(size: 20, appearance: context.appearance(agent.id)).shadow(radius: 0)
-                    Text(model.displayName(of: agent, in: project))
+                    Text(workspace.displayName(of: agent, in: project))
                 }
-                .help("Only show \(model.displayName(of: agent, in: project))’s branch")
+                .help("Only show \(workspace.displayName(of: agent, in: project))’s branch")
             }
         }
         .font(.system(size: 12))
@@ -223,7 +225,7 @@ struct ChangesToolbar: View {
                 .fixedSize()
                 .help("Diff layout")
             Button {
-                Task { await store.load(selected, in: project, model: model) }
+                Task { await store.load(selected, in: project, workspace: workspace) }
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .frame(width: 30, height: 30)
@@ -262,6 +264,7 @@ struct ChipButton<Label: View>: View {
 
 struct ConflictBanner: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let changeSet: RunChangeSet
     let run: Run
     let reload: () -> Void
@@ -305,7 +308,7 @@ struct ConflictBanner: View {
                         .foregroundStyle(Theme.warning)
                 }
                 ForEach(failures) { branch in
-                    Text("Couldn’t read \(model.displayName(of: branch.agent))’s branch \(branch.branch): \(branch.error ?? "")")
+                    Text("Couldn’t read \(workspace.displayName(of: branch.agent))’s branch \(branch.branch): \(branch.error ?? "")")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.warning)
                         .fixedSize(horizontal: false, vertical: true)
@@ -321,16 +324,16 @@ struct ConflictBanner: View {
     @ViewBuilder
     private func conflictActions(_ conflict: MergeConflict) -> some View {
         Button("Ask \(owner(of: conflict.branch)) to combine") {
-            perform { name in "\(name) is merging the branches and resolving the conflict." } action: { try await model.send(RunCommands.AskToCombine(runID: run.id ?? -1, conflict: conflict)) }
+            perform { name in "\(name) is merging the branches and resolving the conflict." } action: { try await workspace.send(RunCommands.AskToCombine(runID: run.id ?? -1, conflict: conflict)) }
         }
         .buttonStyle(PillButtonStyle(.primary, height: 28))
         .help("Merge the other side into \(conflict.branch) and send its author the conflict to resolve")
         Button("Keep \(owner(of: conflict.branch))’s") {
-            perform { _ in "Kept \(conflict.branch)’s version." } action: { try await model.send(RunCommands.KeepBranch(runID: run.id ?? -1, winner: conflict.branch, conflict: conflict)); return "" }
+            perform { _ in "Kept \(conflict.branch)’s version." } action: { try await workspace.send(RunCommands.KeepBranch(runID: run.id ?? -1, winner: conflict.branch, conflict: conflict)); return "" }
         }
         .buttonStyle(PillButtonStyle(height: 28))
         Button("Keep \(conflict.otherIsBase ? conflict.other : owner(of: conflict.other))’s") {
-            perform { _ in "Kept \(conflict.other)’s version." } action: { try await model.send(RunCommands.KeepBranch(runID: run.id ?? -1, winner: conflict.other, conflict: conflict)); return "" }
+            perform { _ in "Kept \(conflict.other)’s version." } action: { try await workspace.send(RunCommands.KeepBranch(runID: run.id ?? -1, winner: conflict.other, conflict: conflict)); return "" }
         }
         .buttonStyle(PillButtonStyle(height: 28))
         Button("Open in Merge Tool") {
@@ -338,10 +341,10 @@ struct ConflictBanner: View {
             Task {
                 defer { busy = false }
                 do {
-                    let staged = try await model.send(RunCommands.StageForMergeTool(runID: run.id ?? -1, conflict: conflict))
+                    let staged = try await workspace.send(RunCommands.StageForMergeTool(runID: run.id ?? -1, conflict: conflict))
                     let worktree = URL(fileURLWithPath: staged.worktree, isDirectory: true)
-                    if let builder = model.agents(inRun: run).first(where: { $0.worktreeURL?.path == staged.worktree }), model.isRemote(builder) {
-                        model.openRemoteShell(at: worktree, forAgent: builder)
+                    if let builder = workspace.agents(inRun: run).first(where: { $0.worktreeURL?.path == staged.worktree }), workspace.isRemote(builder) {
+                        workspace.openRemoteShell(at: worktree, forAgent: builder)
                     } else if let editor = ExternalApp.installed(ExternalApp.editorCandidates).first {
                         editor.open(worktree)
                     } else {
@@ -358,7 +361,7 @@ struct ConflictBanner: View {
     }
 
     private func owner(of branch: String) -> String {
-        changeSet.branches.first { $0.branch == branch }.map { model.displayName(of: $0.agent) } ?? branch
+        changeSet.branches.first { $0.branch == branch }.map { workspace.displayName(of: $0.agent) } ?? branch
     }
 
     private func perform(_ message: @escaping (String) -> String, action: @escaping () async throws -> String) {

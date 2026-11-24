@@ -5,6 +5,7 @@ import SwiftUI
 
 struct ChecksExhaustedCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let run: Run
     let project: Project
     let rounds: Int
@@ -13,8 +14,8 @@ struct ChecksExhaustedCard: View {
     @State private var guidance = ""
 
     var body: some View {
-        let builders = model.checkBuilders(of: run, in: project)
-        let names = builders.map { model.displayName(of: $0.agent, in: project) }
+        let builders = workspace.checkBuilders(of: run, in: project)
+        let names = builders.map { workspace.displayName(of: $0.agent, in: project) }
         VStack(alignment: .leading, spacing: 10) {
             Label("Checks still failing after \(rounds) round\(rounds == 1 ? "" : "s")", systemImage: "tray.full")
                 .font(.system(size: 14, weight: .semibold))
@@ -36,18 +37,18 @@ struct ChecksExhaustedCard: View {
                     Button("Give Guidance") { isGivingGuidance = true }
                         .buttonStyle(PillButtonStyle(.primary, height: 30))
                         .help("Tell the agents what to try, then run the checks again")
-                    Button("Take Over") { model.takeOver(builders.first) }
+                    Button("Take Over") { workspace.takeOver(builders.first) }
                         .buttonStyle(PillButtonStyle(height: 30))
                         .disabled(builders.first?.agent.worktreeURL == nil)
                         .help("Open the worktree in Terminal and fix it yourself")
                     Button("Retry Once More") {
-                        model.resolveFailure(run, retry: true)
+                        workspace.resolveFailure(run, retry: true)
                         reload()
                     }
                     .buttonStyle(PillButtonStyle(height: 30))
                     .help("Give the agents another round of check results")
                     Button("End, Keep Branch") {
-                        model.resolveFailure(run, retry: false)
+                        workspace.resolveFailure(run, retry: false)
                         reload()
                     }
                     .buttonStyle(PillButtonStyle(height: 30))
@@ -65,7 +66,7 @@ struct ChecksExhaustedCard: View {
     private func sendGuidance() {
         let note = guidance.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !note.isEmpty else { return }
-        model.giveChecksGuidance(note, run: run, in: project)
+        workspace.giveChecksGuidance(note, run: run, in: project)
         guidance = ""
         isGivingGuidance = false
         reload()
@@ -79,7 +80,7 @@ extension Run {
     }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func exhaustedChecksRun(for session: LiveAgentSession) -> Run? {
         guard let runID = session.agent.runId, !session.agent.readOnly, let hold = connection.holds[runID],
               let run = (try? database.run(id: runID)) ?? nil,

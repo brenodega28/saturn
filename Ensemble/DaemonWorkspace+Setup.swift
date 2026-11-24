@@ -2,13 +2,21 @@ import EnsembleCore
 import Foundation
 
 extension AppModel {
+    var pendingSetup: (workspace: DaemonWorkspace, project: Project)? {
+        guard case .project(let ref) = selection, let workspace = workspace(for: ref.daemon),
+              let project = workspace.project(withID: ref.id), workspace.isPendingSetup(project) else { return nil }
+        return (workspace, project)
+    }
+}
+
+extension DaemonWorkspace {
     func needsSetup(_ project: Project) -> Bool {
         !project.isRemote && !hasConfig(project)
     }
 
-    var pendingSetupProject: Project? {
-        guard let project = selectedProject, let id = project.id, needsSetup(project) else { return nil }
-        return setupAttempts.contains(id) && !setupsInFlight.contains(id) ? nil : project
+    func isPendingSetup(_ project: Project) -> Bool {
+        guard let id = project.id, needsSetup(project) else { return false }
+        return !setupAttempts.contains(id) || setupsInFlight.contains(id)
     }
 
     func applyRecommendedSetup(_ project: Project) async {
@@ -30,7 +38,7 @@ extension AppModel {
         }
         updateSettings(plan.settings(updating: project.settings), for: project)
         reloadConfig(for: project)
-        selection = .project(id)
+        app.selection = .project(ref(id))
         showChat(in: project)
     }
 }

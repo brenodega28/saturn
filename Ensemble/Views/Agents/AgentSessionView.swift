@@ -4,6 +4,7 @@ import SwiftUI
 
 struct AgentSessionView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let session: LiveAgentSession
     let project: Project
     @AppStorage("preferredEditor", store: AppDefaults.store) private var preferredEditor = ""
@@ -14,7 +15,7 @@ struct AgentSessionView: View {
             header
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 12) {
-                    if let run = model.exhaustedChecksRun(for: session), let hold = run.id.flatMap({ model.connection.holds[$0] }) {
+                    if let run = workspace.exhaustedChecksRun(for: session), let hold = run.id.flatMap({ workspace.connection.holds[$0] }) {
                         ChecksExhaustedCard(run: run, project: project, rounds: run.checkRounds(at: hold.stepId, in: project))
                     }
                     StatusBanner(session: session)
@@ -42,7 +43,7 @@ struct AgentSessionView: View {
         return HStack(alignment: .center, spacing: 14) {
             if !isInWorkbench {
                 Button {
-                    model.select(nil, in: project)
+                    workspace.select(nil, in: project)
                 } label: {
                     Image(systemName: "chevron.left").frame(width: 28, height: 28).contentShape(.rect)
                 }
@@ -51,15 +52,15 @@ struct AgentSessionView: View {
                 .accessibilityLabel("Back to Agents")
             }
 
-            AgentAvatar(size: 40, appearance: RoleAppearance(role: model.role(for: agent, in: project)))
+            AgentAvatar(size: 40, appearance: RoleAppearance(role: workspace.role(for: agent, in: project)))
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 10) {
-                    Text(model.displayName(of: agent, in: project)).font(.system(size: 17, weight: .bold)).lineLimit(1)
-                    StatusLabel(status: model.displayStatus(of: agent), isQueued: session.isQueued, session: session).fixedSize()
+                    Text(workspace.displayName(of: agent, in: project)).font(.system(size: 17, weight: .bold)).lineLimit(1)
+                    StatusLabel(status: workspace.displayStatus(of: agent), isQueued: session.isQueued, session: session).fixedSize()
                 }
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
-                        Text("\(model.role(for: agent, in: project)?.name ?? "Builder")\(agent.skills.isEmpty ? "" : " · \(agent.skills.joined(separator: ", "))") ·\(session.transcript.session?.model ?? agent.model.modelTitle)")
+                        Text("\(workspace.role(for: agent, in: project)?.name ?? "Builder")\(agent.skills.isEmpty ? "" : " · \(agent.skills.joined(separator: ", "))") ·\(session.transcript.session?.model ?? agent.model.modelTitle)")
                         Text(agent.tokensAndCost).font(.system(size: 12, design: .monospaced))
                         Text("started \(Text(agent.createdAt, style: .relative)) ago")
                     }
@@ -155,19 +156,20 @@ private struct StatusBanner: View {
 
 private struct ReadOnlyNote: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let session: LiveAgentSession
     let project: Project
 
     var body: some View {
-        let chat = model.chat(of: session.agent)
+        let chat = workspace.chat(of: session.agent)
         HStack(spacing: 10) {
-            Text("Workers take instructions from the Lead. To change what \(model.displayName(of: session.agent, in: project)) does, tell the Lead in the chat.")
+            Text("Workers take instructions from the Lead. To change what \(workspace.displayName(of: session.agent, in: project)) does, tell the Lead in the chat.")
                 .font(.system(size: 13))
                 .foregroundStyle(Tokens.text2)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
             if let chat {
-                Button("Open the chat") { model.openChat(chat) }.buttonStyle(SecondaryPillStyle())
+                Button("Open the chat") { workspace.openChat(chat) }.buttonStyle(SecondaryPillStyle())
             }
         }
         .padding(12)

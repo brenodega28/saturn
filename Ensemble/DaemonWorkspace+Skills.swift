@@ -9,7 +9,7 @@ enum SkillPluginAvailability: Error, LocalizedError {
     }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func pluginSkills(for project: Project) -> Set<String> {
         Set(project.id.flatMap { skillPlugins[$0] }?.flatMap(\.skills) ?? [])
     }
@@ -37,7 +37,7 @@ extension AppModel {
     }
 
     private func skillPluginInstaller() throws -> SkillPluginInstaller {
-        guard let claude = live.environment.claudePath.map(URL.init(fileURLWithPath:)) ?? locator.locate("claude") else { throw SkillPluginAvailability.claudeMissing }
-        return SkillPluginInstaller(claude: claude, runner: runner)
+        guard let claude = live.environment.claudePath.map(URL.init(fileURLWithPath:)) ?? app.locator.locate("claude") else { throw SkillPluginAvailability.claudeMissing }
+        return SkillPluginInstaller(claude: claude, runner: app.runner)
     }
 }

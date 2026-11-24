@@ -72,7 +72,7 @@ final class ChangesStore {
         runs.first { $0.id == selectedRunID } ?? runs.first
     }
 
-    func load(_ run: Run, in project: Project, model: AppModel) async {
+    func load(_ run: Run, in project: Project, workspace model: DaemonWorkspace) async {
         isLoading = true
         defer { isLoading = false }
         let loaded = await model.loadChanges(for: run, in: project)

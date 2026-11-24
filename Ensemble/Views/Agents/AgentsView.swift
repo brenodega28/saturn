@@ -59,12 +59,13 @@ struct AgentGroup: Identifiable {
 
 struct AgentsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let worktreeCount: Int
     let openWorktrees: () -> Void
 
     var body: some View {
-        let sessions = model.agentSessions(in: project)
+        let sessions = workspace.agentSessions(in: project)
         if sessions.isEmpty {
             EmptyState("No agents yet", message: "Workflows start agents when a run needs them. You can also spawn them yourself: pick a builder or a checker, its model and skills; each builder works in its own worktree.") {
                 Button("New Agent") { model.isNewAgentPresented = true }.buttonStyle(.primaryPill)
@@ -80,7 +81,7 @@ struct AgentsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     summary(sessions)
-                    ForEach(AgentGroup.make(sessions, runs: model.runs(for: sessions), idleCleanupMinutes: project.settings.idleCleanupMinutes, describe: model.runGroupDescription)) { group in
+                    ForEach(AgentGroup.make(sessions, runs: workspace.runs(for: sessions), idleCleanupMinutes: project.settings.idleCleanupMinutes, describe: workspace.runGroupDescription)) { group in
                         section(group)
                     }
                 }
@@ -92,7 +93,7 @@ struct AgentsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 if case .run(let runID) = group.kind {
-                    let needsYou = model.liveRun(id: runID).map(model.runNeedsYou) == true
+                    let needsYou = workspace.liveRun(id: runID).map(workspace.runNeedsYou) == true
                     HStack(spacing: 8) {
                         StatusDot(AppModel.statusColor(needsYou: needsYou, otherwise: Theme.success), size: 8)
                         Text(group.title).font(.system(size: 15, weight: .semibold))
@@ -132,7 +133,7 @@ struct AgentsView: View {
             }
             Spacer()
             if working + queued > 0 {
-                Button("Pause All") { model.pauseAllAgents(in: project) }
+                Button("Pause All") { workspace.pauseAllAgents(in: project) }
                     .buttonStyle(PillButtonStyle(height: 26))
                     .help("Pause every working or queued agent in \(project.name) (⇧⌘P)")
             }
@@ -146,6 +147,7 @@ struct AgentsView: View {
 
 private struct AgentCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let session: LiveAgentSession
     let project: Project
     let isDimmed: Bool
@@ -153,11 +155,11 @@ private struct AgentCard: View {
 
     var body: some View {
         let agent = session.agent
-        let role = model.role(for: agent, in: project)
-        let name = model.displayName(of: agent, in: project)
+        let role = workspace.role(for: agent, in: project)
+        let name = workspace.displayName(of: agent, in: project)
         VStack(alignment: .leading, spacing: 12) {
             Button {
-                model.select(session, in: project)
+                workspace.select(session, in: project)
             } label: {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
@@ -170,7 +172,7 @@ private struct AgentCard: View {
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 8)
-                        StatusLabel(status: model.displayStatus(of: agent), isQueued: session.isQueued, session: session)
+                        StatusLabel(status: workspace.displayStatus(of: agent), isQueued: session.isQueued, session: session)
                     }
                     Text(headline)
                         .font(.system(size: 13))
@@ -195,7 +197,7 @@ private struct AgentCard: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(name), \(session.isQueued ? "Queued" : model.displayStatus(of: agent).label)")
+            .accessibilityLabel("\(name), \(session.isQueued ? "Queued" : workspace.displayStatus(of: agent).label)")
             .accessibilityHint("Opens the agent session")
 
             HStack(spacing: 4) {
@@ -213,7 +215,7 @@ private struct AgentCard: View {
         .card()
         .opacity(isDimmed ? 0.75 : 1)
         .contextMenu {
-            Button("Open") { model.select(session, in: project) }
+            Button("Open") { workspace.select(session, in: project) }
             Button(agent.isPinned ? "Unpin" : "Pin") { session.togglePin() }
             if let worktree = agent.worktreeURL, !project.isRemote {
                 Button("Reveal Worktree in Finder") { NSWorkspace.shared.activateFileViewerSelecting([worktree]) }
@@ -224,14 +226,14 @@ private struct AgentCard: View {
         .confirmationDialog("Delete \(name)?", isPresented: $isConfirmingDelete) {
             if agent.readOnly {
                 Button("Delete Agent", role: .destructive) {
-                    Task { await model.deleteAgent(session, in: project, deleteBranch: false) }
+                    Task { await workspace.deleteAgent(session, in: project, deleteBranch: false) }
                 }
             } else {
                 Button("Delete Agent and Branch", role: .destructive) {
-                    Task { await model.deleteAgent(session, in: project, deleteBranch: true) }
+                    Task { await workspace.deleteAgent(session, in: project, deleteBranch: true) }
                 }
                 Button("Delete Agent, Keep Branch") {
-                    Task { await model.deleteAgent(session, in: project, deleteBranch: false) }
+                    Task { await workspace.deleteAgent(session, in: project, deleteBranch: false) }
                 }
             }
             Button("Cancel", role: .cancel) {}

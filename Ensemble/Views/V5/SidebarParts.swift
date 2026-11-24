@@ -35,7 +35,7 @@ struct NewChatPicker: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        let matches = NewChatFilter.match(model.openProjects, filter: filter)
+        let matches = NewChatFilter.match(model.allOpenProjects, name: \.project.name, filter: filter)
         VStack(alignment: .leading, spacing: 6) {
             Text("New chat in…").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.text2)
             TextField("Filter projects", text: $filter)
@@ -56,16 +56,17 @@ struct NewChatPicker: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, 6)
             }
-            ForEach(Array(matches.enumerated()), id: \.element.id) { index, project in
-                Button { start(project) } label: {
+            ForEach(Array(matches.enumerated()), id: \.offset) { index, match in
+                Button { start(match) } label: {
                     HStack(spacing: 10) {
-                        ProjectTile(project: project, size: 22)
+                        ProjectTile(project: match.project, size: 22)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(project.name).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Tokens.text)
-                            Text(project.isRemote ? project.location : (project.path as NSString).abbreviatingWithTildeInPath)
+                            Text(match.project.name).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Tokens.text)
+                            Text(match.project.isRemote ? match.project.location : (match.project.path as NSString).abbreviatingWithTildeInPath)
                                 .font(.system(size: 11.5)).foregroundStyle(Tokens.text2).lineLimit(1).truncationMode(.middle)
                         }
                         Spacer()
+                        MachineLabel(workspace: match.workspace)
                         if index == highlighted { Text("⏎").font(.system(size: 11)).foregroundStyle(Tokens.text3) }
                     }
                     .padding(.horizontal, 8)
@@ -89,97 +90,122 @@ struct NewChatPicker: View {
         .onAppear { isFocused = true }
     }
 
-    private func pick(_ matches: [Project]) {
+    private func pick(_ matches: [(workspace: DaemonWorkspace, project: Project)]) {
         guard matches.indices.contains(highlighted) else { return }
         start(matches[highlighted])
     }
 
-    private func start(_ project: Project) {
+    private func start(_ match: (workspace: DaemonWorkspace, project: Project)) {
         model.isNewChatPickerShown = false
-        model.startNewChat(in: project)
+        match.workspace.startNewChat(in: match.project)
     }
 }
 
 enum NewChatFilter {
     static func match(_ projects: [Project], filter: String) -> [Project] {
+        match(projects, name: \.name, filter: filter)
+    }
+
+    static func match<Item>(_ items: [Item], name: (Item) -> String, filter: String) -> [Item] {
         let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else { return projects }
-        let prefix = projects.filter { $0.name.lowercased().hasPrefix(needle) }
-        let other = projects.filter { !$0.name.lowercased().hasPrefix(needle) && $0.name.lowercased().contains(needle) }
+        guard !needle.isEmpty else { return items }
+        let prefix = items.filter { name($0).lowercased().hasPrefix(needle) }
+        let other = items.filter { !name($0).lowercased().hasPrefix(needle) && name($0).lowercased().contains(needle) }
         return prefix + other
+    }
+}
+
+struct MachineLabel: View {
+    let workspace: DaemonWorkspace
+    var size: CGFloat = 11
+
+    var body: some View {
+        if workspace.isRemote {
+            HStack(spacing: 3) {
+                Image(systemName: workspace.systemImage).font(.system(size: size - 1.5))
+                Text(workspace.displayName).lineLimit(1)
+            }
+            .font(.system(size: size))
+            .foregroundStyle(Tokens.text2)
+            .help("On \(workspace.displayName)")
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("On \(workspace.displayName)")
+        }
     }
 }
 
 struct ProjectCards: View {
     @Environment(AppModel.self) private var model
     let summaries: [ChatSummary]
-    @AppStorage("sidebar.openProject", store: AppDefaults.store) private var openProjectID = -1
+    @AppStorage("sidebar.openProjectRef", store: AppDefaults.store) private var openProject = ""
 
     var body: some View {
+        let workspaces = model.orderedWorkspaces
         VStack(alignment: .leading, spacing: 6) {
-            if model.connections.count > 1 {
-                FleetHeader(connection: model.connection, isActive: true)
-            }
-            ForEach(model.openProjects) { project in
-                ProjectCard(
-                    project: project,
-                    summaries: summaries.filter { $0.project.id == project.id },
-                    isOpen: openProjectID == Int(project.id ?? -2)
-                ) {
-                    openProjectID = openProjectID == Int(project.id ?? -2) ? -1 : Int(project.id ?? -1)
+            ForEach(workspaces) { workspace in
+                if workspaces.count > 1 {
+                    FleetHeader(workspace: workspace, isFirst: workspace.id == workspaces.first?.id)
                 }
-            }
-            Button("+ Add project") { model.isOpenPanelPresented = true }
-                .buttonStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(Tokens.link)
-                .frame(maxWidth: .infinity)
-                .frame(height: 38)
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tokens.hair2, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
-            ForEach(model.orderedConnections.filter { $0.id != model.connection.id }) { other in
-                FleetHeader(connection: other, isActive: false)
-                ForEach(model.projects(on: other)) { project in
-                    Button { model.open(project, on: other) } label: {
-                        HStack(spacing: 10) {
-                            ProjectTile(project: project, size: 22)
-                            Text(project.name).font(.system(size: 13.5, weight: .medium)).foregroundStyle(Tokens.text)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(height: 34)
-                        .contentShape(.rect)
+                ForEach(workspace.openProjects) { project in
+                    let key = Self.key(workspace, project)
+                    ProjectCard(
+                        project: project,
+                        summaries: summaries.filter { $0.daemon == workspace.id && $0.project.id == project.id },
+                        isOpen: openProject == key
+                    ) {
+                        openProject = openProject == key ? "" : key
                     }
-                    .buttonStyle(.plain)
-                    .help("Open \(project.name) on \(model.displayName(of: other))")
+                    .environment(workspace)
+                }
+                if workspace.isRemote {
+                    Button("+ Add project on \(workspace.displayName)") { model.isRemoteFolderPresented = true }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Tokens.link)
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                } else {
+                    Button("+ Add project") { model.isOpenPanelPresented = true }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Tokens.link)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 38)
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tokens.hair2, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
                 }
             }
         }
     }
+
+    private static func key(_ workspace: DaemonWorkspace, _ project: Project) -> String {
+        "\(workspace.id.uuidString)-\(project.id ?? -1)"
+    }
 }
 
 private struct FleetHeader: View {
-    @Environment(AppModel.self) private var model
-    let connection: DaemonConnection
-    let isActive: Bool
+    let workspace: DaemonWorkspace
+    let isFirst: Bool
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: connection.isRemote ? "server.rack" : "laptopcomputer").font(.system(size: 10))
-            Text(model.displayName(of: connection)).font(.system(size: 11.5, weight: .semibold))
-            if !connection.isConnected {
+            Image(systemName: workspace.systemImage).font(.system(size: 10))
+            Text(workspace.displayName).font(.system(size: 11.5, weight: .semibold))
+            if !workspace.isConnected {
                 Text("offline").font(.system(size: 10.5)).foregroundStyle(Tokens.text2)
             }
             Spacer()
         }
-        .foregroundStyle(isActive ? Tokens.text : Tokens.text2)
-        .padding(.top, isActive ? 0 : 8)
+        .foregroundStyle(workspace.isConnected ? Tokens.text : Tokens.text2)
+        .padding(.top, isFirst ? 0 : 8)
         .padding(.horizontal, 4)
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
 }
 
 private struct ProjectCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let summaries: [ChatSummary]
     let isOpen: Bool
@@ -217,10 +243,10 @@ private struct ProjectCard: View {
             if isOpen {
                 VStack(alignment: .leading, spacing: 1) {
                     section("Crew")
-                    item("Agents", symbol: "person.2", tool: .agents, badge: model.agentSessions(in: project).count, badgeColor: Tokens.text2)
+                    item("Agents", symbol: "person.2", tool: .agents, badge: workspace.agentSessions(in: project).count, badgeColor: Tokens.text2)
                     item("Workflows", symbol: "flowchart", tool: .workflows)
                     section("Review")
-                    item("Changes", symbol: "plus.forwardslash.minus", tool: .changes, badge: ProjectOutline.changesBadge(waiting: model.requests.items.filter { $0.projectId == project.id })?.count ?? 0, badgeColor: Tokens.need)
+                    item("Changes", symbol: "plus.forwardslash.minus", tool: .changes, badge: ProjectOutline.changesBadge(waiting: workspace.requests.items.filter { $0.projectId == project.id })?.count ?? 0, badgeColor: Tokens.need)
                     item("Source", symbol: "chevron.left.forwardslash.chevron.right", tool: .code)
                     item("Settings", symbol: "gearshape", tool: .settings)
                 }
@@ -232,13 +258,13 @@ private struct ProjectCard: View {
         .contextMenu {
             Button("Project settings") { open(.settings) }
             if project.isRemote {
-                Button("Copy SSH path") { model.copyToPasteboard("\(project.location):\(project.path)") }
+                Button("Copy SSH path") { workspace.copyToPasteboard("\(project.location):\(project.path)") }
             } else {
                 Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
             }
-            Button("New chat in this project") { model.startNewChat(in: project) }
+            Button("New chat in this project") { workspace.startNewChat(in: project) }
             Divider()
-            Button("Remove from Ensemble…", role: .destructive) { model.close(project) }
+            Button("Remove from Ensemble…", role: .destructive) { workspace.close(project) }
         }
     }
 
@@ -271,8 +297,7 @@ private struct ProjectCard: View {
     }
 
     private func open(_ tool: MainTool) {
-        model.selection = .project(project.id ?? -1)
-        model.open(tool)
+        workspace.open(tool, in: project)
     }
 }
 

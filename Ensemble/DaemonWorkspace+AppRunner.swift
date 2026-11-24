@@ -15,7 +15,7 @@ struct RunTarget: Identifiable, Hashable {
     var isMain: Bool { agent == nil }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func runTargets(in project: Project) -> [RunTarget] {
         let home = (project.path as NSString).abbreviatingWithTildeInPath
         let main = RunTarget(
@@ -80,10 +80,10 @@ extension AppModel {
         if let existing = appRunners[id] {
             runner = existing
         } else {
-            runner = AppRunner(projectId: id, log: activityLog, environment: [:])
+            runner = AppRunner(projectId: id, log: app.activityLog, environment: [:])
             appRunners[id] = runner
         }
-        runner.environment = AppRunner.environment(from: locator.environment())
+        runner.environment = AppRunner.environment(from: app.locator.environment())
         if project.isRemote || connection.isRemote {
             do {
                 runner.remote = try await appRunnerHost(for: project)
@@ -120,11 +120,11 @@ extension AppModel {
 
     func appOutput(in project: Project) -> [LogEntry] {
         guard let id = project.id else { return [] }
-        return activityLog.entries.filter { $0.source == AppRunner.logSource && $0.projectId == id }
+        return app.activityLog.entries.filter { $0.source == AppRunner.logSource && $0.projectId == id }
     }
 
     func clearAppOutput(in project: Project) {
-        activityLog.clear()
+        app.activityLog.clear()
     }
 
     func chatChecks(for chat: Chat, run: Run?) -> ChatChecks {

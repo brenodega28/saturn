@@ -4,6 +4,7 @@ import SwiftUI
 
 struct WorkflowsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var editor: WorkflowEditor?
     @State private var pendingAction: PendingAction?
@@ -18,7 +19,7 @@ struct WorkflowsView: View {
     }
 
     var body: some View {
-        let config = model.config(for: project)
+        let config = workspace.config(for: project)
         GeometryReader { proxy in
             let mode = WorkflowsLayoutMode(width: proxy.size.width)
             HStack(alignment: .top, spacing: WorkflowsLayoutMode.columnSpacing) {
@@ -26,7 +27,7 @@ struct WorkflowsView: View {
                     WorkflowSidebar(
                         config: config,
                         editor: editor,
-                        hasConfig: model.hasConfig(project),
+                        hasConfig: workspace.hasConfig(project),
                         project: project,
                         open: openFromList,
                         newBlank: { newBlank(config: config) },
@@ -55,14 +56,14 @@ struct WorkflowsView: View {
             openFirst(in: config)
             takeTestRunRequest(config: config)
         }
-        .onChange(of: model.testRunRequest) { takeTestRunRequest(config: model.config(for: project)) }
-        .onChange(of: model.workflowMenuAction, initial: true) { takeMenuAction(config: model.config(for: project)) }
+        .onChange(of: model.testRunRequest) { takeTestRunRequest(config: workspace.config(for: project)) }
+        .onChange(of: model.workflowMenuAction, initial: true) { takeMenuAction(config: workspace.config(for: project)) }
         .onChange(of: project.id) { _, _ in
             editor = nil
-            openFirst(in: model.config(for: project))
+            openFirst(in: workspace.config(for: project))
         }
         .onChange(of: editor.map(ObjectIdentifier.init), initial: true) {
-            if let id = project.id { model.workflowEditors[id] = editor }
+            if let id = project.id { workspace.workflowEditors[id] = editor }
         }
         .onChange(of: editor?.selection) { _, selection in
             isInspectorPanelOpen = selection != nil && selection != .workflow
@@ -112,7 +113,7 @@ struct WorkflowsView: View {
         WorkflowListMenu(
             config: config,
             editor: editor,
-            hasConfig: model.hasConfig(project),
+            hasConfig: workspace.hasConfig(project),
             open: openFromList,
             newBlank: { newBlank(config: config) },
             duplicate: { duplicate($0, config: config) },
@@ -121,15 +122,15 @@ struct WorkflowsView: View {
     }
 
     private func editorArea(_ editor: WorkflowEditor, config: ProjectConfig, mode: WorkflowsLayoutMode, height: CGFloat) -> some View {
-        let issues = model.workflowIssues(editor, config: config)
-        let runs = editor.saved.map { model.activeRuns(ofWorkflow: $0.id, in: project) } ?? []
+        let issues = workspace.workflowIssues(editor, config: config)
+        let runs = editor.saved.map { workspace.activeRuns(ofWorkflow: $0.id, in: project) } ?? []
         let inspector = WorkflowInspector(
             editor: editor,
             roles: config.roles,
             checks: config.checks?.checks ?? [],
             issues: issues,
             activeRuns: runs,
-            suggestedLabels: model.suggestedWorkflowLabels(config, project: project)
+            suggestedLabels: workspace.suggestedWorkflowLabels(config, project: project)
         )
         return VStack(alignment: .leading, spacing: 12) {
             header(editor, config: config, issueCount: issues.count, mode: mode)
@@ -300,7 +301,7 @@ struct WorkflowsView: View {
     }
 
     private func takeTestRunRequest(config: ProjectConfig) {
-        guard let request = model.testRunRequest, request.project == project.id, let workflow = config.workflow(request.workflow) else { return }
+        guard let request = model.testRunRequest, request.project == workspace.ref(of: project), let workflow = config.workflow(request.workflow) else { return }
         model.testRunRequest = nil
         confirmLeaving {
             open(workflow, isNew: false)
@@ -309,7 +310,7 @@ struct WorkflowsView: View {
     }
 
     private func takeMenuAction(config: ProjectConfig) {
-        guard let action = model.workflowMenuAction, action.project == project.id else { return }
+        guard let action = model.workflowMenuAction, action.project == workspace.ref(of: project) else { return }
         model.workflowMenuAction = nil
         switch action.kind {
         case .newWorkflow: newBlank(config: config)
@@ -330,14 +331,14 @@ struct WorkflowsView: View {
     }
 
     private func save(_ editor: WorkflowEditor) {
-        let config = model.config(for: project)
+        let config = workspace.config(for: project)
         var draft = editor.draft
         draft.name = draft.name.trimmingCharacters(in: .whitespaces)
         if editor.isNew {
             draft.id = ProjectConfigLoader.newWorkflowID(for: draft.name, existing: config.workflows)
         }
         do {
-            let written = try model.saveWorkflow(draft, comparedTo: editor.saved, note: editor.changeNote, in: project)
+            let written = try workspace.saveWorkflow(draft, comparedTo: editor.saved, note: editor.changeNote, in: project)
             editor.markSaved(written)
             editor.errorMessage = nil
         } catch {
@@ -349,13 +350,13 @@ struct WorkflowsView: View {
         guard let editor else { return }
         if editor.isNew {
             self.editor = nil
-            openFirst(in: model.config(for: project))
+            openFirst(in: workspace.config(for: project))
             return
         }
         do {
-            try model.deleteWorkflow(editor.draft.id, in: project)
+            try workspace.deleteWorkflow(editor.draft.id, in: project)
             self.editor = nil
-            openFirst(in: model.config(for: project))
+            openFirst(in: workspace.config(for: project))
         } catch {
             editor.errorMessage = "Couldn’t delete the workflow: \(error.localizedDescription)"
         }

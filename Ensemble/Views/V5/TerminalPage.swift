@@ -135,21 +135,22 @@ final class TerminalStore {
 
 struct TerminalPage: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let pageID: UUID
     let project: Project
     let directory: String
 
     var body: some View {
-        let session = model.terminals.session(for: pageID, launch: model.terminalLaunch(for: project, in: directory))
+        let session = model.terminals.session(for: pageID, launch: workspace.terminalLaunch(for: project, in: directory))
         VStack(spacing: 0) {
             PageHeader {
                 Image(systemName: "terminal").font(.system(size: 12)).accessibilityHidden(true)
-                Text(model.terminalPlace(directory, in: project)).font(Tokens.mono(12.5)).foregroundStyle(Tokens.text)
-                if let branch = model.branch(at: directory, in: project) {
+                Text(workspace.terminalPlace(directory, in: project)).font(Tokens.mono(12.5)).foregroundStyle(Tokens.text)
+                if let branch = workspace.branch(at: directory, in: project) {
                     Text("·")
                     Text(branch).font(Tokens.mono(12.5)).lineLimit(1).truncationMode(.middle)
                 }
-                if project.isRemote || model.connection.isRemote {
+                if project.isRemote || workspace.connection.isRemote {
                     Text("SSH")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(Tokens.build)
@@ -247,7 +248,7 @@ struct PageHeader<Content: View>: View {
     }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func terminalLaunch(for project: Project, in directory: String) -> TerminalLaunch {
         if let host = project.host ?? (connection.isRemote ? connection.destination : nil) {
             return .remote(host: host, directory: directory)

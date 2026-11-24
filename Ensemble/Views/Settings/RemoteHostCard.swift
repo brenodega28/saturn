@@ -4,10 +4,11 @@ import SwiftUI
 
 struct RemoteHostCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     var body: some View {
-        let status = model.remoteStatus(for: project)
+        let status = workspace.remoteStatus(for: project)
         let destination = project.host.map(SSHDestination.displayName) ?? ""
         let tunnel: Int? = nil
         VStack(alignment: .leading, spacing: 12) {
@@ -45,7 +46,7 @@ struct RemoteHostCard: View {
                     .foregroundStyle(Theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let recovery = model.state(for: project).recovery, !recovery.isClean {
+            if let recovery = workspace.state(for: project).recovery, !recovery.isClean {
                 Text(recoverySummary(recovery)).font(.system(size: 12)).foregroundStyle(Theme.warning)
             }
             ForEach([status.syncError, status.error].compactMap(\.self), id: \.self) { message in

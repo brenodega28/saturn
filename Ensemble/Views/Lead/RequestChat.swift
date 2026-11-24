@@ -4,6 +4,7 @@ import SwiftUI
 
 struct RequestChat: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let task: Chat
     let project: Project
     @State private var data: RequestThreadData?
@@ -13,15 +14,15 @@ struct RequestChat: View {
     @State private var revealCount = 0
 
     var body: some View {
-        let session = model.leadSession(for: task)
+        let session = workspace.leadSession(for: task)
         let isThinking = session.map { $0.isRunning || $0.isQueued } ?? false
-        let working = model.workingSessions(for: task)
+        let working = workspace.workingSessions(for: task)
         thread(isThinking: isThinking, session: session, working: working)
-            .onChange(of: data?.thread.items.count, initial: true) { model.markViewed(task) }
+            .onChange(of: data?.thread.items.count, initial: true) { workspace.markViewed(task) }
     }
 
     private func thread(isThinking: Bool, session: LiveAgentSession?, working: [LiveAgentSession]) -> some View {
-        let held = model.heldSends(for: model.leadSendTarget(for: task, in: project))
+        let held = workspace.heldSends(for: workspace.leadSendTarget(for: task, in: project))
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
@@ -41,7 +42,7 @@ struct RequestChat: View {
                         }
                     }
                     ForEach(held) { send in
-                        RequestBubble(held: send, onCancel: model.cancelHeldSend)
+                        RequestBubble(held: send, onCancel: workspace.cancelHeldSend)
                             .id(send.id.uuidString)
                     }
                     WorkerRoster(chat: task, project: project)
@@ -83,7 +84,7 @@ struct RequestChat: View {
             }
         }
         .onChange(of: model.leadChatRevision) { reload() }
-        .onChange(of: model.connection.revision) { reload() }
+        .onChange(of: workspace.connection.revision) { reload() }
     }
 
     private static let thinkingID = "thinking"
@@ -127,9 +128,9 @@ struct RequestChat: View {
     }
 
     private func reload() {
-        let latestSpec = model.specDraft(for: task)
+        let latestSpec = workspace.specDraft(for: task)
         if latestSpec != spec { spec = latestSpec }
-        guard let latest = model.requestThread(for: task, in: project) else { return }
+        guard let latest = workspace.requestThread(for: task, in: project) else { return }
         if latest.thread != data?.thread { data = latest }
     }
 
@@ -150,7 +151,7 @@ struct RequestChat: View {
             if message.id != nil {
                 messageRow(message, data: data)
                     .contextMenu {
-                        Button("Copy Link to Message") { model.copyLink(to: task, message: message) }
+                        Button("Copy Link to Message") { workspace.copyLink(to: task, message: message) }
                     }
             } else {
                 messageRow(message, data: data)
@@ -158,15 +159,15 @@ struct RequestChat: View {
         case .runStarted(let run):
             LeadBubble(role: data.leadRole, name: data.leadName, date: run.startedAt) {
                 HStack(spacing: 8) {
-                    if model.runWorkflow(run).map({ !$0.hasLead }) == true {
+                    if workspace.runWorkflow(run).map({ !$0.hasLead }) == true {
                         NoPlanPill()
                     }
                     Text("Started the run.").font(.system(size: 14))
                 }
-                RunCard(run: live(run), workflow: model.runWorkflow(run), timeline: run.id.flatMap { data.timelines[$0] }, agentCount: agentCount(run))
+                RunCard(run: live(run), workflow: workspace.runWorkflow(run), timeline: run.id.flatMap { data.timelines[$0] }, agentCount: agentCount(run))
             }
         case .step(let run, let entry):
-            StepEvent(entry: entry, needsYou: model.stepNeedsYou(entry.status, in: live(run)))
+            StepEvent(entry: entry, needsYou: workspace.stepNeedsYou(entry.status, in: live(run)))
         case .answeredQuestion(let question):
             AnsweredQuestion(item: question)
         case .runEnded(let run):
@@ -175,7 +176,7 @@ struct RequestChat: View {
             QuestionCard(item: question, project: project, reload: reload)
         case .hold(let run):
             let current = live(run)
-            if let hold = run.id.flatMap({ model.connection.holds[$0] }), let timeline = run.id.flatMap({ data.timelines[$0] }) {
+            if let hold = run.id.flatMap({ workspace.connection.holds[$0] }), let timeline = run.id.flatMap({ data.timelines[$0] }) {
                 LeadBubble(role: data.leadRole, name: data.leadName, date: .now) {
                     Text(holdSentence(hold, run: current)).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
                     HoldCard(run: current, project: project, hold: hold, timeline: timeline, reload: reload)
@@ -203,7 +204,7 @@ struct RequestChat: View {
                 hasActiveRun: hasActiveRun, isRequestClosed: task.isClosed
             )
         case .specFeedback:
-            SpecFeedbackBubble(message: message) { model.openSpecTab(for: task, in: project) }
+            SpecFeedbackBubble(message: message) { workspace.openSpecTab(for: task, in: project) }
         case .note:
             ChatNote(text: message.text)
         case .permission:
@@ -223,11 +224,11 @@ struct RequestChat: View {
     }
 
     private func agentCount(_ run: Run) -> Int {
-        model.agentSessions(in: project).filter { $0.agent.runId == run.id && $0.agent.taskId == nil }.count
+        workspace.agentSessions(in: project).filter { $0.agent.runId == run.id && $0.agent.taskId == nil }.count
     }
 
     private func holdSentence(_ hold: RunHold, run: Run) -> String {
-        let step = model.currentStepTitle(of: run) ?? "the next step"
+        let step = workspace.currentStepTitle(of: run) ?? "the next step"
         switch hold.reason {
         case .planApproval: return "Here’s the plan. Reorder tasks, change their skills, or drop tasks before I start."
         case .approval: return "It’s ready for your approval at “\(step)”."
@@ -296,6 +297,7 @@ private extension SessionActivity {
 
 struct ProposalCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let proposal: LeadMessage
     let project: Project
     var spec: SpecFile? = nil
@@ -316,7 +318,7 @@ struct ProposalCard: View {
     }
 
     var body: some View {
-        let workflow = proposal.workflow.flatMap { model.config(for: project).workflow($0) }
+        let workflow = proposal.workflow.flatMap { workspace.config(for: project).workflow($0) }
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text("Proposed run").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.text2)
@@ -337,7 +339,7 @@ struct ProposalCard: View {
             }
             HStack(spacing: 14) {
                 if let spec {
-                    Button("Spec attached") { model.openSpec(spec, in: project) }
+                    Button("Spec attached") { workspace.openSpec(spec, in: project) }
                         .help("Open the spec in its review tab")
                 }
                 Button(showsBrief ? "Show less" : "Show more") {
@@ -351,10 +353,10 @@ struct ProposalCard: View {
             if proposal.status == .open {
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
-                    Button("Dismiss") { model.dismissProposal(proposal) }
+                    Button("Dismiss") { workspace.dismissProposal(proposal) }
                         .buttonStyle(SecondaryPillStyle())
                         .help("Don’t run this; keep talking to the lead")
-                    Button("Start run") { model.startProposal(proposal, in: project) }
+                    Button("Start run") { workspace.startProposal(proposal, in: project) }
                         .buttonStyle(PrimaryPillStyle())
                         .disabled(hasActiveRun || isRequestClosed || workflow == nil)
                         .help(Self.startHelp(hasActiveRun: hasActiveRun, isRequestClosed: isRequestClosed))
@@ -367,9 +369,9 @@ struct ProposalCard: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(proposal.status == .open ? Tokens.hair2 : Tokens.hair))
         .opacity(document?.status == .rejected ? 0.6 : 1)
         .contextMenu {
-            if let spec { Button("Open Spec") { model.openSpec(spec, in: project) } }
+            if let spec { Button("Open Spec") { workspace.openSpec(spec, in: project) } }
             if proposal.status == .open, spec != nil {
-                Button("Reject Spec") { model.rejectProposal(proposal) }
+                Button("Reject Spec") { workspace.rejectProposal(proposal) }
             }
         }
     }
@@ -390,6 +392,7 @@ struct ProposalCard: View {
 
 private struct ProposalAgents: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let workers: [SpecWorker]
     let project: Project
 
@@ -400,7 +403,7 @@ private struct ProposalAgents: View {
                 .foregroundStyle(Tokens.text2)
             ForEach(Array(workers.enumerated()), id: \.offset) { _, worker in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    RobotFace(kind: RobotFace.Kind(icon: model.config(for: project).role(worker.role)?.icon ?? worker.role), size: 14)
+                    RobotFace(kind: RobotFace.Kind(icon: workspace.config(for: project).role(worker.role)?.icon ?? worker.role), size: 14)
                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
                     Text(line(for: worker))
                         .font(.system(size: 13))
@@ -647,13 +650,14 @@ struct LeadBubble<Content: View>: View {
 
 private struct RunCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let run: Run
     let workflow: WorkflowDefinition?
     let timeline: RunTimeline?
     let agentCount: Int
 
     var body: some View {
-        let step = run.isActive ? model.currentStepTitle(of: run) : nil
+        let step = run.isActive ? workspace.currentStepTitle(of: run) : nil
         let meta = [
             workflow?.displayName, step, agentCount > 0 ? "\(agentCount) agent\(agentCount == 1 ? "" : "s")" : nil,
             run.budgetUSD.map { "\(run.costUSD.formatted(.currency(code: "USD"))) of \($0.formatted(.currency(code: "USD")))" }
@@ -662,17 +666,17 @@ private struct RunCard: View {
         ].compactMap(\.self)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                StatusDot(model.statusColor(of: run), size: 8)
+                StatusDot(workspace.statusColor(of: run), size: 8)
                 Text(run.title).font(.system(size: 14, weight: .semibold)).lineLimit(2)
                 Text(meta.joined(separator: " · "))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondaryText)
                     .lineLimit(2)
                 Spacer(minLength: 8)
-                Text(model.statusLabel(of: run))
+                Text(workspace.statusLabel(of: run))
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(model.statusColor(of: run))
-                Button("Details") { model.openRunDetail(run) }
+                    .foregroundStyle(workspace.statusColor(of: run))
+                Button("Details") { workspace.openRunDetail(run) }
                     .buttonStyle(PillButtonStyle(height: 24))
                     .font(.system(size: 11.5))
                     .fixedSize()
@@ -701,27 +705,28 @@ private struct RunCard: View {
 
 private struct RunControls: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let run: Run
     @State private var isConfirmingCancel = false
 
     var body: some View {
-        let hold = run.id.flatMap { model.connection.holds[$0] }
+        let hold = run.id.flatMap { workspace.connection.holds[$0] }
         let canRetry = hold.map { [.stepFailed, .timedOut].contains($0.reason) } == true
         HStack(spacing: 8) {
             if run.status == .running || run.status == .pending {
                 Button {
-                    model.pauseRun(run)
+                    workspace.pauseRun(run)
                 } label: { Label("Pause", systemImage: "pause.fill") }
                     .help("Stop after interrupting the current step; resume later")
             } else if [.paused, .interrupted].contains(run.status) {
                 Button {
-                    model.resumeRun(run)
+                    workspace.resumeRun(run)
                 } label: { Label("Resume", systemImage: "play.fill") }
                     .help("Continue the run from where it stopped")
             }
             if canRetry {
                 Button {
-                    model.retryStep(run)
+                    workspace.retryStep(run)
                 } label: { Label("Retry Step", systemImage: "arrow.clockwise") }
                     .help("Run the failed step again")
             }
@@ -735,7 +740,7 @@ private struct RunControls: View {
         .font(.system(size: 12))
         .confirmationDialog("Cancel “\(run.title)”?", isPresented: $isConfirmingCancel) {
             Button("Cancel Run", role: .destructive) {
-                model.cancelRun(run)
+                workspace.cancelRun(run)
             }
             Button("Keep Running", role: .cancel) {}
         } message: {
@@ -746,6 +751,7 @@ private struct RunControls: View {
 
 private struct FinalStateCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let run: Run
     let reload: () -> Void
     @State private var isChoosingMergeMethod = false
@@ -754,7 +760,7 @@ private struct FinalStateCard: View {
     @State private var ahead: Int?
 
     var body: some View {
-        let color = model.statusColor(of: run)
+        let color = workspace.statusColor(of: run)
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 StatusDot(color, size: 8)
@@ -824,15 +830,15 @@ private struct FinalStateCard: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.secondaryText)
                 }
-                if run.mergedAt != nil, let chat = model.requestTask(for: run), !chat.isClosed, let project = model.project(withID: run.projectId) {
+                if run.mergedAt != nil, let chat = workspace.requestTask(for: run), !chat.isClosed, let project = workspace.project(withID: run.projectId) {
                     Button(run.pushedAt != nil ? "Close chat as done" : "Close chat") {
-                        Task { await model.closeRequest(chat, as: .done, in: project) }
+                        Task { await workspace.closeRequest(chat, as: .done, in: project) }
                     }
                     .buttonStyle(SecondaryPillStyle())
                 }
                 if run.status == .failed {
                     Button {
-                        model.retryStep(run)
+                        workspace.retryStep(run)
                         reload()
                     } label: { Label("Retry Step", systemImage: "arrow.clockwise") }
                         .buttonStyle(.pill)
@@ -841,7 +847,7 @@ private struct FinalStateCard: View {
             }
         }
         .task(id: "\(run.mergedAt?.timeIntervalSince1970 ?? 0)-\(run.pushedAt?.timeIntervalSince1970 ?? 0)") {
-            ahead = canPush ? await model.commitsAhead(of: run) : nil
+            ahead = canPush ? await workspace.commitsAhead(of: run) : nil
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -860,7 +866,7 @@ private struct FinalStateCard: View {
     private func push() {
         isPushing = true
         Task {
-            await model.pushRun(run, baseName: baseName)
+            await workspace.pushRun(run, baseName: baseName)
             isPushing = false
             reload()
         }
@@ -873,7 +879,7 @@ private struct FinalStateCard: View {
     private func merge(_ method: MergeMethod) {
         isMerging = true
         Task {
-            await model.mergeRun(run, method: method)
+            await workspace.mergeRun(run, method: method)
             isMerging = false
             reload()
         }
@@ -887,7 +893,7 @@ private struct FinalStateCard: View {
         case .succeeded: "Run finished"
         case .failed: "Run failed"
         case .cancelled: "Run cancelled"
-        default: model.statusLabel(of: run)
+        default: workspace.statusLabel(of: run)
         }
     }
 }

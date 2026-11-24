@@ -1,6 +1,6 @@
 ---
 title: Clear old agents when a finished chat starts a new run
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Builder, reason: "Core clearing logic, proposal result text, card line and tests are one connected change"}
@@ -30,14 +30,14 @@ When a chat keeps going after its earlier runs ended and the lead proposes a new
 
 ## Acceptance criteria
 
-- [ ] A chat with an ended run whose agents still exist: the lead's propose_run result names those agents and asks the lead to tell the user
-- [ ] That proposal card shows "Starting this run clears N agents from earlier runs" while open; a chat with no earlier run agents shows no such line
-- [ ] Clicking Start run removes the earlier agents and their worktrees; the Workers list then shows only the lead's new run agents
-- [ ] The old agents' branches still exist after clearing
-- [ ] A note "Cleared N agents from earlier runs: …" appears in the chat timeline
-- [ ] Dismissing the proposal leaves every old agent in place
-- [ ] The lead agent and its transcript survive
-- [ ] New unit tests in LeadChatTests cover: clearing on start, no clearing on dismiss, lead kept, branches kept, proposal result text; `swift test` in Packages/EnsembleCore passes
+- [x] A chat with an ended run whose agents still exist: the lead's propose_run result names those agents and asks the lead to tell the user
+- [x] That proposal card shows "Starting this run clears N agents from earlier runs" while open; a chat with no earlier run agents shows no such line
+- [x] Clicking Start run removes the earlier agents and their worktrees; the Workers list then shows only the lead's new run agents
+- [x] The old agents' branches still exist after clearing
+- [x] A note "Cleared N agents from earlier runs: …" appears in the chat timeline
+- [x] Dismissing the proposal leaves every old agent in place
+- [x] The lead agent and its transcript survive
+- [x] New unit tests in LeadChatTests cover: clearing on start, no clearing on dismiss, lead kept, branches kept, proposal result text; `swift test` in Packages/EnsembleCore passes
 
 ## Verification
 

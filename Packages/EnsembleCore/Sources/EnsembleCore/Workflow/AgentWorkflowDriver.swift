@@ -186,7 +186,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             ))
             let attached = (try? specStore.draft(projectId: agent.projectId, taskId: taskId)).flatMap { $0 }.flatMap { $0.status == .done ? nil : $0 }
             let note = attached.map { " The spec draft “\($0.title)” is attached; starting the run commits it and makes its acceptance criteria the run’s." } ?? ""
-            return "The user sees your proposal with a Start button.\(note) End your turn now. If they start it, you’ll be asked to plan it."
+            let previous = try runtime.database.previousRunAgents(taskId: taskId)
+            let clearing = previous.isEmpty ? "" : " Starting it clears \(runtime.database.previousRunSummary(of: previous)) (\(previous.map { displayName(of: $0) }.joined(separator: ", "))). Tell the user in your reply."
+            return "The user sees your proposal with a Start button.\(note)\(clearing) End your turn now. If they start it, you’ll be asked to plan it."
         case .agentMessage(let name, let text) where (try? isLead(agent)) == true:
             let target = try otherAgent(named: name, from: agent)
             let targetName = displayName(of: target)

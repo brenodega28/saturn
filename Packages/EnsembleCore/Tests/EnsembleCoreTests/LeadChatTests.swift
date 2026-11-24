@@ -156,7 +156,7 @@ import Testing
         #expect(proposal.status == .open && proposal.workflow == "feature-delivery" && proposal.title == "Add alpha and beta")
         #expect(try setup.harness.database.runs(taskId: task.id!).isEmpty)
 
-        let run = try chat.start(proposal, in: setup.project)
+        let run = try await chat.start(proposal, in: setup.project)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
 
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
@@ -169,7 +169,7 @@ import Testing
         #expect(input.contains("Create alpha.txt and beta.txt, as agreed."))
         #expect(messages(setup, task).first { $0.id == proposal.id }?.status == .started)
 
-        #expect(throws: LeadChatError.proposalClosed) { try chat.start(proposal, in: setup.project) }
+        await #expect(throws: LeadChatError.proposalClosed) { try await chat.start(proposal, in: setup.project) }
         await #expect(throws: HandoffError.self) {
             try await setup.driver.receive(.proposal(RunProposal(workflow: "feature-delivery", title: "Again", brief: "x")), from: leadAgent.id!)
         }
@@ -181,7 +181,7 @@ import Testing
         defer { setup.harness.cleanUp() }
         let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
-        let run = try chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
+        let run = try await chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
         let plan = try #require(try setup.harness.database.runSteps(runId: run.id!).first { $0.stepId == "plan" }?.output
             .flatMap { try? JSONDecoder().decode(StepOutput.self, from: Data($0.utf8)) }?.plan)
@@ -224,15 +224,102 @@ import Testing
         try chat.dismiss(proposal)
         let dismissed = try #require(messages(setup, task).first { $0.id == proposal.id })
         #expect(dismissed.status == .dismissed)
-        #expect(throws: LeadChatError.proposalClosed) { try chat.start(dismissed, in: setup.project) }
+        await #expect(throws: LeadChatError.proposalClosed) { try await chat.start(dismissed, in: setup.project) }
     }
 
     func startedRun(_ setup: Setup, _ chat: LeadChat) async throws -> (Chat, Run) {
         let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
-        let run = try chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
+        let run = try await chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
         return (task, run)
+    }
+
+    func endedRunWithAgents(_ setup: Setup, _ chat: LeadChat) async throws -> (Chat, Agent, [Agent]) {
+        let (task, run) = try await startedRun(setup, chat)
+        try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
+        let runtime = setup.harness.runtime
+        let lead = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
+        let builder = try await runtime.createRunAgent(
+            in: setup.project, kind: .builder, runId: run.id!, runStepId: nil, task: "old work", git: setup.harness.repo.git
+        )
+        let spawned = try await runtime.spawn(
+            in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git, name: "Helper", spawnedBy: lead
+        )
+        return (task, lead, [builder.agent] + spawned.map(\.agent))
+    }
+
+    func propose(_ setup: Setup, from lead: Agent) async throws -> String {
+        try await setup.driver.receive(.proposal(RunProposal(workflow: "feature-delivery", title: "Follow up", brief: "More work")), from: lead.id!)
+    }
+
+    func openProposal(_ setup: Setup, _ task: Chat) throws -> LeadMessage {
+        try #require(messages(setup, task).last { $0.kind == .proposal && $0.status == .open })
+    }
+
+    func branches(_ setup: Setup) async throws -> String {
+        try await setup.harness.repo.git.run(["branch", "--list"], in: setup.project.url)
+    }
+
+    @Test func startingAFollowUpRunClearsAgentsFromEarlierRunsButKeepsTheLeadAndBranches() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead, old) = try await endedRunWithAgents(setup, chat)
+        let database = setup.harness.database
+        #expect(Set(try database.previousRunAgents(taskId: task.id!).map(\.id)) == Set(old.map(\.id)))
+        let worktrees = old.compactMap(\.worktreeURL)
+        #expect(worktrees.count == 2 && worktrees.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+        let transcript = setup.harness.runtime.paths.transcript(lead.id!)
+        #expect(FileManager.default.fileExists(atPath: transcript.path))
+
+        let reply = try await propose(setup, from: lead)
+        let names = old.map { database.displayName(of: $0) }
+        #expect(reply.contains("Starting it clears 2 agents from earlier runs (\(names.joined(separator: ", "))). Tell the user in your reply."))
+
+        let run = try await chat.start(try openProposal(setup, task), in: setup.project)
+
+        let remaining = try database.agents(inProject: setup.project.id!).map(\.id)
+        #expect(old.allSatisfy { !remaining.contains($0.id) })
+        #expect(worktrees.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
+        #expect(try database.leadAgent(taskId: task.id!)?.id == lead.id)
+        #expect(FileManager.default.fileExists(atPath: transcript.path))
+        let branchList = try await branches(setup)
+        #expect(old.compactMap(\.branch).allSatisfy { branchList.contains($0) })
+        let note = try #require(messages(setup, task).last { $0.kind == .note })
+        #expect(note.text == "Cleared 2 agents from earlier runs: \(names.joined(separator: ", "))")
+        #expect(try database.previousRunAgents(taskId: task.id!).allSatisfy { $0.runId == run.id || $0.id == lead.id })
+        try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
+    }
+
+    @Test func dismissingAFollowUpProposalKeepsEarlierRunAgents() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead, old) = try await endedRunWithAgents(setup, chat)
+        _ = try await propose(setup, from: lead)
+
+        try chat.dismiss(try openProposal(setup, task))
+
+        let remaining = try setup.harness.database.agents(inProject: setup.project.id!).map(\.id)
+        #expect(old.allSatisfy { remaining.contains($0.id) })
+        #expect(old.compactMap(\.worktreeURL).allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+        #expect(!messages(setup, task).contains { $0.kind == .note && $0.text.hasPrefix("Cleared") })
+    }
+
+    @Test func aProposalWithoutEarlierRunAgentsMentionsNoClearing() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let task = try await chat.createRequest("CHAT hi", in: setup.project)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+        let lead = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
+
+        let reply = try await propose(setup, from: lead)
+
+        #expect(!reply.contains("clears"))
+        #expect(try setup.harness.database.previousRunAgents(taskId: task.id!).isEmpty)
+        let run = try await chat.start(try openProposal(setup, task), in: setup.project)
+        #expect(!messages(setup, task).contains { $0.kind == .note && $0.text.hasPrefix("Cleared") })
+        try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
+        try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
     }
 
     func stored(_ setup: Setup, _ task: Chat) throws -> Chat {
@@ -415,7 +502,7 @@ import Testing
         let proposal = try #require(messages(setup, task).first { $0.kind == .proposal })
         try await chat.close(task, as: .dropped, in: setup.project, git: setup.harness.repo.git)
 
-        let run = try chat.start(proposal, in: setup.project)
+        let run = try await chat.start(proposal, in: setup.project)
 
         #expect(run.isActive && run.taskId == task.id)
         let reopened = try stored(setup, task)

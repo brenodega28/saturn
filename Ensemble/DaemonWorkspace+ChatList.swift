@@ -45,6 +45,10 @@ extension AppModel {
         summaries.count { $0.stage.needsAttention }
     }
 
+    func openChat(_ summary: ChatSummary) {
+        workspace(for: summary.daemon)?.openChat(summary.chat)
+    }
+
     func deleteChat(_ target: DaemonChat) async {
         await workspace(for: target.daemon)?.deleteChat(target.chat)
     }

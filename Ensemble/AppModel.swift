@@ -215,6 +215,7 @@ final class AppModel {
         local.reloadProjects()
         adoptKnownDaemons()
         dropStalePages()
+        apply(pages.active)
         local.start()
         requestNotifier.onOpen = { [weak self] target, daemon in self?.openNotification(target, on: daemon) }
         requestNotifier.onAction = { [weak self] action, messageID, daemon in

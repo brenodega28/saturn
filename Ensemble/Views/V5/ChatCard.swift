@@ -248,7 +248,7 @@ private struct ChangesRow: View {
 
     var body: some View {
         let run = workspace.latestRun(of: chat)
-        Button { model.open(.changes) } label: {
+        Button { workspace.open(.changes, in: project) } label: {
             CardRow(symbol: "plus.forwardslash.minus", title: "Changes") {
                 if let diff, diff.lines > 0 {
                     Text("+\(diff.added.formatted())").font(Tokens.mono(12)).foregroundStyle(Tokens.done)

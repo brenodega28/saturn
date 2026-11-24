@@ -18,11 +18,16 @@ struct ChatColumn: View {
         }
     }
 
+    private func shows(_ alert: SystemAlert) -> Bool {
+        if case .hostDisconnected = alert, workspace.isRemote { return false }
+        return alert.affects(project)
+    }
+
     private var leadChat: some View {
         let selected = workspace.selectedRequest(in: project)
         let newRequestHeld = selected == nil ? workspace.heldSends(for: workspace.leadSendTarget(for: nil, in: project)) : []
         return VStack(spacing: 0) {
-            ForEach(model.systemAlerts.filter { $0.affects(project) }) { alert in
+            ForEach(model.systemAlerts.filter(shows)) { alert in
                 ChatAlertBanner(alert: alert)
                     .frame(maxWidth: Tokens.Size.transcript)
                     .padding(.horizontal, 28)

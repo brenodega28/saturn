@@ -9,7 +9,6 @@ struct RootView: View {
     var body: some View {
         @Bindable var model = model
         content
-            .environment(model.local)
             .frame(minWidth: 960, minHeight: 620)
             .environment(\.openURL, model.chatLinkOpenURLAction)
             .task { await model.launch() }
@@ -35,6 +34,7 @@ struct RootView: View {
             .alert(item: $model.alert) { alert in
                 Alert(title: Text(alert.title), message: Text(alert.message))
             }
+            .environment(model.local)
     }
 
     @ViewBuilder

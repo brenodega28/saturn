@@ -194,7 +194,7 @@ final class CodeBrowser {
         isFinderPresented = false
     }
 
-    func activate(_ path: String) {
+    func focusTab(_ path: String) {
         activePath = path
         focusLine = 1
         scrollRequest += 1

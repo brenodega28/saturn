@@ -85,6 +85,7 @@ private struct ChatSummaryPane: View {
                     HStack(spacing: 8) {
                         ProjectTile(project: project, size: 14)
                         Text(project.name).foregroundStyle(Tokens.text2)
+                        MachineLabel(workspace: workspace, size: 12)
                         HStack(spacing: 5) {
                             Circle().fill(stage.color).frame(width: 6, height: 6).accessibilityHidden(true)
                             Text(stage.title)

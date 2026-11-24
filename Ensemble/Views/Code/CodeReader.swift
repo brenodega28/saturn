@@ -93,7 +93,7 @@ private struct CodeTabStrip: View {
                 ForEach(browser.tabs, id: \.self) { path in
                     let isActive = browser.activePath == path
                     HStack(spacing: 4) {
-                        Button { browser.activate(path) } label: {
+                        Button { browser.focusTab(path) } label: {
                             HStack(spacing: 7) {
                                 FileBadge(path: path, size: 14)
                                 Text((path as NSString).lastPathComponent)

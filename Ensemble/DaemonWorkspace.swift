@@ -125,6 +125,7 @@ final class DaemonWorkspace: Identifiable {
         connection.stop()
     }
 
+    @discardableResult
     func send<C: DaemonCommand>(_ command: C) async throws -> C.Response {
         try await connection.send(command)
     }

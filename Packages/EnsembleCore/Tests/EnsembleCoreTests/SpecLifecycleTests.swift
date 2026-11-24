@@ -146,7 +146,7 @@ final class SpecGateDriver: WorkflowDriver {
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         _ = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
 
-        let run = try chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
+        let run = try await chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
         let runID = try #require(run.id)
         let git = setup.harness.repo.git
@@ -238,7 +238,7 @@ final class SpecGateDriver: WorkflowDriver {
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         _ = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
-        let run = try chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
+        let run = try await chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
 
         func gate(_ run: Run, _ verdicts: [(String, Verdict)]) async throws -> StepResult {
@@ -284,7 +284,7 @@ final class SpecGateDriver: WorkflowDriver {
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
         let leadAgent = try #require(try setup.harness.database.leadAgent(taskId: task.id!))
         _ = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
-        let run = try chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
+        let run = try await chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
         let runID = try #require(run.id)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
         let planStep = try #require(try setup.harness.database.runSteps(runId: runID).first { $0.stepId == "plan" })
@@ -401,7 +401,7 @@ final class SpecGateDriver: WorkflowDriver {
         defer { setup.harness.cleanUp() }
         let task = try await chat.createRequest("CHAT-PROPOSE alpha and beta", in: setup.project)
         try await waitUntil { messages(setup, task).contains { $0.kind == .proposal } }
-        let run = try chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
+        let run = try await chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
         try await WorkflowDriverTests().waitForHold(setup, run: run, .planApproval)
         #expect(SpecStore(paths: setup.harness.runtime.paths).link(runId: run.id!) == nil)
         #expect(try await setup.harness.repo.git.run(["branch", "--list", "ensemble/*"], in: setup.harness.repo.root).isEmpty)

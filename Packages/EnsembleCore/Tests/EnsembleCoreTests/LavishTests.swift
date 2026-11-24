@@ -343,7 +343,7 @@ final class DraftLog {
         #expect(fake.commands("poll").last?.contains("--takeover") == true)
         setup.driver.specReviews = restarted
 
-        let run = try chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
+        let run = try await chat.start(try #require(messages(setup, task).first { $0.kind == .proposal }), in: setup.project)
         try await waitUntil { fake.commands("end").count == 1 }
         #expect(restarted.sessions[task.id!] == nil)
         let status = await restarted.status(taskId: task.id!)

@@ -234,7 +234,7 @@ extension EnsembleHost {
             }
             let project = try requireProject(proposal.projectId)
             try database.checkProjectBudget(projectId: proposal.projectId)
-            return try leadChat.start(proposal, in: project)
+            return try await leadChat.start(proposal, in: project)
         }
         router.register(ChatCommands.RejectProposal.self) { [unowned self] command in
             guard let proposal = try database.leadMessage(id: command.messageID) else { throw CommandFailure.notFound("The proposal") }

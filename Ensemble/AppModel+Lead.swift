@@ -132,6 +132,11 @@ extension AppModel {
         connection.workingSessions(for: task)
     }
 
+    func previousRunAgents(of proposal: LeadMessage, in project: Project) -> [Agent] {
+        let ids = Set(((try? database.previousRunAgents(taskId: proposal.taskId)) ?? []).compactMap(\.id))
+        return agentSessions(in: project).map(\.agent).filter { $0.id.map(ids.contains) == true }
+    }
+
     func leadSendTarget(for request: Chat?, in project: Project) -> PendingSendTarget? {
         project.id.map { .lead(project: $0, request: request?.id) }
     }

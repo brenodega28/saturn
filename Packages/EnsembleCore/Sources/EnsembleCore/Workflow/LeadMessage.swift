@@ -163,6 +163,19 @@ extension AppDatabase {
         }
     }
 
+    public func previousRunAgents(taskId: Int64) throws -> [Agent] {
+        let leadId = try leadAgent(taskId: taskId)?.id
+        var seen = Set<Int64>()
+        return try (requestAgents(taskId: taskId) + spawnedAgents(taskId: taskId)).filter { agent in
+            guard let id = agent.id, id != leadId, agent.archivedAt == nil else { return false }
+            return seen.insert(id).inserted
+        }
+    }
+
+    public func previousRunSummary(of agents: [Agent]) -> String {
+        "\(agents.count) agent\(agents.count == 1 ? "" : "s") from earlier runs"
+    }
+
     public func closedTasks(projectId: Int64) throws -> [Chat] {
         try writer.read { db in
             try Chat.fetchAll(db, sql: """

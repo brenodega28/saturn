@@ -161,13 +161,17 @@ public final class LeadChat {
     }
 
     @discardableResult
-    public func start(_ proposal: LeadMessage, in project: Project) throws -> Run {
-        let proposal = try openProposal(proposal)
+    public func start(_ proposal: LeadMessage, in project: Project) async throws -> Run {
+        var proposal = try openProposal(proposal)
         guard let workflowID = proposal.workflow else { throw LeadChatError.proposalClosed }
-        guard let task = try database.task(id: proposal.taskId) else { throw RunEngineError.invalidState("The request is gone.") }
+        guard try database.task(id: proposal.taskId) != nil else { throw RunEngineError.invalidState("The request is gone.") }
         guard try !database.runs(taskId: proposal.taskId).contains(where: \.isActive) else { throw LeadChatError.runInProgress }
         let config = ProjectConfigLoader.load(repository: project.filesRoot)
         guard let workflow = config.workflow(workflowID) else { throw LeadChatError.unknownWorkflow(workflowID) }
+        try await clearPreviousRunAgents(taskId: proposal.taskId, in: project)
+        proposal = try openProposal(proposal)
+        guard let task = try database.task(id: proposal.taskId) else { throw RunEngineError.invalidState("The request is gone.") }
+        guard try !database.runs(taskId: proposal.taskId).contains(where: \.isActive) else { throw LeadChatError.runInProgress }
         let lead = try database.leadAgent(taskId: proposal.taskId)
         let spec = try pendingSpec(taskId: proposal.taskId, projectId: task.projectId)
         if task.isClosed || task.isFinished {
@@ -187,6 +191,23 @@ public final class LeadChat {
         started.runId = run.id
         try database.save(started)
         return run
+    }
+
+    private func clearPreviousRunAgents(taskId: Int64, in project: Project) async throws {
+        let sessions = try database.previousRunAgents(taskId: taskId).compactMap { runtime.session(for: $0) }
+        guard !sessions.isEmpty else { return }
+        let git = try driver.requireGit(for: project)
+        var cleared: [Agent] = []
+        for session in sessions {
+            let agent = session.agent
+            try await runtime.delete(session, in: project, git: git, deleteBranch: false)
+            cleared.append(agent)
+        }
+        let names = cleared.map { database.displayName(of: $0) }.joined(separator: ", ")
+        try database.insert(LeadMessage(
+            projectId: project.id ?? cleared[0].projectId, taskId: taskId, kind: .note,
+            text: "Cleared \(database.previousRunSummary(of: cleared)): \(names)", createdAt: .now
+        ))
     }
 
     public func reject(_ proposal: LeadMessage) throws {

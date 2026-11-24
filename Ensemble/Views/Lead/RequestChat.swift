@@ -294,6 +294,20 @@ private extension SessionActivity {
     }
 }
 
+struct ClearingNotice: View {
+    @Environment(AppModel.self) private var model
+    let agents: [Agent]
+
+    var body: some View {
+        if !agents.isEmpty {
+            Text("Starting this run clears \(model.database.previousRunSummary(of: agents))")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.secondaryText)
+                .help(agents.map { model.displayName(of: $0) }.joined(separator: ", "))
+        }
+    }
+}
+
 struct ProposalCard: View {
     @Environment(AppModel.self) private var model
     let proposal: LeadMessage
@@ -349,6 +363,7 @@ struct ProposalCard: View {
             .font(.system(size: 12.5, weight: .medium))
             .foregroundStyle(Tokens.link)
             if proposal.status == .open {
+                ClearingNotice(agents: model.previousRunAgents(of: proposal, in: project))
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
                     Button("Dismiss") { model.dismissProposal(proposal) }

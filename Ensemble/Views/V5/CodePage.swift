@@ -45,7 +45,7 @@ struct CodePage: View {
             }
         }
         .task(id: path) {
-            await browser.show(file: path, line: model.pendingCodeLines.removeValue(forKey: path))
+            await browser.show(file: path, line: workspace.pendingCodeLines.removeValue(forKey: path))
         }
     }
 

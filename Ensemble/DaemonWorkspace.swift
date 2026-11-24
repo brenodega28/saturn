@@ -41,6 +41,7 @@ final class DaemonWorkspace: Identifiable {
     var remoteStatuses: [Int64: RemoteProjectStatus] = [:]
     var remoteFileSyncs: [Int64: Task<Void, Error>] = [:]
     @ObservationIgnored var fetchingFiles: Set<String> = []
+    @ObservationIgnored var pendingCodeLines: [String: Int] = [:]
     @ObservationIgnored private var isStarted = false
 
     init(connection: DaemonConnection, app: AppModel) {

@@ -96,7 +96,6 @@ final class AppModel {
     let pages: MainPages
     let terminals = TerminalStore()
     @ObservationIgnored var codePages: [UUID: CodeBrowser] = [:]
-    @ObservationIgnored var pendingCodeLines: [String: Int] = [:]
     var isPageFinderShown = false
     @ObservationIgnored weak var mainWindowRef: NSWindow?
     @ObservationIgnored var connectivity: ConnectivityMonitor?

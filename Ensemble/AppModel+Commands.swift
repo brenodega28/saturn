@@ -97,7 +97,7 @@ extension DaemonWorkspace {
         guard let id = project.id else { return }
         let root = codeBrowser(for: project).source?.root ?? project.url
         let absolute = path.hasPrefix("/") ? path : root.appending(path: path).path
-        if let line { app.pendingCodeLines[absolute] = line }
+        if let line { pendingCodeLines[absolute] = line }
         showPage(.code(project: ref(id), path: absolute))
     }
 

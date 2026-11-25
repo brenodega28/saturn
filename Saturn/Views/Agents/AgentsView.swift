@@ -52,6 +52,7 @@ struct AgentsView: View {
     let worktreeCount: Int
     let openWorktrees: () -> Void
     @State private var filter = AgentFilter.all
+    @State private var expanded: Set<String> = []
 
     var body: some View {
         let sessions = workspace.agentSessions(in: project)
@@ -72,6 +73,9 @@ struct AgentsView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     intro(sessions)
                     filters(entries)
+                    if let roleID = workspace.agentTypeFilter(in: project) {
+                        typeFilterBar(roleID)
+                    }
                     grid(entries.filter { filter.includes($0.activity) })
                 }
                 .padding(.bottom, 12)
@@ -110,18 +114,70 @@ struct AgentsView: View {
         }
     }
 
+    private func typeFilterBar(_ roleID: String) -> some View {
+        let title = workspace.config(for: project).role(roleID)?.name ?? roleID
+        return HStack(spacing: 8) {
+            Text("Showing \(title) only").font(.system(size: 12.5)).foregroundStyle(Tokens.text2)
+            Button("Show all types") { workspace.setAgentTypeFilter(nil, in: project) }
+                .buttonStyle(.plain)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Tokens.link)
+        }
+    }
+
     @ViewBuilder
     private func grid(_ entries: [AgentEntry]) -> some View {
-        if entries.isEmpty {
+        let types = visibleTypes(entries)
+        if types.isEmpty {
             Text("No agents match this filter.")
                 .font(.system(size: 13))
                 .foregroundStyle(Tokens.text2)
                 .padding(.vertical, 24)
         } else {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 12, alignment: .top)], spacing: 12) {
-                ForEach(entries) { entry in
-                    AgentCard(session: entry.session, project: project, isLead: entry.isLead, activity: entry.activity)
+            let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(TypeSection.split(types, isExpanded: isExpanded)) { section in
+                    switch section {
+                    case .collapsed(let types):
+                        LazyVGrid(columns: Self.columns, spacing: 12) {
+                            ForEach(types) { typeCard($0) }
+                        }
+                    case .expanded(let type):
+                        VStack(alignment: .leading, spacing: 12) {
+                            typeCard(type)
+                            LazyVGrid(columns: Self.columns, spacing: 12) {
+                                ForEach(type.sessions.compactMap { byID[$0.id] }) { entry in
+                                    AgentCard(session: entry.session, project: project, isLead: entry.isLead, activity: entry.activity)
+                                }
+                            }
+                            .padding(.leading, 20)
+                        }
+                    }
                 }
+            }
+        }
+    }
+
+    private static let columns = [GridItem(.adaptive(minimum: 340), spacing: 12, alignment: .top)]
+
+    private func visibleTypes(_ entries: [AgentEntry]) -> [AgentType] {
+        let types = workspace.agentTypes(of: entries.map(\.session), in: project, includesArchived: true)
+        guard let roleID = workspace.agentTypeFilter(in: project) else { return types }
+        return types.filter { $0.roleID == roleID }
+    }
+
+    private func isExpanded(_ type: AgentType) -> Bool {
+        expanded.contains(type.roleID) || workspace.agentTypeFilter(in: project) == type.roleID
+    }
+
+    private func typeCard(_ type: AgentType) -> some View {
+        let isOpen = isExpanded(type)
+        return AgentTypeCard(type: type, isExpanded: isOpen) {
+            if isOpen {
+                expanded.remove(type.roleID)
+                if workspace.agentTypeFilter(in: project) == type.roleID { workspace.setAgentTypeFilter(nil, in: project) }
+            } else {
+                expanded.insert(type.roleID)
             }
         }
     }
@@ -133,6 +189,80 @@ struct AgentsView: View {
             return AgentEntry(session: session, isLead: kind == .lead, activity: AgentActivity(status: status, isRunning: session.isRunning, isQueued: session.isQueued))
         }
         .sorted { $0.rank < $1.rank }
+    }
+}
+
+private enum TypeSection: Identifiable {
+    case collapsed([AgentType])
+    case expanded(AgentType)
+
+    var id: String {
+        switch self {
+        case .collapsed(let types): "cards-" + (types.first?.roleID ?? "")
+        case .expanded(let type): "open-" + type.roleID
+        }
+    }
+
+    @MainActor
+    static func split(_ types: [AgentType], isExpanded: (AgentType) -> Bool) -> [TypeSection] {
+        var sections: [TypeSection] = []
+        var pending: [AgentType] = []
+        for type in types {
+            if isExpanded(type) {
+                if !pending.isEmpty { sections.append(.collapsed(pending)) }
+                pending = []
+                sections.append(.expanded(type))
+            } else {
+                pending.append(type)
+            }
+        }
+        if !pending.isEmpty { sections.append(.collapsed(pending)) }
+        return sections
+    }
+}
+
+private struct AgentTypeCard: View {
+    let type: AgentType
+    let isExpanded: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 14) {
+                AgentAvatar(size: 52, appearance: RoleAppearance(role: type.role), isFailing: type.sessions.contains { $0.agent.status == .failed })
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(type.title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                        Text("×\(type.count)").font(.system(size: 13, weight: .medium)).foregroundStyle(Tokens.text3)
+                    }
+                    Text(type.count == 1 ? "1 instance" : type.summary)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Tokens.text2)
+                        .lineLimit(1)
+                    Text(isExpanded ? "Hide instances" : type.count == 1 ? "Show instance" : "Show all \(type.count) instances")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(Tokens.link)
+                        .padding(.top, 4)
+                }
+                Spacer(minLength: 8)
+                StatusPill(text: type.status.label, color: type.status.color, background: background)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .raisedCard()
+        .accessibilityLabel("\(type.title), \(type.count) instances, \(type.status.label)")
+        .accessibilityHint(isExpanded ? "Hides the instances" : "Shows the instances")
+    }
+
+    private var background: Color {
+        switch type.status {
+        case .needsYou: Tokens.needBackground
+        case .working: Tokens.buildBackground
+        case .queued, .idle, .stopped: Tokens.fill
+        }
     }
 }
 

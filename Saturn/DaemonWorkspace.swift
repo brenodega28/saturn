@@ -26,6 +26,7 @@ final class DaemonWorkspace: Identifiable {
     var configs: [Int64: ProjectConfig] = [:]
     var runDetailIDs: [Int64: Int64] = [:]
     var selectedAgents: [Int64: Int64] = [:]
+    var agentTypeFilters: [Int64: String] = [:]
     var leadSelections: [Int64: LeadSelection] = [:]
     var requestPageProjectIDs: Set<Int64> = []
     var changesRunSelections: [Int64: Int64] = [:]

@@ -694,28 +694,86 @@ private struct ProjectAgents: View {
     let project: Project
 
     var body: some View {
-        let sessions = workspace.agentSessions(in: project).filter { $0.agent.archivedAt == nil }
+        let types = workspace.agentTypes(in: project)
+        let total = types.reduce(0) { $0 + $1.count }
         VStack(alignment: .leading, spacing: 8) {
             SectionTitle(title: "Agents") {
-                Text("\(sessions.count)").fontWeight(.regular).foregroundStyle(Tokens.text3)
+                Text(types.isEmpty ? "0" : "\(types.count) · \(total) agents").fontWeight(.regular).foregroundStyle(Tokens.text3)
                 Spacer(minLength: 4)
                 LinkButton(title: "Manage", label: "Manage agents") { workspace.open(.agents, in: project) }
             }
-            if sessions.isEmpty {
+            if types.isEmpty {
                 Text("No agents yet. Runs start them when the work needs them.")
                     .font(.system(size: 12.5))
                     .foregroundStyle(Tokens.text2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             VStack(spacing: 0) {
-                ForEach(sessions) { session in
-                    ProjectAgentRow(session: session, project: project)
+                ForEach(types) { type in
+                    ProjectAgentTypeRow(type: type, project: project)
                 }
             }
             .padding(.horizontal, -6)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Agents in this project")
+    }
+}
+
+private struct ProjectAgentTypeRow: View {
+    @Environment(DaemonWorkspace.self) private var workspace
+    let type: AgentType
+    let project: Project
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HoverRow(radius: 10, action: open) {
+                HStack(spacing: 11) {
+                    AgentAvatar(size: 38, appearance: RoleAppearance(role: type.role), isFailing: type.sessions.contains { $0.agent.status == .failed })
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(type.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Tokens.text).lineLimit(1)
+                            if let model = type.sharedModel {
+                                Text(model).font(Tokens.mono(10.5)).foregroundStyle(Tokens.text3).lineLimit(1)
+                            }
+                        }
+                        Text(type.summary).font(.system(size: 11.5)).foregroundStyle(Tokens.text2).lineLimit(1)
+                    }
+                    Spacer(minLength: 6)
+                    if type.count > 1 {
+                        Button(isExpanded ? "Hide" : "Show all \(type.count)") { isExpanded.toggle() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(Tokens.link)
+                            .accessibilityLabel(isExpanded ? "Hide \(type.title) instances" : "Show all \(type.count) \(type.title) instances")
+                    }
+                    Circle().fill(type.status.color).frame(width: 6, height: 6)
+                        .help(type.status.label)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .frame(minHeight: 48)
+            }
+            .help(type.count == 1 ? "Open the session" : isExpanded ? "Hide instances" : "Show all \(type.count) instances")
+            .accessibilityLabel("\(type.title), \(type.summary), \(type.status.label)")
+            if isExpanded {
+                VStack(spacing: 0) {
+                    ForEach(type.sessions) { session in
+                        ProjectAgentRow(session: session, project: project)
+                    }
+                }
+                .padding(.leading, 18)
+            }
+        }
+    }
+
+    private func open() {
+        if type.count == 1, let session = type.sessions.first {
+            workspace.openAgentSession(session.agent, in: project)
+        } else {
+            isExpanded.toggle()
+        }
     }
 }
 

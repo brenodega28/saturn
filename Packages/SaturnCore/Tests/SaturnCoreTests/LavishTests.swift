@@ -86,6 +86,8 @@ let feedbackJSON = #"{"session":{"status":"feedback"},"prompts":[{"uid":"1","pro
         let html = SpecPageRenderer().render(document)
         #expect(html.contains("body {") && html.contains("background: var(--page)"))
         #expect(html.contains("prefers-color-scheme: dark"))
+        #expect(html.contains("'SF Pro Text'") && html.contains("'SF Mono'") && !html.contains("Segoe") && !html.contains("Menlo"))
+        #expect(html.contains("--page: #000000") && html.contains("--accent: #8ec5ff") && html.contains("--rejected: #ff5c8a"))
         #expect(!html.contains("{{"))
     }
 
@@ -190,6 +192,14 @@ let feedbackJSON = #"{"session":{"status":"feedback"},"prompts":[{"uid":"1","pro
             #expect(FileManager.default.fileExists(atPath: package.appending(path: file).path), "\(file)")
         }
         #expect(LavishRuntime.requiredNodeMajor == 22)
+    }
+
+    @Test func bundledChromeEndsWithTheSaturnTheme() throws {
+        let package = try #require(LavishRuntime.bundledPackage)
+        let chrome = try String(contentsOf: package.appending(path: "dist/chrome.css"), encoding: .utf8)
+        let theme = try String(contentsOf: package.appending(path: "saturn-theme.css"), encoding: .utf8)
+        #expect(chrome.components(separatedBy: "/* saturn-theme */").count == 2)
+        #expect(chrome.hasSuffix(theme))
     }
 
     @Test func nodeWarningCoversMissingAndOldNode() {

@@ -3,6 +3,23 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
+// Saturn's theme (saturn-theme.css) is appended to dist/chrome.css behind THEME_MARKER, so the served chrome
+// uses SF fonts and Saturn colours. Re-apply to an existing copy with: node scripts/vendor-lavish.mjs --theme <destination>
+const THEME_MARKER = "/* saturn-theme */";
+
+function applyTheme(root) {
+  const chrome = path.join(root, "dist", "chrome.css");
+  const css = fs.readFileSync(chrome, "utf8");
+  if (css.includes(THEME_MARKER)) return;
+  const theme = fs.readFileSync(path.join(root, "saturn-theme.css"), "utf8");
+  fs.writeFileSync(chrome, `${css.trimEnd()}\n\n${THEME_MARKER}\n${theme}`);
+}
+
+if (process.argv[2] === "--theme") {
+  applyTheme(path.resolve(process.argv[3]));
+  process.exit(0);
+}
+
 const [version, destination, before] = process.argv.slice(2);
 if (!version || !destination || !before) {
   console.error("usage: node scripts/vendor-lavish.mjs <version> <destination> <before-date>");
@@ -20,7 +37,7 @@ const keep = ["dist", "package.json", "LICENSE", "THIRD-PARTY-NOTICES.md"];
 const placed = new Map();
 const lock = {};
 
-const own = new Set(["saturn-json.mjs"]);
+const own = new Set(["saturn-json.mjs", "saturn-theme.css"]);
 for (const entry of fs.existsSync(root) ? fs.readdirSync(root) : []) {
   if (!own.has(entry)) fs.rmSync(path.join(root, entry), { recursive: true, force: true });
 }
@@ -32,6 +49,7 @@ for (const name of keep) {
   if (fs.existsSync(path.join(staging, name))) fs.cpSync(path.join(staging, name), path.join(root, name), { recursive: true });
 }
 fs.rmSync(staging, { recursive: true, force: true });
+applyTheme(root);
 
 const top = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 lock["lavish-axi"] = top.version;

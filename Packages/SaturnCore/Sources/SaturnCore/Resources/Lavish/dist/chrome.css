@@ -2056,3 +2056,99 @@ body.layout-gate-active iframe#artifact {
 .whiteboard-error[hidden] {
   display: none;
 }
+
+/* saturn-theme */
+:root {
+  --ink-900: #000000;
+  --ink-800: #0a0a0c;
+  --ink-700: #0e0e11;
+  --ink-600: #121216;
+  --steel-700: rgba(255, 255, 255, 0.08);
+  --steel-600: rgba(255, 255, 255, 0.12);
+  --steel-500: rgba(255, 255, 255, 0.16);
+  --steel-400: rgba(235, 235, 245, 0.4);
+  --steel-300: rgba(235, 235, 245, 0.5);
+  --steel-200: rgba(235, 235, 245, 0.62);
+  --steel-100: rgba(235, 235, 245, 0.78);
+  --cream-50: #ffffff;
+  --cream-100: #f5f5f7;
+  --cream-200: rgba(235, 235, 245, 0.78);
+  --brass-500: #8ec5ff;
+  --brass-400: #cfe3ff;
+  --brass-ink: #000000;
+  --sage-900: rgba(79, 209, 197, 0.12);
+  --sage-700: rgba(79, 209, 197, 0.35);
+  --sage-300: #4fd1c5;
+  --amber-900: rgba(255, 126, 179, 0.08);
+  --amber-700: rgba(255, 126, 179, 0.4);
+  --rust-500: #ff5c8a;
+  --bg: #000000;
+  --bg-panel: #0a0a0c;
+  --bg-bar: #0a0a0c;
+  --bg-elevated: #121216;
+  --fg: #f5f5f7;
+  --fg-muted: rgba(235, 235, 245, 0.78);
+  --fg-dim: rgba(235, 235, 245, 0.62);
+  --fg-faint: rgba(235, 235, 245, 0.5);
+  --fg-label: rgba(235, 235, 245, 0.4);
+  --border: rgba(255, 255, 255, 0.12);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --accent: #8ec5ff;
+  --accent-hover: #cfe3ff;
+  --accent-ink: #000000;
+  --danger: #ff5c8a;
+  --font-serif: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, monospace;
+  --shadow-tooltip: 0 16px 44px rgba(0, 0, 0, 0.6);
+  --shadow-floating: 0 20px 70px rgba(0, 0, 0, 0.7);
+}
+.warnings-button {
+  border-color: rgba(255, 126, 179, 0.35);
+  background: rgba(255, 126, 179, 0.08);
+  color: #ff7eb3;
+}
+.warnings-button:hover:not(:disabled),
+.warnings-button[aria-expanded="true"] {
+  border-color: rgba(255, 126, 179, 0.6);
+  background: rgba(255, 126, 179, 0.16);
+  color: #ff7eb3;
+}
+.warning-chip.severity,
+.warning-chip.status-reopened {
+  border-color: rgba(255, 92, 138, 0.4);
+}
+.warning-chip.status-unverified {
+  border-color: rgba(255, 126, 179, 0.4);
+}
+.menu-item.danger:hover:not(:disabled),
+.button-danger:hover:not(:disabled) {
+  background: rgba(255, 92, 138, 0.1);
+}
+.anchor-excerpt.text {
+  background: rgba(142, 197, 255, 0.22);
+  box-shadow: 0 0 0 1px rgba(142, 197, 255, 0.35);
+}
+.share-overlay {
+  background: rgba(0, 0, 0, 0.72);
+}
+.ended-overlay {
+  background: rgba(0, 0, 0, 0.86);
+}
+.whiteboard-overlay {
+  background: rgba(0, 0, 0, 0.92);
+}
+@media (max-width: 860px) {
+  .panel-scrim {
+    background: rgba(0, 0, 0, 0.72);
+  }
+}
+@keyframes dock-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(142, 197, 255, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(142, 197, 255, 0);
+  }
+}

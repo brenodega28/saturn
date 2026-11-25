@@ -40,6 +40,12 @@ public final class ReplicaDatabase: Sendable {
 
     public var seq: Int64? { state?.seq }
 
+    public var schema: String? {
+        try? pool.read { db in
+            try String.fetchOne(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid DESC LIMIT 1")
+        }
+    }
+
     private func save(seq: Int64) throws {
         let data = try JSONEncoder().encode(ReplicaState(daemonID: daemonID, seq: seq))
         try data.write(to: stateURL, options: .atomic)

@@ -3,6 +3,11 @@ import SaturnCore
 import Foundation
 import ServiceManagement
 
+struct LocalDaemonConnection {
+    let connection: DaemonConnection
+    let outdatedBusyCount: Int
+}
+
 enum LocalDaemonError: LocalizedError {
     case helperMissing(URL)
     case didNotStart(String)
@@ -48,11 +53,37 @@ enum LocalDaemon {
         return true
     }
 
-    static func connect(clientPaths: AppPaths) async throws -> DaemonConnection {
+    static func connect(clientPaths: AppPaths) async throws -> LocalDaemonConnection {
         let paths = paths
-        if !isListening(paths) {
+        guard isListening(paths) else {
             try await start(paths)
+            return LocalDaemonConnection(connection: try await open(paths, clientPaths: clientPaths), outdatedBusyCount: 0)
         }
+        let connection = try await open(paths, clientPaths: clientPaths)
+        guard runsOutdatedBuild(paths) else { return LocalDaemonConnection(connection: connection, outdatedBusyCount: 0) }
+        try await connection.client.waitUntilConnected(timeout: .seconds(120))
+        let busy = connection.live.activeRunCount + connection.live.agents.values.filter(\.isRunning).count
+        guard busy == 0 else { return LocalDaemonConnection(connection: connection, outdatedBusyCount: busy) }
+        try await restart(connection, paths)
+        return LocalDaemonConnection(connection: try await open(paths, clientPaths: clientPaths), outdatedBusyCount: 0)
+    }
+
+    static func runsOutdatedBuild(_ paths: AppPaths) -> Bool {
+        guard usesLaunchAgent, let bundled = DaemonBuild(executable: helper) else { return false }
+        return DaemonBuild.running(paths: paths) != bundled
+    }
+
+    static func restart(_ connection: DaemonConnection, _ paths: AppPaths) async throws {
+        try await stop(connection)
+        connection.stop()
+        let deadline = ContinuousClock.now + .seconds(15)
+        while isListening(paths), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(150))
+        }
+        try await start(paths)
+    }
+
+    static func open(_ paths: AppPaths, clientPaths: AppPaths) async throws -> DaemonConnection {
         guard let data = try? Data(contentsOf: paths.daemonIdentity),
               let identity = try? JSONDecoder().decode(DaemonIdentity.self, from: data) else {
             throw LocalDaemonError.unknownIdentity(paths.daemonIdentity)

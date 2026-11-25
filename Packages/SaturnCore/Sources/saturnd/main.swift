@@ -74,6 +74,9 @@ func serve(paths: AppPaths) async -> Never {
     } catch {
         fail(error.localizedDescription)
     }
+    if let executable = Bundle.main.executableURL, let build = DaemonBuild(executable: executable) {
+        try? build.record(paths: paths)
+    }
     FileHandle.standardError.write(Data("saturnd: serving \(paths.root.path) as \(host.identity.name) (\(host.identity.id.uuidString.lowercased()))\n".utf8))
     host.onStop = { exit(0) }
     var sources: [DispatchSourceSignal] = []

@@ -201,7 +201,7 @@ public final class DaemonClient {
                 let (channel, process) = try transport.open()
                 self.channel = channel
                 self.process = process
-                try channel.send(.hello(Hello(clientID: clientID, daemonID: identity?.id, lastSeq: replica?.seq)))
+                try channel.send(.hello(Hello(clientID: clientID, daemonID: identity?.id, lastSeq: replica?.seq, replicaSchema: replica?.schema)))
                 state = .syncing
                 attempt = 0
                 await receive(from: channel)

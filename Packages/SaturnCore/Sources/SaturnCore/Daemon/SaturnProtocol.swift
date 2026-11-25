@@ -112,12 +112,17 @@ public struct Hello: Codable, Sendable {
     public var protocolVersion: Int
     public var daemonID: DaemonID?
     public var lastSeq: Int64?
+    public var replicaSchema: String?
 
-    public init(clientID: UUID, protocolVersion: Int = SaturnProtocol.version, daemonID: DaemonID? = nil, lastSeq: Int64? = nil) {
+    public init(
+        clientID: UUID, protocolVersion: Int = SaturnProtocol.version, daemonID: DaemonID? = nil, lastSeq: Int64? = nil,
+        replicaSchema: String? = nil
+    ) {
         self.clientID = clientID
         self.protocolVersion = protocolVersion
         self.daemonID = daemonID
         self.lastSeq = lastSeq
+        self.replicaSchema = replicaSchema
     }
 }
 

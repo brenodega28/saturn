@@ -167,7 +167,8 @@ final class ClientSession {
         }
         clientID = hello.clientID
         send(.welcome(Welcome(daemon: identity, protocolVersion: SaturnProtocol.version, buildVersion: SaturnProtocol.buildVersion)))
-        let resume = hello.daemonID == identity.id ? hello.lastSeq : nil
+        let replicaMatchesSchema = hello.replicaSchema.map { $0 == AppDatabase.latestMigration } ?? true
+        let resume = hello.daemonID == identity.id && replicaMatchesSchema ? hello.lastSeq : nil
         isHandshaken = true
         pumpState.begin(resumeFrom: resume, hadSeq: hello.lastSeq != nil, database: database) { [weak self] in
             Task { @MainActor in

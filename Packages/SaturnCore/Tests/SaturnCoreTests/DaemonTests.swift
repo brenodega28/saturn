@@ -18,6 +18,19 @@ import Testing
         try h.host.database.insert(LeadMessage(projectId: chat.projectId, taskId: chat.id!, kind: .lead, text: text, createdAt: .now))
     }
 
+    func rollBackLatestMigration(replicaAt url: URL) throws {
+        let stale = try DatabaseQueue(path: url.path)
+        try stale.writeWithoutTransaction { db in
+            try db.execute(sql: "ALTER TABLE task DROP COLUMN isOnboarding")
+            try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = ?", arguments: [AppDatabase.latestMigration])
+        }
+        try stale.close()
+    }
+
+    func replicaChats(_ client: DaemonClient) throws -> [Chat] {
+        try client.database?.writer.read { db in try Chat.fetchAll(db) } ?? []
+    }
+
     func replicaMessages(_ client: DaemonClient, chat: Chat) -> [String] {
         ((try? client.database?.leadMessages(taskId: chat.id!)) ?? []).map(\.text)
     }
@@ -260,6 +273,29 @@ import Testing
         try await waitUntil { replicaMessages(relaunched, chat: chat).count == 24 }
         #expect(relaunched.resyncsReceived == 1)
         #expect(relaunched.snapshotsReceived == 1)
+        relaunched.stop()
+        await h.cleanUp()
+    }
+
+    @Test func aReplicaFromAnOlderSchemaGetsAFreshSnapshotInsteadOfResuming() async throws {
+        let h = try await DaemonHarness.make()
+        let (_, chat) = try makeChat(h)
+        let client = try await h.connectedClient()
+        let identity = try #require(client.identity)
+        let replicaURL = try #require(client.replica?.url)
+        client.stop()
+        try client.replica?.close()
+
+        try rollBackLatestMigration(replicaAt: replicaURL)
+
+        let relaunched = h.client("a", knownDaemon: identity)
+        #expect(relaunched.replica?.schema != AppDatabase.latestMigration)
+        #expect(throws: (any Error).self) { try replicaChats(relaunched) }
+        relaunched.start()
+        try await relaunched.waitUntilConnected()
+        #expect(relaunched.snapshotsReceived == 1)
+        #expect(relaunched.replica?.schema == AppDatabase.latestMigration)
+        #expect(try replicaChats(relaunched).map(\.id) == [chat.id])
         relaunched.stop()
         await h.cleanUp()
     }

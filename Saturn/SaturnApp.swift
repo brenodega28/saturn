@@ -118,8 +118,15 @@ enum Launch {
         let clientPaths = AppPaths.standard
         LegacyMigration.runIfNeeded(paths: [LocalDaemon.paths, clientPaths])
         do {
-            let connection = try await LocalDaemon.connect(clientPaths: clientPaths)
-            return .ready(AppModel(connection: connection, clientPaths: clientPaths, daemonPaths: LocalDaemon.paths))
+            let local = try await LocalDaemon.connect(clientPaths: clientPaths)
+            let model = AppModel(connection: local.connection, clientPaths: clientPaths, daemonPaths: LocalDaemon.paths)
+            if local.outdatedBusyCount > 0 {
+                model.alert = AppAlert(
+                    title: "The Saturn daemon is out of date",
+                    message: "It’s still running an older build because \(local.outdatedBusyCount) agent\(local.outdatedBusyCount == 1 ? " is" : "s are") working. Some chats may not load until it restarts. When they finish, choose Stop Saturn daemon from the Saturn menu and open Saturn again."
+                )
+            }
+            return .ready(model)
         } catch {
             return .failed(error.localizedDescription)
         }

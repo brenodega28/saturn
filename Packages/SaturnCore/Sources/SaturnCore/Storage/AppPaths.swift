@@ -34,6 +34,8 @@ public struct AppPaths: Sendable {
 
     public var daemonLog: URL { root.appending(path: "saturnd.log") }
 
+    public var daemonBuild: URL { root.appending(path: "daemon-build.json") }
+
     public var replicasDirectory: URL {
         root.appending(path: "replicas", directoryHint: .isDirectory)
     }

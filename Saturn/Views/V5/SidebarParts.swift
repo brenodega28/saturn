@@ -142,7 +142,7 @@ struct SidebarFooter: View {
             footerButton("Settings (⌘,)", symbol: "gearshape") { openSettings() }
             Spacer()
             Button { showsSpend.toggle() } label: {
-                Text(String(format: "$%.0f wk", model.weeklySpend))
+                Text(String(format: "$%.0f · wk", model.weeklySpend))
                     .font(Tokens.mono(11.5))
                     .foregroundStyle(Tokens.text2)
                     .contentShape(.rect)

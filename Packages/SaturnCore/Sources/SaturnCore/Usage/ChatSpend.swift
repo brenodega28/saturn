@@ -67,7 +67,15 @@ extension AppDatabase {
         }
     }
 
+    public func chatSpend() throws -> [Int64: Double] {
+        try writer.read { db in try Self.chatSpend(db, onlyOpen: false) }
+    }
+
     private static func openChatSpend(_ db: Database) throws -> [Int64: Double] {
+        try chatSpend(db, onlyOpen: true)
+    }
+
+    private static func chatSpend(_ db: Database, onlyOpen: Bool) throws -> [Int64: Double] {
         let rows = try Row.fetchAll(db, sql: """
             SELECT t.id AS chatId, SUM(u.costUSD) AS spent
             FROM usage u
@@ -75,7 +83,7 @@ extension AppDatabase {
             LEFT JOIN agent a ON a.id = u.agentId
             LEFT JOIN run ar ON ar.id = a.runId
             JOIN task t ON t.id = COALESCE(r.taskId, a.taskId, ar.taskId)
-            WHERE t.closedAt IS NULL
+            \(onlyOpen ? "WHERE t.closedAt IS NULL" : "")
             GROUP BY t.id
             """)
         return Dictionary(uniqueKeysWithValues: rows.map { ($0["chatId"], $0["spent"] ?? 0) })

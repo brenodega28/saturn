@@ -204,6 +204,28 @@ import Testing
         #expect(warnings.map(\.title) == ["This chat has passed $10"])
     }
 
+    @Test func chatSpendSumsLeadRunAndAgentUsageForEveryChat() throws {
+        let fixture = try makeFixture()
+        let database = fixture.database
+        let finished = try database.insert(Chat(projectId: fixture.project.id!, title: "Shipped", body: "", source: .chat, status: .done, finishedAt: now, createdAt: now, updatedAt: now))
+        let finishedLead = try database.insert(Agent(projectId: fixture.project.id!, role: "lead", name: "Lead 2", status: .idle, taskId: finished.id, createdAt: now, updatedAt: now))
+        let closed = try database.insert(Chat(projectId: fixture.project.id!, title: "Old", body: "", source: .chat, status: .done, closedAt: now, createdAt: now, updatedAt: now))
+        let closedLead = try database.insert(Agent(projectId: fixture.project.id!, role: "lead", name: "Lead 3", status: .idle, taskId: closed.id, createdAt: now, updatedAt: now))
+
+        try spend(fixture, 1.25, agent: fixture.lead)
+        try spend(fixture, 2.00, run: fixture.run)
+        try spend(fixture, 0.90, agent: fixture.builder)
+        try spend(fixture, 3.00, agent: finishedLead)
+        try spend(fixture, 4.50, agent: closedLead)
+        try spend(fixture, 7)
+
+        let spent = try database.chatSpend()
+        #expect(spent.count == 3)
+        #expect(abs((spent[fixture.chat.id!] ?? 0) - 4.15) < 0.0001)
+        #expect(spent[finished.id!] == 3.00)
+        #expect(spent[closed.id!] == 4.50)
+    }
+
     @Test func weeklyAndMonthlySpendStillCountRealSpendAfterAUsageReset() throws {
         let database = try AppDatabase.inMemory()
         let calendar = UsageReportTests.calendar()

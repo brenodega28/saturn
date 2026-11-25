@@ -11,6 +11,7 @@ struct ChatSummary: Identifiable, Hashable {
     let lastActivity: Date
     let workers: [Agent]
     let isUnread: Bool
+    let costUSD: Double
 
     var id: String { "\(daemon.uuidString)-\(chat.id ?? -1)" }
 }
@@ -74,6 +75,8 @@ extension DaemonWorkspace {
     func chatSummaries() -> (open: [ChatSummary], closed: [ChatSummary]) {
         var open: [ChatSummary] = []
         var closed: [ChatSummary] = []
+        _ = connection.usageRevision
+        let spend = (try? database.chatSpend()) ?? [:]
         let openRequests = Dictionary(grouping: requests.items.filter { $0.taskId != nil }, by: { $0.taskId ?? -1 })
         for project in openProjects {
             guard let projectID = project.id else { continue }
@@ -104,7 +107,8 @@ extension DaemonWorkspace {
                 let summary = ChatSummary(
                     daemon: id, chat: chat, project: project, stage: ChatStage.of(facts), lastActivity: max(last, chat.createdAt),
                     workers: workersByChat[chatID] ?? [],
-                    isUnread: ChatActivity.isUnread(viewedAt: chat.viewedAt, createdAt: chat.createdAt, lastActivity: activity[chatID])
+                    isUnread: ChatActivity.isUnread(viewedAt: chat.viewedAt, createdAt: chat.createdAt, lastActivity: activity[chatID]),
+                    costUSD: spend[chatID] ?? 0
                 )
                 if chat.isClosed { closed.append(summary) } else { open.append(summary) }
             }

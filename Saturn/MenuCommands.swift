@@ -160,7 +160,7 @@ extension CommandContext {
     }
 
     var isReviewing: Bool {
-        model.mainScreen == .tool(.changes) || model.mainScreen == .tool(.code)
+        model.mainScreen.shows(.changes) || model.mainScreen.shows(.code)
     }
 
     var file: (project: Project, path: String)? {
@@ -325,7 +325,7 @@ extension CommandRegistry {
                 id: "view.tool.\(tool.rawValue)", title: tool.title, menu: "View", section: 1, order: index + 1,
                 shortcut: KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.command, .option]),
                 isEnabled: { tool.projectTab == nil || $0.model.currentProject != nil },
-                isChecked: { $0.model.mainScreen == .tool(tool) }
+                isChecked: { $0.model.mainScreen.shows(tool) }
             ) { $0.model.open(tool) })
         }
         register(MenuCommand(id: "view.side-bar", title: "Toggle Side Bar", menu: "View", section: 2, order: 0, shortcut: KeyboardShortcut("0", modifiers: [.command, .option]),

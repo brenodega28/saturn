@@ -33,7 +33,7 @@ struct MarkdownDocumentView: View {
                     MarkdownBlockView(block: block, fontSize: fontSize, caret: false)
                 }
             }
-            .foregroundStyle(Theme.primaryText)
+            .foregroundStyle(Tokens.text)
             .frame(maxWidth: 860, alignment: .leading)
             .padding(.horizontal, 32)
             .padding(.top, 24)
@@ -54,10 +54,10 @@ private struct MarkdownFrontMatterHeader: View {
                 GridRow {
                     Text(fields[index].key)
                         .font(.system(size: fontSize - 2, design: .monospaced))
-                        .foregroundStyle(Theme.tertiaryText)
+                        .foregroundStyle(Tokens.text3)
                     Text(fields[index].value.isEmpty ? "—" : fields[index].value)
                         .font(.system(size: fontSize - 1.5))
-                        .foregroundStyle(fields[index].value.isEmpty ? Theme.tertiaryText : Theme.secondaryText)
+                        .foregroundStyle(fields[index].value.isEmpty ? Tokens.text3 : Tokens.text2)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -66,8 +66,8 @@ private struct MarkdownFrontMatterHeader: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Theme.fill, in: .rect(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.hairline))
+        .background(Tokens.fill, in: .rect(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Tokens.hair))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Front matter")
     }

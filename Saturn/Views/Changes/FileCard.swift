@@ -31,12 +31,9 @@ struct FileCard: View {
                 collapsedNote("Generated file — collapsed. Expand to see the diff.")
             }
         }
-        .background(DiffPalette.cardBackground, in: .rect(cornerRadius: 16, style: .continuous))
-        .clipShape(.rect(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(path.isConflicted ? Theme.danger.opacity(0.45) : Tokens.hair2)
-        )
+        .padding(.bottom, 10)
+        .background(path.isConflicted ? Tokens.stuckBackground.opacity(0.5) : .clear)
+        .overlay(alignment: .top) { Rectangle().fill(Tokens.hair).frame(height: 1) }
     }
 
     private func header(expanded: Bool) -> some View {
@@ -54,12 +51,13 @@ struct FileCard: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Theme.secondaryText)
+            .foregroundStyle(Tokens.text3)
             .accessibilityLabel(expanded ? "Collapse \(path.path)" : "Expand \(path.path)")
             .help(expanded ? "Collapse file" : "Expand file")
 
             Text(displayPath)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .font(Tokens.mono(11.5))
+                .foregroundStyle(Tokens.text2)
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
@@ -69,7 +67,7 @@ struct FileCard: View {
                 Text("+\(path.additions)").foregroundStyle(DiffPalette.addedSign)
                 Text("−\(path.deletions)").foregroundStyle(DiffPalette.removedSign)
             }
-            .font(.system(size: 12, design: .monospaced))
+            .font(Tokens.mono(11.5))
             .accessibilityLabel("\(path.additions) added, \(path.deletions) removed")
 
             badges
@@ -80,10 +78,7 @@ struct FileCard: View {
                     Text(author.name)
                 }
                 .font(.system(size: 12))
-                .padding(.leading, 3)
-                .padding(.trailing, 9)
-                .frame(height: 24)
-                .background(Theme.fillRaised, in: Capsule())
+                .foregroundStyle(Tokens.text2)
             }
 
             Spacer(minLength: 8)
@@ -91,10 +86,7 @@ struct FileCard: View {
             ReviewedPill(reviews: reviews, project: context.project)
             viewedToggle
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Tokens.hover)
-        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.hair).frame(height: 1) }
+        .padding(EdgeInsets(top: 10, leading: 10, bottom: 4, trailing: 18))
     }
 
     private var displayPath: String {
@@ -143,11 +135,11 @@ struct FileCard: View {
             Text("Viewed").font(.system(size: 12))
         }
         .toggleStyle(.checkbox)
-        .tint(Theme.success)
-        .padding(.horizontal, 12)
-        .frame(height: 28)
-        .background(isViewed ? Theme.success.opacity(0.14) : .clear, in: .rect(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tokens.hair2))
+        .tint(Tokens.done)
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(isViewed ? Tokens.doneBackground : .clear, in: Capsule())
+        .overlay(Capsule().strokeBorder(Tokens.hair2))
         .help("Mark as viewed. It stays viewed until the diff changes.")
     }
 
@@ -238,9 +230,9 @@ struct FileCard: View {
     private func collapsedNote(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 12.5))
-            .foregroundStyle(Theme.secondaryText)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .foregroundStyle(Tokens.text2)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -251,11 +243,11 @@ struct Badge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10, weight: .bold))
+            .font(.system(size: 10.5, weight: .semibold))
             .foregroundStyle(color)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(color.opacity(0.18), in: .rect(cornerRadius: 4, style: .continuous))
+            .padding(.horizontal, 7)
+            .frame(height: 18)
+            .background(color.opacity(0.14), in: Capsule())
     }
 }
 
@@ -271,8 +263,8 @@ struct ReviewedPill: View {
             .font(.system(size: 11.5, weight: .semibold))
             .foregroundStyle(color)
             .lineLimit(1)
-            .padding(.horizontal, 9)
-            .frame(height: 24)
+            .padding(.horizontal, 8)
+            .frame(height: 20)
             .background(background, in: Capsule())
             .help(helpText)
     }
@@ -283,15 +275,15 @@ struct ReviewedPill: View {
 
     private var appearance: (String, Color, Color) {
         if reviews.contains(where: { $0.state == .changesRequested }) {
-            return ("Changes requested by \(names(.changesRequested))", Color(hex: 0xFFB340), Theme.warning.opacity(0.16))
+            return ("Changes requested by \(names(.changesRequested))", Tokens.need, Tokens.needBackground)
         }
         if reviews.contains(where: { $0.state == .reviewing }) {
-            return ("\(names(.reviewing)) reviewing…", Color(hex: 0x7DB6FF), Theme.info.opacity(0.16))
+            return ("\(names(.reviewing)) reviewing…", Tokens.review, Tokens.reviewBackground)
         }
         if reviews.contains(where: { $0.state == .approved }) {
-            return ("✓ Reviewed by \(names(.approved))", Theme.successText, Theme.success.opacity(0.14))
+            return ("✓ Reviewed by \(names(.approved))", Tokens.done, Tokens.doneBackground)
         }
-        return ("Not reviewed yet", Theme.secondaryText, Theme.fillRaised)
+        return ("Not reviewed yet", Tokens.text2, Tokens.fill)
     }
 
     private var helpText: String {
@@ -311,24 +303,23 @@ struct ReviewerNotes: View {
     let notes: [(String, String)]
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "text.alignleft")
-                .foregroundStyle(Color(hex: 0x7DB6FF))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(notes.enumerated()), id: \.offset) { _, note in
-                    Text("\(Text("\(note.0): ").fontWeight(.semibold).foregroundStyle(Color(hex: 0x9CC6FF)))\(note.1)")
-                        .font(.system(size: 13))
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(notes.enumerated()), id: \.offset) { _, note in
+                HStack(alignment: .top, spacing: 10) {
+                    AgentAvatar(size: 22, appearance: .reviewer).shadow(radius: 0)
+                    Text("\(Text(note.0).fontWeight(.bold)) · \(note.1)")
+                        .font(.system(size: 12.5))
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(DiffPalette.pinCard, in: .rect(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(DiffPalette.pinLine))
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.accent.opacity(0.06))
-        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.hair).frame(height: 1) }
+        .padding(EdgeInsets(top: 4, leading: 18, bottom: 8, trailing: 18))
     }
 }
 
@@ -350,9 +341,9 @@ struct BranchHeader: View {
                 .truncationMode(.middle)
         }
         .font(.system(size: 12))
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Tokens.hover)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 6)
+        .background(Tokens.fill)
     }
 }
 
@@ -364,11 +355,10 @@ struct OverlapNote: View {
     var body: some View {
         Label("\(path.diffs.map { workspace.displayName(of: $0) }.joined(separator: " and ")) both change this file. Their changes merge cleanly.", systemImage: "arrow.triangle.merge")
             .font(.system(size: 12.5))
-            .foregroundStyle(Theme.warning)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .foregroundStyle(Tokens.need)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.warning.opacity(0.06))
     }
 }
 
@@ -405,10 +395,10 @@ struct ConflictPanel: View {
                     .foregroundStyle(Theme.secondaryText)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.danger.opacity(0.06))
+        .background(Tokens.stuckBackground)
     }
 
     private var headline: String {

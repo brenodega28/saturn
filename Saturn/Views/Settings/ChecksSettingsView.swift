@@ -12,10 +12,16 @@ struct ChecksSettingsView: View {
     @State private var isCheckingHealth = false
     @State private var healthError: String?
 
+    @State private var roundsDraft = ""
+
     var body: some View {
         let checks = workspace.config(for: project).checks
-        SettingsPage("Checks", subtitle: "Commands Saturn runs on every agent’s worktree before work reaches you: format, lint, type check, tests and scans. Failures go back to the agent, never to review.") {
-            checksCard(checks)
+        SettingsPage("Checks", subtitle: "Run in every worker’s worktree before the Reviewer sees the work: format, lint, type check, tests and scans. Failures go back to the agent, never to review.") {
+            if let checks, !checks.checks.isEmpty {
+                configuredChecks(checks)
+            } else {
+                suggestedChecks
+            }
             if let checks, !checks.protectedPaths.isEmpty {
                 protectedCard(checks.protectedPaths)
             }
@@ -23,123 +29,135 @@ struct ChecksSettingsView: View {
         }
         .task(id: project.id) {
             suggestions = CheckDetector.suggest(repository: project.filesRoot)
+            roundsDraft = String(workspace.config(for: project).checks?.maxRounds ?? ChecksConfig.defaultMaxRounds)
         }
     }
 
     @ViewBuilder
-    private func checksCard(_ checks: ChecksConfig?) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Checks").font(.system(size: 15, weight: .semibold))
-                Spacer()
-                Button("Open \(ChecksConfig.fileName)") { openChecksFile() }
-                    .buttonStyle(.pill)
-                    .disabled(checks == nil)
-                    .help("Edit the checks in your editor; Saturn reloads them when you come back")
-                Button("Reload") { workspace.reloadConfig(for: project) }
-                    .buttonStyle(.pill)
+    private func configuredChecks(_ checks: ChecksConfig) -> some View {
+        SettingsRows {
+            ForEach(Array(checks.checks.enumerated()), id: \.element.id) { index, check in
+                CheckRow(index: index + 1, check: check, runsAfterEdits: Binding(
+                    get: { check.onEdit },
+                    set: { value in update(checks) { $0.checks[index].onEdit = value } }
+                ))
             }
-            if let checks, !checks.checks.isEmpty {
-                ForEach(checks.checks) { check in
-                    CheckRow(check: check)
-                }
-                if !checks.hasTestCheck {
-                    warning("No check of kind test, so agents’ work isn’t verified by tests.")
-                }
-                Text("Failing work goes back to its agent up to \(checks.maxRounds) round\(checks.maxRounds == 1 ? "" : "s"), then to you in the chat.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.secondaryText)
-            } else {
-                Text("No checks yet, so nothing verifies agents’ work before you review it.")
-                    .font(.system(size: 13))
-                if let suggestions, !suggestions.checks.isEmpty {
-                    Text("Suggested from \(suggestions.evidence.joined(separator: ", ")):")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.secondaryText)
-                    ForEach(suggestions.checks) { check in
-                        CheckRow(check: check)
+        }
+        if !checks.hasTestCheck {
+            SettingsWarning("No check of kind test, so agents’ work isn’t verified by tests.")
+        }
+        HStack(spacing: 24) {
+            HStack(spacing: 8) {
+                Text("Rounds before a worker stops").font(.system(size: 13))
+                TextField("Rounds", text: $roundsDraft)
+                    .sectionField(width: 52)
+                    .onSubmit { saveRounds(checks) }
+                    .accessibilityLabel("Rounds before a worker stops")
+                    .help("Failing work goes back to its agent this many times, then to you in the chat. Press Return to save.")
+            }
+            Spacer(minLength: 0)
+            Button("Open \(ChecksConfig.fileName)") { openChecksFile() }
+                .buttonStyle(SectionButtonStyle())
+                .help("Edit the checks in your editor; Saturn reloads them when you come back")
+            Button("Reload") { workspace.reloadConfig(for: project) }
+                .buttonStyle(SectionButtonStyle())
+        }
+        SettingsNote("The switch runs a check after every edit as well as before review.", color: Tokens.text3)
+    }
+
+    @ViewBuilder
+    private var suggestedChecks: some View {
+        SettingsRows {
+            SettingsRowLabel(title: "No checks yet", detail: "Nothing verifies agents’ work before you review it.")
+            if let suggestions, !suggestions.checks.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    SettingsNote("Suggested from \(suggestions.evidence.joined(separator: ", ")):")
+                    ForEach(Array(suggestions.checks.enumerated()), id: \.element.id) { index, check in
+                        CheckRow(index: index + 1, check: check, runsAfterEdits: nil)
                     }
                     if !suggestions.protectedPaths.isEmpty {
                         Text("Protected test files: " + suggestions.protectedPaths.joined(separator: ", "))
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(Theme.secondaryText)
+                            .font(Tokens.mono(12))
+                            .foregroundStyle(Tokens.text2)
                     }
                     if !suggestions.hasTestCheck {
-                        warning("Saturn found no test command to run. Add one to \(ChecksConfig.fileName) after adding these.")
+                        SettingsWarning("Saturn found no test command to run. Add one to \(ChecksConfig.fileName) after adding these.")
                     }
                     Button("Add These Checks") { add(suggestions) }
-                        .buttonStyle(.pill)
-                } else {
-                    warning("Saturn couldn’t find a test, lint or format command in this project. Add them to \(ProjectConfig.directoryName)/\(ChecksConfig.fileName).")
+                        .buttonStyle(SectionButtonStyle(kind: .primary))
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    SettingsWarning("Saturn couldn’t find a test, lint or format command in this project. Add them to \(ProjectConfig.directoryName)/\(ChecksConfig.fileName).")
                     Button("Create \(ChecksConfig.fileName)") { add(CheckSuggestions(checks: [], protectedPaths: [], evidence: [])) }
-                        .buttonStyle(.pill)
+                        .buttonStyle(SectionButtonStyle())
                 }
             }
         }
-        .padding(16)
-        .card(cornerRadius: 16)
     }
 
     private func protectedCard(_ paths: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Protected files").font(.system(size: 15, weight: .semibold))
-            Text("Agents can’t edit existing files that match these patterns; they can add new ones. Any change that gets through is pinned for you with the test-change tag.")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(paths.joined(separator: "\n"))
-                .font(.system(size: 12.5, design: .monospaced))
-                .textSelection(.enabled)
+        SettingsRows {
+            VStack(alignment: .leading, spacing: 8) {
+                SettingsRowLabel(title: "Protected files", detail: "Agents can’t edit existing files that match these patterns; they can add new ones. Any change that gets through is pinned for you with the test-change tag.")
+                FlowLayout(spacing: 6) {
+                    ForEach(paths, id: \.self) { path in CommandChip(text: path) }
+                }
+            }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .card(cornerRadius: 16)
     }
 
     private func healthCard(hasChecks: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Health check").font(.system(size: 15, weight: .semibold))
-                Spacer()
+        SettingsRows {
+            HStack(spacing: 14) {
+                SettingsRowLabel(title: "Health check", detail: "Runs the setup script and every check in a fresh worktree of the current branch, so you know agents can get them green.")
                 if isCheckingHealth { ProgressView().controlSize(.small) }
                 Button("Run Health Check") { runHealthCheck() }
-                    .buttonStyle(.pill)
+                    .buttonStyle(SectionButtonStyle())
                     .disabled(isCheckingHealth || !hasChecks)
             }
-            Text("Runs the setup script and every check in a fresh worktree of the current branch, so you know agents can get them green.")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
             if let healthError {
-                warning(healthError)
+                SettingsWarning(healthError)
             }
             if let report {
-                ForEach(report.results) { result in
-                    HStack(spacing: 8) {
-                        StatusDot(result.passed ? Theme.success : Theme.danger)
-                        Text(result.headline).font(.system(size: 12.5))
-                        Spacer()
-                        Text(result.durationSeconds.formatted(.number.precision(.fractionLength(1))) + "s")
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.tertiaryText)
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(report.results) { result in
+                        HStack(spacing: 8) {
+                            StatusDot(result.passed ? Tokens.done : Tokens.danger)
+                            Text(result.headline).font(.system(size: 12.5))
+                            Spacer()
+                            Text(result.durationSeconds.formatted(.number.precision(.fractionLength(1))) + " s")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Tokens.text2)
+                        }
                     }
-                }
-                if report.isHealthy {
-                    Text("Everything passes on a clean checkout.").font(.system(size: 12.5)).foregroundStyle(Theme.successText)
-                } else {
-                    ForEach(report.problems, id: \.self) { warning($0) }
+                    if report.isHealthy {
+                        SettingsNote("Everything passes on a clean checkout.", color: Tokens.done)
+                    } else {
+                        ForEach(report.problems, id: \.self) { SettingsWarning($0) }
+                    }
                 }
             }
         }
-        .padding(16)
-        .card(cornerRadius: 16)
     }
 
-    private func warning(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.triangle.fill")
-            .font(.system(size: 12))
-            .foregroundStyle(Theme.warning)
-            .fixedSize(horizontal: false, vertical: true)
+    private func saveRounds(_ checks: ChecksConfig) {
+        guard let rounds = Int(roundsDraft.trimmingCharacters(in: .whitespaces)), (1...20).contains(rounds) else {
+            roundsDraft = String(checks.maxRounds)
+            return
+        }
+        update(checks) { $0.maxRounds = rounds }
+    }
+
+    private func update(_ checks: ChecksConfig, _ change: (inout ChecksConfig) -> Void) {
+        var updated = checks
+        change(&updated)
+        do {
+            try ProjectConfigLoader.write(updated, repository: project.filesRoot)
+        } catch {
+            model.alert = AppAlert(title: "Couldn’t write \(ChecksConfig.fileName)", message: error.localizedDescription)
+        }
+        workspace.reloadConfig(for: project)
     }
 
     private func add(_ suggestions: CheckSuggestions) {
@@ -174,24 +192,55 @@ struct ChecksSettingsView: View {
 }
 
 private struct CheckRow: View {
+    let index: Int
     let check: CheckDefinition
+    let runsAfterEdits: Binding<Bool>?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(check.kind.rawValue)
-                .font(.system(size: 10.5, weight: .semibold))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Tokens.fill2, in: .capsule)
+        HStack(spacing: 14) {
+            Text("\(index)")
+                .font(Tokens.mono(12))
+                .foregroundStyle(Tokens.text3)
+                .frame(width: 14, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
-                Text(check.name).font(.system(size: 13, weight: .medium))
-                Text(check.command).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.secondaryText).textSelection(.enabled)
+                Text(check.name).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                Text(check.kind.rawValue).font(.system(size: 11.5)).foregroundStyle(Tokens.text3)
             }
-            Spacer()
-            if check.onEdit {
-                Text("after edits").font(.system(size: 11)).foregroundStyle(Theme.tertiaryText)
+            .frame(width: 100, alignment: .leading)
+            Text(check.command)
+                .font(Tokens.mono(12))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Tokens.code, in: .rect(cornerRadius: 7, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Tokens.hair))
+                .help(check.command)
+            Text("\(check.timeoutMinutes) min limit")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Tokens.text2)
+                .frame(width: 84, alignment: .leading)
+            if let runsAfterEdits {
+                SectionSwitch(label: "Run \(check.name) after every edit", isOn: runsAfterEdits)
+                    .help(runsAfterEdits.wrappedValue ? "Runs after every edit and before review" : "Runs before review only")
             }
-            Text("\(check.timeoutMinutes) min").font(.system(size: 11)).foregroundStyle(Theme.tertiaryText)
         }
+    }
+}
+
+struct CommandChip: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(Tokens.mono(12))
+            .foregroundStyle(Tokens.text)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Tokens.code, in: .rect(cornerRadius: 7, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Tokens.hair))
+            .textSelection(.enabled)
     }
 }

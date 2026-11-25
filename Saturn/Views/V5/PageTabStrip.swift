@@ -145,6 +145,8 @@ private struct PageTab: View {
             StageDot(stage: stage).accessibilityHidden(true)
         case .newChat:
             StageDot(stage: nil).accessibilityHidden(true)
+        case .project(let ref, _):
+            if let project = workspace?.project(withID: ref.id) { ProjectTile(project: project, size: 16) }
         default:
             Image(systemName: Self.symbol(for: page.kind))
                 .font(.system(size: 12.5))
@@ -181,6 +183,7 @@ private struct PageTab: View {
         case .terminal: "terminal"
         case .code: "chevron.left.forwardslash.chevron.right"
         case .tool(let tool, _): tool.systemImage
+        case .project: "folder"
         case .run: "point.3.connected.trianglepath.dotted"
         case .agent: "person"
         case .spec: "doc.text"

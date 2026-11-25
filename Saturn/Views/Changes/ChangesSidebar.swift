@@ -2,39 +2,125 @@ import SaturnCore
 import SaturnUI
 import SwiftUI
 
-struct ChangesSidebar: View {
+enum ChangeGroup: CaseIterable {
+    case review
+    case working
+    case merged
+    case earlier
+
+    var title: String {
+        switch self {
+        case .review: "Needs your review"
+        case .working: "Waiting on workers"
+        case .merged: "Merged · not pushed"
+        case .earlier: "Earlier"
+        }
+    }
+
+    static func of(_ run: Run, needsYou: Bool) -> ChangeGroup {
+        if needsYou { return .review }
+        if run.mergedAt != nil && run.pushedAt == nil { return .merged }
+        switch run.status {
+        case .running, .pending, .paused, .interrupted: return .working
+        case .waitingOnYou: return .review
+        case .succeeded, .failed, .cancelled: return .earlier
+        }
+    }
+}
+
+struct ChangesRunList: View {
+    @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
+    let runs: [Run]
+    let selected: Run
+    let store: ChangesStore
+
+    var body: some View {
+        let grouped = Dictionary(grouping: runs) { ChangeGroup.of($0, needsYou: needsYou($0)) }
+        ForEach(ChangeGroup.allCases, id: \.self) { group in
+            if let runs = grouped[group], !runs.isEmpty {
+                SectionGroupTitle(group.title)
+                ForEach(runs) { run in row(run, group: group) }
+            }
+        }
+    }
+
+    private func needsYou(_ run: Run) -> Bool {
+        workspace.holdsForApproval(run) || workspace.runNeedsYou(run)
+    }
+
+    private func row(_ run: Run, group: ChangeGroup) -> some View {
+        let isCurrent = run.id == selected.id
+        let status = status(of: run, in: group)
+        return Button { store.select(run, replacing: selected) } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(run.reviewTitle)
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(Tokens.text)
+                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Text(status.text).foregroundStyle(status.color).lineLimit(1)
+                    Spacer(minLength: 4)
+                    lineCounts(run, isCurrent: isCurrent)
+                }
+                .font(.system(size: 12))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isCurrent ? Tokens.selection : .clear, in: .rect(cornerRadius: 10, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
+        .help("Review \(run.reviewTitle)")
+    }
+
+    @ViewBuilder
+    private func lineCounts(_ run: Run, isCurrent: Bool) -> some View {
+        if isCurrent, store.loadedRunID == run.id, !store.allPaths.isEmpty {
+            let additions = store.allPaths.reduce(0) { $0 + $1.additions }
+            let deletions = store.allPaths.reduce(0) { $0 + $1.deletions }
+            Text("+\(additions)").font(Tokens.mono(11.5)).foregroundStyle(Tokens.done)
+            Text("−\(deletions)").font(Tokens.mono(11.5)).foregroundStyle(Tokens.danger)
+        } else if let lines = run.linesChanged, lines > 0 {
+            Text("\(lines) lines").font(Tokens.mono(11.5)).foregroundStyle(Tokens.text3)
+        }
+    }
+
+    private func status(of run: Run, in group: ChangeGroup) -> (text: String, color: Color) {
+        switch group {
+        case .review:
+            workspace.holdsForApproval(run) ? ("In review", Tokens.review) : ("Waiting on you", Tokens.need)
+        case .working:
+            (run.reviewMeta, run.status == .interrupted ? Tokens.stuck : Tokens.build)
+        case .merged:
+            ("Merged locally", Tokens.done)
+        case .earlier:
+            (run.reviewMeta, run.status == .failed ? Tokens.stuck : run.status == .succeeded ? Tokens.done : Tokens.text2)
+        }
+    }
+}
+
+struct ChangesPinList: View {
     let store: ChangesStore
     let context: ReviewContext
     let jump: (String) -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if !store.reviewPins.isEmpty {
-                    pinSection
-                }
-                fileSection
-            }
-            .padding(.bottom, 96)
-        }
-        .scrollIndicators(.never)
-    }
-
-    private var pinSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        if !store.reviewPins.isEmpty {
             HStack {
-                Text("Needs your eyes").font(.system(size: 12, weight: .semibold))
+                SectionGroupTitle("Pins on this change")
                 Spacer()
-                Text("\(store.openPins.count)")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color(hex: 0x2A2300))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 1)
-                    .background(DiffPalette.pin, in: Capsule())
-                    .accessibilityLabel("\(store.openPins.count) open pins")
+                if !store.openPins.isEmpty {
+                    Text("\(store.openPins.count) open")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Tokens.review)
+                        .padding(.top, 8)
+                        .padding(.trailing, 10)
+                        .accessibilityLabel("\(store.openPins.count) open pins")
+                }
             }
-            .padding(.horizontal, 4)
-            .padding(.bottom, 6)
             ForEach(store.reviewPins) { pin in
                 Button { jump(target(for: pin)) } label: { pinRow(pin) }
                     .buttonStyle(.plain)
@@ -54,12 +140,12 @@ struct ChangesSidebar: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(pin.byUser ? pin.explanation : pin.title)
                     .font(.system(size: 12.5, weight: isOpen ? .semibold : .medium))
-                    .foregroundStyle(isOpen ? Color.white : Theme.secondaryText)
+                    .foregroundStyle(isOpen ? Tokens.text : Tokens.text2)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 Text("\(pin.byUser ? "Your comment · " : "")\((pin.file as NSString).lastPathComponent):\(pin.sideLineLabel)")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Theme.secondaryText)
+                    .font(Tokens.mono(11))
+                    .foregroundStyle(Tokens.text2)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -68,12 +154,12 @@ struct ChangesSidebar: View {
             case .approved:
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Theme.successText)
+                    .foregroundStyle(Tokens.done)
                     .accessibilityLabel("Approved")
             case .changeRequested:
                 Image(systemName: "arrow.uturn.backward")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Theme.warning)
+                    .foregroundStyle(Tokens.need)
                     .accessibilityLabel("Change requested")
             case .open:
                 EmptyView()
@@ -81,121 +167,7 @@ struct ChangesSidebar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
-        .background(isOpen ? DiffPalette.pin.opacity(0.08) : .clear, in: .rect(cornerRadius: 10, style: .continuous))
+        .background(isOpen ? Tokens.reviewBackground : .clear, in: .rect(cornerRadius: 10, style: .continuous))
         .contentShape(Rectangle())
-    }
-
-    private var fileSection: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Files").font(.system(size: 12, weight: .semibold)).padding(.horizontal, 4).padding(.bottom, 6)
-            if store.allPaths.isEmpty {
-                Text(store.changeSet == nil ? "Loading…" : "No changed files")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.secondaryText)
-                    .padding(.horizontal, 8)
-            }
-            ForEach(store.visiblePaths) { path in
-                Button { jump(path.path) } label: { fileRow(path) }
-                    .buttonStyle(.plain)
-                    .help(path.path)
-            }
-        }
-    }
-
-    private func fileRow(_ path: ChangedPath) -> some View {
-        let viewed = store.viewed.contains(path.path)
-        return HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(context.appearance(path.diffs.first?.agentId).palette.gradient)
-                .frame(width: 14, height: 14)
-                .accessibilityHidden(true)
-            Text(path.path.split(separator: "/").suffix(2).joined(separator: "/"))
-                .font(.system(size: 11.5, design: .monospaced))
-                .foregroundStyle(viewed ? Theme.tertiaryText : Color.white.opacity(0.9))
-                .lineLimit(1)
-                .truncationMode(.head)
-            Spacer(minLength: 0)
-            if path.isConflicted {
-                Badge(text: "CONFLICT", color: DiffPalette.conflict)
-            }
-            if viewed {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .heavy))
-                    .foregroundStyle(Theme.successText)
-                    .accessibilityLabel("Viewed")
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .contentShape(Rectangle())
-    }
-}
-
-struct ReviewBar: View {
-    @Environment(AppModel.self) private var model
-    @Environment(DaemonWorkspace.self) private var workspace
-    let run: Run
-    let store: ChangesStore
-    let holdsApproval: Bool
-
-    var body: some View {
-        let open = store.openPins.count
-        let requested = store.changeRequests
-        HStack(spacing: 12) {
-            Image(systemName: "pin.fill")
-                .foregroundStyle(open > 0 ? DiffPalette.pin : Theme.successText)
-                .accessibilityHidden(true)
-            Text(title(open: open, requested: requested.count)).font(.system(size: 13.5, weight: .semibold))
-            Text(subtitle(requested: requested.count))
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.secondaryText)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            if holdsApproval && !requested.isEmpty {
-                Button("Send changes back") { workspace.sendChangesBack(in: run, pins: store.pins) }
-                    .buttonStyle(PillButtonStyle(.primary, height: 36))
-                    .help("Sends the \(requested.count) requested change\(requested.count == 1 ? "" : "s") back to the authors’ workflow step")
-            } else if open > 0 || holdsApproval {
-                let unreadCore = store.unviewedCoreFiles.count
-                Button(holdsApproval ? "Approve all & continue run" : "Approve all pins") { workspace.approveAllPins(in: run) }
-                    .buttonStyle(PillButtonStyle(.primary, height: 36))
-                    .disabled(unreadCore > 0)
-                    .help(unreadCore > 0
-                        ? "Read and mark the \(unreadCore) core file\(unreadCore == 1 ? "" : "s") as viewed first"
-                        : holdsApproval ? "Approves every open pin and lets the run continue" : "Approves every open pin. The run continues when it reaches your approval step.")
-            }
-        }
-        .padding(EdgeInsets(top: 10, leading: 18, bottom: 10, trailing: 10))
-        .frame(maxWidth: 920)
-        .background(.ultraThinMaterial, in: Capsule())
-        .background(Tokens.menu, in: Capsule())
-        .overlay(Capsule().strokeBorder(Tokens.hair2))
-        .shadow(color: .black.opacity(0.5), radius: 20, y: 14)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 4)
-    }
-
-    private func title(open: Int, requested: Int) -> String {
-        let requests = "\(requested) change request\(requested == 1 ? "" : "s")"
-        if open > 0 {
-            let pins = "\(open) open pin\(open == 1 ? "" : "s")"
-            return requested > 0 ? "\(pins) · \(requests)" : pins
-        }
-        if requested > 0 { return requests }
-        return store.reviewPins.isEmpty ? "No pins" : "All pins reviewed"
-    }
-
-    private func subtitle(requested: Int) -> String {
-        var parts: [String] = []
-        let conflicts = store.changeSet?.conflictingPaths.count ?? 0
-        if conflicts > 0 { parts.append("\(conflicts) conflict\(conflicts == 1 ? "" : "s")") }
-        let unreadCore = store.unviewedCoreFiles.count
-        if unreadCore > 0 { parts.append("\(unreadCore) core file\(unreadCore == 1 ? "" : "s") to read line by line") }
-        let unviewed = store.allPaths.filter { !store.viewed.contains($0.path) }.count
-        if unviewed > 0 { parts.append("\(unviewed) file\(unviewed == 1 ? "" : "s") not viewed") }
-        if store.hiddenPinCount > 0 { parts.append("\(store.hiddenPinCount) low-confidence comment\(store.hiddenPinCount == 1 ? "" : "s") hidden") }
-        if requested > 0 && !holdsApproval { parts.append("\(requested) change request\(requested == 1 ? "" : "s") wait for your approval step") }
-        if parts.isEmpty, let step = run.currentStep { parts.append("Run is at \(step.capitalized)") }
-        return parts.joined(separator: " · ")
     }
 }

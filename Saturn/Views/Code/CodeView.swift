@@ -11,13 +11,13 @@ struct CodeView: View {
         let browser = workspace.codeBrowser(for: project)
         HStack(spacing: 0) {
             CodeExplorer(browser: browser)
-                .frame(width: 264)
-            Divider().overlay(Tokens.hair)
+                .frame(width: 260)
+            Rectangle().fill(Tokens.hair).frame(width: 1)
             CodeReader(browser: browser, project: project)
         }
-        .background(CodeStyle.background)
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18, style: .continuous))
-        .overlay(UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18, style: .continuous).strokeBorder(Tokens.hair))
+        .background(Tokens.raised)
+        .clipShape(.rect(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Tokens.hair))
         .overlay {
             if browser.isFinderPresented {
                 CodeFinder(browser: browser)
@@ -41,51 +41,63 @@ struct CodeExplorer: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
+                Button { browser.presentFinder() } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").font(.system(size: 12))
+                        Text("Go to file").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("⌘P").font(Tokens.mono(11)).foregroundStyle(Tokens.text3)
+                    }
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Tokens.text2)
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(Tokens.fill, in: .rect(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tokens.hair2))
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help("Go to file")
                 SourcePicker(browser: browser)
                 HStack(spacing: 6) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.tertiaryText)
-                            .accessibilityHidden(true)
-                        TextField("Filter files", text: $browser.filter)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 12.5))
-                    }
-                    .padding(.horizontal, 9)
-                    .frame(height: 30)
-                    .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 9, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Tokens.hair))
-                    Button { browser.presentFinder() } label: {
-                        Text("⌘P")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(Theme.secondaryText)
-                            .frame(height: 30)
-                            .padding(.horizontal, 9)
-                            .background(Tokens.fill, in: .rect(cornerRadius: 9, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Go to file")
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Tokens.text3)
+                        .accessibilityHidden(true)
+                    TextField("Filter files", text: $browser.filter)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
                 }
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .background(Tokens.window.opacity(0.4), in: .rect(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tokens.hair))
             }
-            .padding(EdgeInsets(top: 12, leading: 12, bottom: 10, trailing: 12))
+            .padding(10)
 
             FileTree(browser: browser)
 
             HStack(spacing: 6) {
-                Text("M").font(.system(size: 11.5, weight: .bold, design: .monospaced)).foregroundStyle(Theme.successText)
+                ChangeDot(color: Tokens.review)
                 Text(browser.source?.agent == nil ? "uncommitted" : "changed by this agent")
-                Text("A").font(.system(size: 11.5, weight: .bold, design: .monospaced)).foregroundStyle(CodeStyle.added).padding(.leading, 6)
+                ChangeDot(color: Tokens.done).padding(.leading, 6)
                 Text("added")
                 Spacer(minLength: 0)
             }
             .font(.system(size: 11.5))
-            .foregroundStyle(Theme.secondaryText)
+            .foregroundStyle(Tokens.text3)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .overlay(alignment: .top) { Divider().overlay(Tokens.hair) }
+            .overlay(alignment: .top) { Rectangle().fill(Tokens.hair).frame(height: 1) }
         }
-        .background(Tokens.hover)
+        .background(Tokens.side)
+    }
+}
+
+struct ChangeDot: View {
+    let color: Color
+
+    var body: some View {
+        Circle().fill(color).frame(width: 6, height: 6).accessibilityHidden(true)
     }
 }
 
@@ -110,19 +122,18 @@ private struct SourcePicker: View {
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                     Text(browser.source?.branch ?? "")
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(Theme.tertiaryText)
+                        .font(Tokens.mono(10.5))
+                        .foregroundStyle(Tokens.text3)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.secondaryText)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(Tokens.text3)
             }
-            .padding(.leading, 6)
+            .padding(.leading, 5)
             .padding(.trailing, 10)
-            .frame(height: 34)
-            .background(Tokens.hover, in: .rect(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Tokens.hair))
+            .frame(height: 32)
+            .background(Tokens.fill, in: .rect(cornerRadius: 8, style: .continuous))
             .contentShape(.rect)
         }
         .menuStyle(.button)
@@ -149,7 +160,7 @@ private struct SourceSwatch: View {
             } else {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(Tokens.fill2)
-                    .overlay { Image(systemName: "folder").font(.system(size: 10)).foregroundStyle(Theme.link) }
+                    .overlay { Image(systemName: "folder").font(.system(size: 10)).foregroundStyle(Tokens.link) }
             }
         }
         .frame(width: 22, height: 22)
@@ -165,7 +176,7 @@ private struct FileTree: View {
             if let error = browser.loadError {
                 Text(error)
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.danger)
+                    .foregroundStyle(Tokens.danger)
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else if browser.snapshot == nil {
@@ -180,11 +191,11 @@ private struct FileTree: View {
                         if rows.isEmpty {
                             Text(browser.filter.isEmpty ? "No files" : "No files match “\(browser.filter)”")
                                 .font(.system(size: 12))
-                                .foregroundStyle(Theme.tertiaryText)
+                                .foregroundStyle(Tokens.text3)
                                 .padding(12)
                         }
                     }
-                    .padding(EdgeInsets(top: 0, leading: 6, bottom: 12, trailing: 6))
+                    .padding(EdgeInsets(top: 0, leading: 6, bottom: 10, trailing: 6))
                 }
             }
         }
@@ -205,47 +216,34 @@ private struct FileTreeRow: View {
             if row.isDirectory { browser.toggle(row.path) } else { browser.open(row.path) }
         } label: {
             HStack(spacing: 6) {
-                if row.isDirectory {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Theme.tertiaryText)
-                        .rotationEffect(.degrees(isOpen ? 90 : 0))
-                        .frame(width: 9)
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.link.opacity(0.85))
-                } else {
-                    Spacer().frame(width: 9)
-                    FileBadge(path: row.path)
-                }
+                Text(row.isDirectory ? (isOpen ? "▾" : "▸") : "")
+                    .foregroundStyle(Tokens.text3)
+                    .frame(width: 10, alignment: .leading)
                 Text(row.name)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(change != nil || isActive ? .white : Theme.primaryText.opacity(0.9))
+                    .foregroundStyle(Tokens.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Spacer(minLength: 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if !row.isDirectory, browser.pins[row.path]?.isEmpty == false {
                     Image(systemName: "pin.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(CodeStyle.pin)
+                        .foregroundStyle(Tokens.review)
                         .accessibilityLabel("Has a pin")
                 }
                 if let change {
-                    Text(change.status.mark)
-                        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
-                        .foregroundStyle(CodeStyle.changeColor(change.status))
+                    ChangeDot(color: CodeStyle.changeColor(change.status))
                         .help(change.status == .added ? "Added" : "Changed")
+                        .accessibilityLabel(change.status == .added ? "Added" : "Changed")
                 } else if row.isDirectory, !isOpen, browser.directoryHasChanges(row.path) {
-                    Text("•")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Theme.successText)
+                    ChangeDot(color: Tokens.review)
                         .help("Contains changes")
                 }
             }
+            .font(Tokens.mono(12))
             .padding(.leading, 8 + CGFloat(row.depth) * 14)
             .padding(.trailing, 8)
             .frame(height: 26)
-            .background(isActive ? Theme.accent.opacity(0.28) : .clear, in: .rect(cornerRadius: 7, style: .continuous))
+            .background(isActive ? Tokens.selection : .clear, in: .rect(cornerRadius: 6, style: .continuous))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

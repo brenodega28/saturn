@@ -34,7 +34,8 @@ struct LineCommentComposer: View {
                     .lineLimit(1...6)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 10, style: .continuous))
+                    .background(Tokens.window, in: .rect(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tokens.hair2))
                     .focused($isFocused)
                     .onSubmit(save)
                     .onKeyPress(.escape) {
@@ -78,14 +79,13 @@ struct NewLineComment: View {
             },
             onCancel: store.clearLineSelection
         )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: 760, alignment: .leading)
-        .background(DiffPalette.pinCard, in: .rect(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.accent.opacity(0.45)))
-        .padding(EdgeInsets(top: 10, leading: store.layout == .split ? 70 : 52, bottom: 12, trailing: 16))
+        .background(Tokens.raised, in: .rect(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Tokens.accent.opacity(0.34)))
+        .padding(EdgeInsets(top: 6, leading: 64, bottom: 8, trailing: 18))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DiffPalette.selection.opacity(0.5))
     }
 
     private var rangeLabel: String {

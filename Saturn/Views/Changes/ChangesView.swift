@@ -8,6 +8,7 @@ struct ChangesView: View {
     @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var store = ChangesStore()
+    @State private var focusedPath: String?
 
     var body: some View {
         reviewContent
@@ -30,7 +31,7 @@ struct ChangesView: View {
                 .task(id: run.id) { await observePins(of: run) }
         } else {
             EmptyState("Nothing to review", message: "Diffs across a run’s branches and the pins agents flag for you appear here before anything reaches main. Ask the Lead in a chat to start a run.") {
-                Button("New Chat") { workspace.newChat(in: project) }.buttonStyle(.pill)
+                Button("New Chat") { workspace.newChat(in: project) }.buttonStyle(SectionButtonStyle(kind: .primary))
             }
         }
     }
@@ -63,24 +64,37 @@ struct ChangesView: View {
                 return RoleAppearance(role: workspace.role(for: agent, in: project))
             }
         )
-        return VStack(alignment: .leading, spacing: 14) {
-            ChangesToolbar(project: project, runs: runs, selected: run, store: store, context: context)
-            ScrollViewReader { proxy in
-                HStack(alignment: .top, spacing: 16) {
-                    ChangesSidebar(store: store, context: context) { target in
-                        withAnimation(.snappy(duration: 0.25)) {
-                            store.reveal(target)
-                            proxy.scrollTo(target, anchor: .top)
-                        }
+        return ScrollViewReader { proxy in
+            HStack(alignment: .top, spacing: 20) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ChangesRunList(runs: runs, selected: run, store: store)
+                        ChangesPinList(store: store, context: context) { target in jump(to: target, proxy: proxy) }
                     }
-                    .frame(width: 236)
+                    .padding(.bottom, 20)
+                }
+                .scrollIndicators(.never)
+                .frame(width: 280)
+                VStack(spacing: 0) {
+                    ChangesHeader(project: project, run: run, store: store, context: context)
+                    if !store.visiblePaths.isEmpty {
+                        FileChips(paths: store.visiblePaths, current: focusedPath ?? store.visiblePaths.first?.path) { path in jump(to: path, proxy: proxy) }
+                    }
                     fileColumn(run: run, context: context)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .sectionCard()
+                .clipShape(.rect(cornerRadius: 14, style: .continuous))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .overlay(alignment: .bottom) {
-            ReviewBar(run: run, store: store, holdsApproval: context.holdsApproval)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func jump(to target: String, proxy: ScrollViewProxy) {
+        focusedPath = target
+        withAnimation(.snappy(duration: 0.25)) {
+            store.reveal(target)
+            proxy.scrollTo(target, anchor: .top)
         }
     }
 
@@ -89,30 +103,34 @@ struct ChangesView: View {
         if store.changeSet == nil || store.loadedRunID != run.id {
             VStack(spacing: 10) {
                 ProgressView().controlSize(.small)
-                Text("Reading the run’s branches…").font(.system(size: 12.5)).foregroundStyle(Theme.secondaryText)
+                Text("Reading the run’s branches…").font(.system(size: 12.5)).foregroundStyle(Tokens.text2)
             }
             .frame(maxWidth: .infinity, minHeight: 240)
         } else if let changeSet = store.changeSet, changeSet.branches.isEmpty {
             EmptyState("No code changes yet", message: "This run hasn’t started any coding agents. Their branches show up here as soon as they begin work.")
+                .frame(maxWidth: .infinity, minHeight: 240)
         } else {
             let reviews = workspace.reviews(for: run)
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    if let changeSet = store.changeSet {
-                        ConflictBanner(changeSet: changeSet, run: run) {
-                            Task { await store.load(run, in: project, workspace: workspace) }
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if let changeSet = store.changeSet {
+                            ConflictBanner(changeSet: changeSet, run: run) {
+                                Task { await store.load(run, in: project, workspace: workspace) }
+                            }
+                        }
+                        if let gates = store.gates, !gates.findings.isEmpty {
+                            GatesCard(report: gates)
+                        }
+                        if !store.evidence.isEmpty {
+                            EvidenceCard(evidence: store.evidence, context: context)
                         }
                     }
-                    if let gates = store.gates, !gates.findings.isEmpty {
-                        GatesCard(report: gates)
-                    }
-                    if !store.evidence.isEmpty {
-                        EvidenceCard(evidence: store.evidence, context: context)
-                    }
+                    .padding(.horizontal, 18)
                     if store.visiblePaths.isEmpty {
                         Text("No file changes on these branches yet.")
                             .font(.system(size: 13))
-                            .foregroundStyle(Theme.secondaryText)
+                            .foregroundStyle(Tokens.text2)
                             .frame(maxWidth: .infinity, minHeight: 160)
                     }
                     ForEach(store.visiblePaths) { path in
@@ -123,142 +141,178 @@ struct ChangesView: View {
                         UnplacedPinsCard(pins: store.pinsOutsideChanges, context: context, compact: store.layout == .split)
                     }
                 }
-                .padding(.bottom, 96)
+                .padding(.top, 4)
+                .padding(.bottom, 14)
             }
             .scrollIndicators(.automatic)
         }
     }
 }
 
-struct ChangesToolbar: View {
+struct ChangesHeader: View {
     @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
-    let runs: [Run]
-    let selected: Run
+    let run: Run
     let store: ChangesStore
     let context: ReviewContext
 
-    static let visibleRunCount = 4
-
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                runChips
-                divider
-                agentChips
-                Spacer(minLength: 12)
-                trailingControls
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(run.reviewTitle)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Tokens.text)
+                    .lineLimit(1)
+                summary
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Tokens.text2)
+                    .lineLimit(1)
             }
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    runChips
-                    Spacer(minLength: 12)
-                    trailingControls
-                }
-                ScrollView(.horizontal) { HStack(spacing: 8) { agentChips } }.scrollIndicators(.never)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            controls
+            requestButton
+            approveButton
         }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.hair).frame(height: 1) }
     }
 
-    private var divider: some View {
-        Rectangle().fill(Tokens.hair2).frame(width: 1, height: 20).padding(.horizontal, 4).accessibilityHidden(true)
+    private var summary: Text {
+        var parts: [Text] = []
+        if let branch = branchLabel { parts.append(Text(branch).font(Tokens.mono(12))) }
+        if store.changeSet != nil {
+            let files = store.allPaths.count
+            parts.append(Text("\(files) file\(files == 1 ? "" : "s")"))
+        }
+        if let checks = checksLabel { parts.append(Text(checks.text).foregroundStyle(checks.color)) }
+        if let pins = pinsLabel { parts.append(Text(pins.text).foregroundStyle(pins.color)) }
+        return parts.dropFirst().reduce(parts.first ?? Text(run.reviewMeta)) { Text("\($0) · \($1)") }
     }
 
-    private var runChips: some View {
+    private var branchLabel: String? {
+        let branches = store.changeSet?.branches ?? []
+        let base = run.baseBranch ?? branches.compactMap(\.base).first
+        let head: String? = run.deliveryBranch ?? (branches.count == 1 ? branches.first?.branch : branches.isEmpty ? nil : "\(branches.count) branches")
+        guard let head else { return nil }
+        return base.map { "\(head) → \($0)" } ?? head
+    }
+
+    private var checksLabel: (text: String, color: Color)? {
+        guard let gates = store.gates else { return nil }
+        if !gates.criteria.isEmpty {
+            let passed = gates.criteria.count { $0.status == .pass }
+            let allPass = passed == gates.criteria.count
+            return ("checks \(passed)/\(gates.criteria.count)\(allPass ? " ✓" : "")", allPass ? Tokens.done : Tokens.need)
+        }
+        if gates.passed { return ("checks passed ✓", Tokens.done) }
+        return ("\(gates.blocking.count) check\(gates.blocking.count == 1 ? "" : "s") need you", Tokens.need)
+    }
+
+    private var pinsLabel: (text: String, color: Color)? {
+        let open = store.openPins.count
+        let requested = store.changeRequests.count
+        if open > 0 { return ("\(open) open pin\(open == 1 ? "" : "s")", Tokens.review) }
+        if requested > 0 { return ("\(requested) change request\(requested == 1 ? "" : "s")", Tokens.need) }
+        return nil
+    }
+
+    private var controls: some View {
         HStack(spacing: 8) {
-            Text("Run").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
-            ForEach(chipRuns) { run in
-                ChipButton(isSelected: run.id == selected.id, action: { store.select(run, replacing: selected) }) {
-                    StatusDot(workspace.statusColor(of: run))
-                    Text(run.reviewTitle).fontWeight(.semibold).lineLimit(1)
-                    Text(run.reviewMeta).font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
-                }
-                .help("Review \(run.reviewTitle)")
-            }
-            if runs.count > chipRuns.count {
+            if store.codingAgents.count > 1 {
                 Menu {
-                    ForEach(runs) { run in
-                        Button("\(run.reviewTitle) · \(run.reviewMeta)") { store.select(run, replacing: selected) }
+                    Button("All agents") { store.agentFilter = nil }
+                    ForEach(store.codingAgents) { agent in
+                        Button(workspace.displayName(of: agent, in: project)) { store.agentFilter = agent.id }
                     }
                 } label: {
-                    Text("More runs")
+                    Text(store.codingAgents.first { $0.id == store.agentFilter }.map { workspace.displayName(of: $0, in: project) } ?? "All agents")
                 }
                 .menuStyle(.button)
-                .buttonStyle(PillButtonStyle(height: 32))
+                .buttonStyle(SectionButtonStyle())
                 .fixedSize()
-                .help("Pick another run of this project")
+                .help("Only show one agent’s branch")
             }
-        }
-    }
-
-    private var chipRuns: [Run] {
-        var shown = Array(runs.prefix(Self.visibleRunCount))
-        if !shown.contains(where: { $0.id == selected.id }) {
-            shown.removeLast()
-            shown.append(selected)
-        }
-        return shown
-    }
-
-    private var agentChips: some View {
-        HStack(spacing: 8) {
-            ChipButton(isSelected: store.agentFilter == nil, height: 30, action: { store.agentFilter = nil }) {
-                AgentAvatar(size: 20, appearance: RoleAppearance(palette: .neutral, symbol: "person.2")).shadow(radius: 0)
-                Text("All agents")
-            }
-            .help("Show every branch in this run")
-            ForEach(store.codingAgents) { agent in
-                ChipButton(isSelected: store.agentFilter == agent.id, height: 30, action: { store.agentFilter = agent.id }) {
-                    AgentAvatar(size: 20, appearance: context.appearance(agent.id)).shadow(radius: 0)
-                    Text(workspace.displayName(of: agent, in: project))
-                }
-                .help("Only show \(workspace.displayName(of: agent, in: project))’s branch")
-            }
-        }
-        .font(.system(size: 12))
-    }
-
-    private var trailingControls: some View {
-        HStack(spacing: 10) {
             CapsuleTabs(DiffLayout.allCases, selection: Binding(get: { store.layout }, set: { store.layout = $0 }), title: \.title)
                 .fixedSize()
                 .help("Diff layout")
             Button {
-                Task { await store.load(selected, in: project, workspace: workspace) }
+                Task { await store.load(run, in: project, workspace: workspace) }
             } label: {
-                Image(systemName: "arrow.clockwise")
-                    .frame(width: 30, height: 30)
-                    .contentShape(Circle())
+                Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .medium))
             }
-            .buttonStyle(.plain)
-            .background(Theme.fillRaised, in: Circle())
+            .buttonStyle(SectionButtonStyle())
             .disabled(store.isLoading)
             .accessibilityLabel("Reload changes")
             .help("Read the branches again")
         }
     }
+
+    private var sendsChangesBack: Bool {
+        context.holdsApproval && !store.changeRequests.isEmpty
+    }
+
+    private var requestButton: some View {
+        let requested = store.changeRequests
+        return Button("Request changes") { workspace.sendChangesBack(in: run, pins: store.pins) }
+            .buttonStyle(SectionButtonStyle(kind: sendsChangesBack ? .primary : .secondary))
+            .disabled(!context.holdsApproval || requested.isEmpty)
+            .help(!context.holdsApproval
+                ? "Available when the run reaches your approval step"
+                : requested.isEmpty
+                    ? "Use Request change on a pin, or comment on a line, first"
+                    : "Sends the \(requested.count) requested change\(requested.count == 1 ? "" : "s") back to the authors’ workflow step")
+    }
+
+    private var approveButton: some View {
+        let unreadCore = store.unviewedCoreFiles.count
+        let canApprove = store.openPins.count > 0 || context.holdsApproval
+        return Button(context.holdsApproval ? "Approve & merge" : "Approve all pins") { workspace.approveAllPins(in: run) }
+            .buttonStyle(SectionButtonStyle(kind: sendsChangesBack ? .secondary : .primary))
+            .disabled(!canApprove || unreadCore > 0 || sendsChangesBack)
+            .help(sendsChangesBack
+                ? "Send the \(store.changeRequests.count) requested change\(store.changeRequests.count == 1 ? "" : "s") back first, or approve those pins"
+                : unreadCore > 0
+                ? "Read and mark the \(unreadCore) core file\(unreadCore == 1 ? "" : "s") as viewed first"
+                : context.holdsApproval
+                    ? "Approves every open pin and lets the run continue to merge"
+                    : canApprove ? "Approves every open pin. The run continues when it reaches your approval step." : "Nothing waits for your approval")
+    }
 }
 
-struct ChipButton<Label: View>: View {
-    let isSelected: Bool
-    var height: CGFloat = 32
-    let action: () -> Void
-    @ViewBuilder let label: () -> Label
+struct FileChips: View {
+    let paths: [ChangedPath]
+    let current: String?
+    let select: (String) -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 7) { label() }
-                .foregroundStyle(Tokens.text)
-                .padding(.leading, height < 32 ? 4 : 12)
-                .padding(.trailing, height < 32 ? 10 : 12)
-                .frame(height: height)
-                .background(isSelected ? Theme.accent.opacity(0.16) : Color.white.opacity(height < 32 ? 0 : 0.05), in: Capsule())
-                .overlay(Capsule().strokeBorder(isSelected ? Theme.accent : Tokens.hair, lineWidth: 1.5))
-                .contentShape(Capsule())
+        ScrollView(.horizontal) {
+            HStack(spacing: 2) {
+                ForEach(paths) { path in
+                    let isCurrent = path.path == current
+                    Button { select(path.path) } label: {
+                        HStack(spacing: 8) {
+                            Text((path.path as NSString).lastPathComponent).foregroundStyle(Tokens.text)
+                            if path.additions > 0 { Text("+\(path.additions)").foregroundStyle(Tokens.done) }
+                            if path.deletions > 0 { Text("−\(path.deletions)").foregroundStyle(Tokens.danger) }
+                        }
+                        .font(Tokens.mono(11.5))
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(isCurrent ? Tokens.selection : .clear, in: .rect(cornerRadius: 7, style: .continuous))
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .help(path.path)
+                    .accessibilityAddTraits(isCurrent ? .isSelected : [])
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .scrollIndicators(.never)
+        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.hair).frame(height: 1) }
     }
 }
 
@@ -316,8 +370,8 @@ struct ConflictBanner: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.danger.opacity(changeSet.conflicts.isEmpty ? 0.04 : 0.08), in: .rect(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.danger.opacity(0.35)))
+            .background(Tokens.stuckBackground, in: .rect(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tokens.stuckLine))
         }
     }
 
@@ -326,16 +380,16 @@ struct ConflictBanner: View {
         Button("Ask \(owner(of: conflict.branch)) to combine") {
             perform { name in "\(name) is merging the branches and resolving the conflict." } action: { try await workspace.send(RunCommands.AskToCombine(runID: run.id ?? -1, conflict: conflict)) }
         }
-        .buttonStyle(PillButtonStyle(.primary, height: 28))
+        .buttonStyle(SectionButtonStyle(kind: .primary, height: 28))
         .help("Merge the other side into \(conflict.branch) and send its author the conflict to resolve")
         Button("Keep \(owner(of: conflict.branch))’s") {
             perform { _ in "Kept \(conflict.branch)’s version." } action: { try await workspace.send(RunCommands.KeepBranch(runID: run.id ?? -1, winner: conflict.branch, conflict: conflict)); return "" }
         }
-        .buttonStyle(PillButtonStyle(height: 28))
+        .buttonStyle(SectionButtonStyle(height: 28))
         Button("Keep \(conflict.otherIsBase ? conflict.other : owner(of: conflict.other))’s") {
             perform { _ in "Kept \(conflict.other)’s version." } action: { try await workspace.send(RunCommands.KeepBranch(runID: run.id ?? -1, winner: conflict.other, conflict: conflict)); return "" }
         }
-        .buttonStyle(PillButtonStyle(height: 28))
+        .buttonStyle(SectionButtonStyle(height: 28))
         Button("Open in Merge Tool") {
             busy = true
             Task {
@@ -356,7 +410,7 @@ struct ConflictBanner: View {
                 }
             }
         }
-        .buttonStyle(PillButtonStyle(height: 28))
+        .buttonStyle(SectionButtonStyle(height: 28))
         .help("Start the merge in the worktree and open it in your editor")
     }
 
@@ -391,16 +445,15 @@ struct UnplacedPinsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Pins on files without changes in this run")
-                .font(.system(size: 13, weight: .semibold))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Tokens.text2)
+                .padding(EdgeInsets(top: 12, leading: 18, bottom: 4, trailing: 18))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Tokens.hover)
             ForEach(pins) { pin in
                 Text("\(pin.file):\(pin.sideLineLabel)")
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Theme.secondaryText)
-                    .padding(.horizontal, 16)
+                    .font(Tokens.mono(11.5))
+                    .foregroundStyle(Tokens.text2)
+                    .padding(.horizontal, 18)
                     .padding(.top, 10)
                 PinCard(
                     pin: pin,
@@ -412,9 +465,7 @@ struct UnplacedPinsCard: View {
                 .id("pin-\(pin.id ?? 0)")
             }
         }
-        .background(DiffPalette.cardBackground, in: .rect(cornerRadius: 16, style: .continuous))
-        .clipShape(.rect(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Tokens.hair2))
+        .overlay(alignment: .top) { Rectangle().fill(Tokens.hair).frame(height: 1) }
         .id("unplaced-pins")
     }
 }

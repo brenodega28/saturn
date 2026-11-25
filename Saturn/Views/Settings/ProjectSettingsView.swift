@@ -20,9 +20,9 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: "General"
-        case .documentation: "Documentation"
+        case .documentation: "Docs"
         case .skills: "Skills"
-        case .agents: "Agents & models"
+        case .agents: "Roles"
         case .workspaces: "Workspaces"
         case .checks: "Checks"
         case .permissions: "Permissions"
@@ -37,7 +37,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: "General"
         case .documentation: "Docs"
         case .skills: "Skills"
-        case .agents: "Agents"
+        case .agents: "Roles"
         case .workspaces: "Spaces"
         case .checks: "Checks"
         case .permissions: "Perms"
@@ -51,31 +51,18 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape"
         case .documentation: "doc.text"
-        case .skills: "sparkles"
-        case .agents: "cpu"
-        case .workspaces: "square.stack.3d.up"
-        case .checks: "checkmark.shield"
-        case .permissions: "hand.raised"
+        case .skills: "bolt"
+        case .agents: "person"
+        case .workspaces: "arrow.triangle.branch"
+        case .checks: "checkmark.square"
+        case .permissions: "shield"
         case .learnedRules: "brain"
         case .claudeAccess: "key"
         case .tools: "wrench.and.screwdriver"
         }
     }
 
-    var tint: Color {
-        switch self {
-        case .general: Color(hex: 0x636366)
-        case .documentation: Color(hex: 0x0A84FF)
-        case .skills: Color(hex: 0x8E4FD9)
-        case .agents: Color(hex: 0x2E9C5A)
-        case .workspaces: Color(hex: 0xA0522D)
-        case .checks: Color(hex: 0x1E8F55)
-        case .permissions: Color(hex: 0xFF9F0A)
-        case .learnedRules: Color(hex: 0xBF5AF2)
-        case .claudeAccess: Color(hex: 0xC23A54)
-        case .tools: Color(hex: 0x48484A)
-        }
-    }
+    static let displayOrder: [SettingsSection] = [.agents, .checks, .permissions, .documentation, .skills, .workspaces, .general, .learnedRules, .claudeAccess, .tools]
 }
 
 struct ProjectSettingsView: View {
@@ -93,7 +80,7 @@ struct ProjectSettingsView: View {
 }
 
 struct SettingsContainer: View {
-    static let fullSidebarMinimumWidth: CGFloat = 900
+    static let fullSidebarMinimumWidth: CGFloat = 760
 
     let project: Project
     let branch: String?
@@ -101,13 +88,9 @@ struct SettingsContainer: View {
     @State private var availableWidth: CGFloat = 0
 
     var body: some View {
-        let isCompact = availableWidth < Self.fullSidebarMinimumWidth
-        HStack(alignment: .top, spacing: isCompact ? 12 : 16) {
-            if isCompact {
-                compactSidebar
-            } else {
-                sidebar
-            }
+        let isCompact = availableWidth > 0 && availableWidth < Self.fullSidebarMinimumWidth
+        HStack(alignment: .top, spacing: isCompact ? 16 : 28) {
+            tabList(isCompact: isCompact)
             Group {
                 switch section {
                 case .general: GeneralSettings(project: project, branch: branch)
@@ -128,78 +111,58 @@ struct SettingsContainer: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
     }
 
-    private var visibleSections: [SettingsSection] {
-        Array(SettingsSection.allCases)
-    }
-
-    private var sidebar: some View {
+    private func tabList(isCompact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(visibleSections) { item in
-                let isSelected = item == section
-                Button {
-                    section = item
-                } label: {
-                    HStack(spacing: 10) {
-                        SectionIcon(section: item)
-                        Text(item.title)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 8)
-                    .frame(height: 32)
-                    .background(isSelected ? Theme.accent.opacity(0.28) : Color.clear, in: .rect(cornerRadius: 8, style: .continuous))
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            ForEach(SettingsSection.displayOrder) { item in
+                SettingsTab(section: item, isSelected: item == section, isCompact: isCompact) { section = item }
             }
-            Spacer()
-        }
-        .padding(8)
-        .frame(width: 210)
-        .card(cornerRadius: 16)
-    }
-
-    private var compactSidebar: some View {
-        VStack(spacing: 2) {
-            ForEach(visibleSections) { item in
-                let isSelected = item == section
-                Button {
-                    section = item
-                } label: {
-                    VStack(spacing: 4) {
-                        SectionIcon(section: item)
-                        Text(item.shortTitle)
-                            .font(.system(size: 10.5, weight: isSelected ? .semibold : .regular))
-                            .lineLimit(1)
-                    }
-                    .frame(width: 60, height: 50)
-                    .background(isSelected ? Theme.accent.opacity(0.28) : Color.clear, in: .rect(cornerRadius: 8, style: .continuous))
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .help(item.title)
-                .accessibilityLabel(item.title)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            if !isCompact {
+                Text("Applies to \(project.name) only. App-wide settings are under ⌘,.")
+                    .font(.system(size: 11.5))
+                    .lineSpacing(2)
+                    .foregroundStyle(Tokens.text3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 12)
             }
-            Spacer()
         }
-        .padding(6)
-        .frame(width: 72)
-        .card(cornerRadius: 16)
+        .frame(width: isCompact ? 38 : 200, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Project settings")
     }
 }
 
-private struct SectionIcon: View {
+private struct SettingsTab: View {
     let section: SettingsSection
+    let isSelected: Bool
+    let isCompact: Bool
+    let select: () -> Void
 
     var body: some View {
-        Image(systemName: section.symbol)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 22, height: 22)
-            .background(section.tint, in: .rect(cornerRadius: 6, style: .continuous))
-            .accessibilityHidden(true)
+        Button(action: select) {
+            HStack(spacing: 10) {
+                Image(systemName: section.symbol)
+                    .font(.system(size: 13))
+                    .frame(width: 16)
+                    .accessibilityHidden(true)
+                if !isCompact {
+                    Text(section.title)
+                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+            }
+            .foregroundStyle(isSelected ? Tokens.accent : Tokens.text)
+            .padding(.horizontal, isCompact ? 11 : 10)
+            .frame(height: 34)
+            .frame(maxWidth: isCompact ? nil : .infinity, alignment: .leading)
+            .background(isSelected ? Tokens.selection : .clear, in: .rect(cornerRadius: 9, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help(section.title)
+        .accessibilityLabel(section.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -217,19 +180,93 @@ struct SettingsPage<Content: View>: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.system(size: 20, weight: .bold))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 22, weight: .semibold))
+                        .kerning(-0.33)
+                        .foregroundStyle(Tokens.text)
+                        .accessibilityAddTraits(.isHeader)
                     Text(subtitle)
                         .font(.system(size: 13))
-                        .foregroundStyle(Theme.secondaryText)
+                        .lineSpacing(3)
+                        .foregroundStyle(Tokens.text2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 content
             }
             .padding(.trailing, 6)
+            .padding(.bottom, 20)
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         }
         .frame(minWidth: 0, maxWidth: .infinity)
+    }
+}
+
+struct SettingsRows<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Group(subviews: content) { subviews in
+                ForEach(Array(subviews.enumerated()), id: \.element.id) { index, subview in
+                    subview.sectionRow(isFirst: index == 0)
+                }
+            }
+        }
+        .sectionCard()
+    }
+}
+
+struct SettingsRowLabel: View {
+    let title: String
+    var detail: String = ""
+    var monospaced = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(monospaced ? Tokens.mono(13.5, weight: .semibold) : .system(size: 14, weight: .semibold))
+                .foregroundStyle(Tokens.text)
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Tokens.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct SettingsNote: View {
+    let text: String
+    let color: Color
+
+    init(_ text: String, color: Color = Tokens.text2) {
+        self.text = text
+        self.color = color
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct SettingsWarning: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Label(text, systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 12))
+            .foregroundStyle(Tokens.need)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -243,7 +280,7 @@ struct IssueList: View {
                 ForEach(issues) { issue in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(Theme.warning)
+                            .foregroundStyle(Tokens.need)
                             .accessibilityLabel("Problem")
                         Text(showsFile ? "\(issue.file): \(issue.message)" : issue.message)
                             .font(.system(size: 12))
@@ -253,7 +290,8 @@ struct IssueList: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.warning.opacity(0.1), in: .rect(cornerRadius: 12, style: .continuous))
+            .background(Tokens.needBackground, in: .rect(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tokens.needLine))
         }
     }
 }
@@ -266,47 +304,49 @@ private struct GeneralSettings: View {
 
     var body: some View {
         let config = workspace.config(for: project)
-        SettingsPage("General", subtitle: "Where this project lives and the state of its Saturn config.") {
+        SettingsPage("General", subtitle: "Where \(project.name) lives and the state of its Saturn config.") {
             if project.isRemote {
                 RemoteHostCard(project: project)
             }
-            VStack(alignment: .leading, spacing: 10) {
-                row("Folder") {
-                    HStack {
-                        Text(project.isRemote ? project.location : project.path.abbreviatingHome).font(Theme.monospaced).textSelection(.enabled)
+            SettingsRows {
+                HStack(spacing: 14) {
+                    SettingsRowLabel(title: "Folder", detail: project.isRemote ? project.location : "On this Mac")
+                    Text(project.isRemote ? project.path : project.path.abbreviatingHome)
+                        .font(Tokens.mono(12))
+                        .foregroundStyle(Tokens.text2)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                    if !project.isRemote {
                         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
-                            .disabled(project.isRemote)
-                            .buttonStyle(.link)
+                            .buttonStyle(SectionButtonStyle(height: 28))
                     }
                 }
-                row("Branch") { Text(branch ?? "detached").font(Theme.monospaced) }
-                row("Worktrees") { Text("\(workspace.state(for: project).worktrees.count) in \(WorktreeManager.directoryName)/") }
-                row("Config") {
-                    Text(workspace.hasConfig(project)
-                         ? "\(config.workflows.count) workflows · \(config.docs.docs.count) documents"
-                         : "No \(ProjectConfig.directoryName)/ folder yet")
-                }
+                valueRow("Branch", branch ?? "detached", monospaced: true)
+                valueRow("Worktrees", "\(workspace.state(for: project).worktrees.count) in \(WorktreeManager.directoryName)/")
+                valueRow("Config", workspace.hasConfig(project)
+                    ? "\(config.workflows.count) workflows · \(config.docs.docs.count) documents"
+                    : "No \(ProjectConfig.directoryName)/ folder yet")
             }
-            .padding(16)
-            .card(cornerRadius: 16)
 
             if !workspace.hasConfig(project) {
                 InstallDefaultsCard(project: project)
             }
             IssueList(issues: config.issues)
             Button("Reload Config") { workspace.reloadConfig(for: project) }
-                .buttonStyle(.pill)
+                .buttonStyle(SectionButtonStyle())
                 .help("Read .saturn/ again from disk")
         }
     }
 
-    private func row(_ title: String, @ViewBuilder value: () -> some View) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title).foregroundStyle(Theme.secondaryText).frame(width: 110, alignment: .leading)
-            value()
-            Spacer()
+    private func valueRow(_ title: String, _ value: String, monospaced: Bool = false) -> some View {
+        HStack(spacing: 14) {
+            SettingsRowLabel(title: title)
+            Text(value)
+                .font(monospaced ? Tokens.mono(12) : .system(size: 12.5))
+                .foregroundStyle(Tokens.text2)
+                .textSelection(.enabled)
         }
-        .font(.system(size: 13))
     }
 }
 
@@ -316,57 +356,66 @@ private struct AgentsSettings: View {
     let project: Project
 
     var body: some View {
-        let limit = project.settings.maxConcurrentAgents
+        let config = workspace.config(for: project)
         let projectID = project.id ?? -1
-        SettingsPage("Agents & models", subtitle: "How many agents in this project may run a turn at the same time. Turns beyond the limit wait as Queued and start when a slot frees.") {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Max concurrent agents").font(.system(size: 13.5, weight: .semibold))
-                    Text("\(workspace.connection.runningCount(inProject: projectID)) running · \(workspace.connection.queuedSessions(inProject: projectID).count) queued")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.secondaryText)
+        SettingsPage("Roles", subtitle: "The kinds of agent the Lead can start in this project, and the limits on each.") {
+            SettingsRows {
+                ForEach(config.roles) { role in
+                    RoleRow(role: role)
                 }
-                Spacer()
-                CountStepper(count: Binding(
-                    get: { limit },
-                    set: { newValue in
-                        var settings = project.settings
-                        settings.maxConcurrentAgents = newValue
-                        workspace.updateSettings(settings, for: project)
-                    }
-                ), range: 1...16)
-                .help("Agents allowed to run at once in this project")
             }
-            .padding(16)
-            .card(cornerRadius: 16)
-
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Review capacity").font(.system(size: 13.5, weight: .semibold))
-                    Text(project.settings.reviewCapacity == 0
-                        ? "No limit: runs start building no matter how much waits on you."
-                        : "New runs wait before building while \(project.settings.reviewCapacity) or more changes wait for your approval.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+            SettingsRows {
+                HStack(spacing: 14) {
+                    SettingsRowLabel(
+                        title: "Max concurrent agents",
+                        detail: "\(workspace.connection.runningCount(inProject: projectID)) running · \(workspace.connection.queuedSessions(inProject: projectID).count) queued. Turns beyond the limit wait as Queued."
+                    )
+                    CountStepper(count: Binding(
+                        get: { project.settings.maxConcurrentAgents },
+                        set: { value in update { $0.maxConcurrentAgents = value } }
+                    ), range: 1...16)
+                    .help("Agents allowed to run at once in this project")
                 }
-                Spacer()
-                CountStepper(count: Binding(
-                    get: { project.settings.reviewCapacity },
-                    set: { newValue in
-                        var settings = project.settings
-                        settings.reviewCapacity = newValue
-                        workspace.updateSettings(settings, for: project)
-                    }
-                ), range: 0...20)
-                .help("Changes that may wait for your approval before new runs hold off building; 0 means no limit")
+                HStack(spacing: 14) {
+                    SettingsRowLabel(
+                        title: "Review capacity",
+                        detail: project.settings.reviewCapacity == 0
+                            ? "No limit: runs start building no matter how much waits on you."
+                            : "New runs wait before building while \(project.settings.reviewCapacity) or more changes wait for your approval."
+                    )
+                    CountStepper(count: Binding(
+                        get: { project.settings.reviewCapacity },
+                        set: { value in update { $0.reviewCapacity = value } }
+                    ), range: 0...20)
+                    .help("Changes that may wait for your approval before new runs hold off building; 0 means no limit")
+                }
             }
-            .padding(16)
-            .card(cornerRadius: 16)
+            SettingsNote("Each workflow step picks its model; agents you spawn pick theirs in New Agent.")
+        }
+    }
 
-            Text("Each workflow step picks its model; agents you spawn pick theirs in New Agent.")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.secondaryText)
+    private func update(_ change: (inout ProjectSettings) -> Void) {
+        var settings = project.settings
+        change(&settings)
+        workspace.updateSettings(settings, for: project)
+    }
+}
+
+private struct RoleRow: View {
+    let role: RoleDefinition
+
+    var body: some View {
+        HStack(spacing: 14) {
+            AgentAvatar(size: 34, appearance: RoleAppearance(role: role)).shadow(radius: 0)
+            SettingsRowLabel(title: role.name, detail: role.description)
+            Text(AgentModel(rawValue: role.model)?.title ?? role.model)
+                .font(Tokens.mono(12))
+                .foregroundStyle(Tokens.text)
+                .frame(width: 100, alignment: .leading)
+            Text(role.editsCode ? "Own worktree" : "Reads others’")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Tokens.text2)
+                .frame(width: 110, alignment: .leading)
         }
     }
 }
@@ -379,7 +428,7 @@ struct ClaudeAccessSettings: View {
             if let environment = model.environment {
                 ProviderChoice(status: environment.provider)
                     .padding(16)
-                    .card(cornerRadius: 16)
+                    .sectionCard()
             }
         }
     }
@@ -391,12 +440,10 @@ struct ToolsSettings: View {
     var body: some View {
         SettingsPage("Tools", subtitle: "The command-line tools Saturn drives.") {
             if let environment = model.environment {
-                VStack(alignment: .leading, spacing: 10) {
+                SettingsRows {
                     ToolSummary(name: "git", check: environment.git)
                     ToolSummary(name: "Claude Code", check: environment.claude)
                 }
-                .padding(16)
-                .card(cornerRadius: 16)
             }
         }
     }
@@ -408,14 +455,14 @@ private struct ToolSummary: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(name).frame(width: 110, alignment: .leading).foregroundStyle(Theme.secondaryText)
+            Text(name).font(.system(size: 14, weight: .semibold)).frame(width: 110, alignment: .leading)
             switch check {
             case .found(let path, let version):
-                Text("\(version) · \(path.path.abbreviatingHome)").font(Theme.monospaced).textSelection(.enabled)
+                Text("\(version) · \(path.path.abbreviatingHome)").font(Tokens.mono(12)).foregroundStyle(Tokens.text2).textSelection(.enabled)
             case .missing:
-                Text("Not found").foregroundStyle(Theme.warning)
+                Text("Not found").foregroundStyle(Tokens.need)
             case .broken(_, let message):
-                Text(message).foregroundStyle(Theme.warning)
+                Text(message).foregroundStyle(Tokens.need)
             }
             Spacer()
         }

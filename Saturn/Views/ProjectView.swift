@@ -2,30 +2,26 @@ import SaturnCore
 import SaturnUI
 import SwiftUI
 
-struct ProjectScreen: View {
-    @Environment(AppModel.self) private var model
+struct ProjectToolSection: View {
     @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.openWindow) private var openWindow
     let project: Project
-    let tab: ProjectTab
+    let section: ProjectSection
 
     var body: some View {
         let state = workspace.state(for: project)
-        VStack(alignment: .leading, spacing: 14) {
-            if let recovery = state.recovery, !recovery.isClean {
-                RecoveryBanner(recovery: recovery) { openWindow(id: WindowID.debugWorktrees) }
-            }
-            content(state: state)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        }
-        .padding(EdgeInsets(top: 14, leading: 22, bottom: 20, trailing: 20))
+        content(state: state)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(EdgeInsets(top: 14, leading: 40, bottom: 20, trailing: 40))
+            .environment(\.showsScreenHeader, false)
+            .environment(\.isInWorkbench, section == .source)
     }
 
     @ViewBuilder
     private func content(state: ProjectState) -> some View {
-        switch tab {
-        case .lead:
-            LeadView(project: project)
+        switch section {
+        case .overview, .chats:
+            EmptyView()
         case .agents:
             AgentsView(project: project, worktreeCount: state.worktrees.count) {
                 openWindow(id: WindowID.debugWorktrees)
@@ -36,19 +32,8 @@ struct ProjectScreen: View {
             WorkflowsView(project: project)
         case .settings:
             ProjectSettingsView(project: project, branch: state.branch)
-        case .code:
+        case .source:
             CodeView(project: project)
-        }
-    }
-}
-
-struct ProjectScreenAccessory: View {
-    let project: Project
-    let tab: ProjectTab
-
-    var body: some View {
-        if tab != .lead {
-            NewAgentButton()
         }
     }
 }
@@ -67,7 +52,7 @@ struct NewAgentButton: View {
     }
 }
 
-private struct RecoveryBanner: View {
+struct RecoveryBanner: View {
     let recovery: WorktreeRecovery
     let review: () -> Void
 

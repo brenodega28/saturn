@@ -22,7 +22,7 @@ struct PinCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             header
             if pin.byUser && isEditingComment {
                 LineCommentComposer(
@@ -36,9 +36,9 @@ struct PinCard: View {
                 )
             } else {
                 Text(pin.explanation)
-                    .font(.system(size: 13.5))
-                    .lineSpacing(4)
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .font(.system(size: 12.5))
+                    .lineSpacing(3)
+                    .foregroundStyle(Tokens.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
@@ -62,17 +62,13 @@ struct PinCard: View {
                     .foregroundStyle(Theme.secondaryText)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, compact ? 12 : 14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: 760, alignment: .leading)
-        .background(DiffPalette.pinCard, in: .rect(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(DiffPalette.pin.opacity(0.35)))
-        .shadow(color: .black.opacity(0.3), radius: 12, y: 8)
-        .padding(EdgeInsets(top: 12, leading: compact ? 70 : 52, bottom: 14, trailing: 16))
+        .background(DiffPalette.pinCard, in: .rect(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(DiffPalette.pinLine))
+        .padding(EdgeInsets(top: 6, leading: 64, bottom: 8, trailing: 18))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DiffPalette.pin.opacity(0.05))
-        .overlay(alignment: .top) { Rectangle().fill(DiffPalette.pin.opacity(0.25)).frame(height: 1) }
-        .overlay(alignment: .bottom) { Rectangle().fill(DiffPalette.pin.opacity(0.25)).frame(height: 1) }
         .fontDesign(.default)
         .textSelection(.disabled)
     }
@@ -96,17 +92,15 @@ struct PinCard: View {
 
     private var titleRow: some View {
         HStack(spacing: 10) {
-            Image(systemName: pin.byUser ? "text.bubble.fill" : "pin.fill")
-                .foregroundStyle(DiffPalette.pin)
-                .accessibilityHidden(true)
+            AgentAvatar(size: 22, appearance: pin.byUser ? .reviewer : appearance).shadow(radius: 0)
             Text(pin.title)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(DiffPalette.pinTitle)
+                .font(.system(size: 12.5, weight: .bold))
+                .foregroundStyle(Tokens.text)
             if !compact {
                 ForEach(pin.tags, id: \.self) { tag in
                     Text(tag)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(DiffPalette.pinTitle)
+                        .foregroundStyle(Tokens.review)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(DiffPalette.pin.opacity(0.14), in: Capsule())
@@ -117,11 +111,10 @@ struct PinCard: View {
 
     private var byline: some View {
         HStack(spacing: 6) {
-            AgentAvatar(size: 18, appearance: pin.byUser ? .reviewer : appearance).shadow(radius: 0)
             Text(pin.byUser ? "Comment by you · lines \(pin.sideLineLabel)" : "Pinned by \(authorName) · lines \(pin.sideLineLabel)")
         }
         .font(.system(size: 12))
-        .foregroundStyle(Theme.secondaryText)
+        .foregroundStyle(Tokens.text2)
     }
 
     private var commentActions: some View {
@@ -203,7 +196,8 @@ struct PinCard: View {
                 .lineLimit(1...4)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(Color.black.opacity(0.25), in: .rect(cornerRadius: 10, style: .continuous))
+                .background(Tokens.window, in: .rect(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Tokens.hair2))
                 .onSubmit { submit(composer) }
             Button(composer == .ask ? "Send" : "Request change") { submit(composer) }
                 .buttonStyle(PillButtonStyle(.primary, height: 30))
@@ -245,11 +239,11 @@ extension RoleAppearance {
 struct PinPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12.5, weight: .bold))
-            .foregroundStyle(Color(hex: 0x2A2300))
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(Tokens.primaryForeground)
             .padding(.horizontal, 14)
-            .frame(height: 30)
-            .background(DiffPalette.pin, in: Capsule())
+            .frame(height: 28)
+            .background(Tokens.primaryBackground, in: Capsule())
             .opacity(configuration.isPressed ? 0.8 : 1)
             .contentShape(Capsule())
     }

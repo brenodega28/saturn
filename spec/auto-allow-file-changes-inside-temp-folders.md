@@ -1,6 +1,6 @@
 ---
 title: Auto-allow file changes inside temp folders
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Builder, reason: "One change in Config/ShellRisk.swift, PermissionProfiles.swift and their tests; too coupled to split"}
@@ -32,15 +32,15 @@ Checkers and QA agents keep asking the user's OK for routine test housekeeping i
 
 ## Acceptance criteria
 
-- [ ] For a read-only policy, `swift build > /tmp/checker8/build.log 2>&1` produces no ask
-- [ ] For a read-only policy, `mkdir -p /tmp/checker8/src && git -C /repo archive main | tar -x -C /tmp/checker8/src` produces no ask
+- [x] For a read-only policy, `swift build > /tmp/checker8/build.log 2>&1` produces no ask
+- [x] For a read-only policy, `mkdir -p /tmp/checker8/src && git -C /repo archive main | tar -x -C /tmp/checker8/src` produces no ask
 - [ ] `S=/private/tmp/claude-501/x/scratchpad; mkdir -p $S/data; rm -rf $S/data; cat > $S/run.sh <<'EOF'\necho hi\nEOF\nchmod +x $S/run.sh` produces no ask for both read-only and developer policies
-- [ ] `swift test 2>&1 > $TMPDIR/t.log` and `D=$(mktemp -d); cp file.txt $D/` produce no ask
-- [ ] `cd /tmp/q7 && mkdir c d && git init repo` produces no ask
+- [x] `swift test 2>&1 > $TMPDIR/t.log` and `D=$(mktemp -d); cp file.txt $D/` produce no ask
+- [x] `cd /tmp/q7 && mkdir c d && git init repo` produces no ask
 - [ ] Still asks: `rm -rf /tmp`, `rm -rf /tmp/*`, `rm -rf /tmp/../Users/x`, `rm -rf $HOME/tmp`, `rm -rf $S/x` when S is unset or set to a non-temp path, `mv ./Sources/a.swift /tmp/`, `cp /tmp/a ./b` for read-only agents, `chmod 777 ~/x`
-- [ ] Still asks: `pkill -f /tmp/q7/daemon` and `osascript` regardless of tmp mentions
-- [ ] A read-only agent's Write to /private/tmp/.../scratchpad/x.py is allowed; its Write to a repo file is still denied
-- [ ] Existing ShellRiskTests, PermissionRoutingTests and related suites pass unchanged except where a case is deliberately updated by this spec
+- [x] Still asks: `pkill -f /tmp/q7/daemon` and `osascript` regardless of tmp mentions
+- [x] A read-only agent's Write to /private/tmp/.../scratchpad/x.py is allowed; its Write to a repo file is still denied
+- [x] Existing ShellRiskTests, PermissionRoutingTests and related suites pass unchanged except where a case is deliberately updated by this spec
 
 ## Verification
 

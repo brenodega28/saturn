@@ -99,6 +99,9 @@ extension AgentRuntime {
         guard let tool = input["tool_name"]?.string, let id = agent.id,
               let assessment = policy.assess(tool: tool, input: input["tool_input"], directory: directory) else { return .object([:]) }
         let shell = tool == "Bash"
+        if assessment.needs.isEmpty, AgentPermissions.fileWritingTools.contains(tool), policy.level(.editFiles) != .allow {
+            return Self.decision("allow")
+        }
         if let blocked = assessment.needs.first(where: { policy.level($0.capability) == .never }) {
             guard blocked.capability == .editFiles || (shell && blocked.capability != .runShell) else { return .object([:]) }
             return Self.decision("deny", reason: "\(policy.profile.name) agents may never \(blocked.capability.describe(blocked.command)). Find another way, or explain in your summary why it’s needed.")

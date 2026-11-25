@@ -100,36 +100,45 @@ enum ShellRisk {
 
     static let aliases: [String: String] = ["i": "install", "un": "uninstall", "rm": "uninstall", "r": "uninstall", "remove": "uninstall", "up": "update", "upgrade": "update"]
 
-    static func needs(of command: ShellCommandLine.Command, readOnly: Bool, directory: String?) -> [PermissionNeed] {
-        command.redirects.compactMap { redirectNeed($0, readOnly: readOnly, directory: directory) }
-            + needs(ofWords: command.words, readOnly: readOnly, directory: directory)
+    static func needs(ofLine line: String, readOnly: Bool, directory: String?, context: ShellContext = ShellContext()) -> [PermissionNeed] {
+        var context = context
+        context.workspace = directory
+        return ShellCommandLine(line).commands.flatMap { needs(of: $0, readOnly: readOnly, directory: directory, context: &context) }
     }
 
-    static func needs(ofWords original: [String], readOnly: Bool, directory: String?) -> [PermissionNeed] {
+    static func needs(of command: ShellCommandLine.Command, readOnly: Bool, directory: String?, context: inout ShellContext) -> [PermissionNeed] {
+        defer { context.record(command) }
+        return command.redirects.compactMap { redirectNeed($0, readOnly: readOnly, directory: directory, context: context) }
+            + needs(ofWords: command.words, readOnly: readOnly, directory: directory, context: context)
+    }
+
+    static func needs(ofWords original: [String], readOnly: Bool, directory: String?, context: ShellContext) -> [PermissionNeed] {
         guard let words = unwrapped(original), let first = words.first else { return [] }
         let program = basename(first)
         let arguments = Array(words.dropFirst())
         let text = words.joined(separator: " ")
         if program == "xargs" {
-            return needs(ofWords: xargsCommand(arguments), readOnly: readOnly, directory: directory)
+            return needs(ofWords: xargsCommand(arguments), readOnly: readOnly, directory: directory, context: context.receivingArguments())
         }
         if let script = nestedScript(program, arguments) {
-            return ShellCommandLine(script).commands.flatMap { needs(of: $0, readOnly: readOnly, directory: directory) }
+            let inherited = program == "eval" ? context : ShellContext(cwd: context.cwd)
+            return needs(ofLine: script, readOnly: readOnly, directory: directory, context: inherited)
         }
         if program == "find" {
-            return findNeeds(arguments, text: text, readOnly: readOnly, directory: directory)
+            return findNeeds(arguments, text: text, readOnly: readOnly, directory: directory, context: context.receivingArguments())
         }
         if program.hasPrefix("python"), arguments.first == "-m", arguments.count > 1, arguments[1] == "pip" {
-            return needs(ofWords: ["pip"] + arguments.dropFirst(2), readOnly: readOnly, directory: directory)
+            return needs(ofWords: ["pip"] + arguments.dropFirst(2), readOnly: readOnly, directory: directory, context: context)
         }
-        let (capability, rule) = classify(program, arguments, readOnly: readOnly)
+        let (capability, rule) = classify(program, arguments, readOnly: readOnly, context: context)
         return [PermissionNeed(capability: capability, rule: rule, command: text)]
     }
 
-    static func classify(_ program: String, _ arguments: [String], readOnly: Bool) -> (PermissionCapability, String) {
+    static func classify(_ program: String, _ arguments: [String], readOnly: Bool, context: ShellContext = ShellContext()) -> (PermissionCapability, String) {
         let positional = positional(arguments)
         let sub = positional.first
         if networkTools.contains(program) { return (.network, program) }
+        if let paths = changedPaths(program, arguments), context.holdsOnlyTemp(paths) { return (.runShell, key(program, positional)) }
         if riskyTools.contains(program) || program.hasPrefix("mkfs.") { return (.riskyCommands, program) }
         if elevators.contains(program) {
             let target = unwrapped(Array(arguments.drop { $0.hasPrefix("-") }))?.first.map(basename)
@@ -139,7 +148,7 @@ enum ShellRisk {
         if let depth = cloudTools[program] { return (.riskyCommands, ([program] + positional.prefix(depth)).joined(separator: " ")) }
         switch program {
         case "git":
-            return git(arguments, readOnly: readOnly)
+            return git(arguments, readOnly: readOnly, context: context)
         case "gh":
             if let rule = github(arguments, positional: positional) { return (.riskyCommands, rule) }
         case "docker", "podman":
@@ -164,9 +173,11 @@ enum ShellRisk {
         return (.runShell, key(program, positional))
     }
 
-    static func git(_ arguments: [String], readOnly: Bool) -> (PermissionCapability, String) {
+    static func git(_ arguments: [String], readOnly: Bool, context: ShellContext) -> (PermissionCapability, String) {
         var index = 0
+        var directory: String?
         while index < arguments.count, arguments[index].hasPrefix("-") {
+            if arguments[index] == "-C", arguments.indices.contains(index + 1) { directory = arguments[index + 1] }
             index += ["-C", "-c", "--git-dir", "--work-tree", "--namespace"].contains(arguments[index]) ? 2 : 1
         }
         guard index < arguments.count else { return (.runShell, "git") }
@@ -190,6 +201,7 @@ enum ShellRisk {
         case "config": risky = has("--global", "--system")
         default: risky = false
         }
+        if !risky, let targets = gitTargets(sub, rest, directory: directory), context.holdsOnlyTemp(targets) { return (.runShell, rule) }
         if risky || (readOnly && gitChangesFiles(sub, rest: rest, positional: positional)) { return (.riskyCommands, rule) }
         return (.runShell, rule)
     }
@@ -263,8 +275,8 @@ enum ShellRisk {
         }
     }
 
-    static func redirectNeed(_ target: String, readOnly: Bool, directory: String?) -> PermissionNeed? {
-        guard !target.hasPrefix("/dev/") else { return nil }
+    static func redirectNeed(_ target: String, readOnly: Bool, directory: String?, context: ShellContext = ShellContext()) -> PermissionNeed? {
+        guard !target.hasPrefix("/dev/"), !context.isTemp(target) else { return nil }
         let command = "> \(target)"
         if readOnly { return PermissionNeed(capability: .riskyCommands, rule: "write files with >", command: command) }
         guard writesOutside(target, directory: directory) else { return nil }
@@ -290,7 +302,7 @@ enum ShellRisk {
         return !roots.contains { path == $0 || path.hasPrefix($0.hasSuffix("/") ? $0 : $0 + "/") }
     }
 
-    static func findNeeds(_ arguments: [String], text: String, readOnly: Bool, directory: String?) -> [PermissionNeed] {
+    static func findNeeds(_ arguments: [String], text: String, readOnly: Bool, directory: String?, context: ShellContext) -> [PermissionNeed] {
         var found: [PermissionNeed] = []
         var index = 0
         while index < arguments.count {
@@ -305,7 +317,7 @@ enum ShellRisk {
                     index += 1
                 }
                 index += 1
-                found += needs(ofWords: inner, readOnly: readOnly, directory: directory)
+                found += needs(ofWords: inner, readOnly: readOnly, directory: directory, context: context)
             }
         }
         return found.isEmpty ? [PermissionNeed(capability: .runShell, rule: "find", command: text)] : found

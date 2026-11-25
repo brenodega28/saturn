@@ -91,7 +91,7 @@ struct NewRequestIntro: View {
             } else {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("What should we build?")
-                        .font(.system(size: 30, weight: .heavy).width(.expanded))
+                        .font(.system(size: 30, weight: .bold))
                         .foregroundStyle(Tokens.text)
                     Text("Describe it in your own words. The Lead writes a spec for you to approve, then starts the workers.")
                         .font(.system(size: 15))

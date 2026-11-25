@@ -10,6 +10,17 @@ public enum SpecFeedback {
         case page
     }
 
+    public static let approveID = "spec-approve"
+
+    public static func isApproval(_ prompt: LavishPrompt) -> Bool {
+        if prompt.selector.contains(approveID) { return true }
+        return prompt.prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "approve"
+    }
+
+    public static func split(_ prompts: [LavishPrompt]) -> (approvals: [LavishPrompt], notes: [LavishPrompt]) {
+        (prompts.filter(isApproval), prompts.filter { !isApproval($0) })
+    }
+
     public static func message(for prompts: [LavishPrompt], document: SpecDocument?) -> String? {
         let notes = prompts.filter { !$0.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !$0.attachments.isEmpty }
         guard !notes.isEmpty else { return nil }
@@ -40,7 +51,7 @@ public enum SpecFeedback {
             }
         }
         if let id = capture("section-([a-z0-9-]+)", in: prompt.selector) {
-            let headings = ["Summary", "Interfaces", "Out of scope", "Acceptance criteria", "Verification", "Workers"] + (document?.extraSections.map(\.heading) ?? [])
+            let headings = ["Summary", "Interfaces", "Out of scope", "Acceptance criteria", "Verification", SpecPageRenderer.planHeading, "Workers"] + (document?.extraSections.map(\.heading) ?? [])
             if let heading = headings.first(where: { SpecPageRenderer.sectionID($0) == "section-\(id)" }) { return .section(heading) }
         }
         if prompt.selector.contains("spec-header") { return .section("Title") }

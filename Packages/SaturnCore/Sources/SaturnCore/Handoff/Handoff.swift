@@ -205,12 +205,14 @@ public struct SpecDraftRequest: Sendable, Hashable, Codable {
     public var acceptanceCriteria: [String]
     public var verification: String
     public var workers: [SpecWorker]
+    public var workflow: String?
 
     public init(
         title: String, owner: String? = nil, summary: String = "", interfaces: [String] = [], outOfScope: [String] = [],
-        acceptanceCriteria: [String] = [], verification: String = "", workers: [SpecWorker] = []
+        acceptanceCriteria: [String] = [], verification: String = "", workers: [SpecWorker] = [], workflow: String? = nil
     ) {
         self.workers = workers
+        self.workflow = workflow?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.title = title
         self.owner = owner
         self.summary = summary
@@ -221,7 +223,7 @@ public struct SpecDraftRequest: Sendable, Hashable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case title, owner, summary, interfaces, verification, workers
+        case title, owner, summary, interfaces, verification, workers, workflow
         case outOfScope = "out_of_scope"
         case acceptanceCriteria = "acceptance_criteria"
     }
@@ -239,6 +241,7 @@ public struct SpecDraftRequest: Sendable, Hashable, Codable {
         self.acceptanceCriteria = clean(try container.decodeIfPresent([String].self, forKey: .acceptanceCriteria))
         self.verification = try container.decodeIfPresent(String.self, forKey: .verification)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         self.workers = (try container.decodeIfPresent([SpecWorker].self, forKey: .workers) ?? []).filter { !$0.name.isEmpty }
+        self.workflow = try container.decodeIfPresent(String.self, forKey: .workflow)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 }
 
@@ -498,7 +501,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .readChat:
             "Read a Saturn request chat from any project: its messages, runs, run step history and agent transcripts. A link saturn://chat/<request_id>?message=<message_id> maps to request_id and message_id, and its ?daemon=<uuid> maps to daemon; call this tool whenever a message contains such a link. Start with the overview section, then page with offset and limit or pull the messages, run or transcript section."
         case .draftSpec:
-            "Create or replace this request’s spec draft: a summary, interfaces, out of scope, checkable acceptance criteria, how to verify the whole change, and the workers you will start once it is approved, in start order, each with a one-line reason. Saturn renders it as a review page the user annotates in Lavish; their notes arrive as chat messages tagged as spec feedback. Send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it."
+            "Create or replace this request’s spec draft: a summary, interfaces, out of scope, checkable acceptance criteria, how to verify the whole change, the workflow the run will use, and every worker the run will need (builders you will start and the checkers its review and QA steps run), in start order, each with a one-line reason and its skills and model. Saturn renders it as a review page the user annotates in Lavish, with the workflow, the worker table, the total agent count and an Approve & start button; their notes arrive as chat messages tagged as spec feedback. Send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it. Approving the spec is the user’s go-ahead for the plan, the workflow and the agent count: once approved, don’t ask again for approval of the plan or how many agents to start. A plan that needs more builders or a new role than the spec lists stops for the user’s approval."
         case .replySpec:
             "Answer the user on this request’s spec review page in Lavish, after you handled their spec feedback. The reply shows in the page’s conversation panel and marks the notes you received as done. Keep it short."
         case .setChatStatus:
@@ -633,10 +636,13 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "out_of_scope": array(string("Something this work deliberately doesn't do")),
                 "acceptance_criteria": array(string("A checkable statement that is true when the work is done")),
                 "verification": string("How to verify the whole change end to end"),
+                "workflow": string("The workflow id the run uses, such as feature-delivery; defaults to the open proposal's workflow or feature-delivery"),
                 "workers": array(object([
                     "role": string("The role id from .saturn/roles that does this part"),
                     "name": string("The worker's display name, such as Django Dev 1"),
                     "reason": string("One short line on what this worker does and why it is needed"),
+                    "skills": array(string("An installed skill this worker loads")),
+                    "model": string("The model this worker runs, such as opus or sonnet"),
                 ], required: ["role", "name"])),
             ], required: ["title", "summary", "acceptance_criteria", "workers"])
         case .replySpec:

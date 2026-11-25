@@ -35,6 +35,7 @@ public final class RunEngine {
     public private(set) var holds: [Int64: RunHold] = [:]
     public internal(set) var waitingForCapacity: Set<Int64> = []
     @ObservationIgnored public var capacityPollInterval: Duration = .seconds(2)
+    @ObservationIgnored public var approvedWorkers: @MainActor (_ runID: Int64) -> [SpecWorker]? = { _ in nil }
 
     @ObservationIgnored let driver: any WorkflowDriver
     @ObservationIgnored let minute: Duration
@@ -54,6 +55,12 @@ public final class RunEngine {
         self.driver = driver
         self.minute = minute
         self.clock = clock
+        if let paths = (driver as? AgentWorkflowDriver)?.runtime.paths {
+            self.approvedWorkers = { runID in
+                guard let spec = SpecStore(paths: paths).runSpec(runId: runID)?.document, SpecApproval.covers(spec) else { return nil }
+                return spec.workers
+            }
+        }
         #if DEBUG
         self.debugTrace = (driver as? AgentWorkflowDriver)?.runtime.debugTrace
         #endif

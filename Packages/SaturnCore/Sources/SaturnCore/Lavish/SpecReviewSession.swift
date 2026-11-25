@@ -125,10 +125,13 @@ public final class SpecReviews: SpecReviewHost {
     public let database: AppDatabase
     public var makeRuntime: @MainActor () async throws -> LavishRuntime
     public var deliver: @MainActor (_ taskId: Int64, _ message: String) async -> Void = { _, _ in }
+    public var approve: @MainActor (_ taskId: Int64) async throws -> Void = { _ in throw SpecReviewError.approvalUnavailable }
     public var drafted: @MainActor (_ projectId: Int64, _ taskId: Int64, _ path: String) -> Void = { _, _, _ in }
     public var ended: @MainActor (_ taskId: Int64) -> Void = { _ in }
     public private(set) var sessions: [Int64: SpecReviewSession] = [:]
     private var opening: [Int64: Task<URL, Error>] = [:]
+    private var approving: Set<Int64> = []
+    private var endAfterApproval: Set<Int64> = []
 
     public init(paths: AppPaths, database: AppDatabase, makeRuntime: @escaping @MainActor () async throws -> LavishRuntime) {
         self.paths = paths
@@ -136,7 +139,7 @@ public final class SpecReviews: SpecReviewHost {
         self.makeRuntime = makeRuntime
     }
 
-    var store: SpecStore { SpecStore(paths: paths) }
+    var store: SpecStore { SpecStore(paths: paths, database: database) }
     var ledger: URL { paths.root.appending(path: "spec-reviews.json") }
 
     public func status(taskId: Int64) async -> SpecReviewStatus {
@@ -179,6 +182,10 @@ public final class SpecReviews: SpecReviewHost {
     }
 
     public func endSpecReview(taskId: Int64) async {
+        if approving.contains(taskId) {
+            endAfterApproval.insert(taskId)
+            return
+        }
         guard let session = sessions.removeValue(forKey: taskId) else { return }
         save()
         await session.end()
@@ -215,9 +222,25 @@ public final class SpecReviews: SpecReviewHost {
 
     func received(_ prompts: [LavishPrompt], taskId: Int64) async {
         guard let chat = try? database.task(id: taskId) else { return }
+        let (approvals, notes) = SpecFeedback.split(prompts)
         let document = try? store.draft(projectId: chat.projectId, taskId: taskId)
-        guard let message = SpecFeedback.message(for: prompts, document: document) else { return }
-        await deliver(taskId, message)
+        if let message = SpecFeedback.message(for: notes, document: document) { await deliver(taskId, message) }
+        if !approvals.isEmpty { await approveFromPage(taskId: taskId) }
+    }
+
+    func approveFromPage(taskId: Int64) async {
+        approving.insert(taskId)
+        let reply: String
+        do {
+            try await approve(taskId)
+            reply = "Approved, run started."
+        } catch {
+            reply = "Not started: \(error.localizedDescription)"
+        }
+        try? await sessions[taskId]?.reply(reply)
+        approving.remove(taskId)
+        guard endAfterApproval.remove(taskId) != nil else { return }
+        Task { await self.endSpecReview(taskId: taskId) }
     }
 
     func draftPage(taskId: Int64) throws -> URL {
@@ -255,6 +278,7 @@ public enum SpecReviewError: Error, LocalizedError, Equatable {
     case remote
     case committed
     case closed
+    case approvalUnavailable
 
     public var errorDescription: String? {
         switch self {
@@ -262,6 +286,7 @@ public enum SpecReviewError: Error, LocalizedError, Equatable {
         case .remote: "Live review in Lavish isn’t available for remote projects, so the spec opens read-only. Send feedback in the chat."
         case .committed: "The run started and the spec is committed on the run branch, so the page is read-only."
         case .closed: "This request is closed, so the spec is read-only."
+        case .approvalUnavailable: "Approving from the page isn’t set up in this Saturn. Approve the spec in the Saturn chat."
         }
     }
 }

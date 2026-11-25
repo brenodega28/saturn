@@ -85,6 +85,28 @@ ol.criteria li.checked .text { color: var(--muted); text-decoration: line-throug
 .workers li { list-style: none; margin-left: -20px; }
 .role { color: var(--muted); font-size: 13px; }
 .reason { color: var(--muted); }
+h3 { font-size: 14px; margin: 16px 0 6px; }
+ol.steps { margin: 0 0 12px; padding-left: 22px; }
+.table { overflow-x: auto; margin: 0 0 12px; }
+table.workers { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.workers th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+table.workers th, table.workers td { padding: 6px 8px; border-top: 1px solid var(--hair); vertical-align: top; overflow-wrap: anywhere; }
+table.workers thead th { border-top: none; }
+.total { margin-top: 4px; }
+.approve { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hair); }
+#spec-approve {
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 9px;
+  padding: 8px 18px;
+  cursor: pointer;
+}
+#spec-approve:hover { filter: brightness(1.08); }
+#spec-approve:disabled { opacity: .6; cursor: default; }
+.hint { color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>

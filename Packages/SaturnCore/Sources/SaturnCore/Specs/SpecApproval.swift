@@ -1,6 +1,21 @@
 import Foundation
 
+public enum PlanCheck: Sendable, Equatable {
+    case proceed
+    case hold(excess: String?)
+}
+
 public enum SpecApproval {
+    public static func check(_ plan: Plan, workers: [SpecWorker]?, approvesPlans: Bool) -> PlanCheck {
+        guard let workers else { return approvesPlans ? .hold(excess: nil) : .proceed }
+        return excess(plan: plan, workers: workers).map { .hold(excess: $0) } ?? .proceed
+    }
+
+    public static func workers(runId: Int64, paths: AppPaths) -> [SpecWorker]? {
+        guard let spec = SpecStore(paths: paths).runSpec(runId: runId)?.document, covers(spec) else { return nil }
+        return spec.workers
+    }
+
     public static func covers(_ document: SpecDocument) -> Bool {
         !document.workers.isEmpty && (document.status == .approved || document.status == .inProgress)
     }

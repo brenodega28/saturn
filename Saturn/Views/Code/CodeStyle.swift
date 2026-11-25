@@ -13,10 +13,10 @@ enum CodeStyle {
     }
 
     static var codeFont: Font { Font.system(size: fontSize, design: .monospaced) }
-    static var lineHeight: CGFloat { (fontSize * 1.68).rounded() }
-    static let added = Color(hex: 0x7DB6FF)
-    static let pin = Color(hex: 0xFF7A2F)
-    static let match = Color(hex: 0x5AB0FF)
+    static var lineHeight: CGFloat { (fontSize * 1.75).rounded() }
+    static let added = Tokens.done
+    static let pin = Tokens.review
+    static let match = Tokens.accent
 
     static func color(_ kind: CodeToken.Kind) -> Color {
         switch kind {
@@ -62,7 +62,7 @@ enum CodeStyle {
     }
 
     static func changeColor(_ status: CodeFileStatus) -> Color {
-        status == .added ? added : Theme.successText
+        status == .added ? added : Tokens.review
     }
 }
 

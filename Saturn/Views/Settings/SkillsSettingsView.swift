@@ -13,60 +13,38 @@ struct SkillsSettingsView: View {
     @State private var installMessage: String?
     @State private var installError: String?
     @State private var hasUncommittedSettings = false
+    @State private var isAdding = false
 
     var body: some View {
         let plugins = project.id.flatMap { workspace.skillPlugins[$0] } ?? []
         let skills = SkillLibrary.skills(in: project.filesRoot, pluginSkills: workspace.pluginSkills(for: project))
-        SettingsPage("Skills", subtitle: "Skills installed for this project, from .claude/skills, the project’s plugins and ~/.claude/skills. The Lead chooses which skills each builder or checker loads; Saturn never turns them on for every agent.") {
-            installCard(plugins: plugins)
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text("Installed skills")
-                    Spacer()
-                    Text("\(skills.count)")
+        SettingsPage("Skills", subtitle: "Extra know-how agents can load when the task calls for it, from .claude/skills, the project’s plugins and ~/.claude/skills. The Lead chooses which skills each worker loads; Saturn never turns them on for every agent.") {
+            if skills.isEmpty {
+                SettingsRows {
+                    SettingsRowLabel(title: "No skills yet", detail: "Add a folder with a SKILL.md to .claude/skills or ~/.claude/skills, or install a plugin.")
                 }
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.secondaryText)
-                .padding(16)
-                if skills.isEmpty {
-                    Divider().overlay(Theme.hairline)
-                    Text("No skills yet. Add a folder with a SKILL.md to .claude/skills or ~/.claude/skills, or install a plugin above.")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Theme.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(16)
-                }
-                ForEach(skills) { skill in
-                    Divider().overlay(Theme.hairline)
-                    skillRow(skill)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+            } else {
+                SettingsRows {
+                    ForEach(skills) { skill in skillRow(skill) }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .card(cornerRadius: 16)
+            if isAdding || skills.isEmpty || !plugins.isEmpty || installError != nil {
+                installCard(plugins: plugins)
+            } else {
+                Button("+ Add a skill") { isAdding = true }
+                    .buttonStyle(LinkButtonStyle())
+            }
         }
+        .task(id: project.path) { await refreshPlugins() }
     }
 
     private func skillRow(_ skill: InstalledSkill) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(skill.name).font(.system(size: 13, weight: .semibold, design: .monospaced)).lineLimit(1)
-                if !skill.description.isEmpty {
-                    Text(skill.description)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer(minLength: 8)
+        HStack(spacing: 14) {
+            SettingsRowLabel(title: skill.name, detail: skill.description, monospaced: true)
             Text(skill.source.title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Theme.secondaryText)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Theme.fillRaised, in: .capsule)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Tokens.text2)
+                .frame(width: 180, alignment: .leading)
                 .help("From \(skill.source.location)")
         }
     }
@@ -74,11 +52,8 @@ struct SkillsSettingsView: View {
     private func installCard(plugins: [SkillPlugin]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Install skills").font(.system(size: 13.5, weight: .semibold))
-                Text("Adds a plugin marketplace and installs a plugin with Claude Code, for this project only. Agents load plugins enabled in \(SkillPluginInstaller.settingsPath).")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Theme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text("Add a skill").font(.system(size: 14, weight: .semibold))
+                SettingsNote("Adds a plugin marketplace and installs a plugin with Claude Code, for this project only. Agents load plugins enabled in \(SkillPluginInstaller.settingsPath).")
             }
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .bottom, spacing: 10) {
@@ -93,19 +68,19 @@ struct SkillsSettingsView: View {
                 }
             }
             if let installMessage {
-                Text(installMessage).font(.system(size: 12)).foregroundStyle(Theme.successText)
+                Text(installMessage).font(.system(size: 12)).foregroundStyle(Tokens.done)
             }
             if let installError {
                 Text(installError)
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.danger)
+                    .foregroundStyle(Tokens.danger)
                     .lineLimit(6)
                     .textSelection(.enabled)
             }
             if hasUncommittedSettings {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.warning)
+                        .foregroundStyle(Tokens.need)
                         .accessibilityLabel("Not committed")
                     Text("Commit \(SkillPluginInstaller.settingsPath). Coding agents work in worktrees made from commits, so they only get plugins once it’s committed.")
                         .font(.system(size: 12))
@@ -113,7 +88,7 @@ struct SkillsSettingsView: View {
                 }
             }
             if !plugins.isEmpty {
-                Divider().overlay(Theme.hairline)
+                Rectangle().fill(Tokens.hair).frame(height: 1)
                 ForEach(plugins) { plugin in
                     DisclosureGroup {
                         FlowLayout(spacing: 6) {
@@ -124,26 +99,25 @@ struct SkillsSettingsView: View {
                         .padding(.top, 6)
                     } label: {
                         HStack(spacing: 8) {
-                            Text(plugin.id).font(.system(size: 12.5, weight: .medium, design: .monospaced))
+                            Text(plugin.id).font(Tokens.mono(12.5, weight: .medium))
                             Text(plugin.skills.count == 1 ? "1 skill" : "\(plugin.skills.count) skills")
                                 .font(.system(size: 12))
-                                .foregroundStyle(Theme.secondaryText)
+                                .foregroundStyle(Tokens.text2)
                         }
                     }
                 }
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .card(cornerRadius: 16)
-        .task(id: project.path) { await refreshPlugins() }
+        .sectionCard()
     }
 
     private var marketplaceField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Marketplace").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+            Text("Marketplace").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.text2)
             TextField("Marketplace", text: $marketplace, prompt: Text("getsentry/skills"))
-                .textFieldStyle(.roundedBorder)
+                .sectionField(width: nil, monospaced: true)
                 .labelsHidden()
                 .autocorrectionDisabled()
                 .help("A GitHub owner/repo, a git or https URL, or a local path")
@@ -152,9 +126,9 @@ struct SkillsSettingsView: View {
 
     private var pluginField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Plugin").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+            Text("Plugin").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.text2)
             TextField("Plugin", text: $plugin, prompt: Text("sentry-skills"))
-                .textFieldStyle(.roundedBorder)
+                .sectionField(width: nil, monospaced: true)
                 .labelsHidden()
                 .autocorrectionDisabled()
                 .onSubmit { Task { await install() } }
@@ -165,7 +139,7 @@ struct SkillsSettingsView: View {
     private var installButton: some View {
         HStack(spacing: 8) {
             Button("Install") { Task { await install() } }
-                .buttonStyle(.primaryPill)
+                .buttonStyle(SectionButtonStyle(kind: .primary, height: 32))
                 .disabled(isInstalling || marketplace.trimmingCharacters(in: .whitespaces).isEmpty || plugin.trimmingCharacters(in: .whitespaces).isEmpty)
             if isInstalling {
                 ProgressView().controlSize(.small)
@@ -210,13 +184,13 @@ private struct SkillChip: View {
             if isMissing {
                 Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).accessibilityLabel("Missing")
             }
-            Text(name).font(.system(size: 12, design: .monospaced))
+            Text(name).font(Tokens.mono(12))
         }
-        .foregroundStyle(isMissing ? Color(hex: 0xFFC36B) : Theme.primaryText)
-        .padding(.horizontal, 8)
-        .frame(height: 24)
-        .background(isMissing ? Theme.warning.opacity(0.1) : Color.black.opacity(0.25), in: .rect(cornerRadius: 7, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(isMissing ? Theme.warning.opacity(0.4) : Tokens.hair2))
+        .foregroundStyle(isMissing ? Tokens.need : Tokens.text)
+        .padding(.horizontal, 9)
+        .frame(height: 26)
+        .background(isMissing ? Tokens.needBackground : Tokens.code, in: .rect(cornerRadius: 7, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(isMissing ? Tokens.needLine : Tokens.hair))
         .help(isMissing ? "\(name) isn’t in .claude/skills or an installed plugin" : name)
     }
 }

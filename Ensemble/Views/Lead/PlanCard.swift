@@ -4,6 +4,7 @@ import SwiftUI
 
 struct PlanCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let run: Run
     let project: Project
     let reload: () -> Void
@@ -19,7 +20,7 @@ struct PlanCard: View {
     }
 
     var body: some View {
-        let installed = SkillLibrary.skills(in: project.filesRoot, pluginSkills: model.pluginSkills(for: project)).map(\.name)
+        let installed = SkillLibrary.skills(in: project.filesRoot, pluginSkills: workspace.pluginSkills(for: project)).map(\.name)
         VStack(alignment: .leading, spacing: 0) {
             header
             if !plan.summary.isEmpty {
@@ -82,7 +83,7 @@ struct PlanCard: View {
         if isAskingForNewPlan {
             NoteField(prompt: "What should the lead change?", note: $note, sendTitle: "Ask for a New Plan", cancel: { isAskingForNewPlan = false }) {
                 let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
-                model.rejectPlan(run, note: text)
+                workspace.rejectPlan(run, note: text)
                 reload()
             }
             .padding(16)
@@ -96,7 +97,7 @@ struct PlanCard: View {
                     .buttonStyle(PillButtonStyle(height: 32))
                     .help("Send the plan back to the lead with a note")
                 Button("Approve & Start Run") {
-                    model.approvePlan(run, plan: plan)
+                    workspace.approvePlan(run, plan: plan)
                     reload()
                 }
                 .buttonStyle(PillButtonStyle(.primary, height: 32))

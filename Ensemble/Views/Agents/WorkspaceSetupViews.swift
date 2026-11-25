@@ -73,6 +73,7 @@ struct SetupLogSection: View {
     static let maximumLogBytes = 64 * 1024
 
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let session: LiveAgentSession
     @State private var record: SetupRecord?
     @State private var log = ""
@@ -133,7 +134,7 @@ struct SetupLogSection: View {
     }
 
     private func reload() async {
-        let connection = model.connection
+        let connection = workspace.connection
         let agentID = session.id
         record = (try? await connection.fileData(.agentFile, id: "\(agentID)/\(SetupRecord.recordFileName)"))
             .flatMap(SetupRecord.decoded(from:))

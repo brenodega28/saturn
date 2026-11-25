@@ -15,7 +15,7 @@ struct CodeSource: Identifiable, Hashable {
     var changeAuthor: String { agent.map { AgentNaming.displayName(of: $0) } ?? "you" }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func codeSources(for project: Project) -> [CodeSource] {
         let projectSource = CodeSource(
             id: CodeSource.projectID, title: "Project checkout", branch: state(for: project).branch,
@@ -46,6 +46,6 @@ extension AppModel {
     }
 
     func codeBrowser(for project: Project) -> CodeBrowser {
-        CodeBrowser.shared(for: project, model: self)
+        CodeBrowser.shared(for: project, workspace: self)
     }
 }

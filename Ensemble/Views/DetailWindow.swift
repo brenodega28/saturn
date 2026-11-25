@@ -8,9 +8,11 @@ struct DetailWindow: View {
 
     var body: some View {
         Group {
-            if let destination, let project = model.project(withID: destination.projectID) {
-                content(destination, project: project)
+            if let destination, let workspace = model.workspace(for: destination.projectID.daemon),
+               let project = workspace.project(withID: destination.projectID.id) {
+                content(destination, project: project, workspace: workspace)
                     .padding(EdgeInsets(top: 10, leading: 22, bottom: 20, trailing: 22))
+                    .environment(workspace)
             } else {
                 EmptyState("Nothing to show", message: "This project is closed or the item no longer exists.")
             }
@@ -20,12 +22,12 @@ struct DetailWindow: View {
     }
 
     @ViewBuilder
-    private func content(_ destination: DetailDestination, project: Project) -> some View {
+    private func content(_ destination: DetailDestination, project: Project, workspace: DaemonWorkspace) -> some View {
         switch destination {
         case .run(_, let runID):
             RunDetailView(runID: runID, project: project)
         case .agent(_, let agentID):
-            if let session = model.agentSessions(in: project).first(where: { $0.id == agentID }) {
+            if let session = workspace.agentSessions(in: project).first(where: { $0.id == agentID }) {
                 AgentSessionView(session: session, project: project)
             } else {
                 EmptyState("Agent not found", message: "The agent was deleted.")
@@ -38,11 +40,12 @@ struct DetailWindow: View {
 
 private struct DetailFileView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let path: String
 
     var body: some View {
-        let document = project.isRemote ? model.codeBrowser(for: project).document(path) : CodeWorkspace.document(at: project.url.appending(path: path))
+        let document = project.isRemote ? workspace.codeBrowser(for: project).document(path) : CodeWorkspace.document(at: project.url.appending(path: path))
         VStack(alignment: .leading, spacing: 8) {
             Text(path).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.secondaryText)
             ScrollView([.vertical, .horizontal]) {
@@ -68,7 +71,7 @@ private struct DetailFileView: View {
 }
 
 extension DetailDestination {
-    var projectID: Int64 {
+    var projectID: ProjectRef {
         switch self {
         case .run(let project, _), .agent(let project, _), .file(let project, _): project
         }

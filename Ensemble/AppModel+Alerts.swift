@@ -4,8 +4,8 @@ import Foundation
 
 extension AppModel {
     var systemAlerts: [SystemAlert] {
-        let errors = remoteStatuses.compactMapValues(\.error)
-        return SystemAlert.detect(environment: environment, planUsage: planUsage.usage, projects: openProjects, remoteErrors: errors)
+        let errors = local.remoteStatuses.compactMapValues(\.error)
+        return SystemAlert.detect(environment: environment, planUsage: planUsage.usage, projects: local.openProjects, remoteErrors: errors)
     }
 
     func resolve(_ alert: SystemAlert) {
@@ -16,8 +16,8 @@ extension AppModel {
         case .rateLimited:
             open(.usage)
         case .hostDisconnected(let projectID, _, _, _):
-            guard let project = project(withID: projectID) else { return }
-            Task { await reopen(project) }
+            guard let project = local.project(withID: projectID) else { return }
+            Task { await local.reopen(project) }
         }
     }
 

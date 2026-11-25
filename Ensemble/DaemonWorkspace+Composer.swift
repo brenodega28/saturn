@@ -13,7 +13,9 @@ extension AppModel {
         ("sonnet", "Sonnet", "Faster, good for small changes"),
         ("haiku", "Haiku", "Quick questions only"),
     ]
+}
 
+extension DaemonWorkspace {
     func newChatOptions(for project: Project) -> NewChatOptions {
         project.id.flatMap { newChatOptionsByProject[$0] } ?? NewChatOptions()
     }
@@ -96,7 +98,7 @@ extension AppModel {
     }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func commitsAhead(of run: Run) async -> Int? {
         guard let base = run.baseBranch, let project = project(withID: run.projectId), let git = git(for: project) else { return nil }
         guard let output = try? await git.run(["rev-list", "--count", "origin/\(base)..\(base)"], in: project.url) else { return nil }

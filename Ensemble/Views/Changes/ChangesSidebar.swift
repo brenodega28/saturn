@@ -133,6 +133,7 @@ struct ChangesSidebar: View {
 
 struct ReviewBar: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let run: Run
     let store: ChangesStore
     let holdsApproval: Bool
@@ -151,12 +152,12 @@ struct ReviewBar: View {
                 .lineLimit(1)
             Spacer(minLength: 8)
             if holdsApproval && !requested.isEmpty {
-                Button("Send changes back") { model.sendChangesBack(in: run, pins: store.pins) }
+                Button("Send changes back") { workspace.sendChangesBack(in: run, pins: store.pins) }
                     .buttonStyle(PillButtonStyle(.primary, height: 36))
                     .help("Sends the \(requested.count) requested change\(requested.count == 1 ? "" : "s") back to the authors’ workflow step")
             } else if open > 0 || holdsApproval {
                 let unreadCore = store.unviewedCoreFiles.count
-                Button(holdsApproval ? "Approve all & continue run" : "Approve all pins") { model.approveAllPins(in: run) }
+                Button(holdsApproval ? "Approve all & continue run" : "Approve all pins") { workspace.approveAllPins(in: run) }
                     .buttonStyle(PillButtonStyle(.primary, height: 36))
                     .disabled(unreadCore > 0)
                     .help(unreadCore > 0

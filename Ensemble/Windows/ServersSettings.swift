@@ -12,10 +12,10 @@ struct ServersSettings: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
-            ForEach(model.orderedConnections) { connection in
-                ServerRow(connection: connection)
+            ForEach(model.orderedWorkspaces) { workspace in
+                ServerRow(workspace: workspace)
             }
-            ForEach(model.knownDaemons.filter { known in model.connections[known.id] == nil }) { known in
+            ForEach(model.knownDaemons.filter { known in model.workspace(for: known.id) == nil }) { known in
                 Text("\(known.displayName): connecting…").font(.system(size: 12.5)).foregroundStyle(Theme.secondaryText)
             }
             Divider()
@@ -46,7 +46,9 @@ struct ServersSettings: View {
 
 private struct ServerRow: View {
     @Environment(AppModel.self) private var model
-    let connection: DaemonConnection
+    let workspace: DaemonWorkspace
+
+    private var connection: DaemonConnection { workspace.connection }
 
     var body: some View {
         let live = connection.live
@@ -55,19 +57,14 @@ private struct ServerRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: connection.isRemote ? "server.rack" : "laptopcomputer").foregroundStyle(Theme.secondaryText)
-                Text(model.displayName(of: connection)).font(.system(size: 13, weight: .semibold))
+                Text(workspace.displayName).font(.system(size: 13, weight: .semibold))
                 Text(stateText).font(.system(size: 11.5)).foregroundStyle(stateColor)
                 Spacer()
-                if connection.id == model.connection.id {
-                    Text("Showing").font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
-                } else {
-                    Button("Show") { model.activate(connection.id) }
-                }
                 if connection.isRemote {
                     Menu("More") {
-                        Button("Upgrade Daemon") { Task { await model.upgradeServer(connection) } }
-                        Button("Stop Daemon") { model.stopServerDaemon(connection) }
-                        Button("Remove Server", role: .destructive) { model.removeServer(connection) }
+                        Button("Upgrade Daemon") { Task { await model.upgradeServer(workspace) } }
+                        Button("Stop Daemon") { model.stopServerDaemon(workspace) }
+                        Button("Remove Server", role: .destructive) { model.removeServer(workspace) }
                     }
                     .fixedSize()
                 }
@@ -91,7 +88,7 @@ private struct ServerRow: View {
             if let problem {
                 Text(problem.message).font(.system(size: 11.5)).foregroundStyle(Theme.danger).fixedSize(horizontal: false, vertical: true)
                 if problem.runsActive != nil {
-                    Button("Upgrade Anyway") { Task { await model.upgradeServer(connection) } }
+                    Button("Upgrade Anyway") { Task { await model.upgradeServer(workspace) } }
                 }
             }
         }

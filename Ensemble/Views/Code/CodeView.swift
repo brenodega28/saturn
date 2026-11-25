@@ -4,10 +4,11 @@ import SwiftUI
 
 struct CodeView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     var body: some View {
-        let browser = model.codeBrowser(for: project)
+        let browser = workspace.codeBrowser(for: project)
         HStack(spacing: 0) {
             CodeExplorer(browser: browser)
                 .frame(width: 264)
@@ -28,7 +29,7 @@ struct CodeView: View {
                 .hidden()
         }
         .task(id: project.id) { await browser.refreshSources() }
-        .onChange(of: model.agentSessions(in: project).map(\.id)) {
+        .onChange(of: workspace.agentSessions(in: project).map(\.id)) {
             Task { await browser.refreshSources() }
         }
     }

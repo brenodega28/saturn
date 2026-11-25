@@ -133,17 +133,17 @@ private struct ChatList: View {
     var body: some View {
         if open.isEmpty && closed.isEmpty {
             SidebarEmptyState(
-                title: model.openProjects.isEmpty ? "No projects yet" : "No chats yet",
-                message: model.openProjects.isEmpty
+                title: model.hasOpenProjects ? "No chats yet" : "No projects yet",
+                message: !model.hasOpenProjects
                     ? "Add a folder on this Mac or on an SSH host. Chats and workers live inside a project."
                     : "Tell the Lead what you need. It writes a spec, starts the workers and brings the result back here.",
-                action: model.openProjects.isEmpty ? "Add project" : "New chat"
+                action: model.hasOpenProjects ? "New chat" : "Add project"
             ) {
-                if model.openProjects.isEmpty { model.isOpenPanelPresented = true } else { model.requestNewChat() }
+                if model.hasOpenProjects { model.requestNewChat() } else { model.isOpenPanelPresented = true }
             }
         } else {
             LazyVStack(alignment: .leading, spacing: 3) {
-                ForEach(open) { ChatRow(summary: $0) }
+                ForEach(open) { summary in ChatRow(summary: summary).inWorkspace(summary.daemon) }
                 if !closed.isEmpty {
                     Button { showsClosed.toggle() } label: {
                         HStack(spacing: 6) {
@@ -161,7 +161,7 @@ private struct ChatList: View {
                     .buttonStyle(.plain)
                     .accessibilityValue(showsClosed ? "expanded" : "collapsed")
                     if showsClosed {
-                        ForEach(closed.prefix(Self.closedLimit)) { ClosedChatRow(summary: $0) }
+                        ForEach(closed.prefix(Self.closedLimit)) { summary in ClosedChatRow(summary: summary).inWorkspace(summary.daemon) }
                         if closed.count > Self.closedLimit {
                             Text("Older closed chats are in ⌘K search.")
                                 .font(.system(size: 11.5))
@@ -196,6 +196,7 @@ private struct SidebarEmptyState: View {
 
 struct ChatRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let summary: ChatSummary
     @State private var isHovered = false
     @State private var isRenaming = false
@@ -203,8 +204,8 @@ struct ChatRow: View {
     @FocusState private var renameFocused: Bool
 
     var body: some View {
-        let isSelected = model.activePage?.kind.chatID == summary.id
-        Button { model.openChat(summary.chat) } label: {
+        let isSelected = summary.chat.id.map { model.activePage?.kind.shows(chat: $0, on: summary.daemon) == true } ?? false
+        Button { workspace.openChat(summary.chat) } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     if summary.isUnread {
@@ -239,6 +240,7 @@ struct ChatRow: View {
                         Text(summary.project.name).lineLimit(1)
                     }
                     .foregroundStyle(Tokens.text2)
+                    MachineLabel(workspace: workspace, size: 11.5)
                     Spacer(minLength: 4)
                     WorkerStack(workers: summary.workers, project: summary.project)
                 }
@@ -253,7 +255,7 @@ struct ChatRow: View {
         .onHover { isHovered = $0 }
         .contextMenu { ChatRowMenu(chat: summary.chat, rename: startRename) }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(summary.chat.title), \(summary.stage.title), \(summary.project.name)")
+        .accessibilityLabel("\(summary.chat.title), \(summary.stage.title), \(summary.project.name)\(workspace.isRemote ? ", on \(workspace.displayName)" : "")")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -266,40 +268,42 @@ struct ChatRow: View {
     private func commitRename() {
         isRenaming = false
         guard draftTitle.trimmingCharacters(in: .whitespaces) != summary.chat.title else { return }
-        model.renameChat(summary.chat, to: draftTitle)
+        workspace.renameChat(summary.chat, to: draftTitle)
     }
 }
 
 struct ChatRowMenu: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let chat: Chat
     let rename: () -> Void
 
     var body: some View {
         Button("Rename", action: rename)
-        if !chat.isClosed, let project = model.project(withID: chat.projectId) {
-            if !chat.isFinished { Button("Mark as finished") { model.finishChat(chat) } }
-            Button("Resolve") { Task { await model.closeRequest(chat, as: .done, in: project) } }
-            Button("Close") { Task { await model.closeRequest(chat, as: .dropped, in: project) } }
+        if !chat.isClosed, let project = workspace.project(withID: chat.projectId) {
+            if !chat.isFinished { Button("Mark as finished") { workspace.finishChat(chat) } }
+            Button("Resolve") { Task { await workspace.closeRequest(chat, as: .done, in: project) } }
+            Button("Close") { Task { await workspace.closeRequest(chat, as: .dropped, in: project) } }
         }
         if chat.isClosed || chat.isFinished {
-            Button("Reopen") { model.reopenChat(chat) }
+            Button("Reopen") { workspace.reopenChat(chat) }
         }
         Divider()
-        Button("Copy link to chat") { model.copyChatLink(chat) }
+        Button("Copy link to chat") { workspace.copyLink(to: chat) }
         Divider()
-        Button("Delete…", role: .destructive) { model.pendingChatDeletion = chat }
+        Button("Delete…", role: .destructive) { model.pendingChatDeletion = DaemonChat(daemon: workspace.id, chat: chat) }
     }
 }
 
 private struct ClosedChatRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let summary: ChatSummary
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Button { model.openChat(summary.chat) } label: {
+            Button { workspace.openChat(summary.chat) } label: {
                 HStack(spacing: 6) {
                     Text(summary.chat.title).lineLimit(1).foregroundStyle(Tokens.text2)
                     Text("· \(summary.chat.closeReason?.title ?? "Closed") · \((summary.chat.closedAt ?? summary.lastActivity).formatted(.dateTime.month(.abbreviated).day()))")
@@ -311,7 +315,7 @@ private struct ClosedChatRow: View {
             }
             .buttonStyle(.plain)
             if isHovered {
-                Button("Reopen") { model.reopenChat(summary.chat) }
+                Button("Reopen") { workspace.reopenChat(summary.chat) }
                     .buttonStyle(.plain)
                     .foregroundStyle(Tokens.link)
             }
@@ -327,6 +331,7 @@ private struct ClosedChatRow: View {
 
 struct WorkerStack: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let workers: [Agent]
     let project: Project
     var size: CGFloat = 18
@@ -336,9 +341,9 @@ struct WorkerStack: View {
             HStack(spacing: 6) {
                 HStack(spacing: -5) {
                     ForEach(workers.prefix(3), id: \.id) { agent in
-                        AgentAvatar(size: size, appearance: RoleAppearance(role: model.role(for: agent, in: project)), isFailing: agent.status == .failed)
+                        AgentAvatar(size: size, appearance: RoleAppearance(role: workspace.role(for: agent, in: project)), isFailing: agent.status == .failed)
                             .background(Tokens.side, in: .rect(cornerRadius: size * 0.33))
-                            .help(model.displayName(of: agent, in: project))
+                            .help(workspace.displayName(of: agent, in: project))
                     }
                 }
                 if workers.count > 3 {
@@ -406,5 +411,24 @@ struct SecondaryPillStyle: ButtonStyle {
             .overlay(Capsule().strokeBorder(Tokens.hair2))
             .background(configuration.isPressed ? Tokens.hover : .clear, in: Capsule())
             .contentShape(Capsule())
+    }
+}
+
+private struct WorkspaceScope: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let daemon: DaemonID?
+
+    func body(content: Content) -> some View {
+        if let workspace = daemon.flatMap(model.workspace(for:)) {
+            content.environment(workspace)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func inWorkspace(_ daemon: DaemonID?) -> some View {
+        modifier(WorkspaceScope(daemon: daemon))
     }
 }

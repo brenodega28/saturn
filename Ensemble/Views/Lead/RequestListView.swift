@@ -20,15 +20,16 @@ struct RequestListView: View {
     }
 
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var query = ""
     @State private var filter: Filter = .all
 
     var body: some View {
-        let requests = LeadRequest.partition(model.leadRequests(in: project))
+        let requests = LeadRequest.partition(workspace.leadRequests(in: project))
         let open = filter == .closed ? [] : requests.open.filter(matchesQuery)
         let closed = filter == .open ? [] : requests.closed.filter(matchesQuery)
-        let needsYouTaskIDs = model.needsYouTaskIDs()
+        let needsYouTaskIDs = workspace.needsYouTaskIDs()
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
                 Text("Requests")
@@ -36,7 +37,7 @@ struct RequestListView: View {
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
                 Button {
-                    model.startNewLeadRequest(in: project)
+                    workspace.startNewLeadRequest(in: project)
                 } label: {
                     Label("New request", systemImage: "plus")
                 }
@@ -123,15 +124,15 @@ struct RequestListView: View {
     }
 
     private func row(_ request: Chat, needsYouTaskIDs: Set<Int64>) -> some View {
-        let run = model.latestRun(of: request)
+        let run = workspace.latestRun(of: request)
         let title = request.title.isEmpty ? "Request #\(request.id ?? 0)" : request.title
-        let status = model.requestStatusLabel(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs)
+        let status = workspace.requestStatusLabel(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs)
         let detail = run.map { "\(status) · \($0.costUSD.formatted(.currency(code: "USD")))" } ?? status
         return Button {
-            model.showRequest(request)
+            workspace.showRequest(request)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StatusDot(model.statusColor(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs))
+                StatusDot(workspace.statusColor(of: request, latestRun: run, needsYouTaskIDs: needsYouTaskIDs))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 13))

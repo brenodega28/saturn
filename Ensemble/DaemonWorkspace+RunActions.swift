@@ -1,7 +1,7 @@
 import EnsembleCore
 import Foundation
 
-extension AppModel {
+extension DaemonWorkspace {
     private func heldRequestID(_ run: Run) -> Int64? {
         run.id.flatMap { connection.hold(runID: $0)?.requestId }
     }

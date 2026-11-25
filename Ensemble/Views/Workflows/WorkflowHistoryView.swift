@@ -4,13 +4,14 @@ import SwiftUI
 
 struct WorkflowHistoryView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let editor: WorkflowEditor
     let dismiss: () -> Void
     @State private var error: String?
 
     var body: some View {
-        let versions = model.workflowHistory(editor.draft.id, in: project)
+        let versions = workspace.workflowHistory(editor.draft.id, in: project)
         VStack(alignment: .leading, spacing: 10) {
             Text("Version history").font(.system(size: 14, weight: .semibold))
             Text("Running tasks keep the version they started with.")
@@ -64,7 +65,7 @@ struct WorkflowHistoryView: View {
     private func restore(_ version: WorkflowVersion) {
         guard let current = editor.saved else { return }
         do {
-            let written = try model.restoreWorkflow(version, of: current, in: project)
+            let written = try workspace.restoreWorkflow(version, of: current, in: project)
             editor.markSaved(written)
             dismiss()
         } catch {

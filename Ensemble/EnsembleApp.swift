@@ -58,6 +58,7 @@ struct EnsembleApp: App {
             if case .ready(let model) = launch {
                 AppSettingsView(updater: updater)
                     .environment(model)
+                    .environment(model.local)
                     .followsAppearance()
                     .tint(Theme.accent)
             }
@@ -67,6 +68,7 @@ struct EnsembleApp: App {
             if case .ready(let model) = launch {
                 DebugWorktreesView()
                     .environment(model)
+                    .environment(model.local)
                     .followsAppearance()
                     .tint(Theme.accent)
             }
@@ -82,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationWillTerminate(_ notification: Notification) {
         model?.stopAllAppsImmediately()
-        model?.connection.stop()
+        model?.stopAllConnections()
     }
 }
 

@@ -4,6 +4,7 @@ import SwiftUI
 
 struct PinCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let pin: Pin
     let author: Agent?
     let appearance: RoleAppearance
@@ -28,7 +29,7 @@ struct PinCard: View {
                     text: pin.response ?? pin.explanation,
                     saveTitle: "Save",
                     onSave: { text in
-                        model.editComment(pin, text: text)
+                        workspace.editComment(pin, text: text)
                         isEditingComment = false
                     },
                     onCancel: { isEditingComment = false }
@@ -134,7 +135,7 @@ struct PinCard: View {
                 .buttonStyle(PillButtonStyle(height: 30))
                 .help("Change the text of your comment")
             }
-            Button("Delete") { model.deleteComment(pin) }
+            Button("Delete") { workspace.deleteComment(pin) }
                 .buttonStyle(PillButtonStyle(height: 30))
                 .help("Withdraw this comment")
             if let author {
@@ -168,7 +169,7 @@ struct PinCard: View {
                     .background(Theme.success.opacity(0.15), in: Capsule())
             case .open, .changeRequested:
                 Button("Looks right") {
-                    model.setPin(pin, status: .approved)
+                    workspace.setPin(pin, status: .approved)
                     composer = nil
                 }
                 .buttonStyle(PinPrimaryButtonStyle())
@@ -226,11 +227,11 @@ struct PinCard: View {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         switch composer {
         case .requestChange:
-            model.setPin(pin, status: .changeRequested, response: text.isEmpty ? nil : text)
+            workspace.setPin(pin, status: .changeRequested, response: text.isEmpty ? nil : text)
             confirmation = holdsApproval ? nil : "Saved. It goes back to \(authorName) when the run reaches your approval."
         case .ask:
             guard !text.isEmpty else { return }
-            confirmation = model.askAgent(about: pin, question: text) ? "Sent to \(authorName)." : "Couldn’t reach \(authorName)."
+            confirmation = workspace.askAgent(about: pin, question: text) ? "Sent to \(authorName)." : "Couldn’t reach \(authorName)."
         }
         self.composer = nil
         draft = ""

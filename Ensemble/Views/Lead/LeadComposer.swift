@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct LeadComposer: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let request: Chat?
     @State private var text = ""
@@ -13,15 +14,15 @@ struct LeadComposer: View {
     @State private var files: [String] = []
 
     var body: some View {
-        let lead = model.chatLeadRole(in: project)
-        let sendTarget = model.leadSendTarget(for: request, in: project)
+        let lead = workspace.chatLeadRole(in: project)
+        let sendTarget = workspace.leadSendTarget(for: request, in: project)
         VStack(alignment: .leading, spacing: 8) {
             suggestions
             composer(lead: lead)
         }
         .cancelsHeldSendOnEscape(for: sendTarget)
         .restoresReturnedSends(for: sendTarget, perform: restore)
-        .task(id: project.id) { files = await model.projectFiles(project) }
+        .task(id: project.id) { files = await workspace.projectFiles(project) }
         .onChange(of: model.composerPrefill, initial: true) { _, prefill in
             guard let prefill, request == nil else { return }
             text = prefill
@@ -49,7 +50,7 @@ struct LeadComposer: View {
     }
 
     private func composer(lead: RoleDefinition?) -> some View {
-        let isBusy = model.isLeadBusy(request)
+        let isBusy = workspace.isLeadBusy(request)
         return VStack(alignment: .leading, spacing: 10) {
             ChatComposerInput(
                 text: $text,
@@ -74,7 +75,7 @@ struct LeadComposer: View {
                 WorkflowMenu(project: project, chat: request)
                 ModelMenu(project: project, chat: request)
                 if isBusy, let request {
-                    Button { model.stopLead(request) } label: {
+                    Button { workspace.stopLead(request) } label: {
                         Image(systemName: "stop.fill").font(.system(size: 11))
                             .foregroundStyle(Tokens.text)
                             .frame(width: 32, height: 32)
@@ -119,7 +120,7 @@ struct LeadComposer: View {
     }
 
     private func canSend(lead: RoleDefinition?) -> Bool {
-        (lead != nil || request.flatMap(model.leadSession(for:)) != nil)
+        (lead != nil || request.flatMap(workspace.leadSession(for:)) != nil)
             && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty)
     }
 
@@ -127,13 +128,13 @@ struct LeadComposer: View {
         guard canSend(lead: lead) else { return }
         if let command = ChatCommand.parse(text), command.runsLocally, attachments.isEmpty {
             text = ""
-            model.runLocalCommand(command, in: request)
+            workspace.runLocalCommand(command, in: request)
             return
         }
         let message = PendingMessage(text: text, attachments: attachments)
         text = ""
         attachments = []
-        model.holdLeadMessage(message, lead: lead, to: request, in: project)
+        workspace.holdLeadMessage(message, lead: lead, to: request, in: project)
     }
 
     private func restore(_ message: PendingMessage) {
@@ -189,17 +190,18 @@ private struct SuggestionList: View {
 
 private struct WorkflowMenu: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let chat: Chat?
 
     var body: some View {
-        let workflows = model.config(for: project).workflows
-        let current = model.chatWorkflow(for: chat, in: project)
+        let workflows = workspace.config(for: project).workflows
+        let current = workspace.chatWorkflow(for: chat, in: project)
         Menu {
             Section("Workflow for this chat") {
                 ForEach(workflows) { workflow in
                     Button {
-                        model.setWorkflow(workflow.id, for: chat, in: project)
+                        workspace.setWorkflow(workflow.id, for: chat, in: project)
                     } label: {
                         if workflow.id == current { Label(workflow.displayName, systemImage: "checkmark") } else { Text(workflow.displayName) }
                     }
@@ -217,17 +219,18 @@ private struct WorkflowMenu: View {
 
 private struct ModelMenu: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let chat: Chat?
 
     var body: some View {
-        let current = model.leadModel(for: chat, in: project)
-        let effort = model.leadEffort(for: chat, in: project)
+        let current = workspace.leadModel(for: chat, in: project)
+        let effort = workspace.leadEffort(for: chat, in: project)
         Menu {
             Section("Lead model") {
                 ForEach(AppModel.leadModels, id: \.id) { option in
                     Button {
-                        model.setLead(model: option.id, effort: effort, for: chat, in: project)
+                        workspace.setLead(model: option.id, effort: effort, for: chat, in: project)
                     } label: {
                         if option.id == current { Label("\(option.title) · \(option.detail)", systemImage: "checkmark") } else { Text("\(option.title) · \(option.detail)") }
                     }
@@ -236,7 +239,7 @@ private struct ModelMenu: View {
             Section("Effort") {
                 ForEach(LeadEffort.allCases, id: \.self) { level in
                     Button {
-                        model.setLead(model: current, effort: level, for: chat, in: project)
+                        workspace.setLead(model: current, effort: level, for: chat, in: project)
                     } label: {
                         if level == effort { Label(level.title, systemImage: "checkmark") } else { Text(level.title) }
                     }

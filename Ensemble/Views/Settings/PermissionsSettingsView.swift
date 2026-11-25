@@ -12,13 +12,14 @@ enum PermissionSummary {
 
 struct PermissionsSettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var draft = PermissionsConfig()
     @State private var newProfileName = ""
     @State private var errorMessage: String?
 
     var body: some View {
-        let saved = model.config(for: project).permissions
+        let saved = workspace.config(for: project).permissions
         SettingsPage("Permissions", subtitle: "What each kind of agent may do on its own. Ask holds the agent and asks you in the chat; Never blocks it outright.") {
             matrixCard
             ForEach($draft.profiles) { $profile in
@@ -150,6 +151,6 @@ struct PermissionsSettingsView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
-        model.reloadConfig(for: project)
+        workspace.reloadConfig(for: project)
     }
 }

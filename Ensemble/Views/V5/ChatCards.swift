@@ -28,13 +28,14 @@ extension PermissionCapability {
 
 struct PermissionCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let card: LeadMessage
     let project: Project
     @State private var agent: Agent?
     @State private var rules: [String] = []
 
     var body: some View {
-        let name = agent.map { model.displayName(of: $0, in: project) } ?? card.title ?? "An agent"
+        let name = agent.map { workspace.displayName(of: $0, in: project) } ?? card.title ?? "An agent"
         let status = card.permissionStatus ?? .pending
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
@@ -64,10 +65,10 @@ struct PermissionCard: View {
                 }
                 if status == .pending {
                     HStack(spacing: 8) {
-                        Button("Allow in this chat") { model.answerPermission(card, decision: .allow) }
+                        Button("Allow in this chat") { workspace.answerPermission(card, decision: .allow) }
                             .buttonStyle(PrimaryPillStyle())
                             .help("Let the lead and every worker in this chat run this and similar commands without asking again")
-                        Button("Deny") { model.answerPermission(card, decision: .deny) }
+                        Button("Deny") { workspace.answerPermission(card, decision: .deny) }
                             .buttonStyle(.plain)
                             .foregroundStyle(Tokens.danger)
                             .font(.system(size: 13.5))
@@ -86,9 +87,9 @@ struct PermissionCard: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Tokens.needLine))
         }
         .task(id: card.permissionRequestId) {
-            let request = card.permissionRequestId.flatMap { try? model.database.permissionRequest(id: $0) }
+            let request = card.permissionRequestId.flatMap { try? workspace.database.permissionRequest(id: $0) }
             rules = request?.rules ?? []
-            agent = request.flatMap { try? model.database.agent(id: $0.agentId) }
+            agent = request.flatMap { try? workspace.database.agent(id: $0.agentId) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Permission request from \(name)")
@@ -101,7 +102,7 @@ struct PermissionCard: View {
 
     private var reason: String? {
         guard let capability = card.capability else { return nil }
-        let run = card.runId.flatMap(model.run(withID:))?.displayTitle
+        let run = card.runId.flatMap(workspace.run(withID:))?.displayTitle
         return ["Needs your OK: \(capability.title.lowercased()).", run.map { "Run: \($0)." }].compactMap(\.self).joined(separator: " ")
     }
 }

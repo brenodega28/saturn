@@ -11,7 +11,7 @@ extension DaemonWorkspace {
     func openChanges(for run: Run) {
         guard let runID = run.id else { return }
         changesRunSelections[run.projectId] = runID
-        showPage(.tool(.changes, project: ref(run.projectId)))
+        if let project = project(withID: run.projectId) { openProject(project, section: .changes) }
     }
 
     func holdsForApproval(_ run: Run) -> Bool {

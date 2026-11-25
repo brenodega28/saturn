@@ -2,58 +2,46 @@ import SaturnCore
 import SaturnUI
 import SwiftUI
 
-struct AgentGroup: Identifiable {
-    enum Kind: Hashable {
-        case run(Int64)
-        case pinned
-        case idle
-        case other
-        case archived
+enum AgentActivity {
+    case needsYou
+    case working
+    case idle
+
+    init(status: AgentStatus, isRunning: Bool, isQueued: Bool) {
+        if [.needsInput, .interrupted, .failed, .takenOver].contains(status) {
+            self = .needsYou
+        } else if isRunning || isQueued || [.working, .reviewing].contains(status) {
+            self = .working
+        } else {
+            self = .idle
+        }
+    }
+}
+
+enum AgentFilter: CaseIterable, Identifiable {
+    case all
+    case working
+    case needsYou
+    case idle
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .working: "Working"
+        case .needsYou: "Needs you"
+        case .idle: "Idle"
+        }
     }
 
-    let kind: Kind
-    let title: String
-    let meta: String
-    let sessions: [LiveAgentSession]
-
-    var id: Kind { kind }
-
-    @MainActor
-    static func make(_ sessions: [LiveAgentSession], runs: [Run], idleCleanupMinutes: Int = 0, describe: (Run) -> (workflow: String?, step: String?) = { ($0.workflow, $0.currentStep) }) -> [AgentGroup] {
-        var groups: [AgentGroup] = []
-        let runsByID = Dictionary(uniqueKeysWithValues: runs.compactMap { run in run.id.map { ($0, run) } })
-        let runIDs = sessions.compactMap(\.agent.runId).reduce(into: [Int64]()) { ids, id in
-            if !ids.contains(id) { ids.append(id) }
+    func includes(_ activity: AgentActivity) -> Bool {
+        switch self {
+        case .all: true
+        case .working: activity == .working
+        case .needsYou: activity == .needsYou
+        case .idle: activity == .idle
         }
-        for runID in runIDs {
-            let members = sessions.filter { $0.agent.runId == runID }
-            let run = runsByID[runID]
-            let title = run.map { $0.title.isEmpty ? "Run #\(runID)" : $0.title } ?? "Run #\(runID)"
-            let cost = members.reduce(0) { $0 + $1.agent.costUSD }.formatted(.currency(code: "USD"))
-            let described = run.map(describe)
-            let meta = [described?.workflow, described?.step.map { "Step: \($0)" }, cost].compactMap(\.self).joined(separator: " · ")
-            groups.append(AgentGroup(kind: .run(runID), title: title, meta: meta, sessions: members))
-        }
-        let outsideRuns = sessions.filter { $0.agent.runId == nil }
-        let archived = outsideRuns.filter { $0.agent.archivedAt != nil && !$0.agent.isPinned }
-        let archivedIDs = Set(archived.map(\.id))
-        let pinned = outsideRuns.filter(\.agent.isPinned)
-        let idle = outsideRuns.filter { !$0.agent.isPinned && $0.agent.status == .idle && !$0.isRunning && !$0.isQueued && !archivedIDs.contains($0.id) }
-        let idleIDs = Set(idle.map(\.id))
-        let others = outsideRuns.filter { !$0.agent.isPinned && !idleIDs.contains($0.id) && !archivedIDs.contains($0.id) }
-        if !pinned.isEmpty {
-            groups.append(AgentGroup(kind: .pinned, title: "Pinned", meta: "Kept between runs, with memory", sessions: pinned))
-        }
-        if !idle.isEmpty {
-            groups.append(AgentGroup(kind: .idle, title: "Idle", meta: IdleCleanupPolicy.summary(minutes: idleCleanupMinutes), sessions: idle))
-        }
-        if !others.isEmpty {
-            groups.append(AgentGroup(kind: .other, title: "Agents", meta: "Working, paused or needing you", sessions: others))
-        }
-        if !archived.isEmpty {
-            groups.append(AgentGroup(kind: .archived, title: "Cleaned up", meta: "Worktrees removed after sitting idle; branches kept", sessions: archived))
-        }
-        return groups
     }
 }
 
@@ -63,12 +51,13 @@ struct AgentsView: View {
     let project: Project
     let worktreeCount: Int
     let openWorktrees: () -> Void
+    @State private var filter = AgentFilter.all
 
     var body: some View {
         let sessions = workspace.agentSessions(in: project)
         if sessions.isEmpty {
             EmptyState("No agents yet", message: "Workflows start agents when a run needs them. You can also spawn them yourself: pick a builder or a checker, its model and skills; each builder works in its own worktree.") {
-                Button("New Agent") { model.isNewAgentPresented = true }.buttonStyle(.primaryPill)
+                Button("New agent") { model.isNewAgentPresented = true }.buttonStyle(CompactPrimaryPillStyle())
             }
             .overlay(alignment: .bottom) {
                 if worktreeCount > 0 {
@@ -78,144 +67,155 @@ struct AgentsView: View {
                 }
             }
         } else {
+            let entries = sorted(sessions)
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    summary(sessions)
-                    ForEach(AgentGroup.make(sessions, runs: workspace.runs(for: sessions), idleCleanupMinutes: project.settings.idleCleanupMinutes, describe: workspace.runGroupDescription)) { group in
-                        section(group)
-                    }
+                VStack(alignment: .leading, spacing: 18) {
+                    intro(sessions)
+                    filters(entries)
+                    grid(entries.filter { filter.includes($0.activity) })
                 }
+                .padding(.bottom, 12)
             }
         }
     }
 
-    private func section(_ group: AgentGroup) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                if case .run(let runID) = group.kind {
-                    let needsYou = workspace.liveRun(id: runID).map(workspace.runNeedsYou) == true
-                    HStack(spacing: 8) {
-                        StatusDot(AppModel.statusColor(needsYou: needsYou, otherwise: Theme.success), size: 8)
-                        Text(group.title).font(.system(size: 15, weight: .semibold))
-                    }
-                } else {
-                    Text(group.title).font(.system(size: 15, weight: .semibold))
-                }
-                Text(group.meta).font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isHeader)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 12)], spacing: 12) {
-                ForEach(group.sessions) { session in
-                    AgentCard(session: session, project: project, isDimmed: group.kind == .idle || group.kind == .archived)
-                }
-            }
-        }
-    }
-
-    private func summary(_ sessions: [LiveAgentSession]) -> some View {
-        let working = sessions.filter { $0.agent.status == .working }.count
-        let attention = sessions.filter { [.failed, .interrupted, .takenOver, .needsInput].contains($0.agent.status) }.count
-        let queued = sessions.filter(\.isQueued).count
-        let pinned = sessions.filter(\.agent.isPinned).count
-        let idle = sessions.filter { $0.agent.status == .idle && !$0.isQueued }.count
-        let cost = sessions.reduce(0) { $0 + $1.agent.costUSD }
-        var parts: [Text] = [Text("\(working) working")]
-        if attention > 0 { parts.append(Text("\(attention) need\(attention == 1 ? "s" : "") you").foregroundStyle(Theme.warning)) }
-        if queued > 0 { parts.append(Text("\(queued) queued")) }
-        parts.append(Text("\(pinned) pinned"))
-        parts.append(Text("\(idle) idle"))
-        parts.append(Text(cost.formatted(.currency(code: "USD"))))
-        return HStack(spacing: 8) {
-            ForEach(parts.indices, id: \.self) { index in
-                if index > 0 { Text("·").accessibilityHidden(true) }
-                parts[index]
-            }
-            Spacer()
-            if working + queued > 0 {
-                Button("Pause All") { workspace.pauseAllAgents(in: project) }
-                    .buttonStyle(PillButtonStyle(height: 26))
+    private func intro(_ sessions: [LiveAgentSession]) -> some View {
+        SectionIntro(title: "Agents", subtitle: "Who can work in \(project.name). The Lead decides who to start for each chat; you decide who exists and what they may do.") {
+            if sessions.contains(where: { $0.isRunning || $0.isQueued }) {
+                Button("Pause all") { workspace.pauseAllAgents(in: project) }
+                    .buttonStyle(CompactSecondaryPillStyle())
                     .help("Pause every working or queued agent in \(project.name) (⇧⌘P)")
             }
+            Button {
+                model.isNewAgentPresented = true
+            } label: {
+                Label("New agent", systemImage: "plus")
+            }
+            .buttonStyle(CompactPrimaryPillStyle())
+        }
+    }
+
+    private func filters(_ entries: [AgentEntry]) -> some View {
+        HStack(spacing: 6) {
+            ForEach(AgentFilter.allCases) { option in
+                FilterChip(title: option.title, count: entries.filter { option.includes($0.activity) }.count, isOn: filter == option) {
+                    filter = option
+                }
+            }
+            Spacer(minLength: 12)
             Text("Up to \(project.settings.maxConcurrentAgents) at once")
+                .font(.system(size: 12))
+                .foregroundStyle(Tokens.text3)
                 .help("Change the limit in Settings › Agents & models")
         }
-        .font(.system(size: 12.5))
-        .foregroundStyle(Theme.secondaryText)
+    }
+
+    @ViewBuilder
+    private func grid(_ entries: [AgentEntry]) -> some View {
+        if entries.isEmpty {
+            Text("No agents match this filter.")
+                .font(.system(size: 13))
+                .foregroundStyle(Tokens.text2)
+                .padding(.vertical, 24)
+        } else {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 12, alignment: .top)], spacing: 12) {
+                ForEach(entries) { entry in
+                    AgentCard(session: entry.session, project: project, isLead: entry.isLead, activity: entry.activity)
+                }
+            }
+        }
+    }
+
+    private func sorted(_ sessions: [LiveAgentSession]) -> [AgentEntry] {
+        sessions.map { session in
+            let kind = workspace.role(for: session.agent, in: project)?.kind ?? AgentKind.guessing(roleID: session.agent.role)
+            let status = workspace.displayStatus(of: session.agent)
+            return AgentEntry(session: session, isLead: kind == .lead, activity: AgentActivity(status: status, isRunning: session.isRunning, isQueued: session.isQueued))
+        }
+        .sorted { $0.rank < $1.rank }
+    }
+}
+
+@MainActor
+private struct AgentEntry: @MainActor Identifiable {
+    let session: LiveAgentSession
+    let isLead: Bool
+    let activity: AgentActivity
+
+    var id: Int64 { session.id }
+
+    var rank: Int {
+        if session.agent.archivedAt != nil { return 5 }
+        if isLead { return 0 }
+        switch activity {
+        case .needsYou: return 1
+        case .working: return 2
+        case .idle: return session.agent.isPinned ? 3 : 4
+        }
     }
 }
 
 private struct AgentCard: View {
-    @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let session: LiveAgentSession
     let project: Project
-    let isDimmed: Bool
+    let isLead: Bool
+    let activity: AgentActivity
     @State private var isConfirmingDelete = false
 
     var body: some View {
         let agent = session.agent
         let role = workspace.role(for: agent, in: project)
         let name = workspace.displayName(of: agent, in: project)
-        VStack(alignment: .leading, spacing: 12) {
+        let status = workspace.displayStatus(of: agent)
+        VStack(alignment: .leading, spacing: 14) {
             Button {
                 workspace.select(session, in: project)
             } label: {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
-                        AgentAvatar(appearance: RoleAppearance(role: role))
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 14) {
+                        AgentAvatar(size: 52, appearance: RoleAppearance(role: role), isFailing: status == .failed)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                            Text("\(role?.name ?? "Builder") ·\(session.transcript.session?.model ?? agent.model.modelTitle)")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(Theme.secondaryText)
-                                .lineLimit(1)
+                            HStack(spacing: 8) {
+                                Text(name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                                if isLead { leadBadge }
+                            }
+                            HStack(spacing: 0) {
+                                Text("\(role?.name ?? "Builder") · ")
+                                Text(session.transcript.session?.model ?? agent.model.modelTitle)
+                                    .font(Tokens.mono(11.5))
+                            }
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(Tokens.text2)
+                            .lineLimit(1)
                         }
                         Spacer(minLength: 8)
-                        StatusLabel(status: workspace.displayStatus(of: agent), isQueued: session.isQueued, session: session)
+                        AgentStatusPill(status: status, session: session)
                     }
                     Text(headline)
                         .font(.system(size: 13))
-                        .foregroundStyle(Theme.primaryText)
+                        .foregroundStyle(Tokens.text)
+                        .lineSpacing(2)
                         .lineLimit(3)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(spacing: 6) {
-                        if agent.isPinned {
-                            MemoryBadge(project: project, agent: agent)
-                        }
-                        if let step = agent.step {
-                            Chip(text: "Step \(step)")
-                        }
-                        if agent.readOnly {
-                            Chip(text: "read-only")
-                        } else {
-                            Chip(text: agent.branch ?? "own worktree", foreground: Theme.successText, background: Theme.success.opacity(0.14))
-                        }
-                    }
                 }
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(name), \(session.isQueued ? "Queued" : workspace.displayStatus(of: agent).label)")
+            .accessibilityLabel("\(name), \(session.isQueued ? "Queued" : status.label)")
             .accessibilityHint("Opens the agent session")
 
-            HStack(spacing: 4) {
-                Text(agent.tokensAndCost)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Theme.secondaryText)
-                Spacer()
-                AgentControls(session: session, compact: true)
-                PinButton(session: session)
-            }
-            .padding(.top, 4)
-            .overlay(alignment: .top) { Divider().overlay(Tokens.hair) }
+            footer(agent)
         }
         .padding(16)
-        .card()
-        .opacity(isDimmed ? 0.75 : 1)
+        .raisedCard()
+        .opacity(agent.archivedAt != nil ? 0.7 : 1)
         .contextMenu {
             Button("Open") { workspace.select(session, in: project) }
+            if let chat = workspace.chat(of: agent) {
+                Button("Open Chat") { workspace.openChat(chat) }
+            }
             Button(agent.isPinned ? "Unpin" : "Pin") { session.togglePin() }
             if let worktree = agent.worktreeURL, !project.isRemote {
                 Button("Reveal Worktree in Finder") { NSWorkspace.shared.activateFileViewerSelecting([worktree]) }
@@ -244,6 +244,54 @@ private struct AgentCard: View {
         }
     }
 
+    private var leadBadge: some View {
+        Text("You talk to this one")
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundStyle(Tokens.accent)
+            .padding(.horizontal, 7)
+            .frame(height: 19)
+            .background(Tokens.selection, in: Capsule())
+            .fixedSize()
+    }
+
+    private func footer(_ agent: Agent) -> some View {
+        HStack(spacing: 8) {
+            chatLink(agent)
+            if agent.isPinned {
+                MemoryBadge(project: project, agent: agent)
+            }
+            Text(agent.costUSD.formatted(.currency(code: "USD").precision(.fractionLength(2))))
+                .font(Tokens.mono(11.5))
+                .help(agent.tokensAndCost)
+            AgentControls(session: session, compact: true)
+            PinButton(session: session)
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(Tokens.text2)
+        .padding(.top, 12)
+        .overlay(alignment: .top) { Rectangle().fill(Tokens.hair).frame(height: 1) }
+    }
+
+    @ViewBuilder
+    private func chatLink(_ agent: Agent) -> some View {
+        let chat = workspace.chat(of: agent)
+        Button {
+            if let chat { workspace.openChat(chat) }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left").font(.system(size: 11)).accessibilityHidden(true)
+                Text(chat?.title ?? agent.branch ?? (agent.readOnly ? "Read-only" : "Own worktree"))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(chat == nil)
+        .help(chat == nil ? "Not part of a chat" : "Open the chat")
+    }
+
     private var headline: String {
         if let tool = session.transcript.activeTool {
             return "\(tool.name) \(tool.target(relativeTo: session.transcript.session?.cwd))"
@@ -258,6 +306,35 @@ private struct AgentCard: View {
             return session.transcript.session == nil ? "Ready. Open the agent and send it a message." : "Waiting for your next message."
         }
         return session.agent.task
+    }
+}
+
+struct AgentStatusPill: View {
+    let status: AgentStatus
+    let session: LiveAgentSession
+
+    var body: some View {
+        let colors = palette
+        StatusPill(text: text, color: colors.0, background: colors.1)
+    }
+
+    private var text: String {
+        if let retryingAt = session.retryingAt { return "Retrying at \(retryingAt.formatted(date: .omitted, time: .shortened))" }
+        if session.isRunning, let retry = session.apiRetry { return "Retrying \(retry.attempt) of \(retry.maxRetries)" }
+        return session.isQueued ? "Queued" : status.label
+    }
+
+    private var palette: (Color, Color) {
+        if session.retryingAt != nil || (session.isRunning && session.apiRetry != nil) { return (Tokens.need, Tokens.needBackground) }
+        if session.isQueued { return (Tokens.idle, Tokens.fill) }
+        switch status {
+        case .working: return (Tokens.build, Tokens.buildBackground)
+        case .reviewing: return (Tokens.review, Tokens.reviewBackground)
+        case .needsInput, .interrupted: return (Tokens.need, Tokens.needBackground)
+        case .failed: return (Tokens.stuck, Tokens.stuckBackground)
+        case .takenOver: return (Tokens.accent, Tokens.selection)
+        case .idle, .waiting, .paused, .stopped: return (Tokens.idle, Tokens.fill)
+        }
     }
 }
 

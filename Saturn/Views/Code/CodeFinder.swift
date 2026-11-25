@@ -70,10 +70,10 @@ struct CodeFinder: View {
                     } label: {
                         HStack(spacing: 6) {
                             Text(mode.title).fontWeight(.semibold)
-                            Text(mode.key).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.tertiaryText)
+                            Text(mode.key).font(.system(size: 11, design: .monospaced)).foregroundStyle(Tokens.text3)
                         }
                         .font(.system(size: 12.5))
-                        .foregroundStyle(isOn ? .white : Theme.secondaryText)
+                        .foregroundStyle(isOn ? Tokens.text : Tokens.text2)
                         .padding(.horizontal, 12)
                         .frame(height: 28)
                         .background(isOn ? Tokens.fill2 : .clear, in: Capsule())
@@ -84,10 +84,10 @@ struct CodeFinder: View {
                 }
             }
             .padding(3)
-            .background(Color.black.opacity(0.25), in: Capsule())
+            .background(Tokens.fill, in: Capsule())
             .fixedSize()
             HStack(spacing: 10) {
-                Text("›").font(.system(size: 16, design: .monospaced)).foregroundStyle(Theme.accent).accessibilityHidden(true)
+                Text("›").font(.system(size: 16, design: .monospaced)).foregroundStyle(Tokens.accent).accessibilityHidden(true)
                 TextField("Search", text: $browser.finderQuery, prompt: Text(browser.finderMode.placeholder))
                     .textFieldStyle(.plain)
                     .font(.system(size: 16, design: .monospaced))
@@ -100,13 +100,13 @@ struct CodeFinder: View {
             }
             Text(count == CodeBrowser.resultLimit ? "\(count)+" : "\(count)")
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(Theme.tertiaryText)
+                .foregroundStyle(Tokens.text3)
                 .fixedSize()
                 .help("Results")
             Button { browser.isFinderPresented = false } label: {
                 Text("esc")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Theme.secondaryText)
+                    .foregroundStyle(Tokens.text2)
                     .padding(.horizontal, 8)
                     .frame(height: 26)
                     .background(Tokens.fill2, in: .rect(cornerRadius: 6, style: .continuous))
@@ -130,7 +130,7 @@ struct CodeFinder: View {
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(CodeStyle.marked(result.title, matches: result.titleMatches, base: .white, size: 12.5))
                                         .lineLimit(1)
-                                    Text(CodeStyle.marked(result.subtitle, matches: result.subtitleMatches, base: Theme.tertiaryText, size: 11))
+                                    Text(CodeStyle.marked(result.subtitle, matches: result.subtitleMatches, base: Tokens.text3, size: 11))
                                         .lineLimit(1)
                                         .truncationMode(.head)
                                 }
@@ -143,7 +143,7 @@ struct CodeFinder: View {
                             }
                             .padding(.horizontal, 10)
                             .frame(minHeight: 40)
-                            .background(isSelected ? Theme.accent.opacity(0.3) : .clear, in: .rect(cornerRadius: 10, style: .continuous))
+                            .background(isSelected ? Tokens.selection : .clear, in: .rect(cornerRadius: 10, style: .continuous))
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
@@ -153,7 +153,7 @@ struct CodeFinder: View {
                     if results.isEmpty {
                         Text(emptyMessage)
                             .font(.system(size: 12.5))
-                            .foregroundStyle(Theme.secondaryText)
+                            .foregroundStyle(Tokens.text2)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 20)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -183,7 +183,7 @@ struct CodeFinder: View {
                 let start = max(0, result.line - 8)
                 Text(result.line > 1 ? "\(result.path):\(result.line)" : result.path)
                     .font(.system(size: 11.5, design: .monospaced))
-                    .foregroundStyle(Theme.secondaryText)
+                    .foregroundStyle(Tokens.text2)
                     .lineLimit(1)
                     .truncationMode(.head)
                     .padding(.horizontal, 14)
@@ -195,7 +195,7 @@ struct CodeFinder: View {
                             let number = start + offset + 1
                             HStack(spacing: 0) {
                                 Text("\(number)")
-                                    .foregroundStyle(Color.white.opacity(0.35))
+                                    .foregroundStyle(Tokens.text3)
                                     .frame(width: 46, alignment: .trailing)
                                     .padding(.trailing, 14)
                                 Text(CodeStyle.highlighted(text, language: language)).fixedSize()
@@ -203,7 +203,7 @@ struct CodeFinder: View {
                             .font(.system(size: 12, design: .monospaced))
                             .frame(height: 20)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(number == result.line && result.line > 1 ? Theme.accent.opacity(0.16) : .clear)
+                            .background(number == result.line && result.line > 1 ? Tokens.selection : .clear)
                         }
                     }
                     .padding(.vertical, 8)
@@ -213,7 +213,7 @@ struct CodeFinder: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.black.opacity(0.18))
+        .background(Tokens.code)
     }
 
     private var footer: some View {
@@ -221,11 +221,11 @@ struct CodeFinder: View {
             Text("↑ ↓ choose")
             Text("↵ open")
             Text("esc close")
-            Text("Letters can be skipped: \(Text("ordser").font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Theme.primaryText)) finds orders/serializers.py")
+            Text("Letters can be skipped: \(Text("ordser").font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Tokens.text)) finds orders/serializers.py")
             Spacer(minLength: 0)
         }
         .font(.system(size: 11.5))
-        .foregroundStyle(Theme.secondaryText)
+        .foregroundStyle(Tokens.text2)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
     }

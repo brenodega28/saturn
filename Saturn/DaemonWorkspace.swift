@@ -39,6 +39,7 @@ final class DaemonWorkspace: Identifiable {
     var setupAttempts: Set<Int64> = []
     var setupsInFlight: Set<Int64> = []
     var onboardingsInFlight: Set<Int64> = []
+    var onboardingChecks: Set<Int64> = []
     var focusedPinIDs: [Int64: Int64] = [:]
     var remoteStatuses: [Int64: RemoteProjectStatus] = [:]
     var remoteFileSyncs: [Int64: Task<Void, Error>] = [:]

@@ -162,7 +162,9 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
     public var id: String
     public var type: StepType
     public var title: String?
-    public var agent: AgentKind?
+    public var agent: AgentKind? {
+        didSet { if agent != nil { profile = nil } }
+    }
     public var profile: String?
     public var model: String?
     public var legacyRole: String?
@@ -290,6 +292,18 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
     }
 
     public var displayTitle: String { title ?? id }
+
+    public var agentChoice: String? {
+        get { profile ?? agent?.rawValue }
+        set {
+            if let newValue, let kind = AgentKind(rawValue: newValue) {
+                agent = kind
+            } else {
+                agent = nil
+                profile = newValue
+            }
+        }
+    }
 
     public var targets: [String] {
         ([next].compactMap(\.self) + routes.values.map(\.to)).reduce(into: []) { result, target in

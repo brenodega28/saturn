@@ -44,7 +44,9 @@ extension DaemonWorkspace {
     }
 
     func openOnboardingIfNeeded(_ project: Project) async {
-        guard !project.isRemote, hasConfig(project), OnboardingDefinition.bundled.needsOnboarding(repository: project.filesRoot) else { return }
+        guard let id = project.id, !project.isRemote, hasConfig(project), !onboardingChecks.contains(id) else { return }
+        onboardingChecks.insert(id)
+        guard OnboardingDefinition.bundled.needsOnboarding(repository: project.filesRoot) else { return }
         await openOnboarding(project)
     }
 

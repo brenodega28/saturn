@@ -104,6 +104,38 @@ import Yams
         #expect(decoded.step("review")?.model == "sonnet")
     }
 
+    @Test func choosingABuiltInAgentInTheInspectorReplacesTheProfile() throws {
+        var step = WorkflowStep(id: "build", type: .agent, profile: "django-builder")
+        #expect(step.agentChoice == "django-builder")
+
+        step.agentChoice = "checker"
+        #expect(step.agent == .checker && step.profile == nil)
+        #expect(try ProjectConfigLoader.encodeYAML(step).contains("agent: checker"))
+
+        step.agentChoice = "ui-reviewer"
+        #expect(step.agent == nil && step.profile == "ui-reviewer")
+        #expect(try ProjectConfigLoader.encodeYAML(step).contains("agent: ui-reviewer"))
+
+        step.agent = .builder
+        #expect(step.profile == nil)
+        #expect(try ProjectConfigLoader.encodeYAML(step).contains("agent: builder"))
+
+        step.agentChoice = nil
+        #expect(step.agent == nil && step.profile == nil)
+    }
+
+    @Test func aBuilderProfileStepBuildsCode() async throws {
+        let setup = try await WorkflowDriverTests().makeSetup()
+        defer { setup.harness.cleanUp() }
+        try write(Self.djangoBuilder, to: ".saturn/agents/django-builder.yaml", in: setup.project.filesRoot)
+        try write("name: UI Reviewer\nkind: checker\n", to: ".saturn/agents/ui-reviewer.yaml", in: setup.project.filesRoot)
+
+        #expect(setup.engine.buildsCode(WorkflowStep(id: "a", type: .agent, profile: "django-builder"), project: setup.project))
+        #expect(!setup.engine.buildsCode(WorkflowStep(id: "b", type: .agent, profile: "ui-reviewer"), project: setup.project))
+        #expect(!setup.engine.buildsCode(WorkflowStep(id: "c", type: .agent, profile: "ghost"), project: setup.project))
+        #expect(setup.engine.buildsCode(WorkflowStep(id: "d", type: .agent, agent: .builder), project: setup.project))
+    }
+
     @Test func explicitArgumentsOverrideTheProfile() throws {
         let profile = AgentProfile(id: "django-builder", name: "Django Builder", kind: .builder, model: "opus", instructions: "Use services.", skills: ["django-developer"])
         let filled = try #require(ResolvedAgent.resolve(profile: profile, kind: nil, model: nil, instructions: "Add login"))

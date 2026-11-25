@@ -1,6 +1,6 @@
 ---
 title: AI-generated chat titles
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Builder, reason: "Adds ChatTitler, wires it into LeadChat.createRequest, and writes the tests — one small, self-contained change"}
@@ -30,13 +30,13 @@ Today a new chat's title is the first line of the message cut to 80 chars (LeadR
 
 ## Acceptance criteria
 
-- [ ] Sending the first message of a new chat shows the truncated first line immediately, then within a few seconds the card shows a short AI title (≤ 6 words, no quotes/punctuation noise)
-- [ ] Two chats starting with the same first line get distinct, content-specific titles
-- [ ] If the user renames the chat before the title arrives, their name is kept
-- [ ] If claude is missing, errors, or takes longer than ~20s, the placeholder title stays and no error is shown to the user
-- [ ] Attachment-only chats (image / pasted text) still get a title; image-only keeps "Image" if nothing useful can be generated
-- [ ] Sending later messages in the chat does not change its title
-- [ ] Unit tests cover cleanTitle and the 'don't overwrite manual rename' rule using FakeClaude; existing tests pass (swift test in Packages/EnsembleCore)
+- [x] Sending the first message of a new chat shows the truncated first line immediately, then within a few seconds the card shows a short AI title (≤ 6 words, no quotes/punctuation noise)
+- [x] Two chats starting with the same first line get distinct, content-specific titles
+- [x] If the user renames the chat before the title arrives, their name is kept
+- [x] If claude is missing, errors, or takes longer than ~20s, the placeholder title stays and no error is shown to the user
+- [x] Attachment-only chats (image / pasted text) still get a title; image-only keeps "Image" if nothing useful can be generated
+- [x] Sending later messages in the chat does not change its title
+- [x] Unit tests cover cleanTitle and the 'don't overwrite manual rename' rule using FakeClaude; existing tests pass (swift test in Packages/EnsembleCore)
 
 ## Verification
 

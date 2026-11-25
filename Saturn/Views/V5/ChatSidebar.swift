@@ -172,10 +172,11 @@ struct ChatRow: View {
                         ProjectTile(project: summary.project, size: 13)
                         Text(summary.project.name).lineLimit(1).layoutPriority(1)
                         Text("·").foregroundStyle(Tokens.text3)
-                        MachineLabel(workspace: workspace, size: 12, showsLocal: true)
                         if let cost = ChatCost.label(summary.costUSD) {
                             Text(cost).font(Tokens.mono(11)).foregroundStyle(Tokens.text2).fixedSize()
+                            Text("·").foregroundStyle(Tokens.text3)
                         }
+                        MachineLabel(workspace: workspace, size: 12, showsLocal: true)
                         Spacer(minLength: 4)
                         WorkerStack(workers: summary.workers, project: summary.project, size: 16)
                     }
@@ -191,7 +192,7 @@ struct ChatRow: View {
         .onHover { isHovered = $0 }
         .contextMenu { ChatRowMenu(chat: summary.chat, rename: startRename) }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(summary.chat.title), \(summary.stage.title), \(summary.project.name)\(workspace.isRemote ? ", on \(workspace.displayName)" : "")\(ChatCost.label(summary.costUSD).map { ", \($0) spent" } ?? "")")
+        .accessibilityLabel("\(summary.chat.title), \(summary.stage.title), \(summary.project.name)\(ChatCost.label(summary.costUSD).map { ", \($0) spent" } ?? "")\(workspace.isRemote ? ", on \(workspace.displayName)" : "")")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 

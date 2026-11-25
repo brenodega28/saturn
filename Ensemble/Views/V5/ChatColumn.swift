@@ -6,6 +6,7 @@ struct ChatColumn: View {
     @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
+    var draftID: UUID?
 
     var body: some View {
         if workspace.isShowingRequestPage(in: project) {
@@ -24,8 +25,8 @@ struct ChatColumn: View {
     }
 
     private var leadChat: some View {
-        let selected = workspace.selectedRequest(in: project)
-        let newRequestDelivering = selected == nil ? workspace.sendsDelivering(to: workspace.leadSendTarget(for: nil, in: project)) : []
+        let selected = draftID == nil ? workspace.selectedRequest(in: project) : nil
+        let newRequestDelivering = selected == nil ? workspace.sendsDelivering(to: workspace.leadSendTarget(for: nil, draft: draftID, in: project)) : []
         return VStack(spacing: 0) {
             ForEach(model.systemAlerts.filter(shows)) { alert in
                 ChatAlertBanner(alert: alert)
@@ -50,7 +51,7 @@ struct ChatColumn: View {
                         AppOutputPanel(project: project)
                             .padding(.horizontal, 28)
                     }
-                    LeadComposer(project: project, request: selected)
+                    LeadComposer(project: project, request: selected, draftID: draftID)
                         .frame(maxWidth: Tokens.Size.transcript)
                         .padding(.horizontal, 28)
                 }
@@ -58,6 +59,6 @@ struct ChatColumn: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(selected.map { "Chat: \($0.title)" } ?? "New chat")
+        .accessibilityLabel(selected.map { "Chat: \($0.title)" } ?? draftID.flatMap(workspace.draftStore.newDraft(id:))?.title ?? "New chat")
     }
 }

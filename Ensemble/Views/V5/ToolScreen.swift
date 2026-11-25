@@ -168,6 +168,8 @@ private struct ProjectPageContent: View {
         switch page.kind {
         case .chat:
             ChatColumn(project: project)
+        case .newChat(let draftID, _):
+            ChatColumn(project: project, draftID: draftID)
         case .terminal(_, let directory):
             TerminalPage(pageID: page.id, project: project, directory: directory)
         case .code(_, let path):

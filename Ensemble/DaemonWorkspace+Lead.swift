@@ -58,7 +58,8 @@ extension DaemonWorkspace {
         guard let projectID = project.id else { return }
         let next = LeadRequest.partition(leadRequests(in: project)).open.first { $0.id != task.id }
         if let page = pages.page(showing: chatID, on: id) {
-            pages.replace(page.id, with: .chat(chatID: next?.id, project: ref(projectID)))
+            let draft = { self.latestDraft(inProjectID: projectID) ?? self.draftStore.createNewDraft(projectID: projectID) }
+            pages.replace(page.id, with: next?.id.map { .chat(chatID: $0, project: ref(projectID)) } ?? .newChat(draftID: draft().id, project: ref(projectID)))
         } else if leadSelections[projectID] == .request(chatID) {
             leadSelections[projectID] = next?.id.map(LeadSelection.request) ?? .newRequest
         }
@@ -82,15 +83,25 @@ extension DaemonWorkspace {
         showChatPage(requestID, inProjectID: id)
     }
 
-    func startNewLeadRequest(in project: Project) {
-        guard let id = project.id else { return }
-        showChatPage(nil, inProjectID: id)
+    @discardableResult
+    func startNewLeadRequest(in project: Project) -> ChatDraft? {
+        guard let id = project.id else { return nil }
+        let draft = draftStore.createNewDraft(projectID: id)
+        openDraft(draft)
+        return draft
     }
 
-    func adoptNewChat(_ request: Chat) {
+    func deleteDraft(_ draft: ChatDraft) {
+        if let page = pages.page(showingDraft: draft.id) { pages.close(page.id) }
+        draftStore.deleteNewDraft(id: draft.id)
+    }
+
+    func adoptNewChat(_ request: Chat, fromDraft draftID: UUID?) {
         guard let id = request.id else { return }
-        if let page = pages.pages.first(where: { $0.kind == .chat(chatID: nil, project: ref(request.projectId)) }) {
-            pages.replace(page.id, with: .chat(chatID: id, project: ref(request.projectId)))
+        let chat = MainPageKind.chat(chatID: id, project: ref(request.projectId))
+        if let draftID {
+            if let page = pages.page(showingDraft: draftID) { pages.replace(page.id, with: chat) }
+            draftStore.deleteNewDraft(id: draftID)
         } else if let project = project(withID: request.projectId), selectedRequest(in: project) == nil {
             showRequest(request)
         }
@@ -137,26 +148,39 @@ extension DaemonWorkspace {
         return agentSessions(in: project).map(\.agent).filter { $0.id.map(ids.contains) == true }
     }
 
-    func leadSendTarget(for request: Chat?, in project: Project) -> LeadSendTarget? {
-        project.id.map { LeadSendTarget(project: $0, request: request?.id) }
+    func leadSendTarget(for request: Chat?, draft draftID: UUID? = nil, in project: Project) -> LeadSendTarget? {
+        project.id.map { LeadSendTarget(project: $0, request: request?.id, draft: request == nil ? draftID : nil) }
     }
 
-    func deliverLeadMessage(_ message: PendingMessage, lead: RoleDefinition?, to request: Chat?, in project: Project) {
-        guard let target = leadSendTarget(for: request, in: project) else { return }
+    func deliverLeadMessage(_ message: PendingMessage, lead: RoleDefinition?, to request: Chat?, fromDraft draftID: UUID? = nil, in project: Project) {
+        guard let target = leadSendTarget(for: request, draft: draftID, in: project) else { return }
         let delivery = DeliveringSend(id: UUID(), target: target, message: message, date: .now)
         deliveringSends.append(delivery)
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let sent = await sendLeadMessage(message.text, attachments: message.attachments, lead: lead, to: request, in: project)
+            let sent = await sendLeadMessage(message.text, attachments: message.attachments, lead: lead, to: request, fromDraft: target.draft, in: project)
             deliveringSends.removeAll { $0.id == delivery.id }
-            if !sent {
-                returnedMessages.returnToComposer(message, for: target)
-            }
+            if !sent { returnToDraft(message, for: target) }
+        }
+    }
+
+    func returnToDraft(_ message: PendingMessage, for target: LeadSendTarget) {
+        if let chatID = target.request {
+            draftStore.setChatDraft((draftStore.chatDraft(chatID: chatID) ?? PendingMessage(text: "")).appending(message), chatID: chatID)
+        } else if let draftID = target.draft, let draft = draftStore.newDraft(id: draftID) {
+            draftStore.updateNewDraft(id: draftID, with: draft.message.appending(message))
+        } else if target.draft != nil {
+            let draft = draftStore.createNewDraft(projectID: target.project)
+            draftStore.updateNewDraft(id: draft.id, with: message)
+        } else {
+            returnedMessages.returnToComposer(message, for: target)
         }
     }
 
     @discardableResult
-    func sendLeadMessage(_ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, to request: Chat?, in project: Project) async -> Bool {
+    func sendLeadMessage(
+        _ text: String, attachments: [ChatAttachment] = [], lead: RoleDefinition?, to request: Chat?, fromDraft draftID: UUID? = nil, in project: Project
+    ) async -> Bool {
         do {
             if let request, let chatID = request.id {
                 try await send(ChatCommands.Send(chatID: chatID, text: text, attachments: attachments))
@@ -166,7 +190,7 @@ extension DaemonWorkspace {
                 let request = try await send(ChatCommands.Create(
                     projectID: projectID, text: text, attachments: attachments, workflow: options.workflow, leadModel: options.model, leadEffort: options.effort
                 ))
-                adoptNewChat(request)
+                adoptNewChat(request, fromDraft: draftID)
             }
             leadChatRevision += 1
             return true

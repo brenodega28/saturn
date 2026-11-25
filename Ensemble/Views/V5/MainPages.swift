@@ -4,6 +4,7 @@ import Observation
 
 enum MainPageKind: Codable, Hashable, Sendable {
     case chat(chatID: Int64?, project: ProjectRef)
+    case newChat(draftID: UUID, project: ProjectRef)
     case terminal(project: ProjectRef, directory: String)
     case code(project: ProjectRef, path: String)
     case tool(MainTool, project: ProjectRef?)
@@ -12,7 +13,19 @@ enum MainPageKind: Codable, Hashable, Sendable {
     case spec(path: String, project: ProjectRef)
 
     var isChat: Bool {
-        if case .chat = self { return true }
+        switch self {
+        case .chat, .newChat: true
+        default: false
+        }
+    }
+
+    var draftID: UUID? {
+        if case .newChat(let draftID, _) = self { return draftID }
+        return nil
+    }
+
+    var isLegacyNewChat: Bool {
+        if case .chat(nil, _) = self { return true }
         return false
     }
 
@@ -23,7 +36,7 @@ enum MainPageKind: Codable, Hashable, Sendable {
 
     var project: ProjectRef? {
         switch self {
-        case .chat(_, let project), .terminal(let project, _), .code(let project, _), .spec(_, let project): project
+        case .chat(_, let project), .newChat(_, let project), .terminal(let project, _), .code(let project, _), .spec(_, let project): project
         case .tool(_, let project): project
         case .run, .agent: nil
         }
@@ -119,6 +132,10 @@ final class MainPages {
 
     func page(showing chatID: Int64, on daemon: DaemonID) -> MainPage? {
         pages.first { $0.kind.shows(chat: chatID, on: daemon) }
+    }
+
+    func page(showingDraft draftID: UUID) -> MainPage? {
+        pages.first { $0.kind.draftID == draftID }
     }
 
     @discardableResult

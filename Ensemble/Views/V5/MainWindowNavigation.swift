@@ -71,7 +71,7 @@ extension AppModel {
     var mainScreen: MainScreen {
         switch activePage?.kind {
         case nil: .none
-        case .chat: .chat
+        case .chat, .newChat: .chat
         case .terminal: .terminal
         case .code: .code
         case .tool(let tool, _): .tool(tool)
@@ -163,7 +163,7 @@ extension AppModel {
 extension DaemonWorkspace {
     func project(of kind: MainPageKind) -> Project? {
         switch kind {
-        case .chat, .terminal, .code, .spec, .tool: kind.project.flatMap { project(withID: $0.id) }
+        case .chat, .newChat, .terminal, .code, .spec, .tool: kind.project.flatMap { project(withID: $0.id) }
         case .run(let id, _): run(withID: id).flatMap { project(withID: $0.projectId) }
         case .agent(let id, _): agent(id: id).flatMap { project(withID: $0.projectId) }
         }
@@ -186,12 +186,29 @@ extension DaemonWorkspace {
     }
 
     func showChatPage(_ chatID: Int64?, inProjectID projectID: Int64) {
-        requestPageProjectIDs.remove(projectID)
         guard let chatID else {
-            pages.open(.chat(chatID: nil, project: ref(projectID)))
+            openDraft(latestDraft(inProjectID: projectID) ?? draftStore.createNewDraft(projectID: projectID))
             return
         }
+        requestPageProjectIDs.remove(projectID)
         pages.showChat(.chat(chatID: chatID, project: ref(projectID)))
+    }
+
+    func openDraft(_ draft: ChatDraft) {
+        requestPageProjectIDs.remove(draft.projectID)
+        pages.open(.newChat(draftID: draft.id, project: ref(draft.projectID)))
+    }
+
+    func latestDraft(inProjectID projectID: Int64) -> ChatDraft? {
+        draftStore.newDrafts().filter { $0.projectID == projectID }.max { $0.updatedAt < $1.updatedAt }
+    }
+
+    func migrateLegacyNewChatPages() {
+        for page in pages.pages where page.kind.isLegacyNewChat && page.kind.daemon == id {
+            guard let project = page.kind.project else { continue }
+            let draft = draftStore.createNewDraft(projectID: project.id)
+            pages.replace(page.id, with: .newChat(draftID: draft.id, project: project))
+        }
     }
 
     func showChat(_ request: Chat) {
@@ -226,6 +243,11 @@ extension DaemonWorkspace {
             app.tabs[project] = .lead
             runDetailIDs[project.id] = nil
             leadSelections[project.id] = chatID.map(LeadSelection.request) ?? .newRequest
+        case .newChat(_, let project):
+            app.focusProject(project)
+            app.tabs[project] = .lead
+            runDetailIDs[project.id] = nil
+            leadSelections[project.id] = .newRequest
         case .tool(let tool, let project?):
             app.focusProject(project)
             if let tab = tool.projectTab { app.tabs[project] = tab }
@@ -252,6 +274,8 @@ extension DaemonWorkspace {
             guard self.project(withID: project.id) != nil else { return false }
             guard let chatID else { return true }
             return (try? database.task(id: chatID))?.projectId == project.id
+        case .newChat(let draftID, let project):
+            return self.project(withID: project.id) != nil && draftStore.newDraft(id: draftID) != nil
         case .tool(_, let project):
             return project.flatMap { self.project(withID: $0.id) } != nil
         case .run(let id, _):
@@ -267,6 +291,7 @@ extension DaemonWorkspace {
         switch kind {
         case .chat(let chatID?, _): (try? database.task(id: chatID))?.title ?? "Chat"
         case .chat(nil, _): "New chat"
+        case .newChat(let draftID, _): draftStore.newDraft(id: draftID)?.title ?? "New chat"
         case .terminal(let project, let directory):
             "Terminal · \(self.project(withID: project.id).map { terminalPlace(directory, in: $0) } ?? (directory as NSString).lastPathComponent)"
         case .code(_, let path): (path as NSString).lastPathComponent

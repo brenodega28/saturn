@@ -1,6 +1,11 @@
 import EnsembleCore
 import Foundation
 
+enum DraftSlot: Hashable {
+    case newChat(UUID)
+    case chat(Int64)
+}
+
 struct NewChatOptions: Hashable {
     var workflow: String?
     var model: String?
@@ -16,6 +21,20 @@ extension AppModel {
 }
 
 extension DaemonWorkspace {
+    func draftMessage(_ slot: DraftSlot) -> PendingMessage {
+        switch slot {
+        case .newChat(let id): draftStore.newDraft(id: id)?.message ?? PendingMessage(text: "")
+        case .chat(let id): draftStore.chatDraft(chatID: id) ?? PendingMessage(text: "")
+        }
+    }
+
+    func setDraftMessage(_ message: PendingMessage, for slot: DraftSlot) {
+        switch slot {
+        case .newChat(let id): draftStore.updateNewDraft(id: id, with: message)
+        case .chat(let id): draftStore.setChatDraft(message, chatID: id)
+        }
+    }
+
     func newChatOptions(for project: Project) -> NewChatOptions {
         project.id.flatMap { newChatOptionsByProject[$0] } ?? NewChatOptions()
     }

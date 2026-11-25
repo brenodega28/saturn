@@ -196,6 +196,31 @@ extension EnsembleHost {
             _ = try requireChat(command.chatID)
             return await specReviews.status(taskId: command.chatID)
         }
+        router.register(ChatCommands.ApproveSpec.self) { [unowned self] command in
+            let chat = try requireChat(command.chatID)
+            if chat.isClosed {
+                throw CommandFailure(code: .failed, message: "This request is closed. Send a message to reopen it first.")
+            }
+            let project = try requireProject(chat.projectId)
+            try database.checkProjectBudget(projectId: chat.projectId)
+            guard let runID = try await leadChat.approveSpec(taskId: command.chatID, in: project).id else {
+                throw CommandFailure(code: .failed, message: "The run started without an id.")
+            }
+            return runID
+        }
+        router.register(ChatCommands.Read.self) { [unowned self] command in
+            var request = command.request
+            request.daemon = nil
+            return try ChatReader(database: database, paths: paths).read(request)
+        }
+        router.register(ChatCommands.SetPeers.self) { [unowned self] command in
+            chatRelay.peers = command.peers.filter { $0.id != identity.id }
+            return Done()
+        }
+        router.register(ChatCommands.AnswerRelay.self) { [unowned self] command in
+            chatRelay.answer(command.answer)
+            return Done()
+        }
         router.register(ChatCommands.Finish.self) { [unowned self] command in
             try leadChat.finish(try requireChat(command.chatID))
             return Done()

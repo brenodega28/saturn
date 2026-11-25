@@ -205,6 +205,9 @@ struct RequestChat: View {
             )
         case .specFeedback:
             SpecFeedbackBubble(message: message) { workspace.openSpecTab(for: task, in: project) }
+        case .specDraft:
+            let hasActiveRun = data.thread.items.contains { if case .hold = $0 { true } else { false } } || activeRun(in: data) != nil
+            SpecCard(card: message, task: task, project: project, spec: spec?.document, hasActiveRun: hasActiveRun)
         case .note:
             ChatNote(text: message.text)
         case .permission:
@@ -435,6 +438,80 @@ private struct ProposalAgents: View {
     private func line(for worker: SpecWorker) -> String {
         let who = worker.role.isEmpty || worker.role.caseInsensitiveCompare(worker.name) == .orderedSame ? worker.name : "\(worker.name) (\(worker.role))"
         return worker.reason.map { "\(who) — \($0)" } ?? who
+    }
+}
+
+struct SpecCard: View {
+    @Environment(DaemonWorkspace.self) private var workspace
+    let card: LeadMessage
+    let task: Chat
+    let project: Project
+    let spec: SpecDocument?
+    let hasActiveRun: Bool
+
+    static func approveHelp(hasActiveRun: Bool, isRequestClosed: Bool, spec: SpecDocument?) -> String? {
+        if isRequestClosed { return "This request is closed. Send a message to reopen it first." }
+        if hasActiveRun { return "Wait for the current run to end" }
+        if let status = spec?.status, status == .inProgress || status == .done { return "The spec is already committed on a run branch" }
+        return nil
+    }
+
+    var body: some View {
+        let info = card.specDraft
+        let blocked = Self.approveHelp(hasActiveRun: hasActiveRun, isRequestClosed: task.isClosed, spec: spec)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Label("Spec", systemImage: "doc.text").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.text2)
+                if let info { Text("v\(info.version)").font(.system(size: 12)).foregroundStyle(Tokens.text2) }
+                Spacer(minLength: 0)
+                statusLabel
+            }
+            Text(card.title ?? "Spec").font(.system(size: 14, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+            if let info {
+                Text("\(info.criteria) acceptance criteri\(info.criteria == 1 ? "on" : "a")")
+                    .font(.system(size: 12.5)).foregroundStyle(Theme.secondaryText)
+                if let reason = info.reason, card.status == .open {
+                    Label(reason, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 12.5)).foregroundStyle(Theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(spacing: 8) {
+                Button("Open spec") { workspace.openSpecTab(for: task, in: project) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Tokens.link)
+                    .help("Open the spec’s review page")
+                Spacer(minLength: 0)
+                if card.status == .open {
+                    Button("Request changes") { workspace.openSpecTab(for: task, in: project) }
+                        .buttonStyle(SecondaryPillStyle())
+                        .help("Annotate the spec page; your notes go to the lead")
+                    Button("Approve") { workspace.approveSpec(for: task, in: project) }
+                        .buttonStyle(PrimaryPillStyle())
+                        .disabled(blocked != nil)
+                        .help(blocked ?? "Approve the spec and start the run")
+                }
+            }
+        }
+        .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Tokens.hover, in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(card.status == .open ? Tokens.hair2 : Tokens.hair))
+        .opacity(card.status == .dismissed ? 0.6 : 1)
+    }
+
+    @ViewBuilder
+    private var statusLabel: some View {
+        switch card.status {
+        case .dismissed:
+            Text("Superseded").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.tertiaryText)
+        case .started:
+            Text(card.runId.map { "Run \($0) started" } ?? "Run started").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.done)
+        default:
+            let status = spec?.status ?? .draft
+            Text(status.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(status.color)
+        }
     }
 }
 

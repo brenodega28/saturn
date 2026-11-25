@@ -6,6 +6,9 @@ public enum ChatReaderError: Error, LocalizedError, Equatable {
     case unknownRun(Int64, requestID: Int64, runs: [Int64])
     case unknownAgent(String, requestID: Int64, agents: [String])
     case missingTranscript(agent: String, id: Int64)
+    case daemonNotConnected(DaemonID, connected: [String])
+    case daemonDidNotAnswer(DaemonID, name: String)
+    case daemonFailed(DaemonID, name: String, message: String)
 
     public var errorDescription: String? {
         switch self {
@@ -21,6 +24,13 @@ public enum ChatReaderError: Error, LocalizedError, Equatable {
                 + (agents.isEmpty ? "This request has no agents." : "Its agents: \(agents.joined(separator: ", ")).")
         case .missingTranscript(let agent, let id):
             "\(agent) (id \(id)) has no transcript yet."
+        case .daemonNotConnected(let id, let connected):
+            "Daemon \(id.uuidString.lowercased()) isn’t connected to this workspace, so its chats can’t be read. "
+                + (connected.isEmpty ? "No other daemons are connected; open Ensemble with that machine connected and try again." : "Connected daemons: \(connected.joined(separator: ", ")).")
+        case .daemonDidNotAnswer(let id, let name):
+            "\(name) (daemon \(id.uuidString.lowercased())) didn’t answer in time. Check that it’s still connected in Ensemble and try again."
+        case .daemonFailed(let id, let name, let message):
+            "\(name) (daemon \(id.uuidString.lowercased())) couldn’t read the chat: \(message)"
         }
     }
 }
@@ -122,7 +132,11 @@ public struct ChatReader {
         if let runId = message.runId { fields.append("run \(runId)") }
         var lines = [fields.joined(separator: " · ")]
         if let title = message.title { lines.append("Title: \(title)") }
-        if !message.text.isEmpty { lines.append(message.text) }
+        if let draft = message.specDraft {
+            lines.append(draft.summary(title: message.title ?? "Spec"))
+        } else if !message.text.isEmpty {
+            lines.append(message.text)
+        }
         if !message.storedAttachments.isEmpty {
             lines.append("Attachments: " + message.storedAttachments.map(\.label).joined(separator: ", "))
         }
@@ -354,5 +368,90 @@ public struct ChatReader {
     static func capped(_ text: String) -> String {
         guard text.count > maxCharacters else { return text }
         return String(text.prefix(maxCharacters - 60)) + "\n… [output cut at \(maxCharacters) characters]"
+    }
+}
+
+public struct DaemonPeer: Codable, Sendable, Hashable {
+    public var id: DaemonID
+    public var name: String
+
+    public init(id: DaemonID, name: String) {
+        self.id = id
+        self.name = name
+    }
+
+    var label: String { "\(name) (\(id.uuidString.lowercased()))" }
+}
+
+@MainActor
+public protocol ChatRouting: AnyObject {
+    func readChat(_ request: ChatReadRequest, on daemon: DaemonID) async throws -> String
+}
+
+@MainActor
+public final class ChatRelay: ChatRouting {
+    public var peers: [DaemonPeer] = []
+    public var timeout: Duration = .seconds(30)
+    let post: @MainActor (DaemonEvent) -> Bool
+    private var pending: [UUID: CheckedContinuation<String, Error>] = [:]
+
+    public init(post: @escaping @MainActor (DaemonEvent) -> Bool) {
+        self.post = post
+    }
+
+    public func readChat(_ request: ChatReadRequest, on daemon: DaemonID) async throws -> String {
+        guard let peer = peers.first(where: { $0.id == daemon }) else {
+            throw ChatReaderError.daemonNotConnected(daemon, connected: peers.map(\.label))
+        }
+        let relayID = UUID()
+        let timeout = timeout
+        return try await withCheckedThrowingContinuation { continuation in
+            pending[relayID] = continuation
+            guard post(.readChat(relayID: relayID, daemon: daemon, request: request)) else {
+                finish(relayID, .failure(ChatReaderError.daemonNotConnected(daemon, connected: [])))
+                return
+            }
+            Task { [weak self] in
+                try? await Task.sleep(for: timeout)
+                self?.finish(relayID, .failure(ChatReaderError.daemonDidNotAnswer(daemon, name: peer.name)))
+            }
+        }
+    }
+
+    public func answer(_ answer: RelayedChat) {
+        let name = peers.first { $0.id == answer.daemon }?.name ?? "The daemon"
+        if let text = answer.text {
+            finish(answer.relayID, .success(text))
+        } else {
+            finish(answer.relayID, .failure(ChatReaderError.daemonFailed(answer.daemon, name: name, message: answer.error ?? "no reason given")))
+        }
+    }
+
+    private func finish(_ relayID: UUID, _ result: Result<String, Error>) {
+        pending.removeValue(forKey: relayID)?.resume(with: result)
+    }
+}
+
+public struct RelayedChat: Codable, Sendable, Hashable {
+    public var relayID: UUID
+    public var daemon: DaemonID
+    public var text: String?
+    public var error: String?
+
+    public init(relayID: UUID, daemon: DaemonID, text: String? = nil, error: String? = nil) {
+        self.relayID = relayID
+        self.daemon = daemon
+        self.text = text
+        self.error = error
+    }
+}
+
+extension AgentWorkflowDriver {
+    func readChat(_ request: ChatReadRequest) async throws -> String {
+        if let daemon = request.daemon, daemon != daemonID {
+            guard let chatRouting else { throw ChatReaderError.daemonNotConnected(daemon, connected: []) }
+            return try await chatRouting.readChat(request, on: daemon)
+        }
+        return try ChatReader(database: runtime.database, paths: runtime.paths).read(request)
     }
 }

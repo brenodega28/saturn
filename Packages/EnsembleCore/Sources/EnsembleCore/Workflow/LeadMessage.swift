@@ -8,6 +8,7 @@ public enum LeadMessageKind: String, Codable, Sendable, Hashable {
     case note
     case permission
     case specFeedback
+    case specDraft
 }
 
 public enum ProposalStatus: String, Codable, Sendable, Hashable {
@@ -75,6 +76,11 @@ public struct LeadMessage: Codable, Sendable, Hashable, Identifiable, FetchableR
 
     public var chatAttachments: [ChatAttachment] { storedAttachments.attachments }
 
+    public var specDraft: SpecDraftInfo? {
+        guard kind == .specDraft else { return nil }
+        return try? JSONDecoder().decode(SpecDraftInfo.self, from: Data(text.utf8))
+    }
+
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
     }
@@ -98,7 +104,65 @@ public struct RunProposal: Sendable, Hashable, Codable {
     }
 }
 
+public struct SpecDraftInfo: Codable, Sendable, Hashable {
+    public var version: Int
+    public var criteria: Int
+    public var url: String?
+    public var reason: String?
+
+    public init(version: Int, criteria: Int, review: SpecReviewStatus) {
+        self.version = version
+        self.criteria = criteria
+        self.url = review.url
+        self.reason = review.reason
+    }
+
+    public var json: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return (try? encoder.encode(self)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+    }
+
+    public func summary(title: String) -> String {
+        let count = "\(criteria) acceptance criteri\(criteria == 1 ? "on" : "a")"
+        let page = url.map { "review page \($0)" } ?? "review page not opened: \(reason ?? "unknown reason")"
+        return "Spec v\(version) “\(title)” · \(count) · \(page)"
+    }
+}
+
 extension AppDatabase {
+    @discardableResult
+    public func insertSpecDraft(projectId: Int64, taskId: Int64, title: String, info: SpecDraftInfo, at date: Date = .now) throws -> LeadMessage {
+        try writer.write { db in
+            try db.execute(
+                sql: "UPDATE leadMessage SET status = ? WHERE taskId = ? AND kind = ? AND status = ?",
+                arguments: [ProposalStatus.dismissed.rawValue, taskId, LeadMessageKind.specDraft.rawValue, ProposalStatus.open.rawValue]
+            )
+            var message = LeadMessage(projectId: projectId, taskId: taskId, kind: .specDraft, text: info.json, title: title, status: .open, createdAt: date)
+            try message.insert(db)
+            try db.execute(sql: "UPDATE task SET updatedAt = ? WHERE id = ?", arguments: [date, taskId])
+            return message
+        }
+    }
+
+    public func openSpecDraft(taskId: Int64) throws -> LeadMessage? {
+        try writer.read { db in
+            try LeadMessage
+                .filter(LeadMessage.Columns.taskId == taskId && Column("kind") == LeadMessageKind.specDraft.rawValue && Column("status") == ProposalStatus.open.rawValue)
+                .order(Column("id").desc)
+                .fetchOne(db)
+        }
+    }
+
+    public func markSpecDraftStarted(taskId: Int64, runId: Int64?) throws {
+        try writer.write { db in
+            try db.execute(
+                sql: "UPDATE leadMessage SET status = ?, runId = ? WHERE taskId = ? AND kind = ? AND status = ?",
+                arguments: [ProposalStatus.started.rawValue, runId, taskId, LeadMessageKind.specDraft.rawValue, ProposalStatus.open.rawValue]
+            )
+        }
+    }
+
     @discardableResult
     public func insert(_ message: LeadMessage) throws -> LeadMessage {
         try writer.write { db in

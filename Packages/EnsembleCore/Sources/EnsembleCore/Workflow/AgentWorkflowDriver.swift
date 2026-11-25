@@ -69,6 +69,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     var specCommits: [Int64: Task<Void, Error>] = [:]
     var closingTasks: Set<Int64> = []
     public weak var specReviews: (any SpecReviewHost)?
+    public weak var chatRouting: (any ChatRouting)?
+    public var daemonID: DaemonID?
     private(set) lazy var questionRelay = QuestionRelay { [weak self] runId, batch in self?.deliverQuestions(batch, runId: runId) }
 
     public var questionWindow: Duration {
@@ -271,11 +273,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             session.send("Your worktree at \(path)\(branch) is ready and you can now edit files there. Continue with the change you were about to make.")
             return "Worktree ready at \(path)\(branch). End your turn now; your next turn runs there with write access."
         case .readChat(let request):
-            return try ChatReader(database: runtime.database, paths: runtime.paths).read(request)
+            return try await readChat(request)
         case .draftSpec(let request):
-            let reply = try draftSpec(request, from: agent)
-            if let taskId = agent.taskId { await specReviews?.specDrafted(projectId: agent.projectId, taskId: taskId) }
-            return reply
+            return try await postSpecDraft(try draftSpec(request, from: agent), from: agent)
         case .replySpec(let text):
             return try await replySpec(text, from: agent)
         case .setChatStatus(let status, let reason):

@@ -85,6 +85,7 @@ struct ShellContext {
     private var lastEnding = ""
     private var lastStatementEnding = ""
     private var madeTempPath = false
+    private var trusted = true
 
     init(cwd: String? = nil) {
         self.cwd = cwd
@@ -107,6 +108,12 @@ struct ShellContext {
     mutating func record(_ command: ShellCommandLine.Command) {
         let afterMktemp = madeTempPath
         madeTempPath = makesTempPath(command.words)
+        let unwrapped = ShellRisk.unwrapped(command.words)
+        let program = unwrapped?.first
+        let names = Self.namesSet(by: command.words)
+        if Self.definesFunction(command) || Self.reshapesTheShell.contains(program ?? "") || names.contains("IFS") { trusted = false }
+        if Self.setsAnyVariable(program, unwrapped ?? []) { variables = [:] }
+        names.forEach { variables[$0] = nil }
         if !command.nested, let assignments = Self.assignments(command.words) {
             let lasting = Self.unconditional.contains(lastStatementEnding) && !Self.backgrounded.contains(command.ending)
             let substitutions = command.words.filter { $0.contains("$(…)") || $0.contains("`…`") }.count
@@ -114,14 +121,25 @@ struct ShellContext {
                 variables[name] = lasting ? assignedValue(name, value, afterMktemp: afterMktemp && substitutions == 1) : nil
             }
         }
-        if command.words.first == "cd" {
-            let reliable = command.ending == "&&" && (Self.unconditional.contains(lastEnding) || lastEnding == "&&")
-            cwd = reliable ? directory(after: Array(command.words.dropFirst())) : nil
-        } else if !Self.continuing.contains(command.ending) {
-            cwd = nil
-        }
+        trackDirectory(command, program: program, arguments: Array(unwrapped?.dropFirst() ?? []))
         lastEnding = command.ending
         if !command.nested { lastStatementEnding = command.ending }
+        if !trusted {
+            variables = [:]
+            cwd = nil
+        }
+    }
+
+    private mutating func trackDirectory(_ command: ShellCommandLine.Command, program: String?, arguments: [String]) {
+        switch program {
+        case "cd":
+            let reliable = command.ending == "&&" && (Self.unconditional.contains(lastEnding) || lastEnding == "&&")
+            cwd = reliable ? directory(after: arguments) : nil
+        case "pushd", "popd":
+            cwd = nil
+        default:
+            if !Self.continuing.contains(command.ending) { cwd = nil }
+        }
     }
 
     private func assignedValue(_ name: String, _ value: String, afterMktemp: Bool) -> String? {
@@ -132,8 +150,47 @@ struct ShellContext {
     }
 
     private func directory(after arguments: [String]) -> String? {
-        guard let target = ShellRisk.operands(arguments).first else { return nil }
-        return TempPaths.resolved(target, variables: variables, cwd: cwd)
+        guard let target = ShellRisk.operands(arguments).first,
+              let expanded = TempPaths.expanded(target, variables: variables),
+              expanded.hasPrefix("/") || expanded.hasPrefix(".") else { return nil }
+        return TempPaths.resolved(expanded, variables: [:], cwd: cwd)
+    }
+
+    static let reshapesTheShell: Set<String> = ["eval", "source", ".", "function", "alias", "trap"]
+    static let variableSetters: Set<String> = ["read", "declare", "typeset", "local", "readonly", "unset", "getopts", "mapfile", "readarray", "let"]
+
+    static func setsAnyVariable(_ program: String?, _ words: [String]) -> Bool {
+        guard let program else { return false }
+        return variableSetters.contains(program) || (program == "printf" && words.contains { $0.hasPrefix("-v") })
+    }
+
+    static func definesFunction(_ command: ShellCommandLine.Command) -> Bool {
+        command.ending == "(" && command.words.count == 1
+    }
+
+    static func namesSet(by words: [String]) -> Set<String> {
+        var names = Set<String>()
+        for (index, word) in words.enumerated() {
+            if let name = assignedName(word) { names.insert(name) }
+            names.formUnion(defaultedNames(word))
+            if ["for", "select"].contains(word), words.indices.contains(index + 1) { names.insert(words[index + 1]) }
+        }
+        return names
+    }
+
+    static func assignedName(_ word: String) -> String? {
+        let name = word.prefix { $0.isASCII && ($0.isLetter || $0.isNumber) || $0 == "_" }
+        let rest = word.dropFirst(name.count)
+        guard isName(name), rest.hasPrefix("=") || rest.hasPrefix("+=") || rest.hasPrefix("[") else { return nil }
+        return String(name)
+    }
+
+    static func defaultedNames(_ word: String) -> [String] {
+        word.components(separatedBy: "${").dropFirst().compactMap { part in
+            let name = part.prefix { $0.isASCII && ($0.isLetter || $0.isNumber) || $0 == "_" }
+            let rest = part.dropFirst(name.count)
+            return rest.hasPrefix("=") || rest.hasPrefix(":=") ? String(name) : nil
+        }
     }
 
     private func makesTempPath(_ words: [String]) -> Bool {

@@ -129,6 +129,8 @@ import Yams
             "S=/private/tmp/claude-501/x/scratchpad/lv; L=/Users/me/repo/Lavish; mkdir -p $S/dist && cp $L/theme.css $S/ && git -C $L show main:a.css > $S/old.css",
             "cd /Users/me/repo && swift test 2>&1 | tail -80 > /private/tmp/claude-501/x/scratchpad/test.log; echo done",
             "SP=/private/tmp/claude-501/x/scratchpad && rm -f $SP/review.png; mkdir -p /tmp/q7/proj && cd /tmp/q7/proj && git init -q 2>/dev/null",
+            "cd /tmp/q7 && { cd /tmp/q8 && rm -rf build; }", "cd /tmp/q7 && builtin cd ./sub && rm -rf build",
+            "S=/tmp/s; ENV_DIR=$S/d nohup true; rm -rf $S/x",
         ] {
             #expect(asks(command, reviewer).isEmpty, "reviewer: \(command)")
             #expect(asks(command, developer).isEmpty, "developer: \(command)")
@@ -145,7 +147,20 @@ import Yams
             ("cd /tmp/q7 && false || rm -rf c", "rm"), ("(cd /tmp/q7 && true); rm -rf c", "rm"), ("(cd /tmp/q7 && true) && rm -rf c", "rm"),
             ("cd /tmp/q7 && (false) || rm -rf c", "rm"), ("rm -rf c $(cd /tmp/q7 && pwd)", "rm"), ("x | (cd /tmp/q7 && true) || rm -rf c", "rm"),
             ("pkill -TERM -f \"data-dir /tmp/q7\"; mkdir -p /tmp/q7/proj", "pkill"), ("S=/tmp/s; kill $P; rm -rf $S/x", "kill"),
-            ("launchctl list", "launchctl"), ("cd /tmp/q7 && cd .. && rm -rf c", "rm"),
+            ("launchctl list", "launchctl"),
+            ("S=/tmp/s; for S in ~/proj; do rm -rf $S; done", "rm"), ("S=/tmp/s; if true; then S=$HOME; fi; rm -rf $S/x", "rm"),
+            ("S=/tmp/s; { S=$HOME; }; rm -rf $S/x", "rm"), ("S=/tmp/s/a; S+=/../..; rm -rf $S", "rm"),
+            ("S=/tmp/s; read S; rm -rf $S/x", "rm"), ("S=/tmp/s; while read S; do rm -rf $S/x; done", "rm"),
+            ("S=/tmp/s; declare S=$HOME; rm -rf $S/x", "rm"), ("S=/tmp/s; local S=$HOME; rm -rf $S/x", "rm"),
+            ("S=/tmp/s; readonly S=$HOME; rm -rf $S/x", "rm"), ("S=/tmp/s; printf -v S %s ~; rm -rf $S/x", "rm"),
+            ("S=/tmp/s; unset S; rm -rf $S/x", "rm"), ("S=/tmp/s; S[0]=$HOME; rm -rf $S/x", "rm"),
+            ("S=/tmp/s; echo ${S:=x}; rm -rf $S/x", "rm"), ("S=/tmp/s; eval S=$HOME; rm -rf $S/x", "rm"),
+            ("f() { S=$HOME; }; S=/tmp/s; f; rm -rf $S/x", "rm"), ("S=/tmp/s; source ./env.sh; rm -rf $S/x", "rm"),
+            ("S=/tmp/s; IFS=/; rm -rf $S", "rm"), ("S=/tmp/s; let S=1; rm -rf $S/x", "rm"),
+            ("cd /tmp/q7 && pushd /Users/me && rm -rf build", "rm"), ("cd /tmp/q7 && popd && rm -rf build", "rm"),
+            ("cd /tmp/q7 && builtin cd /Users/me && rm -rf build", "rm"), ("cd /tmp/q7 && command cd /Users/me && rm -rf build", "rm"),
+            ("cd /tmp/q7 && { cd /Users/me && rm -rf build; }", "rm"), ("cd /tmp/q7 && cd - && rm -rf build", "rm"),
+            ("cd /tmp/q7 && cd sub && rm -rf build", "rm"), ("cd /tmp/q7 && eval cd ~ && rm -rf build", "rm"), ("cd /tmp/q7 && cd .. && rm -rf c", "rm"),
             ("false && S=/tmp/x; rm -rf $S/y", "rm"), ("ls | xargs rm -rf /tmp/x", "rm"), ("find / -exec rm {} \\;", "rm"),
             ("bash -c 'rm -rf $S/x'", "rm"), ("pkill -f /tmp/q7/daemon", "pkill"), ("osascript /tmp/q7/a.scpt", "osascript"),
             ("tar -xP -C /tmp/c -f a.tar", "tar"),
@@ -157,7 +172,7 @@ import Yams
         for (command, rule) in [
             ("mv ./Sources/a.swift /tmp/", "mv"), ("cp /tmp/a ./b", "cp"), ("echo hi > notes.txt", "write files with >"),
             ("mkdir c", "mkdir"), ("git init repo", "git init"), ("git clone https://x.dev/r.git", "git clone"),
-            ("touch /tmp/a ~/b", "touch"), ("cd /tmp && mkdir c", "mkdir"), ("echo hi > $S/out", "write files with >"),
+            ("touch /tmp/a ~/b", "touch"), ("S=/tmp/s; for f in ../..; do touch $S/$f; done", "touch"), ("cd /tmp && mkdir c", "mkdir"), ("echo hi > $S/out", "write files with >"),
         ] {
             #expect(asks(command, reviewer) == [rule], "reviewer: \(command)")
         }

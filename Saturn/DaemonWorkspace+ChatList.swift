@@ -185,7 +185,8 @@ extension ChatStage {
         case .building: Tokens.build
         case .inReview: Tokens.review
         case .finished, .done: Tokens.done
-        case .dropped, .idle: Tokens.text2
+        case .idle: Tokens.idle
+        case .dropped: Tokens.text2
         }
     }
 

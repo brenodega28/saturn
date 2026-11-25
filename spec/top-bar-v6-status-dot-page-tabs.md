@@ -1,6 +1,6 @@
 ---
 title: "Top bar v6: status-dot page tabs"
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: SwiftUI Dev 1, reason: "One file, one coherent visual change in PageTabStrip.swift"}
@@ -28,13 +28,13 @@ Bring the page tab strip above the chat (Saturn/Views/V5/PageTabStrip.swift) in 
 
 ## Acceptance criteria
 
-- [ ] Every chat tab shows a status dot in its stage colour, never a project tile
-- [ ] The halo pulses only for Building and In review, and pulsing stops when Reduce Motion is on
-- [ ] No separate attention dot appears after a tab title
-- [ ] The active tab has a 2 pt accent line at the top that follows the rounded corners; inactive tabs have none
-- [ ] Terminal, code, run, agent, spec and tool tabs still show their SF Symbol icon
-- [ ] VoiceOver reads the dot's stage (e.g. "Needs you") before the tab title
-- [ ] The app builds and the existing SaturnTests pass
+- [x] Every chat tab shows a status dot in its stage colour, never a project tile
+- [x] The halo pulses only for Building and In review, and pulsing stops when Reduce Motion is on
+- [x] No separate attention dot appears after a tab title
+- [x] The active tab has a 2 pt accent line at the top that follows the rounded corners; inactive tabs have none
+- [x] Terminal, code, run, agent, spec and tool tabs still show their SF Symbol icon
+- [x] VoiceOver reads the dot's stage (e.g. "Needs you") before the tab title
+- [x] The app builds and the existing SaturnTests pass
 
 ## Verification
 

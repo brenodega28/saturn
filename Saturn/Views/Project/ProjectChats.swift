@@ -144,7 +144,7 @@ private struct ChatTableRow: View {
         let run = workspace.latestRun(of: summary.chat)
         Button { workspace.openChat(summary.chat) } label: {
             HStack(spacing: 12) {
-                StatusPill(stage: summary.stage).frame(width: ChatTableWidth.status, alignment: .leading)
+                ChatStatusPill(stage: summary.stage).frame(width: ChatTableWidth.status, alignment: .leading)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(summary.chat.title).font(.system(size: 13.5)).foregroundStyle(Tokens.text).lineLimit(1)
                     Text(workspace.subtitle(of: summary)).font(.system(size: 12)).foregroundStyle(Tokens.text2).lineLimit(1)
@@ -195,7 +195,7 @@ private struct ChatTableRow: View {
     }
 }
 
-private struct StatusPill: View {
+private struct ChatStatusPill: View {
     let stage: ChatStage
 
     var body: some View {

@@ -78,22 +78,10 @@ struct TranscriptEntryView: View {
 
 struct TranscriptUserMessage: View {
     let text: String
-    var onCancel: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Text("You").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.secondaryText)
-                Spacer(minLength: 0)
-                if let onCancel {
-                    Button("Cancel", action: onCancel)
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Theme.link)
-                        .help("Stop this message and put it back in the composer (Esc)")
-                        .accessibilityLabel("Cancel send")
-                }
-            }
+            Text("You").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.secondaryText)
             Text(text).font(.system(size: 13.5)).textSelection(.enabled)
         }
         .padding(12)

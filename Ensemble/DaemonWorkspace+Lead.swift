@@ -137,24 +137,20 @@ extension DaemonWorkspace {
         return agentSessions(in: project).map(\.agent).filter { $0.id.map(ids.contains) == true }
     }
 
-    func leadSendTarget(for request: Chat?, in project: Project) -> PendingSendTarget? {
-        project.id.map { .lead(project: $0, request: request?.id) }
+    func leadSendTarget(for request: Chat?, in project: Project) -> LeadSendTarget? {
+        project.id.map { LeadSendTarget(project: $0, request: request?.id) }
     }
 
-    func holdLeadMessage(_ message: PendingMessage, lead: RoleDefinition?, to request: Chat?, in project: Project) {
+    func deliverLeadMessage(_ message: PendingMessage, lead: RoleDefinition?, to request: Chat?, in project: Project) {
         guard let target = leadSendTarget(for: request, in: project) else { return }
-        holdSend(message, to: target) { [weak self] held in
+        let delivery = DeliveringSend(id: UUID(), target: target, message: message, date: .now)
+        deliveringSends.append(delivery)
+        Task { @MainActor [weak self] in
             guard let self else { return }
-            let delivery = HeldSend(id: UUID(), target: target, message: held, date: .now, isCancellable: false)
-            deliveringSends.append(delivery)
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                let current = request?.id.flatMap { try? self.database.task(id: $0) } ?? request
-                let sent = await sendLeadMessage(held.text, attachments: held.attachments, lead: lead, to: current, in: project)
-                deliveringSends.removeAll { $0.id == delivery.id }
-                if !sent {
-                    pendingSends.returnToComposer(held, for: target)
-                }
+            let sent = await sendLeadMessage(message.text, attachments: message.attachments, lead: lead, to: request, in: project)
+            deliveringSends.removeAll { $0.id == delivery.id }
+            if !sent {
+                returnedMessages.returnToComposer(message, for: target)
             }
         }
     }

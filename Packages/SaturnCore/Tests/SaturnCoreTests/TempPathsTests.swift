@@ -6,6 +6,14 @@ import Testing
         for path in ["/tmp/x", "/private/tmp/a/b", "/var/folders/ab/T/x", "/private/var/folders/q", "/tmp/a/../b", "/tmp/x/*", "/tmp/x/"] {
             #expect(TempPaths.isTemp(path), "\(path)")
         }
+        for path in [
+            "/tmp/a/{x,../../Users/me}", "/tmp/a/{x,y}", "/tmp/a/*/../../../Users/me", "/tmp/a/.?/x", "/tmp/a/.*",
+            "/tmp/a/x?/../../..", "/tmp/a/[ab]/..",
+        ] {
+            #expect(!TempPaths.isTemp(path), "\(path)")
+        }
+        #expect(TempPaths.isTemp("/tmp/a/../b/*.log"))
+        #expect(TempPaths.isTemp("/tmp/a/x?/y"))
         for path in ["/tmp", "/tmp/", "/private/tmp", "/var/folders", "/tmp/*", "/tmp/x*", "/tmp/..", "/tmp/../etc", "/tmp/x/../..", "/tmpfoo/x", "/var/tmp/x", "/Users/x", "~/tmp/x", "", "x"] {
             #expect(!TempPaths.isTemp(path), "\(path)")
         }

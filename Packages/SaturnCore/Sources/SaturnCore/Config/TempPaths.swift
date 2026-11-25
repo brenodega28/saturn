@@ -20,7 +20,8 @@ enum TempPaths {
     }
 
     static func resolved(_ path: String, variables: [String: String], cwd: String?) -> String? {
-        guard let expanded = expanded(path, variables: variables), !expanded.isEmpty, !expanded.hasPrefix("~") else { return nil }
+        guard let expanded = expanded(path, variables: variables), !expanded.isEmpty, !expanded.hasPrefix("~"),
+              !mayExpandToParent(expanded) else { return nil }
         if expanded.hasPrefix("/") { return standardized(expanded) }
         guard let cwd, isBelowRoot(cwd) else { return nil }
         return standardized(cwd + "/" + expanded)
@@ -32,6 +33,13 @@ enum TempPaths {
             let first = path.dropFirst(root.count + 1).prefix { $0 != "/" }
             return !first.isEmpty && !first.contains(where: globCharacters.contains)
         }
+    }
+
+    static func mayExpandToParent(_ path: String) -> Bool {
+        guard !path.contains("{") else { return true }
+        let parts = path.split(separator: "/")
+        guard let firstGlob = parts.firstIndex(where: { $0.contains(where: globCharacters.contains) }) else { return false }
+        return parts[firstGlob...].contains { $0 == ".." || $0.hasPrefix(".") && $0.contains(where: globCharacters.contains) }
     }
 
     static func standardized(_ path: String) -> String {

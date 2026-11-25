@@ -148,6 +148,8 @@ import Yams
             ("cd /tmp/q7 && (false) || rm -rf c", "rm"), ("rm -rf c $(cd /tmp/q7 && pwd)", "rm"), ("x | (cd /tmp/q7 && true) || rm -rf c", "rm"),
             ("pkill -TERM -f \"data-dir /tmp/q7\"; mkdir -p /tmp/q7/proj", "pkill"), ("S=/tmp/s; kill $P; rm -rf $S/x", "kill"),
             ("launchctl list", "launchctl"),
+            ("rm -rf /tmp/a/{x,../../Users/me}", "rm"), ("chmod -R 777 /tmp/a/{x,../../Users/me}", "chmod"),
+            ("rm -rf /tmp/a/*/../../../Users/me", "rm"), ("chmod -R 777 /tmp/a/.?", "chmod"), ("S=/tmp/a/{x,..}; rm -rf $S/y", "rm"),
             ("S=/tmp/s; for S in ~/proj; do rm -rf $S; done", "rm"), ("S=/tmp/s; if true; then S=$HOME; fi; rm -rf $S/x", "rm"),
             ("S=/tmp/s; { S=$HOME; }; rm -rf $S/x", "rm"), ("S=/tmp/s/a; S+=/../..; rm -rf $S", "rm"),
             ("S=/tmp/s; read S; rm -rf $S/x", "rm"), ("S=/tmp/s; while read S; do rm -rf $S/x; done", "rm"),
@@ -172,7 +174,9 @@ import Yams
         for (command, rule) in [
             ("mv ./Sources/a.swift /tmp/", "mv"), ("cp /tmp/a ./b", "cp"), ("echo hi > notes.txt", "write files with >"),
             ("mkdir c", "mkdir"), ("git init repo", "git init"), ("git clone https://x.dev/r.git", "git clone"),
-            ("touch /tmp/a ~/b", "touch"), ("S=/tmp/s; for f in ../..; do touch $S/$f; done", "touch"), ("cd /tmp && mkdir c", "mkdir"), ("echo hi > $S/out", "write files with >"),
+            ("touch /tmp/a ~/b", "touch"), ("mv /tmp/a/x /tmp/a/{y,../../Users/me}", "mv"),
+            ("cp a /tmp/a/{x,../../Users/me}", "cp"), ("echo hi | tee /tmp/a/{x,../../Users/me}", "tee"),
+            ("echo hi > /tmp/a/{x,../../Users/me}", "write files with >"), ("S=/tmp/s; for f in ../..; do touch $S/$f; done", "touch"), ("cd /tmp && mkdir c", "mkdir"), ("echo hi > $S/out", "write files with >"),
         ] {
             #expect(asks(command, reviewer) == [rule], "reviewer: \(command)")
         }

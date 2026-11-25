@@ -1,6 +1,6 @@
 # Saturn — Roadmap
 
-Saturn is a macOS app for solo developers that runs AI coding agents inside a verification harness: **agents propose, rails verify, humans approve** (see [mission.md](mission.md)). You define **roles** and **workflows** in the repo. Every coding agent works on a scoped task in its own git worktree and must pass the project's deterministic **checks** before its work reaches you. AI review flags what you must read as **pins**, and nothing reaches `main` without your approval.
+Saturn is a macOS ADE (agentic development environment) for solo developers: **an agentic development environment that puts modern agentic development norms to work, so more of what you build succeeds** (see [mission.md](mission.md)). You chat with the Lead, which sizes the crew to the task, and you define **agent profiles** and **workflows** in the repo. Projects run through a Saturn daemon on this Mac or on a remote host over SSH. Every coding agent works on a scoped task in its own git worktree and must pass the project's deterministic **checks** before its work reaches you. AI review flags what you must read as **pins**, and nothing reaches `main` without your approval.
 
 This document is the build order for the MVP and what comes after. Each phase ends with something usable and a clear exit check. Phases 0–7 were planned before the mission was written and are kept as a record of what was built. Phases 8–10 bring the product in line with the mission, Phase 11 closes the gaps with the [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD), Phase 12 moved the app into an IDE-style work-tool shell, and Phase 13 replaces that with the chat-first v5 app (see [app-v5-chat-with-the-lead.md](app-v5-chat-with-the-lead.md)).
 
@@ -10,7 +10,7 @@ This document is the build order for the MVP and what comes after. Each phase en
 
 | In the MVP                                                           | After the MVP                         |
 | -------------------------------------------------------------------- | ------------------------------------- |
-| Solo developer, one machine                                          | Teams, shared config, multi-user      |
+| Solo developer across several machines: this Mac, SSH hosts, `saturnd` daemons, several Macs on one daemon | Teams, shared config, multi-user |
 | Bring your own keys                                                  | —                                     |
 | Claude Code as the only engine                                       | Codex, Gemini CLI and other providers |
 | Work starts from a chat with the Lead                                | Linear, Jira, Trello                  |
@@ -29,7 +29,7 @@ This document is the build order for the MVP and what comes after. Each phase en
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
 | App stack         | Swift 6 + SwiftUI, built in Xcode                                                                                                          | The most native macOS experience; the same language for the future iOS app                                                    |
 | Design reference  | The [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD) defines every screen; new screens are designed there before they are built | One source for layout, copy and behavior; QA compares the app against it |
-| App shell         | An IDE-style frame (toolbar, navigator, editor tabs, inspector, bottom panel, status bar) built on registries for panes, tabs and commands | Feels like Xcode or Android Studio; new features slot into existing panes instead of adding screens |
+| App shell         | Chat-first: you talk to the Lead, and pages (chats, specs, changes, code, settings) open as tabs beside a sidebar of chats and projects from every machine; replaces the Phase 12 IDE-style frame | Decisions come to you in the chat they belong to; one workspace across all machines |
 | Minimum OS        | macOS 26 Tahoe                                                                                                                             | Native Liquid Glass for the glassy design and the newest SwiftUI APIs                                                         |
 | Distribution      | Direct download: notarized, Developer ID–signed DMG, auto-updates with Sparkle                                                             | The App Store sandbox blocks spawning the `claude` CLI, running `git` and writing worktrees freely                            |
 | Agent runner      | Drive the `claude` CLI headlessly from Swift (`Process`), reading its streaming JSON output; one process per agent, cwd = its worktree     | No Node runtime to bundle; uses the user's own Claude Code login or API key; resumable sessions and MCP support come for free |
@@ -45,7 +45,7 @@ This document is the build order for the MVP and what comes after. Each phase en
 | Agent hooks       | Each worktree gets Claude Code hooks: lint after every edit, block edits to protected paths, block "done" while checks fail                | Enforcement in deterministic tools instead of prompt text                                                                     |
 | Instructions      | One lean `AGENTS.md` at the repo root (`CLAUDE.md` points to it); occasional know-how goes in skills                                       | Context files buy consistency and lower cost, not capability; bloat makes agents ignore them                                  |
 | AI review         | Reviewer roles comment through pins; they never approve and never block a run on their own                                                | Precision-tuned commenters help; rigid LLM gates block valid changes                                                          |
-| Mobile (later)    | iOS app is a remote control for the Mac: chats that need you, approvals, pins, run status. Agents always run on the Mac. Transport decided after the MVP | Keeps the engine in one place; the `SaturnCore` boundary makes a remote client possible                                     |
+| Mobile (later)    | iOS app is another client of the Saturn daemons: chats that need you, approvals, pins, run status. Agents run on the daemon's machine, never on the phone | The engine already lives in `saturnd` behind `SaturnProtocol`, so a phone attaches like another Mac |
 
 ---
 

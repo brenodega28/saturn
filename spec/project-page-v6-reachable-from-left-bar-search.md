@@ -1,6 +1,6 @@
 ---
 title: Project page (v6) reachable from left-bar Search
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Project Page Dev, reason: "Owns the page model, ProjectPage shell, Overview, Chats, palette Projects group and routing (V5/, MainPages, MainWindowNavigation, CommandPalette, ProjectView, new Views/Project/)"}
@@ -36,14 +36,14 @@ Add one Project page per project, built to the Project v6 design on the canvas. 
 ## Acceptance criteria
 
 - [ ] Clicking Search in the left bar and typing part of a project's name lists that project under 'Projects', the current project included. Pressing ↵ or clicking it opens (or focuses) that project's Project page on Overview
-- [ ] Each project has at most one Project page tab. Its tab shows the letter tile and the project name
+- [x] Each project has at most one Project page tab. Its tab shows the letter tile and the project name
 - [ ] The header matches the design: tile, name, location (This Mac / host name), path, branch, and Finder, Terminal, More and New chat buttons that work. Remote projects show the host and no Finder button
 - [ ] Section nav switches sections in place, marks the current one, and shows counts for Chats and Agents, plus a 'needs you' count on Changes when reviews are pending
 - [ ] Overview shows: Needs-you banners for chats waiting on the user, with Approve spec and Open chat; Active chats (link to the chat; All chats goes to the Chats section); Recent activity from the existing Log events; stats (active chats, workers running, needs you, merged this week); spend this week vs budget, by day; agents strip with Manage → Agents section; Repository facts (default branch, remote, run command, worktrees folder, instructions file). Any part without data is hidden, never faked
 - [ ] Chats section: status filter chips with counts, a text filter, and a table grouped Needs you / In progress / Not started / Finished with status, title, subtitle, worker avatars, branch, +/− lines and updated time. Clicking a row opens the chat
 - [ ] Agents, Workflows, Changes, Source and Settings (Roles, Checks, Permissions, Docs, Skills, Workspaces, Remote host, plus any other existing SettingsSection) are restyled to the v6 artboards and keep all their current behaviour
-- [ ] Old menu, ⌘K and keyboard entry points to Agents, Changes, Workflows, Code and Settings open the matching section of the Project page. Saved tool pages from before the update restore as Project pages
-- [ ] Build passes and existing tests pass; new unit tests cover the page-kind migration, the palette project matching and `openProject` uniqueness
+- [x] Old menu, ⌘K and keyboard entry points to Agents, Changes, Workflows, Code and Settings open the matching section of the Project page. Saved tool pages from before the update restore as Project pages
+- [x] Build passes and existing tests pass; new unit tests cover the page-kind migration, the palette project matching and `openProject` uniqueness
 
 ## Verification
 

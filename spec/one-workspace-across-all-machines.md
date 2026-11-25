@@ -1,6 +1,6 @@
 ---
 title: One workspace across all machines
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Workspace Refactor Dev, reason: "One builder: moving per-daemon state into DaemonWorkspace touches AppModel and almost every view together, so splitting the work would interfere."}
@@ -46,9 +46,9 @@ Today AppModel has one active DaemonConnection. Chats, pages, request feeds, per
 - [ ] Sending a message, approving a permission, starting a run, and resolving or closing a chat from a page always goes to that page's own daemon.
 - [ ] When a remote daemon goes offline, its pages stay open and show an offline state. Its sidebar group shows 'offline'. Local pages keep working.
 - [ ] Removing a server in Settings → Servers closes only that machine's pages and sidebar entries.
-- [ ] After a relaunch, open pages from every machine come back. Pages saved by the previous version under per-daemon keys are migrated once and nothing is lost.
-- [ ] `activate(` and `fleet.activeDaemon` no longer appear in Ensemble/. No view reads a global `model.connection`.
-- [ ] `swift test --package-path Packages/EnsembleCore` passes, and the app builds with xcodebuild after `xcodegen generate`.
+- [x] After a relaunch, open pages from every machine come back. Pages saved by the previous version under per-daemon keys are migrated once and nothing is lost.
+- [x] `activate(` and `fleet.activeDaemon` no longer appear in Ensemble/. No view reads a global `model.connection`.
+- [x] `swift test --package-path Packages/EnsembleCore` passes, and the app builds with xcodebuild after `xcodegen generate`.
 
 ## Verification
 

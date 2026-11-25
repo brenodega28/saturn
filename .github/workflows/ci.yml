@@ -15,8 +15,8 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Test EnsembleCore
-        run: swift test --package-path Packages/EnsembleCore
+      - name: Test SaturnCore
+        run: swift test --package-path Packages/SaturnCore
 
-      - name: Build EnsembleUI
-        run: swift build --package-path Packages/EnsembleUI
+      - name: Build SaturnUI
+        run: swift build --package-path Packages/SaturnUI

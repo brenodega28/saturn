@@ -47,7 +47,7 @@ import Testing
     @Test func aRateLimitedTurnWaitsOutTheCooldownAndContinues() async throws {
         let harness = try await AgentHarness.make(mode: "ratelimit")
         defer { harness.cleanUp() }
-        harness.runtime.apiRetryDelays = [.milliseconds(400), .milliseconds(400)]
+        harness.runtime.apiRetryDelays = [.seconds(1), .seconds(1)]
         var replies: [String] = []
         harness.runtime.observeReplies { _, reply in replies.append(reply) }
 

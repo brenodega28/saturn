@@ -4,6 +4,7 @@ import Foundation
 struct LeadSendTarget: Hashable {
     let project: Int64
     let request: Int64?
+    var draft: UUID? = nil
 }
 
 struct DeliveringSend: Identifiable, Hashable {

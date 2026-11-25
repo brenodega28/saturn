@@ -74,7 +74,7 @@ extension DaemonWorkspace {
 
     func showChat(in project: Project) {
         guard let id = project.id else { return }
-        if let page = pages.pages.first(where: { if case .chat(_, ref(id)) = $0.kind { true } else { false } }) {
+        if let page = pages.pages.first(where: { $0.kind.isChat && $0.kind.project == ref(id) }) {
             requestPageProjectIDs.remove(id)
             pages.focus(page.id)
         } else {
@@ -89,8 +89,8 @@ extension DaemonWorkspace {
     func sendToLead(_ text: String, in project: Project) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        startNewLeadRequest(in: project)
-        Task { await sendLeadMessage(trimmed, lead: leadRole(in: project), to: nil, in: project) }
+        guard let draft = startNewLeadRequest(in: project) else { return }
+        deliverLeadMessage(PendingMessage(text: trimmed), lead: leadRole(in: project), to: nil, fromDraft: draft.id, in: project)
     }
 
     func openFile(_ path: String, in project: Project, line: Int? = nil) {

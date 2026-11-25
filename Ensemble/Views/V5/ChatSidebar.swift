@@ -3,15 +3,17 @@ import EnsembleUI
 import SwiftUI
 
 struct ChatSidebar: View {
-    static let tabKey = "sidebar.tab"
+    static let filterKey = "sidebar.projectFilter"
 
     @Environment(AppModel.self) private var model
-    @AppStorage(ChatSidebar.tabKey, store: AppDefaults.store) private var tab = SidebarTab.chats
+    @AppStorage(ChatSidebar.filterKey, store: AppDefaults.store) private var projectFilter = ProjectFilterKey.all
 
     var body: some View {
         @Bindable var model = model
         let summaries = model.chatSummaries()
-        VStack(alignment: .leading, spacing: 12) {
+        let filter = ProjectFilterKey.resolve(projectFilter, among: model.allOpenProjects.map { ProjectFilterBar.key($0.workspace, $0.project) })
+        let groups = ChatGroup.grouped(Self.only(filter, summaries.open), stage: \.stage, lastActivity: \.lastActivity)
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 2) {
                 Spacer()
                 AddProjectButton()
@@ -31,20 +33,16 @@ struct ChatSidebar: View {
             }
             .frame(height: 30)
             SearchChatsButton()
-            SidebarTabs(tab: $tab, badge: model.attentionCount(summaries.open))
+            if model.hasOpenProjects { ProjectFilterBar(filter: $projectFilter) }
             ScrollView {
-                switch tab {
-                case .chats:
-                    ChatList(open: summaries.open, closed: summaries.closed)
-                case .projects:
-                    ProjectCards(summaries: summaries.open)
-                }
+                ChatList(groups: groups, isEmpty: summaries.open.isEmpty && summaries.closed.isEmpty)
             }
             .scrollIndicators(.never)
+            FinishedPanel(finished: groups[.finished] ?? [], closed: Self.only(filter, summaries.closed))
             ForEach(model.systemAlerts) { SidebarAlertCard(alert: $0) }
             SidebarFooter()
         }
-        .padding(EdgeInsets(top: 14, leading: 12, bottom: 12, trailing: 12))
+        .padding(EdgeInsets(top: 14, leading: 10, bottom: 10, trailing: 10))
         .frame(width: Tokens.Size.sidebar)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Tokens.side)
@@ -53,11 +51,10 @@ struct ChatSidebar: View {
         .accessibilityLabel("Chats with the Lead")
         .onChange(of: model.attentionCount(summaries.open), initial: true) { _, count in model.updateDockBadge(attention: count) }
     }
-}
 
-enum SidebarTab: String {
-    case chats
-    case projects
+    private static func only(_ filter: String, _ summaries: [ChatSummary]) -> [ChatSummary] {
+        ProjectFilterKey.filter(summaries, by: filter) { ProjectFilterKey.make(daemon: $0.daemon, projectID: $0.project.id) }
+    }
 }
 
 private struct SearchChatsButton: View {
@@ -67,7 +64,7 @@ private struct SearchChatsButton: View {
         Button { model.openPalette() } label: {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(.system(size: 12, weight: .semibold))
-                Text("Search chats")
+                Text("Search")
                 Spacer()
                 Text("⌘K").font(Tokens.mono(11))
             }
@@ -79,59 +76,17 @@ private struct SearchChatsButton: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .help("Search chats and commands (⌘K)")
-    }
-}
-
-private struct SidebarTabs: View {
-    @Binding var tab: SidebarTab
-    let badge: Int
-
-    var body: some View {
-        HStack(spacing: 0) {
-            segment(.chats, "Chats", badge: badge)
-            segment(.projects, "Projects", badge: 0)
-        }
-        .padding(3)
-        .background(Tokens.fill, in: .rect(cornerRadius: 10, style: .continuous))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Sidebar")
-    }
-
-    private func segment(_ value: SidebarTab, _ title: String, badge: Int) -> some View {
-        let isOn = tab == value
-        return Button { tab = value } label: {
-            HStack(spacing: 6) {
-                Text(title).font(.system(size: 13, weight: .semibold))
-                if badge > 0 {
-                    Text("\(badge)")
-                        .font(.system(size: 10.5, weight: .bold))
-                        .foregroundStyle(Tokens.need)
-                        .padding(.horizontal, 5)
-                        .frame(minWidth: 16, minHeight: 16)
-                        .background(Tokens.needBackground, in: Capsule())
-                }
-            }
-            .foregroundStyle(isOn ? Tokens.text : Tokens.text2)
-            .frame(maxWidth: .infinity)
-            .frame(height: 30)
-            .background(isOn ? Tokens.tabOn : .clear, in: .rect(cornerRadius: 8, style: .continuous))
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isOn ? [.isSelected, .isButton] : .isButton)
-        .accessibilityValue(badge > 0 ? "\(badge) need you" : "")
+        .help("Search chats, projects and commands (⌘K)")
     }
 }
 
 private struct ChatList: View {
     @Environment(AppModel.self) private var model
-    let open: [ChatSummary]
-    let closed: [ChatSummary]
-    @AppStorage("sidebar.closedExpanded", store: AppDefaults.store) private var showsClosed = false
+    let groups: [ChatGroup: [ChatSummary]]
+    let isEmpty: Bool
 
     var body: some View {
-        if open.isEmpty && closed.isEmpty {
+        if isEmpty {
             SidebarEmptyState(
                 title: model.hasOpenProjects ? "No chats yet" : "No projects yet",
                 message: !model.hasOpenProjects
@@ -142,40 +97,13 @@ private struct ChatList: View {
                 if model.hasOpenProjects { model.requestNewChat() } else { model.isOpenPanelPresented = true }
             }
         } else {
-            LazyVStack(alignment: .leading, spacing: 3) {
-                ForEach(open) { summary in ChatRow(summary: summary).inWorkspace(summary.daemon) }
-                if !closed.isEmpty {
-                    Button { showsClosed.toggle() } label: {
-                        HStack(spacing: 6) {
-                            Text("Closed \(closed.count)")
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 9, weight: .bold))
-                                .rotationEffect(.degrees(showsClosed ? 0 : -90))
-                            Spacer()
-                        }
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(Tokens.text2)
-                        .padding(EdgeInsets(top: 12, leading: 10, bottom: 4, trailing: 10))
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityValue(showsClosed ? "expanded" : "collapsed")
-                    if showsClosed {
-                        ForEach(closed.prefix(Self.closedLimit)) { summary in ClosedChatRow(summary: summary).inWorkspace(summary.daemon) }
-                        if closed.count > Self.closedLimit {
-                            Text("Older closed chats are in ⌘K search.")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(Tokens.text3)
-                                .padding(.horizontal, 10)
-                                .padding(.top, 4)
-                        }
-                    }
+            LazyVStack(alignment: .leading, spacing: 8) {
+                ForEach([ChatGroup.needsYou, .inProgress, .notStarted], id: \.self) { group in
+                    StatusGroup(group: group, summaries: groups[group] ?? [])
                 }
             }
         }
     }
-
-    static let closedLimit = 24
 }
 
 private struct SidebarEmptyState: View {
@@ -206,49 +134,48 @@ struct ChatRow: View {
     var body: some View {
         let isSelected = summary.chat.id.map { model.activePage?.kind.shows(chat: $0, on: summary.daemon) == true } ?? false
         Button { workspace.openChat(summary.chat) } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    if summary.isUnread {
-                        Circle().fill(Tokens.accent).frame(width: 7, height: 7).accessibilityLabel("New activity")
+            HStack(alignment: .top, spacing: 9) {
+                StageGlyph(stage: summary.stage).padding(.top, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if summary.isUnread {
+                            Circle().fill(Tokens.accent).frame(width: 7, height: 7).accessibilityLabel("New activity")
+                        }
+                        if isRenaming {
+                            TextField("Chat name", text: $draftTitle)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .focused($renameFocused)
+                                .onSubmit(commitRename)
+                                .onExitCommand { isRenaming = false }
+                        } else {
+                            Text(summary.chat.title)
+                                .font(.system(size: 13.5, weight: titleWeight))
+                                .foregroundStyle(Tokens.text)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Text(ChatTime.label(summary.lastActivity))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Tokens.text3)
+                            .lineLimit(1)
+                            .fixedSize()
                     }
-                    if isRenaming {
-                        TextField("Chat name", text: $draftTitle)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 14, weight: .semibold))
-                            .focused($renameFocused)
-                            .onSubmit(commitRename)
-                            .onExitCommand { isRenaming = false }
-                    } else {
-                        Text(summary.chat.title)
-                            .font(.system(size: 14, weight: summary.isUnread ? .bold : .semibold))
-                            .foregroundStyle(Tokens.text)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    Text(ChatTime.label(summary.lastActivity))
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Tokens.text2)
-                }
-                HStack(spacing: 8) {
-                    HStack(spacing: 5) {
-                        Circle().fill(summary.stage.color).frame(width: 6, height: 6)
-                        Text(summary.stage.title).lineLimit(1)
-                    }
-                    .foregroundStyle(summary.stage.color)
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         ProjectTile(project: summary.project, size: 13)
-                        Text(summary.project.name).lineLimit(1)
+                        Text(summary.project.name).lineLimit(1).layoutPriority(1)
+                        Text("·").foregroundStyle(Tokens.text3)
+                        MachineLabel(workspace: workspace, size: 12, showsLocal: true)
+                        Spacer(minLength: 4)
+                        WorkerStack(workers: summary.workers, project: summary.project, size: 16)
                     }
+                    .font(.system(size: 12))
                     .foregroundStyle(Tokens.text2)
-                    MachineLabel(workspace: workspace, size: 11.5)
-                    Spacer(minLength: 4)
-                    WorkerStack(workers: summary.workers, project: summary.project)
                 }
-                .font(.system(size: 12))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(isSelected ? Tokens.selection : isHovered ? Tokens.hover : .clear, in: .rect(cornerRadius: 12, style: .continuous))
+            .padding(EdgeInsets(top: 7, leading: 10, bottom: 7, trailing: 8))
+            .background(isSelected ? Tokens.selection : isHovered ? Tokens.hover : .clear, in: .rect(cornerRadius: 9, style: .continuous))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -257,6 +184,10 @@ struct ChatRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(summary.chat.title), \(summary.stage.title), \(summary.project.name)\(workspace.isRemote ? ", on \(workspace.displayName)" : "")")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var titleWeight: Font.Weight {
+        summary.isUnread ? .bold : summary.stage == .finished ? .medium : .semibold
     }
 
     private func startRename() {
@@ -295,7 +226,7 @@ struct ChatRowMenu: View {
     }
 }
 
-private struct ClosedChatRow: View {
+struct ClosedChatRow: View {
     @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let summary: ChatSummary

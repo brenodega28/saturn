@@ -28,14 +28,14 @@ struct ChatStageTests {
     @Test func approvalsQuestionsPermissionsAndSpecsNeedYou() {
         #expect(ChatStage.of(Facts(latestRun: run(.waitingOnYou), hold: hold(.planApproval))) == .needsYou)
         #expect(ChatStage.of(Facts(latestRun: run(.waitingOnYou), hold: hold(.gates))) == .needsYou)
+        #expect(ChatStage.of(Facts(latestRun: run(.waitingOnYou), hold: hold(.approval))) == .needsYou)
         #expect(ChatStage.of(Facts(openRequests: [.question])) == .needsYou)
         #expect(ChatStage.of(Facts(pendingPermissions: 1)) == .needsYou)
         #expect(ChatStage.of(Facts(hasOpenProposal: true)) == .needsYou)
         #expect(ChatStage.of(Facts(openRequests: [.notice])) == .idle)
     }
 
-    @Test func theFinalApprovalAndReviewStepsAreInReview() {
-        #expect(ChatStage.of(Facts(latestRun: run(.waitingOnYou), hold: hold(.approval))) == .inReview)
+    @Test func activeReviewStepsAreInReview() {
         let review = WorkflowStep(id: "review", type: .agent, agent: .checker)
         #expect(ChatStage.of(Facts(latestRun: run(.running), currentStep: review)) == .inReview)
         #expect(ChatStage.of(Facts(latestRun: run(.running), currentStep: WorkflowStep(id: "gates", type: .gates))) == .inReview)
@@ -45,7 +45,7 @@ struct ChatStageTests {
         #expect(ChatStage.of(Facts(closeReason: .done, isClosed: true, isFinished: true)) == .done)
         #expect(ChatStage.of(Facts(isFinished: true, latestRun: run(.failed))) == .stuck)
         #expect(ChatStage.of(Facts(isFinished: true, openRequests: [.question])) == .needsYou)
-        #expect(ChatStage.of(Facts(isFinished: true, latestRun: run(.waitingOnYou), hold: hold(.approval))) == .inReview)
+        #expect(ChatStage.of(Facts(isFinished: true, latestRun: run(.waitingOnYou), hold: hold(.approval))) == .needsYou)
         #expect(ChatStage.of(Facts(isFinished: true, leadIsWorking: true)) == .building)
         #expect(ChatStage.of(Facts(isFinished: true, latestRun: run(.cancelled))) == .finished)
     }

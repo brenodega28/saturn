@@ -285,7 +285,7 @@ struct ChatLogEntry: Identifiable, Hashable {
             case .stuck: Tokens.stuck
             case .build: Tokens.build
             case .done: Tokens.done
-            case .idle: Tokens.text2
+            case .idle: Tokens.idle
             }
         }
 

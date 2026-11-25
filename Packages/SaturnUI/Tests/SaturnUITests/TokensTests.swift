@@ -51,20 +51,21 @@ struct TokensTests {
             ("primaryForeground", Tokens.primaryForeground, rgba(0x0A0A0C), rgba(0xFFFFFF)),
             ("link", Tokens.link, rgba(0x8EC5FF), rgba(0x0066CC)),
             ("accent", Tokens.accent, rgba(0x8EC5FF), rgba(0x0A84FF)),
-            ("need", Tokens.need, rgba(0xFF9F5A), rgba(0xC2410C)),
-            ("stuck", Tokens.stuck, rgba(0xFF7B72), rgba(0xC7000F)),
-            ("build", Tokens.build, rgba(0x8EC5FF), rgba(0x0058B8)),
-            ("review", Tokens.review, rgba(0xF5D76E), rgba(0x946200)),
-            ("done", Tokens.done, rgba(0x5CD68A), rgba(0x17803A)),
-            ("needBackground", Tokens.needBackground, rgba(0xFF7A2F, 0.08), rgba(0xEA580C, 0.07)),
-            ("needLine", Tokens.needLine, rgba(0xFF7A2F, 0.4), rgba(0xEA580C, 0.38)),
-            ("stuckBackground", Tokens.stuckBackground, rgba(0xFF453A, 0.09), rgba(0xD70015, 0.06)),
-            ("stuckLine", Tokens.stuckLine, rgba(0xFF453A, 0.4), rgba(0xD70015, 0.35)),
-            ("buildBackground", Tokens.buildBackground, rgba(0x8EC5FF, 0.12), rgba(0x0066CC, 0.08)),
-            ("reviewBackground", Tokens.reviewBackground, rgba(0xF5D76E, 0.11), rgba(0xCA8A04, 0.1)),
-            ("doneBackground", Tokens.doneBackground, rgba(0x5CD68A, 0.12), rgba(0x17803A, 0.08)),
-            ("doneLine", Tokens.doneLine, rgba(0x5CD68A, 0.35), rgba(0x17803A, 0.3)),
-            ("danger", Tokens.danger, rgba(0xFF7B72), rgba(0xC7000F)),
+            ("need", Tokens.need, rgba(0xFF7EB3), rgba(0xE7005F)),
+            ("stuck", Tokens.stuck, rgba(0xFF5C8A), rgba(0xE80042)),
+            ("build", Tokens.build, rgba(0xA99BFF), rgba(0x7059FF)),
+            ("review", Tokens.review, rgba(0xC9A7FF), rgba(0x8F49FF)),
+            ("done", Tokens.done, rgba(0x4FD1C5), rgba(0x228178)),
+            ("idle", Tokens.idle, rgba(0x8C9BB8), rgba(0x60759C)),
+            ("needBackground", Tokens.needBackground, rgba(0xFF7EB3, 0.08), rgba(0xE7005F, 0.07)),
+            ("needLine", Tokens.needLine, rgba(0xFF7EB3, 0.4), rgba(0xE7005F, 0.38)),
+            ("stuckBackground", Tokens.stuckBackground, rgba(0xFF5C8A, 0.09), rgba(0xE80042, 0.06)),
+            ("stuckLine", Tokens.stuckLine, rgba(0xFF5C8A, 0.4), rgba(0xE80042, 0.35)),
+            ("buildBackground", Tokens.buildBackground, rgba(0xA99BFF, 0.12), rgba(0x7059FF, 0.08)),
+            ("reviewBackground", Tokens.reviewBackground, rgba(0xC9A7FF, 0.11), rgba(0x8F49FF, 0.1)),
+            ("doneBackground", Tokens.doneBackground, rgba(0x4FD1C5, 0.12), rgba(0x228178, 0.08)),
+            ("doneLine", Tokens.doneLine, rgba(0x4FD1C5, 0.35), rgba(0x228178, 0.3)),
+            ("danger", Tokens.danger, rgba(0xFF5C8A), rgba(0xE80042)),
             ("live", Tokens.live, rgba(0x30D158), rgba(0x28A745)),
             ("scrim", Tokens.scrim, rgba(0x000000, 0.55), rgba(0x000000, 0.22)),
             ("shadow", Tokens.shadow, rgba(0x000000, 0.7), rgba(0x000000, 0.16)),
@@ -76,7 +77,24 @@ struct TokensTests {
 
     @Test func themeAccentFollowsTheToken() {
         #expect(matches(Theme.accent, dark: rgba(0x8EC5FF), light: rgba(0x0A84FF)))
-        #expect(matches(Theme.danger, dark: rgba(0xFF7B72), light: rgba(0xC7000F)))
+        #expect(matches(Theme.danger, dark: rgba(0xFF5C8A), light: rgba(0xE80042)))
+        #expect(matches(Theme.neutral, dark: rgba(0x8C9BB8), light: rgba(0x60759C)))
+    }
+
+    @Test func buildingIsNotTheAccent() {
+        #expect(!matches(Tokens.build, dark: rgba(0x8EC5FF), light: rgba(0x0A84FF)))
+    }
+
+    @Test func lightStatusColoursReadOnWhite() {
+        func linear(_ value: Int) -> Double {
+            let v = Double(value) / 255
+            return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+        }
+        for (name, color) in [("need", Tokens.need), ("stuck", Tokens.stuck), ("build", Tokens.build), ("review", Tokens.review), ("done", Tokens.done), ("idle", Tokens.idle)] {
+            let c = resolved(color, .aqua)
+            let luminance = 0.2126 * linear(c.red) + 0.7152 * linear(c.green) + 0.0722 * linear(c.blue)
+            #expect(1.05 / (luminance + 0.05) >= 4.5, "\(name)")
+        }
     }
 
     @Test func monoIsSFMono() {

@@ -21,7 +21,7 @@ public enum Theme {
     public static let warning = Tokens.need
     public static let info = Tokens.build
     public static let paused = Tokens.review
-    public static let neutral = Color(hex: 0x98989F)
+    public static let neutral = Tokens.idle
     public static let danger = Tokens.danger
     public static let memory = Color(hex: 0xD9B3FF)
 

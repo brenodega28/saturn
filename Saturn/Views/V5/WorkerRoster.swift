@@ -103,7 +103,8 @@ enum WorkerRow {
         case .waitingOnYou: Tokens.need
         case .stuck, .failed: Tokens.stuck
         case .done: Tokens.done
-        case .queued, .idle, .stopped: Tokens.text2
+        case .queued, .idle: Tokens.idle
+        case .stopped: Tokens.text2
         }
     }
 }

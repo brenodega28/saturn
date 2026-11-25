@@ -700,7 +700,10 @@ private struct ProjectAgents: View {
             SectionTitle(title: "Agents") {
                 Text(types.isEmpty ? "0" : "\(types.count) · \(total) agents").fontWeight(.regular).foregroundStyle(Tokens.text3)
                 Spacer(minLength: 4)
-                LinkButton(title: "Manage", label: "Manage agents") { workspace.open(.agents, in: project) }
+                LinkButton(title: "Manage", label: "Manage agents") {
+                    workspace.setAgentTypeFilter(nil, in: project)
+                    workspace.open(.agents, in: project)
+                }
             }
             if types.isEmpty {
                 Text("No agents yet. Runs start them when the work needs them.")

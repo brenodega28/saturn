@@ -80,13 +80,28 @@ private enum LegacyPageKind: Codable, Hashable, Sendable {
 typealias MainPage = Page<MainPageKind>
 
 enum SideBarTab: String, Codable, CaseIterable {
-    case summary
+    case task
+    case project
     case log
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SideBarTab(rawValue: raw) ?? .task
+    }
 
     var title: String {
         switch self {
-        case .summary: "Summary"
+        case .task: "Task"
+        case .project: "Project"
         case .log: "Log"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .task: "checklist"
+        case .project: "folder"
+        case .log: "list.bullet.rectangle"
         }
     }
 }
@@ -94,7 +109,7 @@ enum SideBarTab: String, Codable, CaseIterable {
 @MainActor
 @Observable
 final class MainPages {
-    private struct Saved: Codable {
+    struct Saved: Codable {
         var list: PageList<MainPageKind>
         var isSideBarOpen: Bool
         var sideBarTab: SideBarTab
@@ -113,7 +128,7 @@ final class MainPages {
     var isSideBarOpen = true {
         didSet { save() }
     }
-    var sideBarTab = SideBarTab.summary {
+    var sideBarTab = SideBarTab.task {
         didSet { save() }
     }
     @ObservationIgnored private let storageKey: String
@@ -219,7 +234,7 @@ final class MainPages {
         let saved = AppDefaults.store.data(forKey: storageKey).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) }
         list = saved.map { PageList(pages: $0.list.pages, activeID: $0.list.activeID) } ?? PageList()
         isSideBarOpen = saved?.isSideBarOpen ?? true
-        sideBarTab = saved?.sideBarTab ?? .summary
+        sideBarTab = saved?.sideBarTab ?? .task
     }
 
     private func migrate(_ daemons: [DaemonID]) {

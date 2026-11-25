@@ -8,14 +8,33 @@ struct LeadComposer: View {
     @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let request: Chat?
-    @State private var text = ""
-    @State private var attachments: [ChatAttachment] = []
+    var draftID: UUID?
+    @State private var looseMessage = PendingMessage(text: "")
     @State private var isDropTargeted = false
     @State private var files: [String] = []
 
+    private var slot: DraftSlot? {
+        request?.id.map(DraftSlot.chat) ?? draftID.map(DraftSlot.newChat)
+    }
+
+    private var draft: Binding<PendingMessage> {
+        guard let slot else { return $looseMessage }
+        return Binding { workspace.draftMessage(slot) } set: { workspace.setDraftMessage($0, for: slot) }
+    }
+
+    private var text: String {
+        get { draft.wrappedValue.text }
+        nonmutating set { draft.wrappedValue.text = newValue }
+    }
+
+    private var attachments: [ChatAttachment] {
+        get { draft.wrappedValue.attachments }
+        nonmutating set { draft.wrappedValue.attachments = newValue }
+    }
+
     var body: some View {
         let lead = workspace.chatLeadRole(in: project)
-        let sendTarget = workspace.leadSendTarget(for: request, in: project)
+        let sendTarget = workspace.leadSendTarget(for: request, draft: draftID, in: project)
         VStack(alignment: .leading, spacing: 8) {
             suggestions
             composer(lead: lead)
@@ -28,6 +47,7 @@ struct LeadComposer: View {
             model.composerPrefill = nil
             model.composerFocusToken += 1
         }
+        .onDisappear { workspace.draftStore.flush() }
     }
 
     @ViewBuilder
@@ -52,8 +72,8 @@ struct LeadComposer: View {
         let isBusy = workspace.isLeadBusy(request)
         return VStack(alignment: .leading, spacing: 10) {
             ChatComposerInput(
-                text: $text,
-                attachments: $attachments,
+                text: draft.text,
+                attachments: draft.attachments,
                 isDropTargeted: $isDropTargeted,
                 placeholder: placeholder(isBusy: isBusy),
                 accessibilityLabel: request == nil ? "Describe what you need" : "Message the Lead",
@@ -106,7 +126,7 @@ struct LeadComposer: View {
         .background(Tokens.raised, in: .rect(cornerRadius: Tokens.Radius.composer, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Tokens.Radius.composer, style: .continuous).strokeBorder(Tokens.hair2))
         .shadow(color: Tokens.shadow.opacity(0.15), radius: 8, y: 4)
-        .chatAttachmentDrop($attachments, isTargeted: $isDropTargeted)
+        .chatAttachmentDrop(draft.attachments, isTargeted: $isDropTargeted)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Message the Lead")
     }
@@ -130,16 +150,13 @@ struct LeadComposer: View {
             workspace.runLocalCommand(command, in: request)
             return
         }
-        let message = PendingMessage(text: text, attachments: attachments)
-        text = ""
-        attachments = []
-        workspace.deliverLeadMessage(message, lead: lead, to: request, in: project)
+        let message = draft.wrappedValue
+        draft.wrappedValue = PendingMessage(text: "")
+        workspace.deliverLeadMessage(message, lead: lead, to: request, fromDraft: draftID, in: project)
     }
 
     private func restore(_ message: PendingMessage) {
-        let merged = PendingMessage(text: text, attachments: attachments).appending(message)
-        text = merged.text
-        attachments = merged.attachments
+        draft.wrappedValue = draft.wrappedValue.appending(message)
     }
 
     private func attach() {

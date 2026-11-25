@@ -146,7 +146,7 @@ private struct PageTab: View {
     @ViewBuilder
     private var icon: some View {
         switch page.kind {
-        case .chat(_, let ref):
+        case .chat(_, let ref), .newChat(_, let ref):
             if let project = workspace?.project(withID: ref.id) { ProjectTile(project: project, size: 16) }
         default:
             Image(systemName: Self.symbol(for: page.kind))
@@ -165,11 +165,15 @@ private struct PageTab: View {
             Divider()
             ChatRowMenu(chat: chat, rename: {}).environment(workspace)
         }
+        if let draftID = page.kind.draftID, let workspace, let draft = workspace.draftStore.newDraft(id: draftID) {
+            Divider()
+            Button("Delete draft", role: .destructive) { workspace.deleteDraft(draft) }
+        }
     }
 
     static func symbol(for kind: MainPageKind) -> String {
         switch kind {
-        case .chat: "bubble.left"
+        case .chat, .newChat: "bubble.left"
         case .terminal: "terminal"
         case .code: "chevron.left.forwardslash.chevron.right"
         case .tool(let tool, _): tool.systemImage

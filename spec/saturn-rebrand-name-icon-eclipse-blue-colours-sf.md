@@ -1,6 +1,6 @@
 ---
 title: "Saturn rebrand: name, icon, Eclipse Blue colours, SF type"
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Rebrand Dev, reason: "One builder: the rename moves almost every file, so splitting the theme/icon work from it would only create merge conflicts"}
@@ -34,15 +34,15 @@ Rebrand the app from Ensemble to Saturn using the Saturn design canvas (pages "S
 
 ## Acceptance criteria
 
-- [ ] `git grep -i ensemble` returns only the intentional legacy-compat hits: the migration code, the ensemble:// alias, the ENSEMBLE_DATA_DIR fallback, and the old LaunchAgent label used for cleanup
-- [ ] `xcodegen generate` produces Saturn.xcodeproj; the Saturn scheme builds; the built app is Saturn.app with display name Saturn and embeds Helpers/saturnd
-- [ ] `swift test --package-path Packages/SaturnCore` and the SaturnUI tests pass (TokensTests updated to the new values)
-- [ ] Menus, About, window titles, notifications, Dock, alerts and onboarding copy all say Saturn
-- [ ] Dock/Finder icon is the Eclipse mark at every size in the appiconset (16, 32, 128, 256, 512 @1x/@2x)
-- [ ] Tokens.swift values match the Eclipse Blue table exactly for both dark and light
-- [ ] No Font.custom / NSFont(name:) / JetBrains Mono / design: .rounded left; mono text uses SF Mono via design .monospaced
+- [x] `git grep -i ensemble` returns only the intentional legacy-compat hits: the migration code, the ensemble:// alias, the ENSEMBLE_DATA_DIR fallback, and the old LaunchAgent label used for cleanup
+- [x] `xcodegen generate` produces Saturn.xcodeproj; the Saturn scheme builds; the built app is Saturn.app with display name Saturn and embeds Helpers/saturnd
+- [x] `swift test --package-path Packages/SaturnCore` and the SaturnUI tests pass (TokensTests updated to the new values)
+- [x] Menus, About, window titles, notifications, Dock, alerts and onboarding copy all say Saturn
+- [x] Dock/Finder icon is the Eclipse mark at every size in the appiconset (16, 32, 128, 256, 512 @1x/@2x)
+- [x] Tokens.swift values match the Eclipse Blue table exactly for both dark and light
+- [x] No Font.custom / NSFont(name:) / JetBrains Mono / design: .rounded left; mono text uses SF Mono via design .monospaced
 - [ ] Upgrade: with an existing Ensemble install, first launch of Saturn keeps projects, chats, settings and Keychain secrets. Projects' .ensemble/ folders become .saturn/. The old ensembled LaunchAgent is gone and saturnd runs. A second launch does nothing further
-- [ ] Agents spawned by the app get the MCP server named saturn and their prompts reference mcp__saturn__* tools
+- [x] Agents spawned by the app get the MCP server named saturn and their prompts reference mcp__saturn__* tools
 - [ ] Old ensemble://chat/<id> links still open the chat
 
 ## Verification

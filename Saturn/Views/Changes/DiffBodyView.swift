@@ -3,35 +3,26 @@ import SaturnUI
 import SwiftUI
 
 enum DiffPalette {
-    static let addedBackground = Color(red: 46 / 255, green: 160 / 255, blue: 67 / 255).opacity(0.14)
-    static let addedGutter = Color(red: 46 / 255, green: 160 / 255, blue: 67 / 255).opacity(0.24)
-    static let removedBackground = Color(red: 248 / 255, green: 81 / 255, blue: 73 / 255).opacity(0.13)
-    static let removedGutter = Color(red: 248 / 255, green: 81 / 255, blue: 73 / 255).opacity(0.22)
-    static let addedSign = Color(hex: 0x4BD97B)
-    static let removedSign = Color(hex: 0xFF7A85)
+    static let addedBackground = Tokens.doneBackground
+    static let removedBackground = Tokens.stuckBackground
+    static let addedSign = Tokens.done
+    static let removedSign = Tokens.danger
     static let emptySide = Tokens.hover
-    static let hunkText = Color(red: 160 / 255, green: 190 / 255, blue: 1).opacity(0.85)
-    static let hunkBackground = Color(red: 56 / 255, green: 139 / 255, blue: 253 / 255).opacity(0.08)
-    static let pin = Color(hex: 0xFFD60A)
-    static let pinTitle = Color(hex: 0xFFE266)
-    static let pinCard = Color.adaptive(dark: 0x24231C, light: 0xFFF8E1)
+    static let hunkText = Tokens.text3
+    static let hunkBackground = Tokens.fill
+    static let pin = Tokens.review
+    static let pinTitle = Tokens.review
+    static let pinCard = Tokens.reviewBackground
+    static let pinLine = Tokens.review.opacity(0.3)
     static let lineNumber = Tokens.text3
-    static let cardBackground = Tokens.code
-    static let conflict = Color(hex: 0xFF8A80)
-    static let selection = Color(red: 56 / 255, green: 139 / 255, blue: 253 / 255).opacity(0.2)
+    static let cardBackground = Tokens.raised
+    static let conflict = Tokens.danger
+    static let selection = Tokens.selection
 
     static func background(_ kind: PatchLine.Kind) -> Color {
         switch kind {
         case .added: addedBackground
         case .removed: removedBackground
-        case .context: .clear
-        }
-    }
-
-    static func gutter(_ kind: PatchLine.Kind) -> Color {
-        switch kind {
-        case .added: addedGutter
-        case .removed: removedGutter
         case .context: .clear
         }
     }
@@ -54,7 +45,7 @@ struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
     @ViewBuilder let pinContent: (Pin) -> PinContent
     @ViewBuilder let composer: () -> ComposerContent
 
-    private static var codeFont: Font { .system(size: 12.5, design: .monospaced) }
+    private static var codeFont: Font { Tokens.mono(12) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -108,12 +99,9 @@ struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
             pinContent(pin)
         case .line(let line, let pinned):
             HStack(alignment: .top, spacing: 0) {
-                HStack(alignment: .top, spacing: 0) {
-                    lineNumber(line.oldLine, kind: line.kind, width: 52)
-                    lineNumber(line.newLine, kind: line.kind, width: 52)
-                }
-                .modifier(LineGutterTap(target: line.commentTarget, onSelect: onSelectLine))
-                signView(line.kind, width: 24)
+                lineNumber(line.kind == .removed ? line.oldLine : line.newLine, width: 48)
+                    .modifier(LineGutterTap(target: line.commentTarget, onSelect: onSelectLine))
+                signView(line.kind, width: 16)
                 codeText(line)
             }
             .background(DiffPalette.background(line.kind))
@@ -148,12 +136,12 @@ struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
     private func splitSide(_ side: SplitSide?, isLeft: Bool) -> some View {
         HStack(alignment: .top, spacing: 0) {
             if let side {
-                lineNumber(isLeft ? side.line.oldLine : side.line.newLine, kind: side.line.kind, width: 48)
+                lineNumber(isLeft ? side.line.oldLine : side.line.newLine, width: 48)
                     .modifier(LineGutterTap(target: side.line.commentTarget, onSelect: onSelectLine))
-                signView(side.line.kind, width: 22)
+                signView(side.line.kind, width: 16)
                 codeText(side.line)
             } else {
-                Color.clear.frame(width: 70)
+                Color.clear.frame(width: 64)
                 Spacer(minLength: 0)
             }
         }
@@ -171,24 +159,24 @@ struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
 
     private func hunkHeader(_ header: String) -> some View {
         Text(header)
-            .font(.system(size: 12, design: .monospaced))
+            .font(Tokens.mono(11.5))
             .foregroundStyle(DiffPalette.hunkText)
             .lineLimit(1)
             .truncationMode(.tail)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 6)
+            .padding(.leading, 64)
+            .padding(.trailing, 16)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(DiffPalette.hunkBackground)
     }
 
-    private func lineNumber(_ number: Int?, kind: PatchLine.Kind, width: CGFloat) -> some View {
+    private func lineNumber(_ number: Int?, width: CGFloat) -> some View {
         Text(number.map(String.init) ?? "")
             .foregroundStyle(DiffPalette.lineNumber)
             .padding(.trailing, 10)
             .frame(width: width, alignment: .trailing)
             .frame(maxHeight: .infinity, alignment: .top)
-            .padding(.vertical, 2)
-            .background(DiffPalette.gutter(kind))
+            .padding(.vertical, 3)
             .accessibilityHidden(true)
     }
 
@@ -196,8 +184,8 @@ struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
         let (sign, color) = DiffPalette.sign(kind)
         return Text(sign)
             .foregroundStyle(color)
-            .frame(width: width)
-            .padding(.vertical, 2)
+            .frame(width: width, alignment: .leading)
+            .padding(.vertical, 3)
             .accessibilityHidden(true)
     }
 
@@ -213,7 +201,7 @@ struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
                     .accessibilityLabel("No newline at end of file")
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
         .padding(.trailing, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -221,7 +209,7 @@ struct DiffBodyView<PinContent: View, ComposerContent: View>: View {
     @ViewBuilder
     private func marker(_ pinned: Bool) -> some View {
         if pinned {
-            Rectangle().fill(DiffPalette.pin).frame(width: 3)
+            Rectangle().fill(DiffPalette.pin).frame(width: 2)
         }
     }
 

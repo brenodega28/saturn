@@ -12,21 +12,23 @@ struct RemoteHostCard: View {
         let destination = project.host.map(SSHDestination.displayName) ?? ""
         let tunnel: Int? = nil
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "server.rack").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
-                Text("SSH host").font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(status.error != nil ? Tokens.stuck : status.info != nil ? Tokens.live : Tokens.idle)
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text(statusText(status, destination: destination)).font(.system(size: 13))
                 Spacer()
-                if status.isConnecting {
-                    ProgressView().controlSize(.small)
-                } else if status.error == nil, status.info != nil {
-                    Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.successText).font(.system(size: 12))
-                }
+                if status.isConnecting { ProgressView().controlSize(.small) }
                 Button("Move to this server’s daemon") { Task { await model.moveToServerDaemon(project) } }
-                    .buttonStyle(.pill)
+                    .buttonStyle(SectionButtonStyle())
                     .help("Reopen this project on the Saturn daemon running on the server. Its history here stays read-only.")
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Tokens.fill, in: .rect(cornerRadius: 12, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 6) {
+            SettingsRows {
                 row("Host", destination)
                 row("System", status.info?.system ?? "—")
                 row("git", status.info.map { $0.gitPath ?? "Not found on the host" } ?? "—")
@@ -41,37 +43,36 @@ struct RemoteHostCard: View {
                 notice("git on \(destination) has no user name or email, so agents’ commits and merges will fail. Set them there with `git config --global user.name` and `git config --global user.email`.")
             }
             if let pulled = status.filesPulledAt {
-                Text("Project files (.saturn/, specs, AGENTS.md, skills) synced \(pulled.formatted(.relative(presentation: .named))). Changes made in Saturn reach the host within seconds; changes on the host show up when you reconnect or come back to Saturn.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                SettingsNote("Project files (.saturn/, specs, AGENTS.md, skills) synced \(pulled.formatted(.relative(presentation: .named))). Changes made in Saturn reach the host within seconds; changes on the host show up when you reconnect or come back to Saturn.")
             }
             if let recovery = workspace.state(for: project).recovery, !recovery.isClean {
-                Text(recoverySummary(recovery)).font(.system(size: 12)).foregroundStyle(Theme.warning)
+                SettingsNote(recoverySummary(recovery), color: Tokens.need)
             }
             ForEach([status.syncError, status.error].compactMap(\.self), id: \.self) { message in
                 Text(message)
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.danger)
+                    .foregroundStyle(Tokens.danger)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("The run bar starts the app on the host and forwards the ports it listens on to this Mac, so localhost links work here.")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.tertiaryText)
+            SettingsNote("The run bar starts the app on the host and forwards the ports it listens on to this Mac, so localhost links work here.", color: Tokens.text3)
         }
-        .padding(16)
-        .card(cornerRadius: 16)
+    }
+
+    private func statusText(_ status: RemoteProjectStatus, destination: String) -> String {
+        if status.isConnecting { return "Connecting to \(destination)…" }
+        if status.error != nil { return "Can’t reach \(destination)" }
+        if status.info != nil { return "Connected · \(project.name) runs on \(destination)" }
+        return "\(project.name) runs on \(destination)"
     }
 
     private func row(_ title: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.secondaryText)
-                .frame(width: 90, alignment: .leading)
+        HStack(spacing: 14) {
+            SettingsRowLabel(title: title)
             Text(value)
-                .font(Theme.monospaced)
+                .font(Tokens.mono(12.5))
+                .foregroundStyle(Tokens.text2)
+                .frame(width: 320, alignment: .leading)
                 .textSelection(.enabled)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -82,7 +83,7 @@ struct RemoteHostCard: View {
         Label {
             Text(LocalizedStringKey(text)).fixedSize(horizontal: false, vertical: true)
         } icon: {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Tokens.need)
         }
         .font(.system(size: 12))
     }

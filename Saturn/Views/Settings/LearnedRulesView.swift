@@ -25,80 +25,73 @@ struct LearnedRulesView: View {
     }
 
     private var instructionsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(AgentInstructions.fileName).font(.system(size: 15, weight: .semibold))
-                Spacer()
+        SettingsRows {
+            HStack(spacing: 14) {
+                SettingsRowLabel(
+                    title: AgentInstructions.fileName,
+                    detail: status.hasAgentsFile
+                        ? "\(status.lineCount) lines. Agents read it through CLAUDE.md\(status.claudePointsToAgents ? "" : ", which doesn’t point to it yet")."
+                        : "The one short file every agent reads: exact commands, non-default conventions and gotchas. Nothing agents can work out from the code.",
+                    monospaced: true
+                )
                 if status.hasAgentsFile {
                     Button("Open") { NSWorkspace.shared.open(project.filesRoot.appending(path: AgentInstructions.fileName)) }
-                        .buttonStyle(.pill)
+                        .buttonStyle(SectionButtonStyle())
                 }
                 if !status.isSetUp {
                     Button(status.hasAgentsFile ? "Point CLAUDE.md at It" : "Set Up AGENTS.md") { setUpInstructions() }
-                        .buttonStyle(.pill)
+                        .buttonStyle(SectionButtonStyle())
                         .help("Writes AGENTS.md (or moves CLAUDE.md into it), points CLAUDE.md at it and commits both")
                 }
             }
-            Text(status.hasAgentsFile
-                ? "\(status.lineCount) lines. Agents read it through CLAUDE.md\(status.claudePointsToAgents ? "" : ", which doesn’t point to it yet")."
-                : "The one short file every agent reads: exact commands, non-default conventions and gotchas. Nothing agents can work out from the code.")
-                .font(.system(size: 12.5))
-                .foregroundStyle(Theme.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
             if status.isTooLong {
-                Label("It’s longer than a page. Long instruction files get ignored: move rules that matter into checks or protected paths, and cut what agents can infer.", systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.warning)
-                    .fixedSize(horizontal: false, vertical: true)
+                SettingsWarning("It’s longer than a page. Long instruction files get ignored: move rules that matter into checks or protected paths, and cut what agents can infer.")
             }
             if let message {
-                Text(message).font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+                SettingsNote(message)
             }
         }
-        .padding(16)
-        .card(cornerRadius: 16)
     }
 
+    @ViewBuilder
     private var correctionsCard: some View {
         let open = corrections.filter { !$0.isEncoded }.sorted { repeated.contains($0.id ?? -1) && !repeated.contains($1.id ?? -1) }
         let encoded = corrections.filter(\.isEncoded)
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("Your corrections").font(.system(size: 15, weight: .semibold))
+        Text("Your corrections").font(.system(size: 13, weight: .semibold)).foregroundStyle(Tokens.text2)
+        SettingsRows {
             if open.isEmpty {
-                Text("Nothing to encode. Corrections show up here when you request a change or comment in Changes.")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Theme.secondaryText)
+                SettingsRowLabel(title: "Nothing to encode", detail: "Corrections show up here when you request a change or comment in Changes.")
             }
             ForEach(open) { correction in
-                HStack(alignment: .top, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(correction.text).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
-                        Text([correction.file, correction.createdAt.formatted(date: .abbreviated, time: .omitted)].compactMap(\.self).joined(separator: " · "))
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.tertiaryText)
-                    }
-                    Spacer()
+                HStack(spacing: 14) {
+                    SettingsRowLabel(
+                        title: correction.text,
+                        detail: [correction.file, correction.createdAt.formatted(date: .abbreviated, time: .omitted)].compactMap(\.self).joined(separator: " · ")
+                    )
                     if repeated.contains(correction.id ?? -1) {
-                        Text("Repeated").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.warning)
+                        Text("Repeated")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Tokens.need)
+                            .padding(.horizontal, 8)
+                            .frame(height: 20)
+                            .background(Tokens.needBackground, in: Capsule())
                     }
                     Button("Encode…") { encoding = correction }
-                        .buttonStyle(.pill)
+                        .buttonStyle(SectionButtonStyle(height: 28))
                 }
             }
-            if !encoded.isEmpty {
-                Divider().overlay(Tokens.hair)
-                Text("Encoded").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+        }
+        if !encoded.isEmpty {
+            Text("Encoded").font(.system(size: 13, weight: .semibold)).foregroundStyle(Tokens.text2)
+            SettingsRows {
                 ForEach(encoded) { correction in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(correction.text).font(.system(size: 12.5)).foregroundStyle(Theme.secondaryText)
-                        Text(correction.encoding ?? "").font(.system(size: 11.5, design: .monospaced)).foregroundStyle(Theme.tertiaryText)
+                        Text(correction.text).font(.system(size: 13)).foregroundStyle(Tokens.text2)
+                        Text(correction.encoding ?? "").font(Tokens.mono(11.5)).foregroundStyle(Tokens.text3)
                     }
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .card(cornerRadius: 16)
     }
 
     private func reload() {
@@ -153,7 +146,7 @@ private struct EncodeCorrectionSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Encode this correction").font(.system(size: 16, weight: .semibold))
-            Text("“\(correction.text)”").font(.system(size: 13)).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+            Text("“\(correction.text)”").font(.system(size: 13)).foregroundStyle(Tokens.text2).fixedSize(horizontal: false, vertical: true)
             Picker("Encode as", selection: $target) {
                 ForEach(Target.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -164,7 +157,7 @@ private struct EncodeCorrectionSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...4)
                 Text("Added under “Learned from review” in AGENTS.md. Keep it one line an agent can act on.")
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+                    .font(.system(size: 11.5)).foregroundStyle(Tokens.text2)
             case .check:
                 TextField("Name", text: $checkName).textFieldStyle(.roundedBorder)
                 Picker("Kind", selection: $checkKind) {
@@ -172,14 +165,14 @@ private struct EncodeCorrectionSheet: View {
                 }
                 TextField("Command", text: $checkCommand).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced))
                 Text("Added to \(ProjectConfig.directoryName)/\(ChecksConfig.fileName); it runs on every branch from now on.")
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+                    .font(.system(size: 11.5)).foregroundStyle(Tokens.text2)
             case .protectedPath:
                 TextField("Glob", text: $protectedPath).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced))
                 Text("Agents can’t edit existing files that match it, and any change that gets through is pinned for you.")
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
+                    .font(.system(size: 11.5)).foregroundStyle(Tokens.text2)
             }
             if let error {
-                Text(error).font(.system(size: 12)).foregroundStyle(Theme.danger)
+                Text(error).font(.system(size: 12)).foregroundStyle(Tokens.danger)
             }
             HStack {
                 Spacer()
@@ -189,7 +182,7 @@ private struct EncodeCorrectionSheet: View {
                     .disabled(isSaving || !isValid)
             }
             Text("Saturn commits only the changed file to \(project.name)’s current branch.")
-                .font(.system(size: 11)).foregroundStyle(Theme.tertiaryText)
+                .font(.system(size: 11)).foregroundStyle(Tokens.text3)
         }
         .padding(20)
         .frame(width: 480)

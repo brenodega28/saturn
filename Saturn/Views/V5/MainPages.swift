@@ -8,6 +8,7 @@ enum MainPageKind: Codable, Hashable, Sendable {
     case terminal(project: ProjectRef, directory: String)
     case code(project: ProjectRef, path: String)
     case tool(MainTool, project: ProjectRef?)
+    case project(ProjectRef, section: ProjectSection)
     case run(Int64, daemon: DaemonID)
     case agent(Int64, daemon: DaemonID)
     case spec(path: String, project: ProjectRef)
@@ -38,6 +39,7 @@ enum MainPageKind: Codable, Hashable, Sendable {
         switch self {
         case .chat(_, let project), .newChat(_, let project), .terminal(let project, _), .code(let project, _), .spec(_, let project): project
         case .tool(_, let project): project
+        case .project(let project, _): project
         case .run, .agent: nil
         }
     }
@@ -139,6 +141,7 @@ final class MainPages {
         self.storageKey = storageKey
         load()
         migrate(legacyDaemons)
+        migrateToolPages()
     }
 
     var pages: [MainPage] { list.pages }
@@ -166,6 +169,11 @@ final class MainPages {
     @discardableResult
     func showChat(_ kind: MainPageKind) -> UUID {
         update { $0.show(kind, replacingActiveWhen: \.isChat) }
+    }
+
+    @discardableResult
+    func openProject(_ project: ProjectRef, section: ProjectSection) -> UUID {
+        update { $0.openOrUpdate(.project(project, section: section)) { $0.projectPage == project } }
     }
 
     func replace(_ id: UUID, with kind: MainPageKind) {
@@ -255,6 +263,14 @@ final class MainPages {
             }
         }
         list = PageList(pages: pages, activeID: activeID)
+        save()
+    }
+
+    private func migrateToolPages() {
+        var next = list
+        next.migrate(\.migratedToProjectPage, uniqueBy: \.projectPage)
+        guard next != list else { return }
+        list = next
         save()
     }
 

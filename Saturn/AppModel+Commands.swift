@@ -60,7 +60,7 @@ extension AppModel {
     func openFileFinder() {
         guard let project = currentProject else { return }
         let browser = currentWorkspace.codeBrowser(for: project)
-        isPageFinderShown = mainScreen != .tool(.code)
+        isPageFinderShown = !mainScreen.shows(.code)
         browser.presentFinder()
         if browser.snapshot == nil { Task { await browser.refreshSources() } }
     }
@@ -118,8 +118,6 @@ extension DaemonWorkspace {
     }
 
     func openSettings(_ section: SettingsSection, in project: Project) {
-        guard let id = project.id else { return }
-        settingsSections[id] = section
-        setTab(.settings, for: project)
+        openProject(project, section: .settings(section))
     }
 }

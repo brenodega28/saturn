@@ -1,6 +1,6 @@
 ---
 title: Persistent chat drafts and New chat sidebar entries
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Builder 1, reason: "One task: the store, page kind, composer binding and sidebar rows all depend on each other, so they can't be tested apart"}
@@ -33,17 +33,17 @@ Today a new chat is an unsaved `.chat(chatID: nil)` page, and the composer keeps
 
 ## Acceptance criteria
 
-- [ ] Pressing ⌘N three times adds 'New chat 1', 'New chat 2' and 'New chat 3' to the sidebar right away, each with its own empty page
-- [ ] Typing a prompt and attaching an image and a pasted-text attachment in 'New chat 2', then opening another chat and coming back, shows the same text and attachments
-- [ ] After quitting and relaunching the app, all draft entries are still in the sidebar with their text and attachments
-- [ ] Leaving a draft empty and opening something else does not remove its entry. Closing its tab does not remove it either, and clicking the sidebar row reopens it
-- [ ] Right-click > Delete draft, or the row's ×, removes the entry and its file on disk. If the draft's page is open, that page closes
-- [ ] After deleting 'New chat 1' while 'New chat 2' exists, the next ⌘N creates 'New chat 1' (lowest unused number)
-- [ ] Sending from a draft creates the real chat in the same page, removes the draft entry, and clears the saved draft. If the send fails, the message goes back into the draft
-- [ ] In an existing chat, typed-but-unsent text and attachments survive switching chats and restarting the app, and are cleared after a successful send
-- [ ] Drafts of a project that is closed or removed don't show in the sidebar and don't crash anything
-- [ ] swift test --package-path Packages/EnsembleCore passes, with new tests for ChatDraftStore: numbering, save/load round trip with image attachments, delete, and chat drafts
-- [ ] The app target builds
+- [x] Pressing ⌘N three times adds 'New chat 1', 'New chat 2' and 'New chat 3' to the sidebar right away, each with its own empty page
+- [x] Typing a prompt and attaching an image and a pasted-text attachment in 'New chat 2', then opening another chat and coming back, shows the same text and attachments
+- [x] After quitting and relaunching the app, all draft entries are still in the sidebar with their text and attachments
+- [x] Leaving a draft empty and opening something else does not remove its entry. Closing its tab does not remove it either, and clicking the sidebar row reopens it
+- [x] Right-click > Delete draft, or the row's ×, removes the entry and its file on disk. If the draft's page is open, that page closes
+- [x] After deleting 'New chat 1' while 'New chat 2' exists, the next ⌘N creates 'New chat 1' (lowest unused number)
+- [x] Sending from a draft creates the real chat in the same page, removes the draft entry, and clears the saved draft. If the send fails, the message goes back into the draft
+- [x] In an existing chat, typed-but-unsent text and attachments survive switching chats and restarting the app, and are cleared after a successful send
+- [x] Drafts of a project that is closed or removed don't show in the sidebar and don't crash anything
+- [x] swift test --package-path Packages/EnsembleCore passes, with new tests for ChatDraftStore: numbering, save/load round trip with image attachments, delete, and chat drafts
+- [x] The app target builds
 
 ## Verification
 

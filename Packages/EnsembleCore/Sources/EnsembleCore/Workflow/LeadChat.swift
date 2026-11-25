@@ -19,12 +19,14 @@ public final class LeadChat {
     public let runtime: AgentRuntime
     public let engine: RunEngine
     public let driver: AgentWorkflowDriver
+    public let titler: ChatTitler
     var database: AppDatabase { runtime.database }
 
-    public init(runtime: AgentRuntime, engine: RunEngine, driver: AgentWorkflowDriver) {
+    public init(runtime: AgentRuntime, engine: RunEngine, driver: AgentWorkflowDriver, titler: ChatTitler? = nil) {
         self.runtime = runtime
         self.engine = engine
         self.driver = driver
+        self.titler = titler ?? ChatTitler(runtime: runtime)
         runtime.observeReplies { [weak self] agent, reply in self?.record(reply: reply, from: agent) }
         runtime.observeTurnEnds { [weak self] session in self?.cleanUpAfterLeadTurn(session) }
     }
@@ -41,8 +43,19 @@ public final class LeadChat {
             body: ChatAttachment.prompt(text: typed, attachments: attachments), source: .chat,
             workflow: workflow, status: .incoming, leadModel: leadModel, leadEffort: leadEffort, createdAt: now, updatedAt: now
         ))
+        let source = Self.titleSource(text: typed, attachments: attachments)
+        if !source.isEmpty {
+            Task { [titler] in await titler.generateTitle(for: task, text: source) }
+        }
         try await send(typed, attachments: attachments, to: task, in: project, now: now)
         return task
+    }
+
+    static func titleSource(text: String, attachments: [ChatAttachment]) -> String {
+        guard text.isEmpty else { return text }
+        return attachments.lazy.compactMap(\.pastedText)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? ""
     }
 
     public func send(

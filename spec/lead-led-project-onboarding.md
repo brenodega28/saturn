@@ -1,6 +1,6 @@
 ---
 title: Lead-led project onboarding
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Onboarding Builder, reason: "Builds everything in one task: the onboarding definition and versioning, agent profiles, the propose_setup tool, the card, and the chat trigger. The tool, the card and the trigger depend on each other, so they can't be tested apart."}
@@ -39,19 +39,19 @@ When a project is onboarded to Saturn, Saturn opens an onboarding chat with the 
 
 ## Acceptance criteria
 
-- [ ] Opening a new local project that has no .saturn/ runs the deterministic setup, then opens an onboarding chat with the Lead without the user typing anything.
-- [ ] In a repo with source code, the Lead's first reply summarises the app's mission and vision from the code and docs, then asks where specs should be stored (spec/ or .saturn/specs/).
-- [ ] In an empty repo (no source files apart from .saturn, .gitignore, LICENSE or a near-empty README), the Lead asks the user what the app is before proposing anything.
-- [ ] propose_setup with an invalid workflow, a duplicate or invalid agent id, or a spec_folder other than the two allowed values returns the errors to the Lead and posts no card.
-- [ ] A valid propose_setup shows a card listing every file to be written, each marked new or overwrite. Nothing is written until the user clicks Apply.
-- [ ] After Apply, <spec_folder>/mission.md, .saturn/specs.yaml, .saturn/agents/*.yaml, .saturn/workflows/<id>.yaml and .saturn/onboarding.yaml (with the bundled version) exist. When make_default is true the default workflow is the proposed one, and the Workflows page shows the new workflow.
-- [ ] After Apply, new spec drafts are committed into the chosen spec folder, because SpecStore follows specs.yaml.
-- [ ] Agent profiles load into ProjectConfig. A malformed profile shows a ConfigIssue and doesn't crash the app.
-- [ ] spawn_agent with profile: <id> starts an agent with the profile's kind, model and instructions. A workflow step whose agent: names a profile runs with that profile.
-- [ ] Reopening a project whose onboarding.yaml version equals the bundled version doesn't start an onboarding chat.
-- [ ] With a bundled definition at version 2 and force_onboarding: true, opening a project recorded at version 1 reopens the onboarding chat, or reuses an open one. With force_onboarding: false, it doesn't.
-- [ ] Opening a project twice while its onboarding chat is still open never creates a second onboarding chat.
-- [ ] Engine tests cover OnboardingDefinition.needsOnboarding, agent profile loading and validation, propose_setup validation, and the files Apply writes. `swift test --package-path Packages/SaturnCore` passes.
+- [x] Opening a new local project that has no .saturn/ runs the deterministic setup, then opens an onboarding chat with the Lead without the user typing anything.
+- [x] In a repo with source code, the Lead's first reply summarises the app's mission and vision from the code and docs, then asks where specs should be stored (spec/ or .saturn/specs/).
+- [x] In an empty repo (no source files apart from .saturn, .gitignore, LICENSE or a near-empty README), the Lead asks the user what the app is before proposing anything.
+- [x] propose_setup with an invalid workflow, a duplicate or invalid agent id, or a spec_folder other than the two allowed values returns the errors to the Lead and posts no card.
+- [x] A valid propose_setup shows a card listing every file to be written, each marked new or overwrite. Nothing is written until the user clicks Apply.
+- [x] After Apply, <spec_folder>/mission.md, .saturn/specs.yaml, .saturn/agents/*.yaml, .saturn/workflows/<id>.yaml and .saturn/onboarding.yaml (with the bundled version) exist. When make_default is true the default workflow is the proposed one, and the Workflows page shows the new workflow.
+- [x] After Apply, new spec drafts are committed into the chosen spec folder, because SpecStore follows specs.yaml.
+- [x] Agent profiles load into ProjectConfig. A malformed profile shows a ConfigIssue and doesn't crash the app.
+- [x] spawn_agent with profile: <id> starts an agent with the profile's kind, model and instructions. A workflow step whose agent: names a profile runs with that profile.
+- [x] Reopening a project whose onboarding.yaml version equals the bundled version doesn't start an onboarding chat.
+- [x] With a bundled definition at version 2 and force_onboarding: true, opening a project recorded at version 1 reopens the onboarding chat, or reuses an open one. With force_onboarding: false, it doesn't.
+- [x] Opening a project twice while its onboarding chat is still open never creates a second onboarding chat.
+- [x] Engine tests cover OnboardingDefinition.needsOnboarding, agent profile loading and validation, propose_setup validation, and the files Apply writes. `swift test --package-path Packages/SaturnCore` passes.
 
 ## Verification
 

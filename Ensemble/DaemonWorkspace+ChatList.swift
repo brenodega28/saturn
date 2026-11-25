@@ -15,12 +15,47 @@ struct ChatSummary: Identifiable, Hashable {
     var id: String { "\(daemon.uuidString)-\(chat.id ?? -1)" }
 }
 
+struct DraftSummary: Identifiable, Hashable {
+    let daemon: DaemonID
+    let draft: ChatDraft
+    let project: Project
+
+    var id: String { "\(daemon.uuidString)-draft-\(draft.id.uuidString)" }
+}
+
+enum SidebarEntry: Identifiable, Hashable {
+    case chat(ChatSummary)
+    case draft(DraftSummary)
+
+    var id: String {
+        switch self {
+        case .chat(let summary): summary.id
+        case .draft(let summary): summary.id
+        }
+    }
+
+    var date: Date {
+        switch self {
+        case .chat(let summary): summary.lastActivity
+        case .draft(let summary): summary.draft.updatedAt
+        }
+    }
+
+    static func merging(_ chats: [ChatSummary], _ drafts: [DraftSummary]) -> [SidebarEntry] {
+        (chats.map(SidebarEntry.chat) + drafts.map(SidebarEntry.draft)).sorted { ($0.date, $0.id) > ($1.date, $1.id) }
+    }
+}
+
 extension AppModel {
     func chatSummaries() -> (open: [ChatSummary], closed: [ChatSummary]) {
         let all = workspaces.values.map { $0.chatSummaries() }
         let open = all.flatMap(\.open).sorted { ($0.lastActivity, $0.id) > ($1.lastActivity, $1.id) }
         let closed = all.flatMap(\.closed).sorted { ($0.chat.closedAt ?? .distantPast, $0.id) > ($1.chat.closedAt ?? .distantPast, $1.id) }
         return (open, closed)
+    }
+
+    func draftSummaries() -> [DraftSummary] {
+        orderedWorkspaces.flatMap { $0.draftSummaries() }
     }
 
     var appearance: Appearance {
@@ -96,6 +131,13 @@ extension DaemonWorkspace {
         return (open, closed)
     }
 
+    func draftSummaries() -> [DraftSummary] {
+        let projects = Dictionary(openProjects.compactMap { project in project.id.map { ($0, project) } }, uniquingKeysWith: { first, _ in first })
+        return draftStore.newDrafts().compactMap { draft in
+            projects[draft.projectID].map { DraftSummary(daemon: id, draft: draft, project: $0) }
+        }
+    }
+
     func summary(of chat: Chat) -> ChatSummary? {
         let all = chatSummaries()
         return (all.open + all.closed).first { $0.chat.id == chat.id }
@@ -136,6 +178,7 @@ extension DaemonWorkspace {
             try await send(ChatCommands.Delete(chatID: id))
             leadChatRevision += 1
             pages.retain { !$0.kind.shows(chat: id, on: self.id) }
+            draftStore.clearChatDraft(chatID: id)
             if leadSelections[chat.projectId] == .request(id) { leadSelections[chat.projectId] = nil }
             app.dropStalePages()
         } catch {

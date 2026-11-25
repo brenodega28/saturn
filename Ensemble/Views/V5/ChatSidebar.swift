@@ -86,7 +86,12 @@ private struct ChatList: View {
     let isEmpty: Bool
 
     var body: some View {
+<<<<<<< HEAD
         if isEmpty {
+=======
+        let entries = SidebarEntry.merging(open, model.draftSummaries())
+        if entries.isEmpty && closed.isEmpty {
+>>>>>>> crew/delivery-run-14/persistent-chat-drafts-and-new
             SidebarEmptyState(
                 title: model.hasOpenProjects ? "No chats yet" : "No projects yet",
                 message: !model.hasOpenProjects
@@ -97,9 +102,45 @@ private struct ChatList: View {
                 if model.hasOpenProjects { model.requestNewChat() } else { model.isOpenPanelPresented = true }
             }
         } else {
+<<<<<<< HEAD
             LazyVStack(alignment: .leading, spacing: 8) {
                 ForEach([ChatGroup.needsYou, .inProgress, .notStarted], id: \.self) { group in
                     StatusGroup(group: group, summaries: groups[group] ?? [])
+=======
+            LazyVStack(alignment: .leading, spacing: 3) {
+                ForEach(entries) { entry in
+                    switch entry {
+                    case .chat(let summary): ChatRow(summary: summary).inWorkspace(summary.daemon)
+                    case .draft(let summary): DraftRow(summary: summary).inWorkspace(summary.daemon)
+                    }
+                }
+                if !closed.isEmpty {
+                    Button { showsClosed.toggle() } label: {
+                        HStack(spacing: 6) {
+                            Text("Closed \(closed.count)")
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                                .rotationEffect(.degrees(showsClosed ? 0 : -90))
+                            Spacer()
+                        }
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Tokens.text2)
+                        .padding(EdgeInsets(top: 12, leading: 10, bottom: 4, trailing: 10))
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityValue(showsClosed ? "expanded" : "collapsed")
+                    if showsClosed {
+                        ForEach(closed.prefix(Self.closedLimit)) { summary in ClosedChatRow(summary: summary).inWorkspace(summary.daemon) }
+                        if closed.count > Self.closedLimit {
+                            Text("Older closed chats are in ⌘K search.")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(Tokens.text3)
+                                .padding(.horizontal, 10)
+                                .padding(.top, 4)
+                        }
+                    }
+>>>>>>> crew/delivery-run-14/persistent-chat-drafts-and-new
                 }
             }
         }
@@ -200,6 +241,82 @@ struct ChatRow: View {
         isRenaming = false
         guard draftTitle.trimmingCharacters(in: .whitespaces) != summary.chat.title else { return }
         workspace.renameChat(summary.chat, to: draftTitle)
+    }
+}
+
+struct DraftRow: View {
+    @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
+    let summary: DraftSummary
+    @State private var isHovered = false
+
+    var body: some View {
+        let draft = summary.draft
+        let isSelected = model.activePage?.kind.draftID == draft.id
+        Button { workspace.openDraft(draft) } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(draft.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Tokens.text)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(ChatTime.label(draft.updatedAt))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Tokens.text2)
+                        .opacity(isHovered ? 0 : 1)
+                }
+                if !draft.preview.isEmpty {
+                    Text(draft.preview)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Tokens.text2)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 8) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "square.and.pencil").font(.system(size: 10, weight: .semibold))
+                        Text("Draft")
+                    }
+                    .foregroundStyle(Tokens.text2)
+                    HStack(spacing: 5) {
+                        ProjectTile(project: summary.project, size: 13)
+                        Text(summary.project.name).lineLimit(1)
+                    }
+                    .foregroundStyle(Tokens.text2)
+                    MachineLabel(workspace: workspace, size: 11.5)
+                    Spacer(minLength: 4)
+                }
+                .font(.system(size: 12))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(isSelected ? Tokens.selection : isHovered ? Tokens.hover : .clear, in: .rect(cornerRadius: 12, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            if isHovered {
+                Button { workspace.deleteDraft(draft) } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Tokens.text2)
+                        .frame(width: 22, height: 22)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help("Delete draft")
+                .accessibilityLabel("Delete draft")
+                .padding(EdgeInsets(top: 7, leading: 0, bottom: 0, trailing: 8))
+            }
+        }
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            Button("Delete draft", role: .destructive) { workspace.deleteDraft(draft) }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAction(named: "Delete draft") { workspace.deleteDraft(draft) }
+        .accessibilityLabel("\(draft.title), draft, \(summary.project.name)\(draft.preview.isEmpty ? "" : ", \(draft.preview)")")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

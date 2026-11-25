@@ -17,6 +17,7 @@ final class DaemonWorkspace: Identifiable {
     var chatNotifications: ChatNotificationFeed
     var pendingPermissions: PendingPermissionFeed
     let returnedMessages = ReturnedMessages<LeadSendTarget>()
+    let draftStore: ChatDraftStore
     var deliveringSends: [DeliveringSend] = []
 
     private(set) var openProjects: [Project] = []
@@ -51,6 +52,7 @@ final class DaemonWorkspace: Identifiable {
     init(connection: DaemonConnection, app: AppModel) {
         self.connection = connection
         self.app = app
+        draftStore = ChatDraftStore(directory: app.clientPaths.root.appending(path: "drafts/\(connection.id.uuidString.lowercased())", directoryHint: .isDirectory))
         requests = ChatRequestFeed(database: connection.database)
         chatNotifications = ChatNotificationFeed(database: connection.database)
         pendingPermissions = PendingPermissionFeed(database: connection.database)
@@ -59,9 +61,13 @@ final class DaemonWorkspace: Identifiable {
         }
         connection.onEvent = { [weak self] event in self?.receive(event) }
         quitObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.closeSpecTunnels() }
+            MainActor.assumeIsolated {
+                self?.draftStore.flush()
+                self?.closeSpecTunnels()
+            }
         }
         reloadProjects()
+        migrateLegacyNewChatPages()
         observeReplica()
         observeConnection()
     }

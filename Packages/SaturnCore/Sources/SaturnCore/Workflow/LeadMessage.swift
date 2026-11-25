@@ -9,6 +9,7 @@ public enum LeadMessageKind: String, Codable, Sendable, Hashable {
     case permission
     case specFeedback
     case specDraft
+    case setupProposal
 }
 
 public enum ProposalStatus: String, Codable, Sendable, Hashable {
@@ -16,6 +17,7 @@ public enum ProposalStatus: String, Codable, Sendable, Hashable {
     case starting
     case started
     case dismissed
+    case applied
 }
 
 public enum PermissionCardStatus: String, Codable, Sendable, Hashable {
@@ -76,6 +78,11 @@ public struct LeadMessage: Codable, Sendable, Hashable, Identifiable, FetchableR
     public var storedAttachments: [StoredChatAttachment] { attachments ?? [] }
 
     public var chatAttachments: [ChatAttachment] { storedAttachments.attachments }
+
+    public var setupProposal: SetupProposal? {
+        guard kind == .setupProposal else { return nil }
+        return SetupProposal.decode(json: text)
+    }
 
     public var specDraft: SpecDraftInfo? {
         guard kind == .specDraft else { return nil }
@@ -140,6 +147,20 @@ extension AppDatabase {
                 arguments: [ProposalStatus.dismissed.rawValue, taskId, LeadMessageKind.specDraft.rawValue, ProposalStatus.open.rawValue]
             )
             var message = LeadMessage(projectId: projectId, taskId: taskId, kind: .specDraft, text: info.json, title: title, status: .open, createdAt: date)
+            try message.insert(db)
+            try db.execute(sql: "UPDATE task SET updatedAt = ? WHERE id = ?", arguments: [date, taskId])
+            return message
+        }
+    }
+
+    @discardableResult
+    public func insertSetupProposal(_ proposal: SetupProposal, projectId: Int64, taskId: Int64, at date: Date = .now) throws -> LeadMessage {
+        try writer.write { db in
+            try db.execute(
+                sql: "UPDATE leadMessage SET status = ? WHERE taskId = ? AND kind = ? AND status = ?",
+                arguments: [ProposalStatus.dismissed.rawValue, taskId, LeadMessageKind.setupProposal.rawValue, ProposalStatus.open.rawValue]
+            )
+            var message = LeadMessage(projectId: projectId, taskId: taskId, kind: .setupProposal, text: proposal.json, title: "Project setup", status: .open, createdAt: date)
             try message.insert(db)
             try db.execute(sql: "UPDATE task SET updatedAt = ? WHERE id = ?", arguments: [date, taskId])
             return message

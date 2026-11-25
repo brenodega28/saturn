@@ -223,6 +223,19 @@ extension DaemonWorkspace {
         leadChatRevision += 1
     }
 
+    func applySetupProposal(_ card: LeadMessage, in project: Project) async {
+        guard let messageID = card.id else { return }
+        guard await command("Couldn’t apply the setup", ChatCommands.ApplySetupProposal(messageID: messageID)) != nil else { return }
+        reloadConfig(for: project)
+        leadChatRevision += 1
+    }
+
+    func dismissSetupProposal(_ card: LeadMessage) {
+        guard let messageID = card.id else { return }
+        dispatch("Couldn’t dismiss the setup", ChatCommands.DismissSetupProposal(messageID: messageID))
+        leadChatRevision += 1
+    }
+
     func requestThread(for task: Chat, in project: Project) -> RequestThreadData? {
         guard let taskID = task.id else { return nil }
         let runs = ((try? database.runs(taskId: taskID)) ?? [])

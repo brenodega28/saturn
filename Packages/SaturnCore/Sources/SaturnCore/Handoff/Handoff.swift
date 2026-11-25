@@ -347,6 +347,7 @@ public enum HandoffMessage: Sendable, Hashable {
     case openWorktree
     case readChat(ChatReadRequest)
     case draftSpec(SpecDraftRequest)
+    case setupProposal(SetupProposal)
     case replySpec(String)
     case setChatStatus(ChatStatusTarget, reason: String?)
 }
@@ -408,15 +409,17 @@ public struct ChatReadRequest: Sendable, Hashable, Codable {
 }
 
 public struct AgentSpawnRequest: Sendable, Hashable, Codable {
-    public var agent: AgentKind
+    public var agent: AgentKind?
+    public var profile: String?
     public var task: String
     public var name: String?
     public var model: String?
     public var count: Int
     public var skills: [String]
 
-    public init(agent: AgentKind, task: String, name: String? = nil, model: String? = nil, count: Int = 1, skills: [String] = []) {
+    public init(agent: AgentKind? = nil, profile: String? = nil, task: String, name: String? = nil, model: String? = nil, count: Int = 1, skills: [String] = []) {
         self.agent = agent
+        self.profile = profile
         self.task = task
         self.name = name
         self.model = model
@@ -425,16 +428,19 @@ public struct AgentSpawnRequest: Sendable, Hashable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case agent, task, name, model, count, skills
+        case agent, profile, task, name, model, count, skills
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let named = try container.decode(String.self, forKey: .agent).trimmingCharacters(in: .whitespaces).lowercased()
-        guard let agent = AgentKind(rawValue: named), AgentKind.spawnable.contains(agent) else {
-            throw HandoffError.notAllowed("Unknown agent “\(named)”. Use one of: \(AgentKind.spawnable.map(\.rawValue).joined(separator: ", ")).")
+        self.profile = try container.decodeIfPresent(String.self, forKey: .profile)?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+        if let named = try container.decodeIfPresent(String.self, forKey: .agent)?.trimmingCharacters(in: .whitespaces).lowercased().nilIfEmpty {
+            guard let agent = AgentKind(rawValue: named), AgentKind.spawnable.contains(agent) else {
+                throw HandoffError.notAllowed("Unknown agent “\(named)”. Use one of: \(AgentKind.spawnable.map(\.rawValue).joined(separator: ", ")), or pass an agent profile id as profile.")
+            }
+            self.agent = agent
         }
-        self.agent = agent
+        guard agent != nil || profile != nil else { throw HandoffError.missing("agent") }
         self.task = try container.decode(String.self, forKey: .task)
         self.name = try container.decodeIfPresent(String.self, forKey: .name)
         self.model = try container.decodeIfPresent(String.self, forKey: .model)
@@ -463,6 +469,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     case draftSpec = "draft_spec"
     case replySpec = "reply_spec"
     case setChatStatus = "set_chat_status"
+    case proposeSetup = "propose_setup"
 
     public static let leadTools: Set<HandoffTool> = [.messageAgent, .listAgents, .spawnAgent, .stopAgent, .deleteAgent]
 
@@ -489,7 +496,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .listAgents:
             "List every agent in this project with its kind, skills, status, branch, worktree and task."
         case .spawnAgent:
-            "Start new agents with a task: builders get their own worktree and branch and edit code; checkers are read-only and start fresh, for reviews and tests. Choose the installed skills each should load. They start working on the task right away. When each one ends its turn, its report arrives as your next message, so end your turn after calling this instead of checking on them."
+            "Start new agents with a task: builders get their own worktree and branch and edit code; checkers are read-only and start fresh, for reviews and tests. Pass profile to start one of the project's agent profiles: it fills in the kind, model, skills and instructions, and any argument you also pass overrides it. Choose the installed skills each should load. They start working on the task right away. When each one ends its turn, its report arrives as your next message, so end your turn after calling this instead of checking on them."
         case .stopAgent:
             "Stop another agent's current turn and drop its queued messages. It keeps its worktree, branch and history and can be messaged again later."
         case .deleteAgent:
@@ -504,6 +511,8 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             "Create or replace this request’s spec draft: a summary, interfaces, out of scope, checkable acceptance criteria, how to verify the whole change, the workflow the run will use, and every worker the run will need (builders you will start and the checkers its review and QA steps run), in start order, each with a one-line reason and its skills and model. Saturn renders it as a review page the user annotates in Lavish, with the workflow, the worker table, the total agent count and an Approve & start button; their notes arrive as chat messages tagged as spec feedback. Send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it. Approving the spec is the user’s go-ahead for the plan, the workflow and the agent count: once approved, don’t ask again for approval of the plan or how many agents to start. A plan that needs more builders or a new role than the spec lists stops for the user’s approval."
         case .replySpec:
             "Answer the user on this request’s spec review page in Lavish, after you handled their spec feedback. The reply shows in the page’s conversation panel and marks the notes you received as done. Keep it short."
+        case .proposeSetup:
+            "Propose this project's Saturn setup at the end of onboarding: the mission (markdown), where specs live (spec or .saturn/specs), named agent profiles tailored to the stack, a custom workflow that uses them (same shape as a .saturn/workflows YAML file, plus its id), and whether it becomes the default. Saturn checks it and returns any problems for you to fix. A valid setup shows the user a card listing every file Saturn will write; nothing is written until they click Apply. Then end your turn."
         case .setChatStatus:
             "Set this request chat’s status. finished: the work is done and waits on the user; agents, worktrees and branches stay. resolved: the user confirmed the goal is met. closed: the user abandoned it. Resolving or closing deletes the request’s agents, worktrees and branches after your turn ends. open: work resumes. Only open works while a run is going."
         }
@@ -588,14 +597,15 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             return object([
                 "agent": .object([
                     "type": .string("string"), "enum": .array(AgentKind.spawnable.map { JSONValue.string($0.rawValue) }),
-                    "description": .string("builder edits code in its own worktree; checker is read-only and starts fresh, for reviews and tests"),
+                    "description": .string("builder edits code in its own worktree; checker is read-only and starts fresh, for reviews and tests. Optional when profile is given"),
                 ]),
+                "profile": string("An agent profile id from your instructions; it sets the kind, model, skills and instructions"),
                 "task": string("What the agents should do, with everything they need to start"),
                 "name": string("Base name for the agents; defaults to Builder or Checker"),
                 "model": string("Model alias or full name; defaults to sonnet"),
                 "count": .object(["type": .string("integer"), "minimum": .number(1), "maximum": .number(Double(AgentRuntime.maxSpawnCount))]),
                 "skills": array(string("An installed skill the agents should load, by name")),
-            ], required: ["agent", "task"])
+            ], required: ["task"])
         case .stopAgent:
             return object(["agent": string("The agent's name, as list_agents shows it")], required: ["agent"])
         case .deleteAgent:
@@ -645,6 +655,29 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                     "model": string("The model this worker runs, such as opus or sonnet"),
                 ], required: ["role", "name"])),
             ], required: ["title", "summary", "acceptance_criteria", "workers"])
+        case .proposeSetup:
+            let kinds = JSONValue.array(AgentKind.spawnable.map { JSONValue.string($0.rawValue) })
+            return object([
+                "mission": string("The mission document in markdown: a title, then Mission and Vision sections"),
+                "spec_folder": .object([
+                    "type": .string("string"), "enum": .array(SetupProposal.specFolders.map(JSONValue.string)),
+                    "description": .string("Where the mission and specs live: spec (a folder in the repo) or .saturn/specs (Saturn only)"),
+                ]),
+                "agents": array(object([
+                    "id": string("Lowercase kebab-case id, unique, not lead, builder or checker; it names .saturn/agents/<id>.yaml"),
+                    "name": string("Display name, such as Django Builder"),
+                    "kind": .object(["type": .string("string"), "enum": kinds]),
+                    "model": string("Model alias or full name, such as sonnet or opus"),
+                    "description": string("One line on what this agent does"),
+                    "instructions": string("Instructions written for this agent; Saturn puts them before its task"),
+                ], required: ["id", "name", "kind", "description", "instructions"])),
+                "workflow": .object([
+                    "type": .string("object"),
+                    "description": .string("The workflow, shaped like a .saturn/workflows YAML file as JSON, plus id (lowercase kebab-case). A step's agent can be lead, builder, checker or one of the agent profile ids above"),
+                    "required": .array(["id", "name", "steps"].map(JSONValue.string)),
+                ]),
+                "make_default": .object(["type": .string("boolean"), "description": .string("Make this workflow the project's default")]),
+            ], required: ["mission", "spec_folder", "agents", "workflow", "make_default"])
         case .replySpec:
             return object(["text": string("Your answer to the user's spec feedback, shown on the review page")], required: ["text"])
         case .setChatStatus:
@@ -684,7 +717,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .listAgents:
             return .listAgents
         case .spawnAgent:
-            guard arguments["agent"]?.string?.isEmpty == false else { throw HandoffError.missing("agent") }
+            guard arguments["agent"]?.string?.isEmpty == false || arguments["profile"]?.string?.isEmpty == false else { throw HandoffError.missing("agent") }
             let request = try decoder.decode(AgentSpawnRequest.self, from: data)
             if request.task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw HandoffError.missing("task") }
             return .spawnAgent(request)
@@ -721,6 +754,12 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             let request = try decoder.decode(SpecDraftRequest.self, from: data)
             guard !request.title.isEmpty else { throw HandoffError.missing("title") }
             return .draftSpec(request)
+        case .proposeSetup:
+            do {
+                return .setupProposal(try decoder.decode(SetupProposal.self, from: data))
+            } catch let error as DecodingError {
+                throw HandoffError.notAllowed("The setup isn’t valid: \(ProjectConfigLoader.describe(error)). Fix it and call \(rawValue) again.")
+            }
         case .replySpec:
             guard let text = arguments["text"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { throw HandoffError.missing("text") }
             return .replySpec(text)

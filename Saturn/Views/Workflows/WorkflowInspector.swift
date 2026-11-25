@@ -5,6 +5,7 @@ import SwiftUI
 struct WorkflowInspector: View {
     @Bindable var editor: WorkflowEditor
     let roles: [RoleDefinition]
+    var agents: [AgentProfile] = []
     let checks: [CheckDefinition]
     let issues: [ConfigIssue]
     let activeRuns: [Run]
@@ -48,7 +49,7 @@ struct WorkflowInspector: View {
             EndSection(end: $editor.draft.end)
         case .step(let id):
             if let index = editor.draft.index(of: id) {
-                StepSection(editor: editor, step: $editor.draft.steps[index], roles: roles, checks: checks)
+                StepSection(editor: editor, step: $editor.draft.steps[index], roles: roles, agents: agents, checks: checks)
                     .id(id)
             } else {
                 WorkflowSettingsSection(editor: editor)
@@ -230,12 +231,17 @@ private struct StepSection: View {
     @Bindable var editor: WorkflowEditor
     @Binding var step: WorkflowStep
     let roles: [RoleDefinition]
+    let agents: [AgentProfile]
     let checks: [CheckDefinition]
     @State private var idText = ""
     @State private var idError: String?
 
+    private var profile: AgentProfile? {
+        agents.first { $0.id == step.profile }
+    }
+
     var body: some View {
-        let role = step.agent?.builtInRole
+        let role = (step.agent ?? profile?.kind)?.builtInRole
         let style = NodeStyle.step(step, role: role)
         VStack(alignment: .leading, spacing: 16) {
             InspectorHeader(kind: style.kind, title: step.displayTitle, symbol: style.symbol, fill: style.fill)
@@ -304,15 +310,25 @@ private struct StepSection: View {
             switch step.type {
             case .agent, .spawn:
                 VStack(alignment: .leading, spacing: 8) {
-                    Picker("Who does it", selection: $step.agent) {
-                        Text("Choose an agent").tag(AgentKind?.none)
+                    Picker("Who does it", selection: $step.agentChoice) {
+                        Text("Choose an agent").tag(String?.none)
                         ForEach(step.type == .spawn ? [AgentKind.builder] : AgentKind.allCases) { kind in
-                            Text(kind.name).tag(AgentKind?.some(kind))
+                            Text(kind.name).tag(String?.some(kind.rawValue))
+                        }
+                        let profiles = agents.filter { step.type != .spawn || $0.kind == .builder }
+                        if !profiles.isEmpty {
+                            Divider()
+                            ForEach(profiles) { profile in
+                                Text("\(profile.name) (\(profile.kind.rawValue))").tag(String?.some(profile.id))
+                            }
+                        }
+                        if let unknown = step.profile, !agents.contains(where: { $0.id == unknown }) {
+                            Text("\(unknown) (missing profile)").tag(String?.some(unknown))
                         }
                     }
                     .labelsHidden()
                     .help("Lead plans and reviews, a builder writes code, a checker reviews or tests from a fresh context")
-                    Text(step.type == .spawn ? "Each task in the plan gets its own builder and worktree." : (step.agent?.summary ?? "Pick who runs this step."))
+                    Text(step.type == .spawn ? "Each task in the plan gets its own builder and worktree." : (profile.flatMap { $0.description.isEmpty ? nil : $0.description } ?? step.agent?.summary ?? "Pick who runs this step."))
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -320,7 +336,7 @@ private struct StepSection: View {
                         get: { step.model ?? "" },
                         set: { step.model = $0.isEmpty ? nil : $0 }
                     )) {
-                        Text("Default (\((step.agent ?? .builder).defaultModel.modelTitle))").tag("")
+                        Text("Default (\((profile?.model ?? (step.agent ?? profile?.kind ?? .builder).defaultModel).modelTitle))").tag("")
                         ForEach(modelChoices, id: \.self) { model in
                             Text(model.modelTitle).tag(model)
                         }

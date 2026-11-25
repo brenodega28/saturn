@@ -406,7 +406,9 @@ extension RunEngine {
 
     func buildsCode(_ step: WorkflowStep, project: Project) -> Bool {
         if step.type == .spawn { return true }
-        return step.type == .agent && step.agent == .builder
+        guard step.type == .agent else { return false }
+        if step.profile != nil { return ProjectConfigLoader.load(repository: project.filesRoot).resolve(step)?.kind == .builder }
+        return step.agent == .builder
     }
 
     func changesWaitingOnYou(projectID: Int64, excluding runID: Int64) -> Int {

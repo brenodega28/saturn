@@ -60,6 +60,14 @@ extension AppDatabase {
         }
     }
 
+    public func openOnboardingChat(projectId: Int64) throws -> Chat? {
+        try writer.read { db in
+            try Chat.filter(Column("projectId") == projectId && Column("isOnboarding") == true && Column("closedAt") == nil)
+                .order(Column("id").desc)
+                .fetchOne(db)
+        }
+    }
+
     public func deleteChat(id: Int64) throws {
         try writer.write { db in
             _ = try Chat.deleteOne(db, id: id)

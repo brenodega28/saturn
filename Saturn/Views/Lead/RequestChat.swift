@@ -212,6 +212,8 @@ struct RequestChat: View {
             ChatNote(text: message.text)
         case .permission:
             PermissionCard(card: message, project: project)
+        case .setupProposal:
+            SetupProposalCard(card: message, project: project)
         }
     }
 

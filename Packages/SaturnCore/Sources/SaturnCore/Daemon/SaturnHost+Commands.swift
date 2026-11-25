@@ -271,6 +271,24 @@ extension SaturnHost {
             try leadChat.dismiss(proposal)
             return Done()
         }
+        router.register(ChatCommands.ApplySetupProposal.self) { [unowned self] command in
+            guard let message = try database.leadMessage(id: command.messageID) else { throw CommandFailure.notFound("The setup") }
+            guard message.status == .open else { throw CommandFailure.alreadyAnswered("This setup") }
+            _ = try leadChat.applySetup(message, in: try requireProject(message.projectId))
+            return Done()
+        }
+        router.register(ChatCommands.DismissSetupProposal.self) { [unowned self] command in
+            guard let message = try database.leadMessage(id: command.messageID) else { throw CommandFailure.notFound("The setup") }
+            guard message.status == .open else { throw CommandFailure.alreadyAnswered("This setup") }
+            try leadChat.dismissSetup(message)
+            return Done()
+        }
+        router.register(ChatCommands.OpenOnboarding.self) { [unowned self] command in
+            let project = try requireProject(command.projectID)
+            guard !project.isRemote else { throw CommandFailure(code: .failed, message: "Remote projects aren’t onboarded with the Lead.") }
+            let scan = ProjectScanner.scanFiles(repository: project.filesRoot)
+            return try await leadChat.openOnboarding(in: project, scan: scan)
+        }
         router.register(ChatCommands.PostNotice.self) { [unowned self] command in
             _ = try database.createChatRequest(command.request)
             return Done()

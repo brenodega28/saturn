@@ -115,6 +115,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         if isLead, agent.readOnly, agent.worktreePath == nil { leadTools.insert(.openWorktree) }
         var chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .draftSpec, .messageAgent, .askHuman]
         if isLead, agent.taskId != nil { chatTools.formUnion([.setChatStatus, .replySpec]) }
+        if isLead, let taskId = agent.taskId, (try? runtime.database.task(id: taskId))??.isOnboarding == true { chatTools.insert(.proposeSetup) }
         let spawnedTools: Set<HandoffTool> = agent.spawnedById == nil ? [] : [.messageAgent, .askHuman, .submitResult]
         let requestTools = chatTools.union(leadTools).union(spawnedTools).union([.readChat])
         guard agent.runId != nil else { return requestTools }
@@ -260,12 +261,13 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             return zip(agents, labels).map { listing(of: $0, label: $1, isCaller: $0.id == agentID) }.joined(separator: "\n")
         case .spawnAgent(let request):
             try requireLead(agent)
-            let (project, _) = try projectAndConfig(for: agent)
+            let (project, config) = try projectAndConfig(for: agent)
+            let resolved = try resolve(request, config: config)
             let spawned = try await runtime.spawn(
-                in: project, kind: request.agent, count: request.count, git: try requireGit(for: project),
-                name: request.name, model: request.model, task: request.task, skills: request.skills, spawnedBy: agent
+                in: project, kind: resolved.kind, count: request.count, git: try requireGit(for: project),
+                name: resolved.name, model: resolved.model, task: resolved.instructions, skills: resolved.skills, spawnedBy: agent
             )
-            let skills = request.skills.isEmpty ? "" : " with \(request.skills.joined(separator: ", "))"
+            let skills = resolved.skills.isEmpty ? "" : " with \(resolved.skills.joined(separator: ", "))"
             return "Started \(spawned.map { AgentNaming.displayName(of: $0.agent) }.joined(separator: ", "))\(skills). Each agent’s report arrives as your next message when it finishes its turn. End your turn now."
         case .stopAgent(let name):
             try requireLead(agent)
@@ -298,6 +300,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             return try await readChat(request)
         case .draftSpec(let request):
             return try await postSpecDraft(try draftSpec(request, from: agent), from: agent)
+        case .setupProposal(let proposal):
+            return try postSetupProposal(proposal, from: agent)
         case .replySpec(let text):
             return try await replySpec(text, from: agent)
         case .setChatStatus(let status, let reason):
@@ -305,6 +309,31 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             if status.closeReason != nil, let taskId = agent.taskId { await specReviews?.endSpecReview(taskId: taskId) }
             return reply
         }
+    }
+
+    private func resolve(_ request: AgentSpawnRequest, config: ProjectConfig) throws -> ResolvedAgent {
+        var profile: AgentProfile?
+        if let id = request.profile {
+            guard let found = config.agentProfile(id) else {
+                let ids = config.agents.map(\.id)
+                throw HandoffError.notAllowed("Unknown agent profile “\(id)”. \(ids.isEmpty ? "This project has no agent profiles." : "Use one of: \(ids.joined(separator: ", ")).")")
+            }
+            profile = found
+        }
+        guard let resolved = ResolvedAgent.resolve(
+            profile: profile, kind: request.agent, model: request.model, instructions: request.task, skills: request.skills, name: request.name
+        ) else { throw HandoffError.missing("agent") }
+        return resolved
+    }
+
+    func postSetupProposal(_ proposal: SetupProposal, from agent: Agent) throws -> String {
+        guard agent.kind == .lead, let taskId = agent.taskId else { throw HandoffError.notAllowed("Only an onboarding chat’s lead can propose the setup.") }
+        let errors = proposal.validate(against: try projectConfig(for: agent))
+        guard errors.isEmpty else {
+            throw HandoffError.notAllowed("The setup has problems, so the user didn’t see it. Fix these and call \(HandoffTool.proposeSetup.rawValue) again:\n" + errors.map { "- \($0)" }.joined(separator: "\n"))
+        }
+        try runtime.database.insertSetupProposal(proposal, projectId: agent.projectId, taskId: taskId)
+        return "The user sees your setup as a card listing every file Saturn will write, with Apply and Dismiss buttons. Nothing is written until they click Apply. End your turn now."
     }
 
     private func relayLead(for agent: Agent, runId: Int64) throws -> Agent? {
@@ -431,8 +460,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     public func runAgentStep(_ context: StepContext) async throws -> StepResult {
         try await ensureServer()
         let git = try requireGit(for: context.project)
-        guard let kind = context.kind else { throw WorkflowDriverError.missingAgent(context.step.id) }
         let config = ProjectConfigLoader.load(repository: context.project.filesRoot)
+        let context = context.resolvingProfile(in: config)
+        guard let kind = context.kind else { throw WorkflowDriverError.missingAgent(context.step.id) }
         let expected = expectedHandoff(for: context, kind: kind, workflow: workflowSnapshot(context.run))
         let runId = try requireRunID(context.run)
         try await ensureSpecBranch(for: context.run, project: context.project, git: git)
@@ -490,6 +520,8 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     }
 
     public func runSpawnStep(_ context: SpawnContext) async throws -> StepResult {
+        var context = context
+        context.step = context.step.resolvingProfile(in: ProjectConfigLoader.load(repository: context.step.project.filesRoot))
         try await ensureServer()
         let git = try requireGit(for: context.step.project)
         let runId = try requireRunID(context.step.run)

@@ -86,12 +86,8 @@ private struct ChatList: View {
     let isEmpty: Bool
 
     var body: some View {
-<<<<<<< HEAD
-        if isEmpty {
-=======
-        let entries = SidebarEntry.merging(open, model.draftSummaries())
-        if entries.isEmpty && closed.isEmpty {
->>>>>>> crew/delivery-run-14/persistent-chat-drafts-and-new
+        let drafts = model.draftSummaries()
+        if isEmpty && drafts.isEmpty {
             SidebarEmptyState(
                 title: model.hasOpenProjects ? "No chats yet" : "No projects yet",
                 message: !model.hasOpenProjects
@@ -102,45 +98,10 @@ private struct ChatList: View {
                 if model.hasOpenProjects { model.requestNewChat() } else { model.isOpenPanelPresented = true }
             }
         } else {
-<<<<<<< HEAD
             LazyVStack(alignment: .leading, spacing: 8) {
+                ForEach(drafts) { summary in DraftRow(summary: summary).inWorkspace(summary.daemon) }
                 ForEach([ChatGroup.needsYou, .inProgress, .notStarted], id: \.self) { group in
                     StatusGroup(group: group, summaries: groups[group] ?? [])
-=======
-            LazyVStack(alignment: .leading, spacing: 3) {
-                ForEach(entries) { entry in
-                    switch entry {
-                    case .chat(let summary): ChatRow(summary: summary).inWorkspace(summary.daemon)
-                    case .draft(let summary): DraftRow(summary: summary).inWorkspace(summary.daemon)
-                    }
-                }
-                if !closed.isEmpty {
-                    Button { showsClosed.toggle() } label: {
-                        HStack(spacing: 6) {
-                            Text("Closed \(closed.count)")
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 9, weight: .bold))
-                                .rotationEffect(.degrees(showsClosed ? 0 : -90))
-                            Spacer()
-                        }
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(Tokens.text2)
-                        .padding(EdgeInsets(top: 12, leading: 10, bottom: 4, trailing: 10))
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityValue(showsClosed ? "expanded" : "collapsed")
-                    if showsClosed {
-                        ForEach(closed.prefix(Self.closedLimit)) { summary in ClosedChatRow(summary: summary).inWorkspace(summary.daemon) }
-                        if closed.count > Self.closedLimit {
-                            Text("Older closed chats are in ⌘K search.")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(Tokens.text3)
-                                .padding(.horizontal, 10)
-                                .padding(.top, 4)
-                        }
-                    }
->>>>>>> crew/delivery-run-14/persistent-chat-drafts-and-new
                 }
             }
         }

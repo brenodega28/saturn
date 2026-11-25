@@ -272,7 +272,7 @@ struct ThinkingRow: View {
     }
 }
 
-private extension SessionActivity {
+extension SessionActivity {
     func summary(relativeTo root: String?) -> String {
         switch self {
         case .working: "working"

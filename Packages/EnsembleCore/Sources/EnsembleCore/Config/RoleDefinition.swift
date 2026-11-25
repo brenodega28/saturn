@@ -63,17 +63,20 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable, Hashable, Identi
         case .lead:
             RoleDefinition(
                 id: rawValue, name: name, description: summary, icon: "lead", color: "lead", model: defaultModel,
-                prompt: Self.leadPrompt, editsCode: false, permissionProfile: permissionProfileID, canSpawn: true
+                prompt: Self.leadPrompt, editsCode: false, permissionProfile: permissionProfileID, canSpawn: true,
+                verb: "planning"
             )
         case .builder:
             RoleDefinition(
                 id: rawValue, name: name, description: summary, icon: "terminal", color: "claude", model: defaultModel,
-                prompt: Self.builderPrompt, editsCode: true, permissionProfile: permissionProfileID, canSpawn: false
+                prompt: Self.builderPrompt, editsCode: true, permissionProfile: permissionProfileID, canSpawn: false,
+                verb: "building"
             )
         case .checker:
             RoleDefinition(
                 id: rawValue, name: name, description: summary, icon: "reviewer", color: "reviewer", model: defaultModel,
-                prompt: Self.checkerPrompt, editsCode: false, permissionProfile: permissionProfileID, canSpawn: false
+                prompt: Self.checkerPrompt, editsCode: false, permissionProfile: permissionProfileID, canSpawn: false,
+                verb: "checking"
             )
         }
     }
@@ -113,6 +116,7 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Decodable {
     public var editsCode: Bool
     public var permissionProfile: String
     public var canSpawn: Bool
+    public var verb: String?
 
     public init(
         id: String,
@@ -127,7 +131,8 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Decodable {
         docs: [String] = [],
         editsCode: Bool = true,
         permissionProfile: String = "default",
-        canSpawn: Bool = false
+        canSpawn: Bool = false,
+        verb: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -142,10 +147,11 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Decodable {
         self.editsCode = editsCode
         self.permissionProfile = permissionProfile
         self.canSpawn = canSpawn
+        self.verb = verb
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, description, icon, color, provider, model, prompt, skills, docs
+        case name, description, icon, color, provider, model, prompt, skills, docs, verb
         case editsCode = "edits_code"
         case permissionProfile = "permission_profile"
         case canSpawn = "can_spawn"
@@ -166,9 +172,12 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Decodable {
         self.editsCode = try container.decodeIfPresent(Bool.self, forKey: .editsCode) ?? true
         self.permissionProfile = try container.decodeIfPresent(String.self, forKey: .permissionProfile) ?? "default"
         self.canSpawn = try container.decodeIfPresent(Bool.self, forKey: .canSpawn) ?? false
+        self.verb = try container.decodeIfPresent(String.self, forKey: .verb)
     }
 
     public var kind: AgentKind { AgentKind.of(self) }
+
+    public var activeVerb: String { verb ?? "working" }
 
     public var isReviewer: Bool { !editsCode && !canSpawn }
 }

@@ -213,18 +213,24 @@ final class DaemonWorkspace: Identifiable {
     }
 
     func setTab(_ tab: ProjectTab, for project: Project) {
-        guard let id = project.id else { return }
         if let tool = MainTool(tab: tab) {
-            showPage(.tool(tool, project: ref(id)))
+            open(tool, in: project)
         } else {
             showChat(in: project)
         }
     }
 
     func open(_ tool: MainTool, in project: Project) {
+        let settings = project.id.flatMap { settingsSections[$0] } ?? .general
+        guard let section = ProjectSection(tool: tool, settings: settings) else { return }
+        openProject(project, section: section)
+    }
+
+    func openProject(_ project: Project, section: ProjectSection = .overview) {
         guard let id = project.id else { return }
+        if case .settings(let settings) = section { settingsSections[id] = settings }
         app.selection = .project(ref(id))
-        showPage(.tool(tool, project: ref(id)))
+        pages.openProject(ref(id), section: section)
     }
 
     func pauseAllAgents(in project: Project) {
@@ -254,7 +260,8 @@ final class DaemonWorkspace: Identifiable {
         if let id = session?.id {
             showPage(.agent(id, daemon: self.id))
         } else if let page = app.activePage, case .agent = page.kind {
-            pages.replace(page.id, with: .tool(.agents, project: ref(projectID)))
+            pages.close(page.id)
+            openProject(project, section: .agents)
         }
     }
 

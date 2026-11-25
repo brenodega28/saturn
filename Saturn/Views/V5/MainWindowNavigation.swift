@@ -58,11 +58,20 @@ enum MainScreen: Hashable {
     case terminal
     case code
     case tool(MainTool)
+    case project(ProjectPageSection)
     case run(Int64)
     case agent(Int64)
     case spec(String)
 
     var isChat: Bool { self == .chat }
+
+    func shows(_ tool: MainTool) -> Bool {
+        switch self {
+        case .tool(let shown): shown == tool
+        case .project(let section): ProjectPageSection(legacyTool: tool.rawValue) == section
+        default: false
+        }
+    }
 }
 
 extension AppModel {
@@ -75,6 +84,7 @@ extension AppModel {
         case .terminal: .terminal
         case .code: .code
         case .tool(let tool, _): .tool(tool)
+        case .project(_, let section): .project(section.key)
         case .run(let id, _): .run(id)
         case .agent(let id, _): .agent(id)
         case .spec(let path, _): .spec(path)
@@ -102,8 +112,8 @@ extension AppModel {
     func open(_ tool: MainTool) {
         if tool == .usage {
             pages.open(.tool(.usage, project: nil))
-        } else if let ref = currentRef {
-            pages.open(.tool(tool, project: ref))
+        } else if let project = currentProject {
+            currentWorkspace.open(tool, in: project)
         }
     }
 
@@ -155,7 +165,7 @@ extension AppModel {
     }
 
     func title(of kind: MainPageKind) -> String {
-        if case .tool(let tool, _) = kind { return tool.title }
+        if case .tool(.usage, _) = kind { return MainTool.usage.title }
         return workspace(of: kind)?.title(of: kind) ?? "Offline"
     }
 }
@@ -163,7 +173,7 @@ extension AppModel {
 extension DaemonWorkspace {
     func project(of kind: MainPageKind) -> Project? {
         switch kind {
-        case .chat, .newChat, .terminal, .code, .spec, .tool: kind.project.flatMap { project(withID: $0.id) }
+        case .chat, .newChat, .terminal, .code, .spec, .tool, .project: kind.project.flatMap { project(withID: $0.id) }
         case .run(let id, _): run(withID: id).flatMap { project(withID: $0.projectId) }
         case .agent(let id, _): agent(id: id).flatMap { project(withID: $0.projectId) }
         }
@@ -254,6 +264,11 @@ extension DaemonWorkspace {
             runDetailIDs[project.id] = nil
         case .tool(_, nil):
             break
+        case .project(let project, let section):
+            app.focusProject(project)
+            if let tab = section.tab { app.tabs[project] = tab }
+            runDetailIDs[project.id] = nil
+            if case .settings(let settings) = section { settingsSections[project.id] = settings }
         case .run(let runID, _):
             guard let run = run(withID: runID) else { return }
             app.focusProject(ref(run.projectId))
@@ -278,6 +293,8 @@ extension DaemonWorkspace {
             return self.project(withID: project.id) != nil && draftStore.newDraft(id: draftID) != nil
         case .tool(_, let project):
             return project.flatMap { self.project(withID: $0.id) } != nil
+        case .project(let project, _):
+            return self.project(withID: project.id) != nil
         case .run(let id, _):
             return run(withID: id).flatMap { project(withID: $0.projectId) } != nil
         case .agent(let id, _):
@@ -296,6 +313,7 @@ extension DaemonWorkspace {
             "Terminal · \(self.project(withID: project.id).map { terminalPlace(directory, in: $0) } ?? (directory as NSString).lastPathComponent)"
         case .code(_, let path): (path as NSString).lastPathComponent
         case .tool(let tool, _): tool.title
+        case .project(let project, _): self.project(withID: project.id)?.name ?? "Project"
         case .run(let id, _): run(withID: id).map { "Run · \($0.displayTitle)" } ?? "Run"
         case .agent(let id, _): agent(id: id).map { displayName(of: $0) } ?? "Agent"
         case .spec(let path, _): "Spec · \(specTitle(atPath: path))"

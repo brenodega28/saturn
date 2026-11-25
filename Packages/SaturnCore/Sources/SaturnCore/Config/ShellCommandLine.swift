@@ -4,6 +4,8 @@ struct ShellCommandLine {
     struct Command: Hashable {
         var words: [String] = []
         var redirects: [String] = []
+        var ending = ""
+        var nested = false
 
         var text: String { words.joined(separator: " ") }
         var isEmpty: Bool { words.isEmpty && redirects.isEmpty }
@@ -29,6 +31,7 @@ private struct ShellParser {
     let characters: [Character]
     var index = 0
     var heredocs: [Heredoc] = []
+    var subshells = 0
 
     init(_ characters: [Character]) {
         self.characters = characters
@@ -46,7 +49,9 @@ private struct ShellParser {
         var commands: [ShellCommandLine.Command] = []
         var current = ShellCommandLine.Command()
         var depth = 0
-        func finish() {
+        func finish(_ ending: String) {
+            current.ending = ending
+            current.nested = subshells > 0 || depth > 0
             if !current.isEmpty { commands.append(current) }
             current = ShellCommandLine.Command()
         }
@@ -57,11 +62,11 @@ private struct ShellParser {
                 index += 1
             case ")" where depth == 0 && closer == ")":
                 index += 1
-                finish()
+                finish(")")
                 return commands
             case "\n":
                 index += 1
-                finish()
+                finish("\n")
                 commands += readHeredocBodies()
             case "#":
                 while let skipped = peek(), skipped != "\n" { index += 1 }
@@ -69,16 +74,17 @@ private struct ShellParser {
                 readRedirect(into: &current, commands: &commands)
             case ";", "&", "|":
                 index += 1
-                if next == character || (character == "|" && next == "&") { index += 1 }
-                finish()
+                let doubled = next == character || (character == "|" && next == "&")
+                if doubled { index += 1 }
+                finish(doubled ? String([character, next!]) : String(character))
             case "(":
                 index += 1
+                finish("(")
                 depth += 1
-                finish()
             case ")":
                 index += 1
+                finish(")")
                 depth = max(0, depth - 1)
-                finish()
             case "<":
                 readInput(into: &current, commands: &commands)
             case ">":
@@ -87,15 +93,21 @@ private struct ShellParser {
                 if let word = readWord(into: &commands) { current.words.append(word) }
             }
         }
-        finish()
+        finish("")
         return commands
+    }
+
+    mutating func parseSubshell() -> [ShellCommandLine.Command] {
+        subshells += 1
+        defer { subshells -= 1 }
+        return parse(until: ")")
     }
 
     mutating func readInput(into current: inout ShellCommandLine.Command, commands: inout [ShellCommandLine.Command]) {
         switch (peek(1), peek(2)) {
         case ("(", _):
             index += 2
-            commands += parse(until: ")")
+            commands += parseSubshell()
             current.words.append("<(…)")
         case ("<", "<"):
             index += 3
@@ -117,7 +129,7 @@ private struct ShellParser {
         index += 1
         if peek() == "(" {
             index += 1
-            commands += parse(until: ")")
+            commands += parseSubshell()
             return
         }
         if peek() == ">" || peek() == "|" { index += 1 }
@@ -194,7 +206,7 @@ private struct ShellParser {
                 word += "`…`"
             case "$" where peek(1) == "(":
                 index += 2
-                commands += parse(until: ")")
+                commands += parseSubshell()
                 word += "$(…)"
             case "$" where peek(1) == "{":
                 while let inner = peek() {
@@ -231,7 +243,7 @@ private struct ShellParser {
                 word += "`…`"
             case "$" where peek(1) == "(":
                 index += 2
-                commands += parse(until: ")")
+                commands += parseSubshell()
                 word += "$(…)"
             default:
                 word.append(character)
@@ -252,6 +264,10 @@ private struct ShellParser {
             index += 1
         }
         index += 1
-        return ShellCommandLine(inner).commands
+        return ShellCommandLine(inner).commands.map { command in
+            var nested = command
+            nested.nested = true
+            return nested
+        }
     }
 }

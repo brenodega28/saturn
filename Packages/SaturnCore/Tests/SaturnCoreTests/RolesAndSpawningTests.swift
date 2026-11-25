@@ -192,7 +192,7 @@ import Yams
 }
 
 @Suite struct ReadOnlyLaunchTests {
-    @Test func readOnlyLaunchHasNoWritingToolsAndAddsDirectories() throws {
+    @Test func readOnlyLaunchWritesOnlyInsideTempFoldersAndAddsDirectories() throws {
         let root = FileManager.default.temporaryDirectory
         let other = root.appending(path: "saturn-sibling-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
@@ -214,7 +214,10 @@ import Yams
         let allowedIndex = try #require(arguments.firstIndex(of: "--allowedTools"))
         let allowed = Array(arguments[(allowedIndex + 1)...])
 
-        #expect(!allowed.contains { $0.hasPrefix("Edit") || $0.hasPrefix("Write") || $0.hasPrefix("MultiEdit") || $0.hasPrefix("NotebookEdit") })
+        let writing = allowed.filter { tool in AgentPermissions.fileWritingTools.contains { tool.hasPrefix($0) } }
+        #expect(Set(writing) == Set(["//tmp/**", "//private/tmp/**", "//var/folders/**", "//private/var/folders/**"].flatMap { root in
+            AgentPermissions.fileWritingTools.map { "\($0)(\(root))" }
+        }))
         #expect(allowed.contains("Read"))
         #expect(allowed.contains("Grep"))
         #expect(allowed.contains("Bash(git status:*)"))
@@ -224,8 +227,8 @@ import Yams
         }
         #expect(allowed.last == "mcp__saturn__submit_verdict")
 
-        let disallowedIndex = try #require(arguments.firstIndex(of: "--disallowedTools"))
-        #expect(Array(arguments[(disallowedIndex + 1)...(disallowedIndex + 4)]) == ["Edit", "MultiEdit", "Write", "NotebookEdit"])
+        #expect(!arguments.contains("--disallowedTools"))
+        #expect(arguments[try #require(arguments.firstIndex(of: "--tools")) + 1] == "Bash,Skill,Read,Glob,Grep,Edit,MultiEdit,Write,NotebookEdit")
         let addDirIndex = try #require(arguments.firstIndex(of: "--add-dir"))
         #expect(arguments[addDirIndex + 1] == realPath(of: other))
         #expect(arguments.contains("--mcp-config"))
@@ -312,7 +315,7 @@ import Yams
         #expect(try harness.database.agents(inProject: harness.project.id!).count == 1)
     }
 
-    @Test func readOnlyCheckerRunsFromTheProjectRootWithoutWritingTools() async throws {
+    @Test func readOnlyCheckerRunsFromTheProjectRootWritingOnlyInsideTempFolders() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
 
@@ -331,8 +334,9 @@ import Yams
         #expect(session.transcript.session.map { realPath(of: URL(fileURLWithPath: $0.cwd)) } == realPath(of: harness.repo.root))
 
         let launch = try #require(harness.launches().first)
-        #expect(launch.contains("--disallowedTools Edit MultiEdit Write NotebookEdit"))
-        #expect(!launch.contains("Write(/"))
+        #expect(!launch.contains("--disallowedTools"))
+        #expect(launch.contains("Write(//private/tmp/**)"))
+        #expect(!launch.contains("Write(/" + realPath(of: harness.repo.root)))
         #expect(!launch.contains("Bash(git commit:*)"))
         #expect(!launch.contains("Bash(git merge:*)"))
         #expect(launch.contains("Bash(git diff:*)"))
@@ -372,9 +376,15 @@ import Yams
                 "hook_event_name": .string("PreToolUse"), "tool_name": .string(tool),
                 "tool_input": .object(["file_path": .string("tests/test_refunds.py"), "notebook_path": .string("n.ipynb")]),
             ])
+            let scratch: JSONValue = .object([
+                "hook_event_name": .string("PreToolUse"), "tool_name": .string(tool),
+                "tool_input": .object(["file_path": .string("/private/tmp/claude-501/x/scratchpad/x.py"), "notebook_path": .string("/tmp/q7/n.ipynb")]),
+            ])
             for session in [checker, lead] {
                 let reply = await harness.runtime.handleHook(input, agentID: session.id)
                 #expect(reply["hookSpecificOutput"]?["permissionDecision"]?.string == "deny", "\(session.agent.name) \(tool)")
+                let scratchReply = await harness.runtime.handleHook(scratch, agentID: session.id)
+                #expect(scratchReply["hookSpecificOutput"]?["permissionDecision"]?.string == "allow", "\(session.agent.name) \(tool)")
             }
             #expect(await harness.runtime.handleHook(input, agentID: builder.id) == .object([:]), "\(tool)")
         }

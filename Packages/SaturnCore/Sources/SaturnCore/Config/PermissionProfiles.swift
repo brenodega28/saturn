@@ -182,7 +182,8 @@ public struct PermissionPolicy: Sendable, Hashable {
         switch tool {
         case "Edit", "MultiEdit", "Write", "NotebookEdit":
             let path = input?["file_path"]?.string ?? input?["notebook_path"]?.string ?? "a file"
-            return PermissionAssessment(request: path, needs: [PermissionNeed(capability: .editFiles, rule: "edit files", command: path)])
+            let needs = TempPaths.isTemp(path, excluding: directory) ? [] : [PermissionNeed(capability: .editFiles, rule: "edit files", command: path)]
+            return PermissionAssessment(request: path, needs: needs)
         case "WebFetch":
             let url = input?["url"]?.string ?? "the web"
             let host = URL(string: url)?.host() ?? url
@@ -199,8 +200,7 @@ public struct PermissionPolicy: Sendable, Hashable {
     }
 
     public func shellNeeds(_ command: String, directory: String? = nil) -> [PermissionNeed] {
-        ShellCommandLine(command).commands
-            .flatMap { ShellRisk.needs(of: $0, readOnly: readOnly, directory: directory) }
+        ShellRisk.needs(ofLine: command, readOnly: readOnly, directory: directory)
             .filter { need in
                 !profile.extraCommands.contains { Self.matches(need.command, $0) }
                     && !(need.capability == .runShell && covers(need.command))

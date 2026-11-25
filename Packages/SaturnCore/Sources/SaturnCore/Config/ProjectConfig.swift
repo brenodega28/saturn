@@ -104,6 +104,7 @@ public struct ProjectConfig: Sendable, Hashable {
     public static let directoryName = ".saturn"
 
     public var workflows: [WorkflowDefinition]
+    public var agents: [AgentProfile]
     public var docs: DocsIndex
     public var checks: ChecksConfig?
     public var review: ReviewPolicy
@@ -114,7 +115,7 @@ public struct ProjectConfig: Sendable, Hashable {
     public var migrationNotices: [MigrationNotice]
 
     public init(
-        workflows: [WorkflowDefinition] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil,
+        workflows: [WorkflowDefinition] = [], agents: [AgentProfile] = [], docs: DocsIndex = DocsIndex(), checks: ChecksConfig? = nil,
         review: ReviewPolicy = ReviewPolicy(), permissions: PermissionsConfig = PermissionsConfig(),
         preferences: ProjectPreferences = ProjectPreferences(), specs: SpecsConfig = SpecsConfig(), issues: [ConfigIssue] = [],
         migrationNotices: [MigrationNotice] = []
@@ -123,6 +124,7 @@ public struct ProjectConfig: Sendable, Hashable {
         self.preferences = preferences
         self.specs = specs
         self.workflows = workflows
+        self.agents = agents
         self.docs = docs
         self.checks = checks
         self.review = review
@@ -178,6 +180,14 @@ public enum ProjectConfigLoader {
             }
         }
 
+        let agents: [AgentProfile] = yamlFiles(in: root.appending(path: AgentProfile.directoryName)).compactMap { file in
+            decode(AgentProfile.self, file: file, relativeTo: repository, issues: &issues).map { profile in
+                var profile = profile
+                profile.id = file.deletingPathExtension().lastPathComponent
+                return profile
+            }
+        }
+
         let docsFile = root.appending(path: "docs.yaml")
         let docs = FileManager.default.fileExists(atPath: docsFile.path)
             ? decode(DocsIndex.self, file: docsFile, relativeTo: repository, issues: &issues) ?? DocsIndex()
@@ -200,7 +210,7 @@ public enum ProjectConfigLoader {
 
         let specs = loadSpecs(repository: repository, issues: &issues)
         var config = ProjectConfig(
-            workflows: workflows, docs: docs, checks: checks, review: review, permissions: permissions,
+            workflows: workflows, agents: agents, docs: docs, checks: checks, review: review, permissions: permissions,
             preferences: ProjectPreferences.load(repository: repository), specs: specs, issues: issues, migrationNotices: notices
         )
         config.issues += ConfigValidator.validate(config)
@@ -209,6 +219,10 @@ public enum ProjectConfigLoader {
 
     public static func write(_ workflow: WorkflowDefinition, repository: URL) throws {
         try writeYAML(workflow, to: ProjectConfig.directory(in: repository).appending(path: "workflows/\(workflow.id).yaml"))
+    }
+
+    public static func write(_ profile: AgentProfile, repository: URL) throws {
+        try writeYAML(profile, to: AgentProfile.file(id: profile.id, in: repository))
     }
 
     public static func write(_ docs: DocsIndex, repository: URL) throws {
@@ -329,6 +343,10 @@ public enum ConfigValidator {
             issues += ChecksConfig.validate(checks).map { ConfigIssue(file: file, message: $0) }
         }
 
+        for profile in config.agents {
+            issues += profile.problems().map { ConfigIssue(file: AgentProfile.relativePath(id: profile.id), message: $0) }
+        }
+
         for workflow in config.workflows {
             let file = "\(ProjectConfig.directoryName)/workflows/\(workflow.id).yaml"
             let stepIDs = Set(workflow.steps.map(\.id))
@@ -348,7 +366,11 @@ public enum ConfigValidator {
                     if let model = step.model, !ModelCatalog.isValid(model) {
                         issues.append(ConfigIssue(file: file, message: prefix + "model “\(model)” isn’t a known model"))
                     }
-                    guard let agent = step.agent else {
+                    if let profile = step.profile, config.agentProfile(profile) == nil {
+                        issues.append(ConfigIssue(file: file, message: prefix + "agent “\(profile)” isn’t lead, builder, checker or an agent profile in \(ProjectConfig.directoryName)/\(AgentProfile.directoryName)"))
+                        continue
+                    }
+                    guard let agent = config.resolve(step)?.kind else {
                         let kinds = AgentKind.allCases.map(\.rawValue).joined(separator: ", ")
                         issues.append(ConfigIssue(file: file, message: prefix + "needs an agent: one of \(kinds)"))
                         continue

@@ -65,6 +65,15 @@ public enum AgentInstructions {
         return written
     }
 
+    public static func isGenerated(_ path: String, contents: String, repository: URL) -> Bool {
+        let text = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch path {
+        case fileName: return text == template(repository: repository).trimmingCharacters(in: .whitespacesAndNewlines)
+        case claudeFileName: return text == claudePointer
+        default: return false
+        }
+    }
+
     public static func template(repository: URL) -> String {
         let checks = ProjectConfigLoader.load(repository: repository).checks?.checks ?? CheckDetector.suggest(repository: repository).checks
         var lines = [

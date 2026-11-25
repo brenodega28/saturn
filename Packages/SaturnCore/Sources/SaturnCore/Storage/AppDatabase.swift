@@ -413,6 +413,11 @@ public final class AppDatabase: Sendable {
             }
         }
         migrator.registerMigration("v28-no-budget-holds", migrate: releaseBudgetHolds)
+        migrator.registerMigration("v29-onboarding-chat") { db in
+            try db.alter(table: "task") { t in
+                t.add(column: "isOnboarding", .boolean).notNull().defaults(to: false)
+            }
+        }
 
         return migrator
     }

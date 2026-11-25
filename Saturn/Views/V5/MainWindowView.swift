@@ -41,6 +41,10 @@ struct MainWindowView: View {
             Text("Its messages, runs and workers are deleted, and their worktrees and branches removed. This can’t be undone.")
         }
         .background(MainWindowReader { model.mainWindowRef = $0 })
+        .task(id: model.currentRef) {
+            guard let project = model.currentProject else { return }
+            await model.currentWorkspace.openOnboardingIfNeeded(project)
+        }
     }
 }
 

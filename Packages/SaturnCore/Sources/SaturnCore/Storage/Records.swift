@@ -93,6 +93,7 @@ public struct Chat: Codable, Sendable, Hashable, Identifiable, FetchableRecord, 
     public var viewedAt: Date?
     public var leadModel: String?
     public var leadEffort: LeadEffort?
+    public var isOnboarding: Bool
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -100,8 +101,9 @@ public struct Chat: Codable, Sendable, Hashable, Identifiable, FetchableRecord, 
         id: Int64? = nil, projectId: Int64, title: String, body: String, source: ChatSource,
         workflow: String? = nil, status: ChatStatus, labels: [String] = [], closedAt: Date? = nil, closeReason: RequestCloseReason? = nil,
         finishedAt: Date? = nil, viewedAt: Date? = nil, leadModel: String? = nil, leadEffort: LeadEffort? = nil,
-        createdAt: Date, updatedAt: Date
+        isOnboarding: Bool = false, createdAt: Date, updatedAt: Date
     ) {
+        self.isOnboarding = isOnboarding
         self.viewedAt = viewedAt
         self.leadModel = leadModel
         self.leadEffort = leadEffort

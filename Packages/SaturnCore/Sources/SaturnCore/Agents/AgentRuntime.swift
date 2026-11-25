@@ -331,9 +331,13 @@ public final class AgentRuntime {
             }
             if isLead {
                 prompt += "\n\n" + Self.skillsGuide(SkillLibrary.skills(in: files, pluginSkills: pluginSkills(project)))
+                if let guide = Self.agentProfilesGuide(config.agents) { prompt += "\n\n" + guide }
             }
-            if agent.taskId != nil {
+            if let taskId = agent.taskId {
                 prompt += "\n\n" + Self.leadChatGuide(workflows: config.workflows, defaultWorkflow: config.preferences.defaultWorkflow)
+                if isLead, try database.task(id: taskId)?.isOnboarding == true {
+                    prompt += "\n\n" + OnboardingDefinition.bundled.instructions
+                }
             } else if agent.runId != nil {
                 prompt += "\n\n" + Self.webToolsGuide
             }
@@ -426,6 +430,16 @@ public final class AgentRuntime {
         return """
         # Skills for your agents
         Each builder and checker loads only the skills you choose for it, in a plan task's `skills` or in `\(HandoffTool.spawnAgent.qualifiedName)`. Pick the ones that match the work; skip skills that don't apply. Installed skills:
+        \(list.joined(separator: "\n"))
+        """
+    }
+
+    static func agentProfilesGuide(_ profiles: [AgentProfile]) -> String? {
+        guard !profiles.isEmpty else { return nil }
+        let list = profiles.map { "- `\($0.id)` (\($0.kind.rawValue))\($0.description.isEmpty ? "" : ": \($0.description)")" }
+        return """
+        # Agent profiles
+        This project defines these agent profiles. Start one with `profile` in `\(HandoffTool.spawnAgent.qualifiedName)`, or name its id in a workflow step's `agent:`:
         \(list.joined(separator: "\n"))
         """
     }

@@ -25,7 +25,7 @@ struct ChatColumn: View {
 
     private var leadChat: some View {
         let selected = workspace.selectedRequest(in: project)
-        let newRequestHeld = selected == nil ? workspace.heldSends(for: workspace.leadSendTarget(for: nil, in: project)) : []
+        let newRequestDelivering = selected == nil ? workspace.sendsDelivering(to: workspace.leadSendTarget(for: nil, in: project)) : []
         return VStack(spacing: 0) {
             ForEach(model.systemAlerts.filter(shows)) { alert in
                 ChatAlertBanner(alert: alert)
@@ -37,8 +37,8 @@ struct ChatColumn: View {
                 if let selected {
                     RequestChat(task: selected, project: project)
                         .id(selected.id)
-                } else if !newRequestHeld.isEmpty {
-                    NewRequestHeldSends(held: newRequestHeld)
+                } else if !newRequestDelivering.isEmpty {
+                    NewRequestDeliveringSends(delivering: newRequestDelivering)
                 } else {
                     NewRequestIntro(project: project)
                 }

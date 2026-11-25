@@ -20,7 +20,6 @@ struct LeadComposer: View {
             suggestions
             composer(lead: lead)
         }
-        .cancelsHeldSendOnEscape(for: sendTarget)
         .restoresReturnedSends(for: sendTarget, perform: restore)
         .task(id: project.id) { files = await workspace.projectFiles(project) }
         .onChange(of: model.composerPrefill, initial: true) { _, prefill in
@@ -134,7 +133,7 @@ struct LeadComposer: View {
         let message = PendingMessage(text: text, attachments: attachments)
         text = ""
         attachments = []
-        workspace.holdLeadMessage(message, lead: lead, to: request, in: project)
+        workspace.deliverLeadMessage(message, lead: lead, to: request, in: project)
     }
 
     private func restore(_ message: PendingMessage) {

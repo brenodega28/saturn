@@ -16,8 +16,8 @@ final class DaemonWorkspace: Identifiable {
     var requests: ChatRequestFeed
     var chatNotifications: ChatNotificationFeed
     var pendingPermissions: PendingPermissionFeed
-    let pendingSends = PendingSends<PendingSendTarget>()
-    var deliveringSends: [HeldSend] = []
+    let returnedMessages = ReturnedMessages<LeadSendTarget>()
+    var deliveringSends: [DeliveringSend] = []
 
     private(set) var openProjects: [Project] = []
     private(set) var recentProjects: [Project] = []

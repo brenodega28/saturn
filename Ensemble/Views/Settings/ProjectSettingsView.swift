@@ -8,7 +8,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case documentation
     case skills
     case agents
-    case chat
     case workspaces
     case checks
     case permissions
@@ -24,7 +23,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .documentation: "Documentation"
         case .skills: "Skills"
         case .agents: "Agents & models"
-        case .chat: "Chat"
         case .workspaces: "Workspaces"
         case .checks: "Checks"
         case .permissions: "Permissions"
@@ -40,7 +38,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .documentation: "Docs"
         case .skills: "Skills"
         case .agents: "Agents"
-        case .chat: "Chat"
         case .workspaces: "Spaces"
         case .checks: "Checks"
         case .permissions: "Perms"
@@ -56,7 +53,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .documentation: "doc.text"
         case .skills: "sparkles"
         case .agents: "cpu"
-        case .chat: "bubble.left.and.bubble.right"
         case .workspaces: "square.stack.3d.up"
         case .checks: "checkmark.shield"
         case .permissions: "hand.raised"
@@ -72,7 +68,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .documentation: Color(hex: 0x0A84FF)
         case .skills: Color(hex: 0x8E4FD9)
         case .agents: Color(hex: 0x2E9C5A)
-        case .chat: Color(hex: 0x0A84FF)
         case .workspaces: Color(hex: 0xA0522D)
         case .checks: Color(hex: 0x1E8F55)
         case .permissions: Color(hex: 0xFF9F0A)
@@ -119,7 +114,6 @@ struct SettingsContainer: View {
                 case .documentation: DocsSettingsView(project: project)
                 case .skills: SkillsSettingsView(project: project)
                 case .agents: AgentsSettings(project: project)
-                case .chat: ChatSettingsView()
                 case .workspaces: WorkspacesSettingsView(project: project)
                 case .checks: ChecksSettingsView(project: project)
                 case .permissions: PermissionsSettingsView(project: project)

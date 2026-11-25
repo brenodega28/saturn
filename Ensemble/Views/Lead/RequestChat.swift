@@ -22,7 +22,7 @@ struct RequestChat: View {
     }
 
     private func thread(isThinking: Bool, session: LiveAgentSession?, working: [LiveAgentSession]) -> some View {
-        let held = workspace.heldSends(for: workspace.leadSendTarget(for: task, in: project))
+        let delivering = workspace.sendsDelivering(to: workspace.leadSendTarget(for: task, in: project))
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
@@ -41,8 +41,8 @@ struct RequestChat: View {
                                 .transition(.asymmetric(insertion: insertion(of: item), removal: .opacity))
                         }
                     }
-                    ForEach(held) { send in
-                        RequestBubble(held: send, onCancel: workspace.cancelHeldSend)
+                    ForEach(delivering) { send in
+                        RequestBubble(delivering: send)
                             .id(send.id.uuidString)
                     }
                     WorkerRoster(chat: task, project: project)
@@ -61,7 +61,7 @@ struct RequestChat: View {
             .followsBottom(
                 of: FollowSignature(
                     items: data?.thread.items.map(\.id) ?? [],
-                    held: held.map(\.id),
+                    delivering: delivering.map(\.id),
                     isThinking: isThinking,
                     entries: [isThinking ? session.flatMap(Self.latestEntry) : nil] + working.map(Self.latestEntry)
                 ),
@@ -69,7 +69,7 @@ struct RequestChat: View {
                 releasingOn: revealCount
             )
             .onChange(of: data?.thread.items.last?.id) { revealHighlight(proxy) }
-            .onChange(of: held.map(\.id)) { old, new in
+            .onChange(of: delivering.map(\.id)) { old, new in
                 if new.contains(where: { !old.contains($0) }) { sendCount += 1 }
             }
             .onChange(of: data.map(Self.userMessageCount)) { old, new in
@@ -92,7 +92,7 @@ struct RequestChat: View {
 
     private struct FollowSignature: Equatable {
         let items: [String]
-        let held: [UUID]
+        let delivering: [UUID]
         let isThinking: Bool
         let entries: [TranscriptEntry?]
     }
@@ -506,20 +506,17 @@ struct RequestBubble: View {
     let text: String
     let date: Date
     private let attachments: [SentAttachment]
-    private let onCancel: (() -> Void)?
 
     init(text: String, date: Date, attachments: [StoredChatAttachment] = []) {
         self.text = text
         self.date = date
         self.attachments = attachments.map(SentAttachment.init)
-        onCancel = nil
     }
 
-    init(held: HeldSend, onCancel: @escaping (HeldSend) -> Void) {
-        text = held.message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        date = held.date
-        attachments = held.message.attachments.map(SentAttachment.init)
-        self.onCancel = held.isCancellable ? { onCancel(held) } : nil
+    init(delivering send: DeliveringSend) {
+        text = send.message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        date = send.date
+        attachments = send.message.attachments.map(SentAttachment.init)
     }
 
     var body: some View {
@@ -538,22 +535,11 @@ struct RequestBubble: View {
                     .background(Tokens.bubble, in: .rect(cornerRadius: 14, style: .continuous))
                     .accessibilityLabel("You: \(text)")
             }
-            if let onCancel {
-                HStack(spacing: 10) {
-                    Button("Cancel", action: onCancel)
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(Theme.link)
-                        .help("Stop this message and put it back in the composer (Esc)")
-                        .accessibilityLabel("Cancel send")
-                    Text(date.formatted(.relative(presentation: .named))).font(.system(size: 11.5)).foregroundStyle(Tokens.text2)
-                }
-            }
         }
         .help(date.formatted(date: .abbreviated, time: .shortened))
         .frame(maxWidth: Tokens.Size.transcript * 0.8, alignment: .trailing)
         .frame(maxWidth: .infinity, alignment: .trailing)
-        .accessibilityElement(children: attachments.isEmpty && onCancel == nil ? .combine : .contain)
+        .accessibilityElement(children: attachments.isEmpty ? .combine : .contain)
     }
 
     private static func linked(_ text: String) -> AttributedString {

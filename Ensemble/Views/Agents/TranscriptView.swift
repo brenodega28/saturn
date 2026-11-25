@@ -15,19 +15,12 @@ struct TranscriptView: View {
         let root = transcript.session?.cwd ?? session.agent.worktreePath
         let activity = TranscriptLayout.activity(entries, live: live)
         let todos = TranscriptLayout.latestTodos(in: entries)
-        let held = workspace.heldSends(for: .session(session.id))
         VStack(spacing: 10) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(items) { item in
                         TranscriptItemView(item: item, root: root)
                             .id(item.id)
-                    }
-                    ForEach(held) { send in
-                        TranscriptUserMessage(
-                            text: send.message.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                            onCancel: send.isCancellable ? { workspace.cancelHeldSend(send) } : nil
-                        )
                     }
                     if session.isRunning, session.isStopping || activity == .working {
                         WorkingIndicator(isStopping: session.isStopping)
@@ -36,7 +29,7 @@ struct TranscriptView: View {
                 }
                 .padding(16)
             }
-            .followsBottom(of: FollowSignature(count: entries.count, tail: live ?? entries.last, isRunning: session.isRunning, held: held.map(\.id)))
+            .followsBottom(of: FollowSignature(count: entries.count, tail: live ?? entries.last, isRunning: session.isRunning))
             .card(cornerRadius: 20)
             if !todos.isEmpty {
                 TodoChecklist(todos: todos)
@@ -52,7 +45,6 @@ struct FollowSignature: Equatable {
     let count: Int
     let tail: TranscriptEntry?
     let isRunning: Bool
-    let held: [UUID]
 }
 
 private struct WorkingIndicator: View {

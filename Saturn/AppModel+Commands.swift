@@ -83,9 +83,7 @@ extension DaemonWorkspace {
     }
 
     func openAgent(_ session: LiveAgentSession, in project: Project) {
-        guard let projectID = project.id else { return }
-        selectedAgents[projectID] = session.id
-        openProject(project, section: .agents)
+        select(session, in: project)
     }
 
     func sendToLead(_ text: String, in project: Project) {

@@ -1,6 +1,6 @@
 ---
 title: SF-only type and Nebula status colours everywhere
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Builder 1, reason: "One task: Swift tokens, spec page template and Lavish theme stylesheet share the same palette and are tested together"}
@@ -31,14 +31,14 @@ Finish the Saturn brand pass from the design canvas (Saturn · Colour and type p
 
 ## Acceptance criteria
 
-- [ ] Every status colour in the app (sidebar groups, chat rows, worker roster, run timeline, cards, badges) shows the Nebula set in dark mode with the exact hexes above
-- [ ] Light mode status colours are the derived Nebula shades and each passes 4.5:1 on white
-- [ ] Building no longer shares the accent blue: Tokens.build ≠ Tokens.accent
-- [ ] No hardcoded old status hexes (0xFF9F5A, 0xFF7B72, 0xF5D76E, 0x5CD68A and their light variants) remain in Swift sources outside the Nebula definitions
-- [ ] grep for Segoe|Menlo|Consolas|Geist|Garamond|Georgia|Inter in Saturn-owned sources (Swift, spec-page template, Saturn stylesheet) returns nothing
-- [ ] The spec review page in Lavish renders in SF Pro with SF Mono code, black Eclipse Blue surfaces, ice-blue accent, and Nebula status colours
-- [ ] Whiteboard drawings in Lavish still render their hand-drawn fonts
-- [ ] Existing tests pass (swift test for SaturnCore/SaturnUI, DesignParityTests updated if it pins token values) and the app builds
+- [x] Every status colour in the app (sidebar groups, chat rows, worker roster, run timeline, cards, badges) shows the Nebula set in dark mode with the exact hexes above
+- [x] Light mode status colours are the derived Nebula shades and each passes 4.5:1 on white
+- [x] Building no longer shares the accent blue: Tokens.build ≠ Tokens.accent
+- [x] No hardcoded old status hexes (0xFF9F5A, 0xFF7B72, 0xF5D76E, 0x5CD68A and their light variants) remain in Swift sources outside the Nebula definitions
+- [x] grep for Segoe|Menlo|Consolas|Geist|Garamond|Georgia|Inter in Saturn-owned sources (Swift, spec-page template, Saturn stylesheet) returns nothing
+- [x] The spec review page in Lavish renders in SF Pro with SF Mono code, black Eclipse Blue surfaces, ice-blue accent, and Nebula status colours
+- [x] Whiteboard drawings in Lavish still render their hand-drawn fonts
+- [x] Existing tests pass (swift test for SaturnCore/SaturnUI, DesignParityTests updated if it pins token values) and the app builds
 
 ## Verification
 

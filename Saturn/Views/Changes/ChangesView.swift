@@ -78,7 +78,7 @@ struct ChangesView: View {
                 VStack(spacing: 0) {
                     ChangesHeader(project: project, run: run, store: store, context: context)
                     if !store.visiblePaths.isEmpty {
-                        FileChips(paths: store.visiblePaths, current: focusedPath) { path in jump(to: path, proxy: proxy) }
+                        FileChips(paths: store.visiblePaths, current: focusedPath ?? store.visiblePaths.first?.path) { path in jump(to: path, proxy: proxy) }
                     }
                     fileColumn(run: run, context: context)
                 }

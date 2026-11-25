@@ -101,6 +101,83 @@ import Yams
         }
     }
 
+    var developer: PermissionPolicy { PermissionPolicy(profile: PermissionsConfig().resolve(for: nil, readOnly: false), readOnly: false) }
+    var reviewer: PermissionPolicy { PermissionPolicy(profile: PermissionsConfig().resolve(for: nil, readOnly: true), readOnly: true) }
+
+    func asks(_ command: String, _ policy: PermissionPolicy) -> [String] {
+        policy.shellNeeds(command, directory: worktree).filter { policy.level($0.capability) != .allow }.map(\.rule)
+    }
+
+    @Test func fileChangesInsideTempFoldersNeedNoAsking() {
+        let scratchpad = "S=/private/tmp/claude-501/x/scratchpad; mkdir -p $S/data; rm -rf $S/data; cat > $S/run.sh <<'EOF'\necho hi\nEOF\nchmod +x $S/run.sh"
+        for command in [
+            "swift build > /tmp/checker8/build.log 2>&1",
+            "mkdir -p /tmp/checker8/src && git -C /repo archive main | tar -x -C /tmp/checker8/src",
+            scratchpad,
+            "swift test 2>&1 > $TMPDIR/t.log",
+            "D=$(mktemp -d); cp file.txt $D/",
+            "D=$(mktemp -d -t checker); rm -rf $D",
+            "cd /tmp/q7 && mkdir c d && git init repo",
+            "export OUT=${TMPDIR}/run; mkdir -p $OUT && touch $OUT/a",
+            "rm -rf /private/var/folders/ab/T/x /tmp/checker8",
+            "mv /tmp/a /tmp/b", "cp -R Sources /tmp/checker8/", "cp -t /tmp/c a b", "ln -sf /etc/hosts /tmp/c/hosts",
+            "echo hi | tee /tmp/c/log", "sed -i '' 's/a/b/' /tmp/c/f.txt", "perl -pi -e 's/a/b/' /tmp/c/f",
+            "unzip a.zip -d /tmp/c", "tar -czf /tmp/c/a.tgz Sources", "chmod -R 755 /tmp/c", "chown me /tmp/c/x",
+            "git clone https://x.dev/r.git /tmp/c/r", "cd /tmp/c && git clone ../r", "git -C /tmp/c init",
+            "rmdir /tmp/c/empty", "unlink /tmp/c/link", "cd /tmp/c && tar -xf ~/a.tar && unzip ~/b.zip",
+            "T=/tmp/satqa; rm -rf $T; mkdir -p $T/d $T/repo; echo 'x: 1' > $T/repo/p.yaml; (cd $T/repo && git init -q); cp $T/repo/p.yaml $T/d/",
+            "S=/private/tmp/claude-501/x/scratchpad/lv; L=/Users/me/repo/Lavish; mkdir -p $S/dist && cp $L/theme.css $S/ && git -C $L show main:a.css > $S/old.css",
+            "cd /Users/me/repo && swift test 2>&1 | tail -80 > /private/tmp/claude-501/x/scratchpad/test.log; echo done",
+            "SP=/private/tmp/claude-501/x/scratchpad && rm -f $SP/review.png; mkdir -p /tmp/q7/proj && cd /tmp/q7/proj && git init -q 2>/dev/null",
+        ] {
+            #expect(asks(command, reviewer).isEmpty, "reviewer: \(command)")
+            #expect(asks(command, developer).isEmpty, "developer: \(command)")
+        }
+    }
+
+    @Test func fileChangesOutsideTempFoldersStillAsk() {
+        let both: [(String, String)] = [
+            ("rm -rf /tmp", "rm"), ("rm -rf /tmp/*", "rm"), ("rm -rf /tmp/../Users/x", "rm"), ("rm -rf $HOME/tmp", "rm"),
+            ("rm -rf $S/x", "rm"), ("S=/Users/me; rm -rf $S/x", "rm"), ("chmod 777 ~/x", "chmod"), ("rm", "rm"),
+            ("rm -rf /tmp/a /Users/me", "rm"), ("rm -rf /tmp/a -- -x", "rm"), ("chmod -x /etc/a /tmp/b", "chmod"),
+            ("D=$(mktemp -d ~/x.XXXX); rm -rf $D", "rm"), ("S='/tmp/a /etc'; rm -rf $S", "rm"), ("rm -rf /tmp/x/`echo ../..`", "rm"),
+            ("cd /tmp/q7; rm -rf c", "rm"), ("cd /tmp/q7 || rm -rf c", "rm"), ("true || cd /tmp/q7 && rm -rf c", "rm"),
+            ("cd /tmp/q7 && false || rm -rf c", "rm"), ("(cd /tmp/q7 && true); rm -rf c", "rm"), ("(cd /tmp/q7 && true) && rm -rf c", "rm"),
+            ("cd /tmp/q7 && (false) || rm -rf c", "rm"), ("rm -rf c $(cd /tmp/q7 && pwd)", "rm"), ("x | (cd /tmp/q7 && true) || rm -rf c", "rm"),
+            ("pkill -TERM -f \"data-dir /tmp/q7\"; mkdir -p /tmp/q7/proj", "pkill"), ("S=/tmp/s; kill $P; rm -rf $S/x", "kill"),
+            ("launchctl list", "launchctl"), ("cd /tmp/q7 && cd .. && rm -rf c", "rm"),
+            ("false && S=/tmp/x; rm -rf $S/y", "rm"), ("ls | xargs rm -rf /tmp/x", "rm"), ("find / -exec rm {} \\;", "rm"),
+            ("bash -c 'rm -rf $S/x'", "rm"), ("pkill -f /tmp/q7/daemon", "pkill"), ("osascript /tmp/q7/a.scpt", "osascript"),
+            ("tar -xP -C /tmp/c -f a.tar", "tar"),
+        ]
+        for (command, rule) in both {
+            #expect(asks(command, reviewer).contains(rule), "reviewer: \(command)")
+            #expect(asks(command, developer).contains(rule) || rule == "tar", "developer: \(command)")
+        }
+        for (command, rule) in [
+            ("mv ./Sources/a.swift /tmp/", "mv"), ("cp /tmp/a ./b", "cp"), ("echo hi > notes.txt", "write files with >"),
+            ("mkdir c", "mkdir"), ("git init repo", "git init"), ("git clone https://x.dev/r.git", "git clone"),
+            ("touch /tmp/a ~/b", "touch"), ("cd /tmp && mkdir c", "mkdir"), ("echo hi > $S/out", "write files with >"),
+        ] {
+            #expect(asks(command, reviewer) == [rule], "reviewer: \(command)")
+        }
+        #expect(asks("echo hi > $S/out", developer) == ["write outside the worktree"])
+        #expect(asks("S=/work/repo; echo hi > $S/out", developer) == ["write outside the worktree"])
+        #expect(asks("osascript -e 'tell app \"Finder\" to quit'", developer) == ["osascript"])
+        #expect(asks("SP=/tmp/s && curl -s http://127.0.0.1:1/a.css -o $SP/a.css", developer) == ["curl"])
+    }
+
+    @Test func readOnlyAgentsMayWriteFilesOnlyInsideTempFolders() throws {
+        let scratch = "/private/tmp/claude-501/x/scratchpad/x.py"
+        #expect(try #require(reviewer.assess(tool: "Write", input: .object(["file_path": .string(scratch)]))).needs.isEmpty)
+        let repoFile = try #require(reviewer.assess(tool: "Write", input: .object(["file_path": .string("/work/repo/Sources/a.swift")])))
+        #expect(repoFile.needs.map(\.capability) == [.editFiles])
+        #expect(reviewer.level(.editFiles) == .never)
+        for path in ["/tmp", "/tmp/../etc/hosts", "~/x"] {
+            #expect(reviewer.assess(tool: "Edit", input: .object(["file_path": .string(path)]))?.needs.isEmpty == false, "\(path)")
+        }
+    }
+
     @Test func extraCommandsAreAllowedWithoutAsking() {
         var profile = PermissionsConfig().resolve(for: .builder)
         profile.extraCommands = ["pkill", "open"]

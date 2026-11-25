@@ -51,9 +51,13 @@ public enum AgentPermissions {
     public static let artifactTools = [artifactReadTool] + artifactDataTools
     public static let artifactEnvironment = ["CLAUDE_CODE_ARTIFACT": "1"]
 
-    public static func builtInTools(readOnly: Bool, extraAllowedTools: [String]) -> [String] {
-        ["Bash", "Skill"] + tools + (readOnly ? [] : fileWritingTools)
+    public static func builtInTools(extraAllowedTools: [String]) -> [String] {
+        ["Bash", "Skill"] + tools + fileWritingTools
             + (webTools + artifactTools).filter(extraAllowedTools.contains).map(toolName)
+    }
+
+    public static var tempWritingTools: [String] {
+        TempPaths.roots.flatMap { root in fileWritingTools.map { "\($0)(/\(root)/**)" } }
     }
 
     static func toolName(_ rule: String) -> String {
@@ -63,7 +67,7 @@ public enum AgentPermissions {
     public static let projectSkillsOnlySettings = #"{"disableBundledSkills":true,"skillOverrides":{"design":"off","doctor":"off","plugin-authoring":"off"}}"#
 
     public static func readOnlyAllowedTools() -> [String] {
-        tools + readOnlyCommands.map { "Bash(\($0):*)" }
+        tools + tempWritingTools + readOnlyCommands.map { "Bash(\($0):*)" }
     }
 
     public static func allowedTools(worktree: URL) -> [String] {
@@ -180,10 +184,6 @@ public struct ClaudeLaunch: Sendable, Equatable {
         for directory in additionalDirectories {
             arguments += ["--add-dir", resolvedPath(of: directory)]
         }
-        if !writes {
-            arguments.append("--disallowedTools")
-            arguments += AgentPermissions.fileWritingTools
-        }
         arguments += extraArguments
         arguments.append("--allowedTools")
         arguments += allowedTools
@@ -198,7 +198,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
     }
 
     var tools: [String] {
-        var tools = AgentPermissions.builtInTools(readOnly: !writes, extraAllowedTools: extraAllowedTools)
+        var tools = AgentPermissions.builtInTools(extraAllowedTools: extraAllowedTools)
         if let permissions, !permissions.hasBash {
             tools.removeAll { $0 == "Bash" }
         }
@@ -212,7 +212,8 @@ public struct ClaudeLaunch: Sendable, Equatable {
             return AgentPermissions.allowedTools(worktree: worktree)
         }
         let commands = permissions.commands.map { "Bash(\($0):*)" }
-        guard writes, permissions.level(.editFiles) == .allow else { return AgentPermissions.tools + commands }
+        guard writes else { return AgentPermissions.tools + AgentPermissions.tempWritingTools + commands }
+        guard permissions.level(.editFiles) == .allow else { return AgentPermissions.tools + commands }
         let scope = "/" + resolvedPath(of: worktree) + "/**"
         return AgentPermissions.tools + AgentPermissions.fileWritingTools.map { "\($0)(\(scope))" } + commands
     }
@@ -221,7 +222,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
         let editing = canOpenWorktree
             ? "You start read-only and never edit, create or delete files here or commit. When you must change code yourself, "
                 + "call `\(HandoffTool.openWorktree.qualifiedName)` to get your own worktree and branch; your next turn runs there with write access."
-            : "You never edit, create or delete files and never commit. Report what you find; the coding agents and the user make the changes."
+            : "You never edit, create or delete files outside temp folders and never commit. Report what you find; the coding agents and the user make the changes."
         return """
         You are \(agentName), a read-only agent run by Saturn. You work from \(directory.path) and can read every file \
         and worktree you are given, run tests and inspect history. \(editing)
@@ -235,7 +236,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
     public static let selfServiceRule = "Do everything you can yourself: run the commands, read the files, fix the environment. Hand a step to the user only as a last resort, when your tools or permissions can't do it. Whenever you need the user to do something, give the exact commands to run, each in its own code block, with the directory to run it from."
 
     static let askingTopics: [(PermissionCapability, String)] = [
-        (.riskyCommands, "risky commands (deleting files with rm, git reset --hard or git clean; force-deleting branches; kill, sudo, chmod; publishing or changing things outside the repo such as gh pr create, npm publish, docker push, kubectl apply and cloud CLIs; writing outside your worktree)"),
+        (.riskyCommands, "risky commands (deleting files with rm outside temp folders, git reset --hard or git clean; force-deleting branches; kill, sudo, chmod; publishing or changing things outside the repo such as gh pr create, npm publish, docker push, kubectl apply and cloud CLIs; writing outside your worktree)"),
         (.installPackages, "installing or removing packages"),
         (.network, "network tools such as curl, wget and ssh"),
         (.gitPush, "git push"),
@@ -258,7 +259,7 @@ public struct ClaudeLaunch: Sendable, Equatable {
             lines.append("These need the user’s OK the first time: " + asking.joined(separator: "; ") + ".")
         }
         if policy.readOnly, policy.level(.riskyCommands) == .ask {
-            lines.append("Because you are read-only, commands that change files (mv, cp, mkdir, touch, sed -i, tee, > redirects, formatters that write, and git commands that change the repo) need the user’s OK too.")
+            lines.append("Because you are read-only, commands that change files (mv, cp, mkdir, touch, sed -i, tee, > redirects, formatters that write, and git commands that change the repo) need the user’s OK too, except file changes inside temp folders (/tmp, /private/tmp, the scratchpad), which don’t need asking.")
         }
         let never = askingTopics.filter { policy.level($0.0) == .never }.map(\.1)
         if !never.isEmpty {

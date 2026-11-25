@@ -414,9 +414,9 @@ extension TranscriptEntry {
         }
 
         #expect(try value(of: "--tools", in: launch(readOnly: false)) == "Bash,Skill,Read,Glob,Grep,Edit,MultiEdit,Write,NotebookEdit")
-        #expect(try value(of: "--tools", in: launch(readOnly: true)) == "Bash,Skill,Read,Glob,Grep")
-        #expect(try value(of: "--tools", in: launch(readOnly: true, extraAllowedTools: ["WebFetch", "WebSearch", "mcp__saturn__ask_human"])) == "Bash,Skill,Read,Glob,Grep,WebFetch,WebSearch")
-        #expect(try value(of: "--tools", in: launch(readOnly: true, extraAllowedTools: AgentPermissions.artifactTools)) == "Bash,Skill,Read,Glob,Grep,Artifact,ArtifactData,ArtifactComments,ArtifactCheck")
+        #expect(try value(of: "--tools", in: launch(readOnly: true)) == "Bash,Skill,Read,Glob,Grep,Edit,MultiEdit,Write,NotebookEdit")
+        #expect(try value(of: "--tools", in: launch(readOnly: true, extraAllowedTools: ["WebFetch", "WebSearch", "mcp__saturn__ask_human"])) == "Bash,Skill,Read,Glob,Grep,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch")
+        #expect(try value(of: "--tools", in: launch(readOnly: true, extraAllowedTools: AgentPermissions.artifactTools)) == "Bash,Skill,Read,Glob,Grep,Edit,MultiEdit,Write,NotebookEdit,Artifact,ArtifactData,ArtifactComments,ArtifactCheck")
 
         let settings = try value(of: "--settings", in: launch(readOnly: false))
         let decoded = try #require(try JSONSerialization.jsonObject(with: Data(settings.utf8)) as? [String: Any])

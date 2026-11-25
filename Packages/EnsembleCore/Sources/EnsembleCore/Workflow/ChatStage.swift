@@ -50,7 +50,6 @@ public enum ChatStage: String, Sendable, Hashable, CaseIterable {
         if let hold = facts.hold, stuckHolds.contains(hold.reason) { return .stuck }
         if facts.openRequests.contains(where: stuckKinds.contains) { return .stuck }
         if let run = facts.latestRun, run.status == .failed || run.status == .interrupted { return .stuck }
-        if facts.hold?.reason == .approval { return .inReview }
         if facts.hold != nil || facts.pendingPermissions > 0 || facts.hasOpenProposal { return .needsYou }
         if facts.openRequests.contains(where: { $0 != .notice && $0 != .pinReview }) { return .needsYou }
         if let run = facts.latestRun, run.isActive {

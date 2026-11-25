@@ -23,29 +23,6 @@ struct DraftSummary: Identifiable, Hashable {
     var id: String { "\(daemon.uuidString)-draft-\(draft.id.uuidString)" }
 }
 
-enum SidebarEntry: Identifiable, Hashable {
-    case chat(ChatSummary)
-    case draft(DraftSummary)
-
-    var id: String {
-        switch self {
-        case .chat(let summary): summary.id
-        case .draft(let summary): summary.id
-        }
-    }
-
-    var date: Date {
-        switch self {
-        case .chat(let summary): summary.lastActivity
-        case .draft(let summary): summary.draft.updatedAt
-        }
-    }
-
-    static func merging(_ chats: [ChatSummary], _ drafts: [DraftSummary]) -> [SidebarEntry] {
-        (chats.map(SidebarEntry.chat) + drafts.map(SidebarEntry.draft)).sorted { ($0.date, $0.id) > ($1.date, $1.id) }
-    }
-}
-
 extension AppModel {
     func chatSummaries() -> (open: [ChatSummary], closed: [ChatSummary]) {
         let all = workspaces.values.map { $0.chatSummaries() }

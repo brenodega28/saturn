@@ -117,19 +117,22 @@ struct GroupHeader: View {
 struct StatusGroup: View {
     let group: ChatGroup
     let summaries: [ChatSummary]
+    let drafts: [DraftSummary]
     @AppStorage private var isCollapsed: Bool
 
-    init(group: ChatGroup, summaries: [ChatSummary]) {
+    init(group: ChatGroup, summaries: [ChatSummary], drafts: [DraftSummary]) {
         self.group = group
         self.summaries = summaries
+        self.drafts = drafts
         _isCollapsed = AppStorage(wrappedValue: false, group.collapsedKey, store: AppDefaults.store)
     }
 
     var body: some View {
-        if !summaries.isEmpty {
+        if !summaries.isEmpty || !drafts.isEmpty {
             VStack(alignment: .leading, spacing: 1) {
-                GroupHeader(title: group.title, color: group.titleColor, count: summaries.count, isOpen: !isCollapsed) { isCollapsed.toggle() }
+                GroupHeader(title: group.title, color: group.titleColor, count: summaries.count + drafts.count, isOpen: !isCollapsed) { isCollapsed.toggle() }
                 if !isCollapsed {
+                    ForEach(drafts) { draft in DraftRow(summary: draft).inWorkspace(draft.daemon) }
                     ForEach(summaries) { summary in ChatRow(summary: summary).inWorkspace(summary.daemon) }
                 }
             }

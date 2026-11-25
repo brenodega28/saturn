@@ -190,15 +190,15 @@ public final class LeadChat {
     public func approveSpec(taskId: Int64, in project: Project) async throws -> Run {
         guard let task = try database.task(id: taskId) else { throw RunEngineError.invalidState("The request is gone.") }
         guard !(try hasActiveRun(taskId: taskId)) else { throw LeadChatError.runInProgress }
-        let store = SpecStore(paths: runtime.paths)
+        let store = SpecStore(paths: runtime.paths, database: database)
         guard FileManager.default.fileExists(atPath: store.draftURL(projectId: task.projectId, taskId: taskId).path),
               let document = try store.draft(projectId: task.projectId, taskId: taskId) else { throw SpecReviewError.noDraft }
         guard document.status == .draft || document.status == .rejected || document.status == .approved else { throw SpecReviewError.committed }
-        if let proposal = try openProposal(taskId: taskId) {
+        if let proposal = try openProposal(taskId: taskId), document.workflow == nil || document.workflow == proposal.workflow {
             return try await approving(document, in: task) { try await start(proposal, in: project) }
         }
         let config = ProjectConfigLoader.load(repository: project.filesRoot)
-        let workflow = [Self.specWorkflow, task.workflow, config.preferences.defaultWorkflow].compactMap(\.self).first { config.workflow($0) != nil }
+        let workflow = document.workflow ?? [Self.specWorkflow, task.workflow, config.preferences.defaultWorkflow].compactMap(\.self).first { config.workflow($0) != nil }
         guard let workflow else { throw LeadChatError.unknownWorkflow(Self.specWorkflow) }
         let launch = RunLaunch(taskId: taskId, workflow: workflow, title: document.title, brief: Self.brief(for: document))
         return try await approving(document, in: task) { try await start(launch, in: project) {} }
@@ -214,7 +214,7 @@ public final class LeadChat {
         }
     }
 
-    static let specWorkflow = "feature-delivery"
+    nonisolated static let specWorkflow = "feature-delivery"
 
     static func brief(for document: SpecDocument) -> String {
         var parts = [document.summary.trimmingCharacters(in: .whitespacesAndNewlines)].filter { !$0.isEmpty }
@@ -260,7 +260,7 @@ public final class LeadChat {
 
     private func setSpecStatus(_ status: SpecStatus, of document: SpecDocument, in task: Chat) throws {
         guard let taskId = task.id else { return }
-        let store = SpecStore(paths: runtime.paths)
+        let store = SpecStore(paths: runtime.paths, database: database)
         var updated = document
         updated.status = status
         try store.write(updated, to: store.draftURL(projectId: task.projectId, taskId: taskId))

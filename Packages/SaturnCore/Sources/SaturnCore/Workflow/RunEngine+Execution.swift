@@ -84,12 +84,12 @@ extension RunEngine {
         runStep.outcome = result.outcome
         runStep.output = encode(result.output)
         loaded.run.costUSD += result.costUSD
-        if step.type == .agent, let plan = result.output.plan, approvesPlans(projectID: loaded.run.projectId) {
+        if step.type == .agent, let plan = result.output.plan, case .hold(let excess) = planCheck(plan, run: loaded.run) {
             runStep.status = .waitingOnYou
             try hold(
                 &loaded, .planApproval, stepId: step.id, runStepId: runStepID, outcome: result.outcome,
                 title: "Approve the plan for “\(loaded.run.title)”",
-                body: Self.describe(plan), steps: [runStep]
+                body: [excess, Self.describe(plan)].compactMap(\.self).filter { !$0.isEmpty }.joined(separator: "\n\n"), steps: [runStep]
             )
             return false
         }
@@ -380,6 +380,18 @@ extension RunEngine {
     static func authorStep(before step: WorkflowStep, in workflow: WorkflowDefinition) -> String? {
         guard let index = workflow.steps.firstIndex(where: { $0.id == step.id }) else { return nil }
         return workflow.steps[..<index].last { $0.type == .spawn || $0.type == .agent }?.id
+    }
+
+    enum PlanCheck {
+        case proceed
+        case hold(excess: String?)
+    }
+
+    func planCheck(_ plan: Plan, run: Run) -> PlanCheck {
+        if let runID = run.id, let workers = approvedWorkers(runID) {
+            return SpecApproval.excess(plan: plan, workers: workers).map { .hold(excess: $0) } ?? .proceed
+        }
+        return approvesPlans(projectID: run.projectId) ? .hold(excess: nil) : .proceed
     }
 
     func approvesPlans(projectID: Int64) -> Bool {

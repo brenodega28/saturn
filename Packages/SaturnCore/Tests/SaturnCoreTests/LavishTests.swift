@@ -63,7 +63,7 @@ let feedbackJSON = #"{"session":{"status":"feedback"},"prompts":[{"uid":"1","pro
         let html = SpecPageRenderer().render(document)
         #expect(html.contains("<title>Alpha &lt;and&gt; beta</title>"))
         #expect(html.contains("Version 3") && html.contains("status-draft") && html.contains("1/2 criteria met"))
-        for heading in ["Summary", "Interfaces", "Out of scope", "Acceptance criteria", "Verification", "Workers"] {
+        for heading in ["Summary", "Interfaces", "Out of scope", "Acceptance criteria", "Verification", "Plan &amp; approvals"] {
             #expect(html.contains("<h2>\(heading)</h2>"))
         }
         #expect(html.contains("<code>text</code>") && html.contains("Builds the files"))

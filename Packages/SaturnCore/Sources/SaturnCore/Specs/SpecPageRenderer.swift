@@ -21,10 +21,12 @@ public struct SpecPageRenderer: Sendable {
         <body><main>{{content}}</main></body></html>
         """
 
-    public func render(_ document: SpecDocument) -> String {
+    public static let planHeading = "Plan & approvals"
+
+    public func render(_ document: SpecDocument, workflow: WorkflowDefinition? = nil) -> String {
         template
             .replacingOccurrences(of: "{{title}}", with: Self.escape(document.title))
-            .replacingOccurrences(of: "{{content}}", with: content(document))
+            .replacingOccurrences(of: "{{content}}", with: content(document, workflow: workflow))
     }
 
     public static func pageURL(for draft: URL) -> URL {
@@ -40,14 +42,14 @@ public struct SpecPageRenderer: Sendable {
         "section-" + (Slug.make(heading).nilIfEmpty ?? "notes")
     }
 
-    func content(_ document: SpecDocument) -> String {
+    func content(_ document: SpecDocument, workflow: WorkflowDefinition? = nil) -> String {
         var parts = [header(document)]
         if !document.summary.isEmpty { parts.append(section("Summary", Self.blocks(document.summary))) }
         if !document.interfaces.isEmpty { parts.append(section("Interfaces", Self.list(document.interfaces))) }
         if !document.outOfScope.isEmpty { parts.append(section("Out of scope", Self.list(document.outOfScope))) }
         parts.append(section("Acceptance criteria", criteria(document.acceptanceCriteria)))
         if !document.verification.isEmpty { parts.append(section("Verification", Self.blocks(document.verification))) }
-        if !document.workers.isEmpty { parts.append(section("Workers", workers(document.workers))) }
+        parts.append(section(Self.planHeading, SpecPlanSection(document: document, workflow: workflow).html))
         for extra in document.extraSections where !extra.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             parts.append(section(extra.heading, Self.blocks(extra.body)))
         }
@@ -85,15 +87,6 @@ public struct SpecPageRenderer: Sendable {
             return "<li id=\"criterion-\(id)\" data-criterion=\"\(id)\"\(state)><span class=\"text\">\(Self.inline(item.text))</span></li>"
         }
         return "<ol class=\"criteria\">\n" + rows.joined(separator: "\n") + "\n</ol>"
-    }
-
-    private func workers(_ items: [SpecWorker]) -> String {
-        let rows = items.map { worker in
-            let role = worker.role.isEmpty ? "" : " <span class=\"role\">\(Self.escape(worker.role))</span>"
-            let reason = worker.reason.map { " · <span class=\"reason\">\(Self.inline($0))</span>" } ?? ""
-            return "<li><strong>\(Self.escape(worker.name))</strong>\(role)\(reason)</li>"
-        }
-        return "<ul class=\"workers\">\n" + rows.joined(separator: "\n") + "\n</ul>"
     }
 
     static func list(_ items: [String]) -> String {

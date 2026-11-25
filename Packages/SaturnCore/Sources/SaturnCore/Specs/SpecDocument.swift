@@ -29,15 +29,21 @@ public struct SpecWorker: Sendable, Hashable, Codable {
     public var role: String
     public var name: String
     public var reason: String?
+    public var skills: [String]
+    public var model: String?
 
-    public init(role: String, name: String, reason: String? = nil) {
+    public init(role: String, name: String, reason: String? = nil, skills: [String] = [], model: String? = nil) {
         self.role = role
         self.name = name
         self.reason = reason?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.skills = skills.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        self.model = model?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 
+    public var kind: AgentKind { AgentKind.guessing(roleID: role) }
+
     enum CodingKeys: String, CodingKey {
-        case role, name, reason
+        case role, name, reason, skills, model
     }
 
     public init(from decoder: Decoder) throws {
@@ -45,6 +51,9 @@ public struct SpecWorker: Sendable, Hashable, Codable {
         self.role = try container.decode(String.self, forKey: .role).trimmingCharacters(in: .whitespacesAndNewlines)
         self.name = try container.decode(String.self, forKey: .name).trimmingCharacters(in: .whitespacesAndNewlines)
         self.reason = try container.decodeIfPresent(String.self, forKey: .reason)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.skills = (try container.decodeIfPresent([String].self, forKey: .skills) ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        self.model = try container.decodeIfPresent(String.self, forKey: .model)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 }
 
@@ -85,6 +94,7 @@ public struct SpecDocument: Sendable, Hashable {
     public var status: SpecStatus
     public var version: Int
     public var workers: [SpecWorker]
+    public var workflow: String?
     public var owner: String
     public var linkedRuns: [Int64]
     public var created: Date
@@ -98,7 +108,7 @@ public struct SpecDocument: Sendable, Hashable {
     public var extraFrontMatter: String
 
     public init(
-        title: String, status: SpecStatus = .draft, version: Int = 1, workers: [SpecWorker] = [], owner: String = "", linkedRuns: [Int64] = [], created: Date = .now,
+        title: String, status: SpecStatus = .draft, version: Int = 1, workers: [SpecWorker] = [], workflow: String? = nil, owner: String = "", linkedRuns: [Int64] = [], created: Date = .now,
         summary: String = "", interfaces: [String] = [], outOfScope: [String] = [], acceptanceCriteria: [SpecCriterion] = [],
         verification: String = "", preamble: String = "", extraSections: [SpecSection] = [], extraFrontMatter: String = ""
     ) {
@@ -106,6 +116,7 @@ public struct SpecDocument: Sendable, Hashable {
         self.status = status
         self.version = max(1, version)
         self.workers = workers
+        self.workflow = workflow?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.owner = owner
         self.linkedRuns = linkedRuns
         self.created = Self.day(of: created)
@@ -133,7 +144,7 @@ public struct SpecDocument: Sendable, Hashable {
         }
     }
 
-    static let knownKeys: Set<String> = ["title", "status", "version", "workers", "owner", "linked_runs", "created"]
+    static let knownKeys: Set<String> = ["title", "status", "version", "workers", "workflow", "owner", "linked_runs", "created"]
 
     public init(markdown: String) throws {
         let (frontMatter, body) = Self.splitFrontMatter(markdown)
@@ -169,6 +180,7 @@ public struct SpecDocument: Sendable, Hashable {
             status: Self.string(fields["status"]).map(SpecStatus.init(lenient:)) ?? .draft,
             version: Self.string(fields["version"]).flatMap { Int($0) } ?? 1,
             workers: Self.workers(fields["workers"]),
+            workflow: Self.string(fields["workflow"]),
             owner: Self.string(fields["owner"]) ?? "",
             linkedRuns: Self.runIDs(fields["linked_runs"]),
             created: Self.date(fields["created"]) ?? Self.day(of: .now),
@@ -195,10 +207,13 @@ public struct SpecDocument: Sendable, Hashable {
         if !workers.isEmpty {
             let lines = ["workers:"] + workers.map { worker in
                 let reason = worker.reason.map { ", reason: \(Self.yamlScalar($0))" } ?? ""
-                return "  - {role: \(Self.yamlScalar(worker.role)), name: \(Self.yamlScalar(worker.name))\(reason)}"
+                let skills = worker.skills.isEmpty ? "" : ", skills: [\(worker.skills.map(Self.yamlScalar).joined(separator: ", "))]"
+                let model = worker.model.map { ", model: \(Self.yamlScalar($0))" } ?? ""
+                return "  - {role: \(Self.yamlScalar(worker.role)), name: \(Self.yamlScalar(worker.name))\(reason)\(skills)\(model)}"
             }
             front.insert(contentsOf: lines, at: 3)
         }
+        if let workflow { front.insert("workflow: \(Self.yamlScalar(workflow))", at: 3) }
         let extraFront = extraFrontMatter.trimmingCharacters(in: .newlines)
         if !extraFront.isEmpty { front.append(extraFront) }
 
@@ -334,10 +349,18 @@ public struct SpecDocument: Sendable, Hashable {
         guard let items = value as? [Any] else { return [] }
         return items.compactMap { item in
             if let map = item as? [String: Any], let name = string(map["name"])?.nilIfEmpty {
-                return SpecWorker(role: string(map["role"]) ?? "", name: name, reason: string(map["reason"]))
+                return SpecWorker(
+                    role: string(map["role"]) ?? "", name: name, reason: string(map["reason"]),
+                    skills: strings(map["skills"]), model: string(map["model"])
+                )
             }
             return string(item)?.nilIfEmpty.map { SpecWorker(role: "", name: $0) }
         }
+    }
+
+    private static func strings(_ value: Any?) -> [String] {
+        if let items = value as? [Any] { return items.compactMap { string($0)?.nilIfEmpty } }
+        return string(value).map { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } } ?? []
     }
 
     private static func runIDs(_ value: Any?) -> [Int64] {

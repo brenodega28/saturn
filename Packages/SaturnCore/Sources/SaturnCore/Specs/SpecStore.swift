@@ -43,9 +43,11 @@ public struct SpecFile: Sendable, Hashable, Identifiable {
 
 public struct SpecStore: Sendable {
     public let paths: AppPaths
+    public let database: AppDatabase?
 
-    public init(paths: AppPaths) {
+    public init(paths: AppPaths, database: AppDatabase? = nil) {
         self.paths = paths
+        self.database = database
     }
 
     public func draftURL(projectId: Int64, taskId: Int64) -> URL {
@@ -66,9 +68,17 @@ public struct SpecStore: Sendable {
 
     public func writePage(_ document: SpecDocument, for draft: URL) throws {
         let page = SpecPageRenderer.pageURL(for: draft)
-        let html = SpecPageRenderer().render(document)
+        let taskId = Int64(draft.deletingPathExtension().lastPathComponent)
+        let html = SpecPageRenderer().render(document, workflow: taskId.flatMap { workflow(for: document, taskId: $0) })
         guard (try? String(contentsOf: page, encoding: .utf8)) != html else { return }
         try html.write(to: page, atomically: false, encoding: .utf8)
+    }
+
+    public func workflow(for document: SpecDocument, taskId: Int64) -> WorkflowDefinition? {
+        guard let database, let chat = try? database.task(id: taskId), let project = try? database.project(id: chat.projectId) else { return nil }
+        let proposal = (try? database.leadMessages(taskId: taskId))?.last { $0.kind == .proposal && $0.status == .open }?.workflow
+        let id = document.workflow ?? proposal ?? LeadChat.specWorkflow
+        return ProjectConfigLoader.load(repository: project.filesRoot).workflow(id)
     }
 
     public func pageURL(projectId: Int64, taskId: Int64) -> URL {
@@ -77,9 +87,9 @@ public struct SpecStore: Sendable {
 
     public func ensurePage(projectId: Int64, taskId: Int64) -> URL? {
         let page = pageURL(projectId: projectId, taskId: taskId)
-        if FileManager.default.fileExists(atPath: page.path) { return page }
-        guard let document = try? draft(projectId: projectId, taskId: taskId) else { return nil }
-        try? writePage(document, for: draftURL(projectId: projectId, taskId: taskId))
+        if let document = try? draft(projectId: projectId, taskId: taskId) {
+            try? writePage(document, for: draftURL(projectId: projectId, taskId: taskId))
+        }
         return FileManager.default.fileExists(atPath: page.path) ? page : nil
     }
 

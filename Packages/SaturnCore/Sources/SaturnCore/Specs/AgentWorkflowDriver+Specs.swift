@@ -1,7 +1,7 @@
 import Foundation
 
 extension AgentWorkflowDriver {
-    var specStore: SpecStore { SpecStore(paths: runtime.paths) }
+    var specStore: SpecStore { SpecStore(paths: runtime.paths, database: runtime.database) }
 
     func draftSpec(_ request: SpecDraftRequest, from agent: Agent) throws -> SpecDocument {
         guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can draft its spec.") }
@@ -23,6 +23,7 @@ extension AgentWorkflowDriver {
         }
         document.title = request.title
         document.workers = request.workers
+        if let workflow = request.workflow { document.workflow = workflow }
         if let owner = request.owner { document.owner = owner }
         document.summary = request.summary
         document.interfaces = request.interfaces
@@ -93,10 +94,16 @@ extension AgentWorkflowDriver {
         guard let runId = run.id, let spec = specStore.runSpec(runId: runId) else { return nil }
         return """
             ## The user’s spec
-            The user approved this spec in the chat. Saturn committed it as `\(spec.link.path)` on the run branch. Its acceptance criteria are fixed: keep them as they are. Refine the tasks freely, and add interfaces or out-of-scope notes in your plan’s spec only when the work needs them.
+            The user approved this spec. Saturn committed it as `\(spec.link.path)` on the run branch. Its acceptance criteria are fixed: keep them as they are. Refine the tasks freely, and add interfaces or out-of-scope notes in your plan’s spec only when the work needs them.\(Self.workersGuide(spec.document.workers))
 
             \(spec.document.planSpec.markdown)
             """
+    }
+
+    static func workersGuide(_ workers: [SpecWorker]) -> String {
+        guard !workers.isEmpty else { return "" }
+        let builders = workers.filter { $0.kind == .builder }.count
+        return " The approval covers the workers it lists (\(builders) builder\(builders == 1 ? "" : "s")) and its workflow: a plan within them goes straight to build, so don’t ask the user to approve the plan or the agent count again. A plan with more builders stops for the user’s approval."
     }
 
     func criteriaGuide(for run: Run) -> String? {
@@ -197,7 +204,7 @@ extension AgentWorkflowDriver {
 extension LeadChat {
     func attachSpec(to run: Run, taskId: Int64, document: SpecDocument, project: Project, config: ProjectConfig) throws {
         guard let runId = run.id, let projectId = project.id else { return }
-        let store = SpecStore(paths: runtime.paths)
+        let store = SpecStore(paths: runtime.paths, database: database)
         var started = document
         started.status = .inProgress
         if !started.linkedRuns.contains(runId) { started.linkedRuns.append(runId) }
@@ -211,7 +218,7 @@ extension LeadChat {
     }
 
     func pendingSpec(taskId: Int64, projectId: Int64) throws -> SpecDocument? {
-        let store = SpecStore(paths: runtime.paths)
+        let store = SpecStore(paths: runtime.paths, database: database)
         guard FileManager.default.fileExists(atPath: store.draftURL(projectId: projectId, taskId: taskId).path) else { return nil }
         guard let document = try store.draft(projectId: projectId, taskId: taskId), document.status != .done else { return nil }
         return document

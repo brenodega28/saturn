@@ -10,6 +10,12 @@ extension SaturnHost {
         specReviews.deliver = { [weak self] taskId, message in
             try? await self?.leadChat.deliverSpecFeedback(message, taskId: taskId)
         }
+        specReviews.approve = { [weak self] taskId in
+            guard let self else { throw SpecReviewError.approvalUnavailable }
+            guard let chat = try database.task(id: taskId), let project = try database.project(id: chat.projectId) else { throw SpecReviewError.noDraft }
+            if chat.isClosed { throw SpecReviewError.closed }
+            _ = try await leadChat.approveSpec(taskId: taskId, in: project)
+        }
         specReviews.drafted = { [weak self] projectId, taskId, path in
             self?.server?.broadcast(.event(.specDrafted(projectId: projectId, taskId: taskId, path: path)))
         }

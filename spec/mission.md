@@ -1,18 +1,18 @@
-# Ensemble — Mission
+# Saturn — Mission
 
-Ensemble formalizes the proven workflow for agentic development: **agents propose, rails verify, humans approve.**
+Saturn formalizes the proven workflow for agentic development: **agents propose, rails verify, humans approve.**
 
 The teams that get good, consistent code from AI agents don't rely on better prompts. They converged on the same pipeline: a well-scoped task, a written plan, an agent working in isolation, a deterministic loop of linters, type checks and tests it must pass with capped retries, a change that reaches review only once that loop is green, a precision-tuned AI first-pass review, and approval by a human who owns the change. Then they feed every repeated mistake back into the rules.
 
-That pipeline takes a platform team to build and maintain. Ensemble gives it to a solo developer on their own machine, as a native app that runs it the same way every time.
+That pipeline takes a platform team to build and maintain. Saturn gives it to a solo developer on their own machine, as a native app that runs it the same way every time.
 
-Ensemble is a complete developer toolkit for agentic coding, in the way Xcode and Android Studio are for their platforms. It is one integrated, polished environment where the developer scopes work, runs agents, verifies, reviews, ships and measures, instead of stitching together terminals, editors, CI dashboards and chat windows. Every stage of the pipeline has a first-class home in the app, and the tools work together so they feel like one.
+Saturn is a complete developer toolkit for agentic coding, in the way Xcode and Android Studio are for their platforms. It is one integrated, polished environment where the developer scopes work, runs agents, verifies, reviews, ships and measures, instead of stitching together terminals, editors, CI dashboards and chat windows. Every stage of the pipeline has a first-class home in the app, and the tools work together so they feel like one.
 
 ---
 
 ## Product experience
 
-The [Ensemble design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD) is the reference for how the app looks and behaves. It covers every screen: the chat with the Lead, Agents, Workflows, Changes, Source, Run detail, Agent session, Usage, Settings, the ⌘K palette, Welcome, project onboarding and the website. The v5 pages are the current design. When the app and the canvas disagree, the canvas wins or gets updated, never ignored.
+The [Saturn design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD) is the reference for how the app looks and behaves. It covers every screen: the chat with the Lead, Agents, Workflows, Changes, Source, Run detail, Agent session, Usage, Settings, the ⌘K palette, Welcome, project onboarding and the website. The v5 pages are the current design. When the app and the canvas disagree, the canvas wins or gets updated, never ignored.
 
 The experience it sets out:
 
@@ -23,7 +23,7 @@ The experience it sets out:
 - **Cost always visible.** Spend shows in the sidebar, on every run and agent, and before a plan starts.
 - **Guided start.** Onboarding scans the project, suggests workflows, skills, checks and limits, and gets to the first task in a few steps.
 
-The evidence is consistent: speed is easy and stability is hard. Agents raise output, but unchecked they also raise PR size, review time, duplication, complexity and bugs. Ensemble's job is to keep the speed and pay the stability bill up front. It does that with the harness around the model, not with the model.
+The evidence is consistent: speed is easy and stability is hard. Agents raise output, but unchecked they also raise PR size, review time, duplication, complexity and bugs. Saturn's job is to keep the speed and pay the stability bill up front. It does that with the harness around the model, not with the model.
 
 ---
 
@@ -59,7 +59,7 @@ What gets in their way today:
 
 ## Success criteria
 
-Ensemble succeeds when it makes agent work dependable, measured by outcomes rather than by the developer's sense of speed:
+Saturn succeeds when it makes agent work dependable, measured by outcomes rather than by the developer's sense of speed:
 
 - **Nothing unverified reaches review.** Every change presented to the developer has passed its deterministic checks, and no change made them pass by editing or disabling them.
 - **Small changes.** PR size stays small and steady as usage grows instead of creeping up.
@@ -69,5 +69,5 @@ Ensemble succeeds when it makes agent work dependable, measured by outcomes rath
 - **Fewer repeated mistakes.** Corrections the developer makes become rules or checks, and the same mistake stops recurring.
 - **Predictable spend.** No run exceeds its budget, and the developer can say what each change cost.
 - **Reliable runs.** No lost work across quits, crashes, sleep or rate limits; every run finishes, waits on the developer, or fails with a clear reason.
-- **One place to work.** The developer goes from task to merged change without leaving Ensemble for a terminal, browser or other tool, unless they choose to.
+- **One place to work.** The developer goes from task to merged change without leaving Saturn for a terminal, browser or other tool, unless they choose to.
 - **Visible numbers.** The developer can see these metrics in the app, not just trust that they're true.

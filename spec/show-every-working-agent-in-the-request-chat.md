@@ -12,7 +12,7 @@ The request chat shows a live row while the Lead is thinking, but agents working
 
 ## Interfaces
 
-- EnsembleCore `LeadChat.backgroundSessions(for:)` becomes `workingSessions(for: ProjectTask) -> [AgentSession]`: every running or queued session for an agent tied to the request (agents from `database.requestAgents(taskId:)`, which covers the request's runs, plus `database.spawnedAgents(taskId:)`), with the chat lead excluded, no duplicates, ordered by agent id
+- SaturnCore `LeadChat.backgroundSessions(for:)` becomes `workingSessions(for: ProjectTask) -> [AgentSession]`: every running or queued session for an agent tied to the request (agents from `database.requestAgents(taskId:)`, which covers the request's runs, plus `database.spawnedAgents(taskId:)`), with the chat lead excluded, no duplicates, ordered by agent id
 - `AppModel.backgroundSessions(for:)` is renamed to `workingSessions(for:)` to match, keeping the `agents.usageRevision` dependency
 - `RequestChat`'s `BackgroundAgentsRow` / `BackgroundAgentRow` / `BackgroundAgentLine` become working-agent rows. The single-agent subtitle reads '· working on the run' for agents with a runId and keeps '· working in the background' otherwise. The group header reads 'N agents working'
 
@@ -34,8 +34,8 @@ The request chat shows a live row while the Lead is thinking, but agents working
 - [x] An agent's row disappears once it stops running or queued, and the chat scrolls to keep the row in view as it appears or changes, like it does today
 - [x] Each agent appears at most once, even if it matches both the request's runs and the spawned-by-lead query
 - [x] LeadAgentControlTests covers the new behavior: a run agent working on the request is included, the chat lead and agents on other requests are excluded, and idle agents are excluded. The existing assertion that run agents are excluded is updated to match
-- [x] `swift test` passes in Packages/EnsembleCore and the app builds with xcodebuild
+- [x] `swift test` passes in Packages/SaturnCore and the app builds with xcodebuild
 
 ## Verification
 
-Run `swift test` in Packages/EnsembleCore, including the updated LeadAgentControlTests. Build the Ensemble app with xcodebuild. Then start a feature-delivery run from a request chat and check that the run lead, then the builders, then the checker each show up live at the bottom of the chat while they work and disappear when they finish, that two at once collapse into the grouped list, and that clicking one opens its session.
+Run `swift test` in Packages/SaturnCore, including the updated LeadAgentControlTests. Build the Saturn app with xcodebuild. Then start a feature-delivery run from a request chat and check that the run lead, then the builders, then the checker each show up live at the bottom of the chat while they work and disappear when they finish, that two at once collapse into the grouped list, and that clicking one opens its session.

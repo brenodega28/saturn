@@ -12,9 +12,9 @@ The v4 chat-and-log rebuild (merge 0e14688) removed the Workbench StatusBar. Thi
 
 ## Interfaces
 
-- New view `MainStatusBar` (Ensemble/Views/V4/MainStatusBar.swift), placed in `MainWindowView` below the three-column HStack, full width
+- New view `MainStatusBar` (Saturn/Views/V4/MainStatusBar.swift), placed in `MainWindowView` below the three-column HStack, full width
 - Items, left: Agents ("N agents working · M need you"), Checks ("Checks · round N · state"), Problems ("✕ errors ! warnings"); right: Claude CLI health, plan usage %, offline / rate-limited
-- Restored helpers that were deleted with the Workbench: `AppModel.problems(...)` (from Ensemble/Workbench/Navigators/RunNavigators.swift at 47ffa4c), `AppModel.steps(of:)` (NavigatorParts.swift at 47ffa4c), `activeRunsInScope`, `CheckBoardEntry.State.statusWord`, `PlanUsageSeverity.color`, and a status button component — adapted to v4 (no WorkbenchState / NavigatorScope dependency)
+- Restored helpers that were deleted with the Workbench: `AppModel.problems(...)` (from Saturn/Workbench/Navigators/RunNavigators.swift at 47ffa4c), `AppModel.steps(of:)` (NavigatorParts.swift at 47ffa4c), `activeRunsInScope`, `CheckBoardEntry.State.statusWord`, `PlanUsageSeverity.color`, and a status button component — adapted to v4 (no WorkbenchState / NavigatorScope dependency)
 - Click targets: Agents → MainScreen.tool(.agents); Checks → MainScreen.run(id) of the run the entry belongs to; Problems → the run the first problem came from; Claude → Settings; Plan usage → MainScreen.tool(.usage); Offline / rate limit → not clickable (help text only)
 
 ## Out of scope
@@ -22,7 +22,7 @@ The v4 chat-and-log rebuild (merge 0e14688) removed the Workbench StatusBar. Thi
 - Bringing back the old toolbar (project switcher, scheme selector, start/stop, activity viewer)
 - Bringing back the bottom panel, navigator or inspector
 - A new Problems view
-- Changes to PlanUsage / ProjectSignals logic in EnsembleCore
+- Changes to PlanUsage / ProjectSignals logic in SaturnCore
 
 ## Acceptance criteria
 
@@ -37,4 +37,4 @@ The v4 chat-and-log rebuild (merge 0e14688) removed the Workbench StatusBar. Thi
 
 ## Verification
 
-Build the app with xcodebuild and run the EnsembleCore tests. Launch the app, open a project with a running run: confirm the bar sits full width at the bottom, items show and hide per their conditions, and each click lands on the right screen. Toggle network off to see Offline. Screenshot light/dark if V4 supports both.
+Build the app with xcodebuild and run the SaturnCore tests. Launch the app, open a project with a running run: confirm the bar sits full width at the bottom, items show and hide per their conditions, and each click lands on the right screen. Toggle network off to see Offline. Screenshot light/dark if V4 supports both.

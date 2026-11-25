@@ -16,8 +16,8 @@ Today a new chat is an unsaved `.chat(chatID: nil)` page, and the composer keeps
 
 ## Interfaces
 
-- ChatDraft (new, EnsembleCore): Codable struct { id: UUID, projectID: Int64, number: Int, createdAt: Date, updatedAt: Date, text: String, attachments: [ChatAttachment] }
-- ChatDraftStore (new, EnsembleCore): file-backed store under AppPaths root `drafts/<daemonID>/`. Methods: newDrafts(), createNewDraft(projectID:) -> ChatDraft (number = lowest unused positive number across that daemon's new drafts), save(_:), deleteNewDraft(id:), chatDraft(chatID:) -> PendingMessage?, setChatDraft(_:chatID:), clearChatDraft(chatID:). Saves are debounced or coalesced so typing does not write on every keystroke
+- ChatDraft (new, SaturnCore): Codable struct { id: UUID, projectID: Int64, number: Int, createdAt: Date, updatedAt: Date, text: String, attachments: [ChatAttachment] }
+- ChatDraftStore (new, SaturnCore): file-backed store under AppPaths root `drafts/<daemonID>/`. Methods: newDrafts(), createNewDraft(projectID:) -> ChatDraft (number = lowest unused positive number across that daemon's new drafts), save(_:), deleteNewDraft(id:), chatDraft(chatID:) -> PendingMessage?, setChatDraft(_:chatID:), clearChatDraft(chatID:). Saves are debounced or coalesced so typing does not write on every keystroke
 - MainPageKind gains `.newChat(draftID: UUID, project: ProjectRef)`, or `.chat` gains a draftID. Pages restored from older saved state with `.chat(chatID: nil)` are migrated into a fresh draft
 - DaemonWorkspace.newChat(in:) / startNewChat(in:) / requestNewChat(): always create a new draft and open its page, never reuse an existing one
 - DaemonWorkspace.adoptNewChat: replaces the page for the draft that was sent (matched by draft id, not just 'the nil-chat page of this project') and deletes that draft
@@ -42,9 +42,9 @@ Today a new chat is an unsaved `.chat(chatID: nil)` page, and the composer keeps
 - [x] Sending from a draft creates the real chat in the same page, removes the draft entry, and clears the saved draft. If the send fails, the message goes back into the draft
 - [x] In an existing chat, typed-but-unsent text and attachments survive switching chats and restarting the app, and are cleared after a successful send
 - [x] Drafts of a project that is closed or removed don't show in the sidebar and don't crash anything
-- [x] swift test --package-path Packages/EnsembleCore passes, with new tests for ChatDraftStore: numbering, save/load round trip with image attachments, delete, and chat drafts
+- [x] swift test --package-path Packages/SaturnCore passes, with new tests for ChatDraftStore: numbering, save/load round trip with image attachments, delete, and chat drafts
 - [x] The app target builds
 
 ## Verification
 
-Run `swift test --package-path Packages/EnsembleCore` and build the app with xcodebuild (project.yml / XcodeGen). Then do a manual pass in the running app: create three drafts with ⌘N, fill one with text, an image and a paste, navigate away and back, quit and relaunch, delete one and check the numbering, send one and confirm it becomes a real chat, and type in an existing chat, switch away, relaunch and confirm the text is still there.
+Run `swift test --package-path Packages/SaturnCore` and build the app with xcodebuild (project.yml / XcodeGen). Then do a manual pass in the running app: create three drafts with ⌘N, fill one with text, an image and a paste, navigate away and back, quit and relaunch, delete one and check the numbering, send one and confirm it becomes a real chat, and type in an existing chat, switch away, relaunch and confirm the text is still there.

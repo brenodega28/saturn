@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/build/release"
 DIST="$ROOT/dist"
-ARCHIVE="$BUILD/Ensemble.xcarchive"
+ARCHIVE="$BUILD/Saturn.xcarchive"
 EXPORT="$BUILD/export"
 
 rm -rf "$BUILD" "$DIST"
@@ -17,8 +17,8 @@ cd "$ROOT"
 xcodegen generate
 
 xcodebuild archive \
-  -project Ensemble.xcodeproj \
-  -scheme Ensemble \
+  -project Saturn.xcodeproj \
+  -scheme Saturn \
   -configuration Release \
   -archivePath "$ARCHIVE" \
   -derivedDataPath "$BUILD/DerivedData" \
@@ -43,11 +43,11 @@ PLIST
 
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" -exportOptionsPlist "$BUILD/ExportOptions.plist"
 
-APP="$EXPORT/Ensemble.app"
+APP="$EXPORT/Saturn.app"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")"
-DMG="$DIST/Ensemble-$VERSION.dmg"
+DMG="$DIST/Saturn-$VERSION.dmg"
 
-hdiutil create -volname Ensemble -srcfolder "$APP" -ov -format UDZO "$DMG"
+hdiutil create -volname Saturn -srcfolder "$APP" -ov -format UDZO "$DMG"
 codesign --sign "Developer ID Application" --timestamp "$DMG"
 
 xcrun notarytool submit "$DMG" \

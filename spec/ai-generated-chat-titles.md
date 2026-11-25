@@ -12,11 +12,11 @@ created: 2026-11-25
 
 ## Summary
 
-Today a new chat's title is the first line of the message cut to 80 chars (LeadRequest.title), so many cards look alike. After the first message of a new chat is sent, Ensemble asks a small, fast model (Haiku) in the background for a short 3–6 word title and renames the chat with it. The truncated first line stays as the immediate placeholder and as the fallback if generation fails, times out, or Claude isn't available. A title the user renamed by hand is never overwritten.
+Today a new chat's title is the first line of the message cut to 80 chars (LeadRequest.title), so many cards look alike. After the first message of a new chat is sent, Saturn asks a small, fast model (Haiku) in the background for a short 3–6 word title and renames the chat with it. The truncated first line stays as the immediate placeholder and as the fallback if generation fails, times out, or Claude isn't available. A title the user renamed by hand is never overwritten.
 
 ## Interfaces
 
-- New `ChatTitler` (EnsembleCore/Workflow) with `func generateTitle(for chat: Chat, text: String) async` — runs a one-shot `claude -p --model haiku` (reusing ClaudeLaunch/ToolLocator, same provider mode/env as agents, no tools, no MCP, no session persistence) with a prompt asking for a 3–6 word title, plain text only
+- New `ChatTitler` (SaturnCore/Workflow) with `func generateTitle(for chat: Chat, text: String) async` — runs a one-shot `claude -p --model haiku` (reusing ClaudeLaunch/ToolLocator, same provider mode/env as agents, no tools, no MCP, no session persistence) with a prompt asking for a 3–6 word title, plain text only
 - `static func cleanTitle(_ reply: String) -> String?` — strips quotes, trailing punctuation, markdown and newlines, caps at LeadRequest.maxTitleLength; nil when empty
 - LeadChat.createRequest kicks off ChatTitler in a detached Task after the chat is inserted; it never blocks sending to the lead
 - Rename goes through AppDatabase.renameChat only if the chat's title still equals the placeholder (so a manual rename wins), so the sidebar updates through existing DB observation
@@ -36,8 +36,8 @@ Today a new chat's title is the first line of the message cut to 80 chars (LeadR
 - [x] If claude is missing, errors, or takes longer than ~20s, the placeholder title stays and no error is shown to the user
 - [x] Attachment-only chats (image / pasted text) still get a title; image-only keeps "Image" if nothing useful can be generated
 - [x] Sending later messages in the chat does not change its title
-- [x] Unit tests cover cleanTitle and the 'don't overwrite manual rename' rule using FakeClaude; existing tests pass (swift test in Packages/EnsembleCore)
+- [x] Unit tests cover cleanTitle and the 'don't overwrite manual rename' rule using FakeClaude; existing tests pass (swift test in Packages/SaturnCore)
 
 ## Verification
 
-Run `swift test` in Packages/EnsembleCore. Then build the app, start a new chat with a long message and another with a near-identical opening line; confirm both cards get distinct short titles within seconds. Rename one chat immediately after sending and confirm the manual name sticks. Temporarily point to a missing claude binary and confirm the placeholder remains.
+Run `swift test` in Packages/SaturnCore. Then build the app, start a new chat with a long message and another with a near-identical opening line; confirm both cards get distinct short titles within seconds. Rename one chat immediately after sending and confirm the manual name sticks. Temporarily point to a missing claude binary and confirm the placeholder remains.

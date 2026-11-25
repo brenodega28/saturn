@@ -38,8 +38,8 @@ Match the "In the frame · Chat" design: when the Chat tab is the active editor 
 - [x] Switching to another request updates the inspector to that request. Selecting New request (or a direct chat) shows the inspector's 'No selection' state.
 - [x] The ProposalCard 'Spec attached' link still works.
 - [x] No code comments are added.
-- [x] `swift test` in Packages/EnsembleCore passes and the app builds with xcodebuild.
+- [x] `swift test` in Packages/SaturnCore passes and the app builds with xcodebuild.
 
 ## Verification
 
-Build the app with xcodebuild and run `swift test` in Packages/EnsembleCore. Manual check: open a lead chat that has a spec draft and start a run where a builder runs an unlisted command (e.g. `java -version`). Confirm the request shows up only in the inspector, that the inspector opens on its own if it was hidden, that each of the three decisions works and moves the request into history, that the Specfile section matches the spec, and that Open in editor works. Compare the inspector to the 'In the frame · Chat' artboard.
+Build the app with xcodebuild and run `swift test` in Packages/SaturnCore. Manual check: open a lead chat that has a spec draft and start a run where a builder runs an unlisted command (e.g. `java -version`). Confirm the request shows up only in the inspector, that the inspector opens on its own if it was hidden, that each of the three decisions works and moves the request into history, that the Specfile section matches the spec, and that Open in editor works. Compare the inspector to the 'In the frame · Chat' artboard.

@@ -1,7 +1,7 @@
 .DS_Store
-/Ensemble.xcodeproj/
-/Ensemble/Info.plist
-/Ensemble/Ensemble.entitlements
+/Saturn.xcodeproj/
+/Saturn/Info.plist
+/Saturn/Saturn.entitlements
 /build/
 /dist/
 DerivedData/

@@ -3,6 +3,17 @@ import Foundation
 
 enum FakeClaude {
     static let script = #"""
+    case " $* " in
+      *" --output-format text "*)
+        printf '%s\n' "$(printf '%s' "$*" | tr '\n' ' ')" >> "$FAKE_DIR/titles.log"
+        title_mode=""
+        [ -f "$FAKE_DIR/title-mode" ] && title_mode="$(cat "$FAKE_DIR/title-mode")"
+        [ "$title_mode" = "fail" ] && { echo "title failed" >&2; exit 1; }
+        [ "$title_mode" = "slow" ] && sleep 5
+        [ -f "$FAKE_DIR/title" ] && cat "$FAKE_DIR/title"
+        exit 0
+        ;;
+    esac
     session=""
     resumed=no
     model=default

@@ -54,16 +54,14 @@ extension RequestCloseReason {
     }
 }
 
-struct NewRequestHeldSends: View {
-    @Environment(AppModel.self) private var model
-    @Environment(DaemonWorkspace.self) private var workspace
-    let held: [HeldSend]
+struct NewRequestDeliveringSends: View {
+    let delivering: [DeliveringSend]
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
-                ForEach(held) { send in
-                    RequestBubble(held: send, onCancel: workspace.cancelHeldSend)
+                ForEach(delivering) { send in
+                    RequestBubble(delivering: send)
                 }
             }
             .frame(maxWidth: Tokens.Size.transcript)
@@ -71,7 +69,7 @@ struct NewRequestHeldSends: View {
             .padding(EdgeInsets(top: 22, leading: 28, bottom: 16, trailing: 28))
         }
         .defaultScrollAnchor(.bottom)
-        .followsBottom(of: held.map(\.id), jumpingOn: held.count, releasingOn: false)
+        .followsBottom(of: delivering.map(\.id), jumpingOn: delivering.count, releasingOn: false)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

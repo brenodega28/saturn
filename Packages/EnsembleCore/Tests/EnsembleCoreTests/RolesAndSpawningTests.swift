@@ -1,6 +1,27 @@
 import Foundation
 import Testing
+import Yams
 @testable import EnsembleCore
+
+@Suite struct RoleVerbTests {
+    @Test func decodesVerbFromRoleFile() throws {
+        let role = try YAMLDecoder().decode(RoleDefinition.self, from: "name: Tester\nverb: testing\n")
+        #expect(role.verb == "testing")
+        #expect(role.activeVerb == "testing")
+    }
+
+    @Test func missingVerbFallsBackToWorking() throws {
+        let role = try YAMLDecoder().decode(RoleDefinition.self, from: "name: Coder\n")
+        #expect(role.verb == nil)
+        #expect(role.activeVerb == "working")
+    }
+
+    @Test func builtInRolesHaveDefaultVerbs() {
+        #expect(AgentKind.lead.builtInRole.activeVerb == "planning")
+        #expect(AgentKind.builder.builtInRole.activeVerb == "building")
+        #expect(AgentKind.checker.builtInRole.activeVerb == "checking")
+    }
+}
 
 @Suite struct AgentNamingTests {
     @Test func singleAgentKeepsThePlainRoleName() {

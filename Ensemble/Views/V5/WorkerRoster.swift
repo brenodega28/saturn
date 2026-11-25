@@ -3,7 +3,6 @@ import EnsembleUI
 import SwiftUI
 
 struct WorkerRoster: View {
-    @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let chat: Chat
     let project: Project
@@ -11,38 +10,14 @@ struct WorkerRoster: View {
     static let nudge = "You’ve had no output for a while. If you’re waiting on a prompt or a command that hangs, stop it, then say where you are and what’s left."
 
     var body: some View {
-        let workers = workspace.chatWorkers(chat, in: project)
+        let workers = workspace.chatWorkers(chat, in: project).filter(\.isActive)
         if !workers.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Text("Workers").font(.system(size: 13, weight: .semibold)).foregroundStyle(Tokens.text)
-                    Text(Self.counts(workers.map(\.state))).font(.system(size: 12.5)).foregroundStyle(Tokens.text2)
-                    Spacer()
-                    if workers.contains(where: { $0.state == .working || $0.state == .stuck || $0.state == .queued }) {
-                        Button("Stop all") { for worker in workers { worker.session?.stop() } }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(Tokens.danger)
-                    }
-                }
-                .padding(EdgeInsets(top: 2, leading: 2, bottom: 6, trailing: 2))
+            VStack(alignment: .leading, spacing: 14) {
                 ForEach(workers, id: \.agent.id) { worker in
-                    WorkerRow(worker: worker, project: project)
+                    WorkerActivityRow(worker: worker, project: project)
                 }
             }
-            .padding(EdgeInsets(top: 10, leading: 12, bottom: 8, trailing: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tokens.hair2))
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Workers on this chat")
         }
-    }
-
-    static func counts(_ states: [WorkerState]) -> String {
-        let order: [(WorkerState, String)] = [(.working, "working"), (.stuck, "stuck"), (.waitingOnYou, "waiting on you"), (.queued, "queued"), (.done, "done"), (.stopped, "stopped"), (.failed, "failed"), (.idle, "idle")]
-        return order.compactMap { state, label in
-            let count = states.count { $0 == state }
-            return count > 0 ? "\(count) \(label)" : nil
-        }.joined(separator: " · ")
     }
 }
 
@@ -50,78 +25,65 @@ struct ChatWorker {
     let agent: Agent
     let session: LiveAgentSession?
     let state: WorkerState
+
+    var isActive: Bool { state == .working || state == .queued || state == .stuck }
 }
 
-struct WorkerRow: View {
-    @Environment(AppModel.self) private var model
+struct WorkerActivityRow: View {
     @Environment(DaemonWorkspace.self) private var workspace
     let worker: ChatWorker
     let project: Project
-    @State private var isHovered = false
 
     var body: some View {
-        let name = workspace.displayName(of: worker.agent, in: project)
+        let role = workspace.role(for: worker.agent, in: project) ?? (worker.agent.kind ?? .builder).builtInRole
+        let session = worker.session
+        let activity = session.map { TranscriptLayout.activity($0.transcript.entries, live: $0.transcript.liveEntry) } ?? .working
+        let root = session.flatMap { $0.transcript.session?.cwd ?? $0.agent.worktreePath }
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                AgentAvatar(size: 20, appearance: RoleAppearance(role: workspace.role(for: worker.agent, in: project)), isFailing: worker.state == .failed || worker.state == .stuck)
-                Text(name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Tokens.text)
-                Text(worker.agent.branch ?? (worker.agent.readOnly ? "no worktree · reads the others" : ""))
-                    .font(Tokens.mono(11.5))
-                    .foregroundStyle(Tokens.text2)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 6)
-                if isHovered {
-                    actions
-                } else {
-                    Text(Self.label(worker.state)).font(.system(size: 12.5)).foregroundStyle(Self.color(worker.state))
-                }
+            HStack(alignment: activity.isReply ? .top : .center, spacing: 12) {
+                RobotFace(kind: RobotFace.Kind(icon: role.icon), size: 20, lookingAside: true)
+                SessionActivityView(activity: activity, name: role.name, root: root, verb: role.activeVerb)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .animation(.snappy(duration: 0.2), value: activity.phase)
             }
-            if worker.state == .stuck, let session = worker.session {
-                HStack(spacing: 8) {
-                    Text("No output for \(Self.silentMinutes(session)) min. It may be waiting on a prompt or a hung command.")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Tokens.text2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer()
-                    Button("Nudge") { session.send(WorkerRoster.nudge) }.buttonStyle(SecondaryPillStyle())
-                    Button("Restart") {
-                        session.stop()
-                        session.resume()
-                    }
-                    .buttonStyle(SecondaryPillStyle())
-                    Button("Stop") { session.stop() }.buttonStyle(.plain).foregroundStyle(Tokens.danger)
-                }
-                .padding(.leading, 30)
+            .contentShape(.rect)
+            .onTapGesture { workspace.openAgentSession(worker.agent, in: project) }
+            .accessibilityElement(children: activity.isReply ? .contain : .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { workspace.openAgentSession(worker.agent, in: project) }
+            if worker.state == .stuck, let session {
+                StuckControls(session: session).padding(.leading, 32)
             }
         }
-        .padding(.vertical, 4)
-        .contentShape(.rect)
-        .onHover { isHovered = $0 }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(name), \(Self.label(worker.state))")
     }
+}
 
-    @ViewBuilder
-    private var actions: some View {
-        HStack(spacing: 10) {
-            Button("Open") { workspace.openAgentSession(worker.agent, in: project) }
-            if worker.state == .failed || worker.state == .stopped, let session = worker.session {
-                Button("Retry") { session.resume() }
+struct StuckControls: View {
+    let session: LiveAgentSession
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("No output for \(silentMinutes) min. It may be waiting on a prompt or a hung command.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Tokens.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button("Nudge") { session.send(WorkerRoster.nudge) }.buttonStyle(SecondaryPillStyle())
+            Button("Restart") {
+                session.stop()
+                session.resume()
             }
-            if worker.state == .working || worker.state == .queued || worker.state == .stuck, let session = worker.session {
-                Button("Stop") { session.stop() }.foregroundStyle(Tokens.danger)
-            }
+            .buttonStyle(SecondaryPillStyle())
+            Button("Stop") { session.stop() }.buttonStyle(.plain).foregroundStyle(Tokens.danger)
         }
-        .buttonStyle(.plain)
-        .font(.system(size: 12.5))
-        .foregroundStyle(Tokens.link)
     }
 
-    static func silentMinutes(_ session: LiveAgentSession) -> Int {
+    private var silentMinutes: Int {
         session.lastOutputAt.map { Int(Date.now.timeIntervalSince($0) / 60) } ?? 0
     }
+}
 
+enum WorkerRow {
     static func label(_ state: WorkerState) -> String {
         switch state {
         case .working: "Working"

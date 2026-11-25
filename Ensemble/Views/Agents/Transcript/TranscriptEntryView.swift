@@ -113,6 +113,7 @@ struct SessionActivityView: View {
     let activity: SessionActivity
     let name: String
     let root: String?
+    var verb = "working"
     var fontSize: CGFloat = 14
 
     var body: some View {
@@ -120,7 +121,7 @@ struct SessionActivityView: View {
         case .working:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("\(name) is working…").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
+                Text("\(name) is \(verb)…").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
             }
         case .replying(let text):
             MarkdownText(text: text, fontSize: fontSize, isStreaming: true)

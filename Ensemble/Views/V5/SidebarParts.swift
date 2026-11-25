@@ -114,12 +114,13 @@ enum NewChatFilter {
 struct MachineLabel: View {
     let workspace: DaemonWorkspace
     var size: CGFloat = 11
+    var showsLocal = false
 
     var body: some View {
-        if workspace.isRemote {
-            HStack(spacing: 3) {
+        if workspace.isRemote || showsLocal {
+            HStack(spacing: 4) {
                 Image(systemName: workspace.systemImage).font(.system(size: size - 1.5))
-                Text(workspace.displayName).lineLimit(1)
+                Text(workspace.displayName).lineLimit(1).truncationMode(.tail)
             }
             .font(.system(size: size))
             .foregroundStyle(Tokens.text2)
@@ -127,173 +128,6 @@ struct MachineLabel: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel("On \(workspace.displayName)")
         }
-    }
-}
-
-struct ProjectCards: View {
-    @Environment(AppModel.self) private var model
-    let summaries: [ChatSummary]
-    @AppStorage("sidebar.openProjectRef", store: AppDefaults.store) private var openProject = ""
-
-    var body: some View {
-        let workspaces = model.orderedWorkspaces
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(workspaces) { workspace in
-                if workspaces.count > 1 {
-                    FleetHeader(workspace: workspace, isFirst: workspace.id == workspaces.first?.id)
-                }
-                ForEach(workspace.openProjects) { project in
-                    let key = Self.key(workspace, project)
-                    ProjectCard(
-                        project: project,
-                        summaries: summaries.filter { $0.daemon == workspace.id && $0.project.id == project.id },
-                        isOpen: openProject == key
-                    ) {
-                        openProject = openProject == key ? "" : key
-                    }
-                    .environment(workspace)
-                }
-                if workspace.isRemote {
-                    Button("+ Add project on \(workspace.displayName)") { model.isRemoteFolderPresented = true }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Tokens.link)
-                        .padding(.horizontal, 10)
-                        .frame(height: 30)
-                } else {
-                    Button("+ Add project") { model.isOpenPanelPresented = true }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Tokens.link)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 38)
-                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tokens.hair2, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
-                }
-            }
-        }
-    }
-
-    private static func key(_ workspace: DaemonWorkspace, _ project: Project) -> String {
-        "\(workspace.id.uuidString)-\(project.id ?? -1)"
-    }
-}
-
-private struct FleetHeader: View {
-    let workspace: DaemonWorkspace
-    let isFirst: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: workspace.systemImage).font(.system(size: 10))
-            Text(workspace.displayName).font(.system(size: 11.5, weight: .semibold))
-            if !workspace.isConnected {
-                Text("offline").font(.system(size: 10.5)).foregroundStyle(Tokens.text2)
-            }
-            Spacer()
-        }
-        .foregroundStyle(workspace.isConnected ? Tokens.text : Tokens.text2)
-        .padding(.top, isFirst ? 0 : 8)
-        .padding(.horizontal, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
-    }
-}
-
-private struct ProjectCard: View {
-    @Environment(AppModel.self) private var model
-    @Environment(DaemonWorkspace.self) private var workspace
-    let project: Project
-    let summaries: [ChatSummary]
-    let isOpen: Bool
-    let toggle: () -> Void
-
-    var body: some View {
-        let need = summaries.count { $0.stage.needsAttention }
-        VStack(alignment: .leading, spacing: 1) {
-            Button(action: toggle) {
-                HStack(spacing: 10) {
-                    ProjectTile(project: project, size: 30)
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(project.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Tokens.text)
-                            Image(systemName: project.isRemote ? "cloud" : "laptopcomputer")
-                                .font(.system(size: 10))
-                                .foregroundStyle(project.isRemote ? Tokens.link : Tokens.text2)
-                                .help(project.isRemote ? "SSH · \(project.location)" : "Local · \((project.path as NSString).abbreviatingWithTildeInPath)")
-                        }
-                        Text(meta(active: summaries.count, need: need))
-                            .font(.system(size: 12))
-                            .foregroundStyle(need > 0 ? Tokens.need : Tokens.text2)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Tokens.text2)
-                        .rotationEffect(.degrees(isOpen ? 0 : -90))
-                }
-                .padding(10)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityValue(isOpen ? "expanded" : "collapsed")
-            if isOpen {
-                VStack(alignment: .leading, spacing: 1) {
-                    section("Crew")
-                    item("Agents", symbol: "person.2", tool: .agents, badge: workspace.agentSessions(in: project).count, badgeColor: Tokens.text2)
-                    item("Workflows", symbol: "flowchart", tool: .workflows)
-                    section("Review")
-                    item("Changes", symbol: "plus.forwardslash.minus", tool: .changes, badge: ProjectOutline.changesBadge(waiting: workspace.requests.items.filter { $0.projectId == project.id })?.count ?? 0, badgeColor: Tokens.need)
-                    item("Source", symbol: "chevron.left.forwardslash.chevron.right", tool: .code)
-                    item("Settings", symbol: "gearshape", tool: .settings)
-                }
-                .padding(EdgeInsets(top: 0, leading: 6, bottom: 8, trailing: 6))
-            }
-        }
-        .background(isOpen ? Tokens.fill : .clear, in: .rect(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(isOpen ? Tokens.hair : .clear))
-        .contextMenu {
-            Button("Project settings") { open(.settings) }
-            if project.isRemote {
-                Button("Copy SSH path") { workspace.copyToPasteboard("\(project.location):\(project.path)") }
-            } else {
-                Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
-            }
-            Button("New chat in this project") { workspace.startNewChat(in: project) }
-            Divider()
-            Button("Remove from Ensemble…", role: .destructive) { workspace.close(project) }
-        }
-    }
-
-    private func meta(active: Int, need: Int) -> String {
-        guard active > 0 else { return "No active chats" }
-        return "\(active) active chat\(active == 1 ? "" : "s")" + (need > 0 ? " · \(need) need\(need == 1 ? "s" : "") you" : "")
-    }
-
-    private func section(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11.5, weight: .semibold))
-            .foregroundStyle(Tokens.text2)
-            .padding(EdgeInsets(top: 8, leading: 8, bottom: 3, trailing: 8))
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    private func item(_ title: String, symbol: String, tool: MainTool, badge: Int = 0, badgeColor: Color = Tokens.text2) -> some View {
-        Button { open(tool) } label: {
-            HStack(spacing: 10) {
-                Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(Tokens.text2).frame(width: 16)
-                Text(title).font(.system(size: 13.5)).foregroundStyle(Tokens.text)
-                Spacer()
-                if badge > 0 { Text("\(badge)").font(Tokens.mono(11.5, weight: .bold)).foregroundStyle(badgeColor) }
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 32)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func open(_ tool: MainTool) {
-        workspace.open(tool, in: project)
     }
 }
 

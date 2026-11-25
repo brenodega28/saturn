@@ -92,7 +92,7 @@ From the "Tokens · dark and light" board. Text pairs pass 4.5:1; `text3` is onl
 
 **Avatars and type**
 - Role avatar colours: Lead #8E5BEA (eyes #E7D6FF), backend #26A866, frontend #2F97CF, CLI #CF6E50, review #E0952A. A failing worker's face turns #FF8A80.
-- Fonts: SF Pro at 13 px base, JetBrains Mono for code, paths, branches and numbers, and Archivo 800 at 112 % width for display headings.
+- Fonts: SF Pro at 13 px base, SF Mono for code, paths, branches and numbers, and SF Pro Display 700 for display headings.
 - The transcript is 14.5 px with 1.6 line height.
 
 **Layout**
@@ -104,7 +104,7 @@ From the "Tokens · dark and light" board. Text pairs pass 4.5:1; `text3` is onl
 
 ## What gets removed
 
-| Feature | App | EnsembleCore |
+| Feature | App | SaturnCore |
 | --- | --- | --- |
 | Tasks | `Views/Tasks/`, `AppModel+Tasks`, `ProjectTab.tasks`, the Tasks sidebar section and its run rows, accept/dismiss flows | `TaskSource.github`, and the task fields only GitHub used (`sourceURL`, `externalNumber`, `repository`) |
 | Inbox | `Views/Inbox/`, `AppModel+Inbox`, `SidebarItem.inbox`, the Inbox tool, menu, key-binding and ⌘K entries | `InboxItem`, `InboxKind`, `InboxStatus`, `InboxStore`, `InboxFeed`, and their use in `RunEngine`, `AgentWorkflowDriver`, `PermissionRequests`, `RequestThread`, `RunTimeline`, Quality and budget code |
@@ -164,7 +164,7 @@ Each phase ends with the app building, tests passing and the app usable.
         - Chat rows show new-activity dots and a More menu: Rename, Mark as done, Drop chat, Copy link to chat, Delete…. Long titles wrap to two lines.
         - A collapsible "Closed" section with Reopen on hover; older closed chats are found through ⌘K.
         - Empty states for no chats and no projects.
-        - Project cards (Crew: Agents, Workflows; Review: Changes, Source; Settings). The card's menu has Project settings, Reveal in Finder or Copy SSH path, New chat in this project, and Remove from Ensemble…. SSH cards show connecting, offline and failing states.
+        - Project cards (Crew: Agents, Workflows; Review: Changes, Source; Settings). The card's menu has Project settings, Reveal in Finder or Copy SSH path, New chat in this project, and Remove from Saturn…. SSH cards show connecting, offline and failing states.
         - Footer: Usage, Settings, and the budget meter (near and over the limit), whose popover has spend by project, Change limits or Raise, and Open Usage.
     - **Navigation:** secondary screens replace the chat area. The top bar reads "‹ Back to <chat>" (or esc) with a project breadcrumb. The chat header shows the project, the title and a stage pill.
     - **Chat card:**
@@ -242,7 +242,7 @@ Each phase ends with the app building, tests passing and the app usable.
 
 ## Acceptance criteria
 
-- [ ] No GitHub, Tasks, Inbox or direct-chat code is left in the app or EnsembleCore, and nothing in the UI mentions them
+- [ ] No GitHub, Tasks, Inbox or direct-chat code is left in the app or SaturnCore, and nothing in the UI mentions them
 - [ ] A finished run merges into the base branch locally by default; Push to origin then pushes it and the chat shows the pushed commit
 - [ ] Spike and Review only runs end without merging
 - [ ] Every point where the engine waits on you shows as an ask card in its chat with the buttons above, and sets the chat's stage to Needs you
@@ -255,7 +255,7 @@ Each phase ends with the app building, tests passing and the app usable.
 - [ ] The Dock badge and menu bar item count chats that need you, and notifications let you approve or allow without opening the app
 - [ ] Every screen works in dark and light, following the Appearance setting
 - [ ] Every screen matches its v5 board in both themes
-- [ ] EnsembleCore tests pass and the app builds with xcodebuild after every phase
+- [ ] SaturnCore tests pass and the app builds with xcodebuild after every phase
 
 ## Out of scope
 
@@ -267,7 +267,7 @@ Each phase ends with the app building, tests passing and the app usable.
 
 These states are still missing from the canvas. Each is built with the nearest designed pattern until the designer covers it.
 
-- Dialogs behind Reject…, Request changes, Delete… and Remove from Ensemble…
+- Dialogs behind Reject…, Request changes, Delete… and Remove from Saturn…
 - A merge conflict or failed local merge; a failed push; no `origin`
 - Settings tabs other than General: Claude CLI, Models, Budget, Notifications, Advanced
 - The flows behind Install…, Locate…, Details, and the run command's "Set up…"

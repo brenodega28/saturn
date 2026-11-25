@@ -48,8 +48,8 @@ Give chat cards four statuses: Open, Finished, Resolved and Closed. Add a `set_c
 - [x] An open chat whose latest run succeeded shows "Finished", not "Done"; the sidebar and menu show the labels Open, Finished, Resolved, Closed; no "Done" or "Dropped" chat labels remain
 - [x] The user can mark a chat Finished, Resolve it, Close it and Reopen it from the chat row menu
 - [x] Existing rows with closeReason done/dropped load and show as Resolved/Closed
-- [x] EnsembleCoreTests cover each status transition via FakeClaude call_tool set_chat_status, the active-run refusal, the tool list, the ChatStage precedence for .finished and the migration; swift test passes
+- [x] SaturnCoreTests cover each status transition via FakeClaude call_tool set_chat_status, the active-run refusal, the tool list, the ChatStage precedence for .finished and the migration; swift test passes
 
 ## Verification
 
-Run `swift test` in Packages/EnsembleCore and build the app target. In the app, ask a lead to mark its chat finished. The card should show Finished in the open list, and its worktrees should remain. Then ask it to resolve. The card should move to the closed list as Resolved, and its agents should be cleaned up after its turn. Send a message to the chat and check that it shows Open again. Try closing while a run is active and check that the attempt is refused. Use the row menu to step through all four statuses.
+Run `swift test` in Packages/SaturnCore and build the app target. In the app, ask a lead to mark its chat finished. The card should show Finished in the open list, and its worktrees should remain. Then ask it to resolve. The card should move to the closed list as Resolved, and its agents should be cleaned up after its turn. Send a message to the chat and check that it shows Open again. Try closing while a run is active and check that the attempt is refused. Use the row menu to step through all four statuses.

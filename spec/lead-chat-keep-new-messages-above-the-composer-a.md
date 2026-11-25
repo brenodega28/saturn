@@ -12,9 +12,9 @@ In the lead request chat, a message you send lands behind the floating composer,
 
 ## Interfaces
 
-- `ChatColumn.leadChat` (Ensemble/Views/V4/ChatColumn.swift): the composer goes in a `.safeAreaInset(edge: .bottom)` (or a measured equivalent) instead of a bottom-aligned ZStack overlay, so the scroll view's bottom inset matches the composer's actual height
-- `RequestChat` and `NewRequestHeldSends` (Ensemble/Views/Lead/RequestChat.swift, LeadView.swift): drop the hard-coded 150pt bottom padding and use a single bottom-follow mechanism instead of the mix of `proxy.scrollTo(..., anchor: .bottom)` and `followsBottom`
-- `FollowsBottom` (Ensemble/Views/Agents/Transcript/TranscriptEntryView.swift): may be extended to follow content-height growth, and to accept a 'force to bottom' trigger for the user's own sends. Its other callers must keep working
+- `ChatColumn.leadChat` (Saturn/Views/V4/ChatColumn.swift): the composer goes in a `.safeAreaInset(edge: .bottom)` (or a measured equivalent) instead of a bottom-aligned ZStack overlay, so the scroll view's bottom inset matches the composer's actual height
+- `RequestChat` and `NewRequestHeldSends` (Saturn/Views/Lead/RequestChat.swift, LeadView.swift): drop the hard-coded 150pt bottom padding and use a single bottom-follow mechanism instead of the mix of `proxy.scrollTo(..., anchor: .bottom)` and `followsBottom`
+- `FollowsBottom` (Saturn/Views/Agents/Transcript/TranscriptEntryView.swift): may be extended to follow content-height growth, and to accept a 'force to bottom' trigger for the user's own sends. Its other callers must keep working
 - `DirectChatView`: gets the same treatment if it shows the same symptoms (sent bubble hidden, no follow while waiting)
 
 ## Out of scope
@@ -37,4 +37,4 @@ In the lead request chat, a message you send lands behind the floating composer,
 
 ## Verification
 
-Build and run the app. In a request chat with history: (1) send a short message, then a multi-line message with an attachment, and check that each bubble is fully visible above the composer; (2) send something that makes the lead think for a while and watch without touching the scroll, checking the view keeps the thinking row and reply in view as they grow; (3) scroll up mid-reply and check it stays put, then scroll back down and check it follows again; (4) scroll up and send, and check it jumps to the bottom; (5) open a chat link to an older message and check it is centered and highlighted; (6) repeat 1–2 in a direct agent chat. Run the existing test suites (`swift test` in Packages/EnsembleCore and the app scheme's tests via xcodebuild).
+Build and run the app. In a request chat with history: (1) send a short message, then a multi-line message with an attachment, and check that each bubble is fully visible above the composer; (2) send something that makes the lead think for a while and watch without touching the scroll, checking the view keeps the thinking row and reply in view as they grow; (3) scroll up mid-reply and check it stays put, then scroll back down and check it follows again; (4) scroll up and send, and check it jumps to the bottom; (5) open a chat link to an older message and check it is centered and highlighted; (6) repeat 1–2 in a direct agent chat. Run the existing test suites (`swift test` in Packages/SaturnCore and the app scheme's tests via xcodebuild).

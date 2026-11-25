@@ -20,7 +20,7 @@ const keep = ["dist", "package.json", "LICENSE", "THIRD-PARTY-NOTICES.md"];
 const placed = new Map();
 const lock = {};
 
-const own = new Set(["ensemble-json.mjs"]);
+const own = new Set(["saturn-json.mjs"]);
 for (const entry of fs.existsSync(root) ? fs.readdirSync(root) : []) {
   if (!own.has(entry)) fs.rmSync(path.join(root, entry), { recursive: true, force: true });
 }

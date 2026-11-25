@@ -1,0 +1,22 @@
+import SaturnCore
+import SaturnUI
+import SwiftUI
+
+struct ClosedChatBanner: View {
+    @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
+    let chat: Chat
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("Closed as \(chat.closeReason?.title.lowercased() ?? "closed") on \((chat.closedAt ?? chat.updatedAt).formatted(.dateTime.month(.abbreviated).day())). Reopen it to keep talking.")
+                .font(.system(size: 13))
+                .foregroundStyle(Tokens.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button("Reopen") { workspace.reopenChat(chat) }.buttonStyle(SecondaryPillStyle())
+        }
+        .padding(12)
+        .background(Tokens.fill, in: .rect(cornerRadius: 12, style: .continuous))
+    }
+}

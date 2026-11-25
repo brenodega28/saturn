@@ -21,7 +21,7 @@ Today, after the lead calls draft_spec, the only way to reach the spec is a tab 
 - New daemon command `ChatCommands.ApproveSpec(chatID:)`: marks the draft approved and starts a feature-delivery run for the request with the spec attached (same path as Start on a proposal with the spec), returns the run id or an error
 - Request changes: client action that opens/focuses the Spec tab (Lavish page) for the chat; no daemon command
 - SpecReviewStatus gains the remote Lavish port so a client on another Mac can forward it; DaemonWorkspace opens an SSH `-L 127.0.0.1:<local>:127.0.0.1:<remote>` tunnel (reusing the RemoteAppHost/SSHClient pattern) and rewrites the session URL to the local port
-- read_chat tool gains an optional `daemon` parameter (UUID from ensemble://chat links); ChatReader resolves it against the connected daemons in the workspace and reads that daemon's replica, erroring clearly when that daemon isn't connected
+- read_chat tool gains an optional `daemon` parameter (UUID from saturn://chat links); ChatReader resolves it against the connected daemons in the workspace and reads that daemon's replica, erroring clearly when that daemon isn't connected
 
 ## Out of scope
 
@@ -39,10 +39,10 @@ Today, after the lead calls draft_spec, the only way to reach the spec is a tab 
 - [x] Request changes opens or focuses the Spec tab on the Lavish page; feedback sent there still reaches the lead as spec feedback
 - [x] Re-running draft_spec adds a new card and marks earlier cards for that request as superseded (no Approve/Request changes buttons)
 - [x] For a daemon on another Mac, the Lavish port is forwarded over SSH to 127.0.0.1 only, and the tunnel is closed when the review ends or the connection drops
-- [x] read_chat with request_id and daemon from an ensemble://chat/<id>?daemon=<uuid> link reads that chat when that daemon is connected, and gives a clear error otherwise
-- [x] `swift test --package-path Packages/EnsembleCore` passes with new tests for the spec card message, ApproveSpec, the error surfacing and read_chat's daemon routing; the app builds with `xcodegen generate && xcodebuild -scheme Ensemble build`
+- [x] read_chat with request_id and daemon from an saturn://chat/<id>?daemon=<uuid> link reads that chat when that daemon is connected, and gives a clear error otherwise
+- [x] `swift test --package-path Packages/SaturnCore` passes with new tests for the spec card message, ApproveSpec, the error surfacing and read_chat's daemon routing; the app builds with `xcodegen generate && xcodebuild -scheme Saturn build`
 - [x] No unnecessary code comments; short, descriptive names
 
 ## Verification
 
-Run the EnsembleCore tests and build the app. In the app, open a local project chat, ask for a small feature, and let the lead call draft_spec. Check that a spec card appears, that Open spec shows the live Lavish page, and that Request changes jumps there. Annotate the page and send the note to confirm the lead gets it. Have the lead revise, and check that the old card is marked superseded. Press Approve and confirm a feature-delivery run starts with the spec committed on the run branch. Repeat on a chat served by the other Mac's daemon: the card appears, the page loads live through the SSH tunnel (check `lsof -iTCP -sTCP:LISTEN` shows only 127.0.0.1), and Approve starts the run there. Remove Node from PATH and confirm the card shows the reason. Finally, have a lead call read_chat on a ?daemon= link to the other machine.
+Run the SaturnCore tests and build the app. In the app, open a local project chat, ask for a small feature, and let the lead call draft_spec. Check that a spec card appears, that Open spec shows the live Lavish page, and that Request changes jumps there. Annotate the page and send the note to confirm the lead gets it. Have the lead revise, and check that the old card is marked superseded. Press Approve and confirm a feature-delivery run starts with the spec committed on the run branch. Repeat on a chat served by the other Mac's daemon: the card appears, the page loads live through the SSH tunnel (check `lsof -iTCP -sTCP:LISTEN` shows only 127.0.0.1), and Approve starts the run there. Remove Node from PATH and confirm the card shows the reason. Finally, have a lead call read_chat on a ?daemon= link to the other machine.

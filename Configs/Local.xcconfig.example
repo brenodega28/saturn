@@ -1,2 +1,2 @@
-SPARKLE_FEED_URL = https:/$()/updates.example.com/ensemble/appcast.xml
+SPARKLE_FEED_URL = https:/$()/updates.example.com/saturn/appcast.xml
 SPARKLE_PUBLIC_ED_KEY = <output of Sparkle's generate_keys>

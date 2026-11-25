@@ -34,4 +34,4 @@ Permission requests only become a card in the lead chat when the asker is a non-
 
 ## Verification
 
-Run swift test in Packages/EnsembleCore, including the new PermissionRoutingTests cases. Then build the app with xcodebuild, open a chat, run a small-task workflow, get both the lead and a run agent to try an unlisted command, and confirm both cards show up inline in that chat and nothing new appears in the Inbox.
+Run swift test in Packages/SaturnCore, including the new PermissionRoutingTests cases. Then build the app with xcodebuild, open a chat, run a small-task workflow, get both the lead and a run agent to try an unlisted command, and confirm both cards show up inline in that chat and nothing new appears in the Inbox.

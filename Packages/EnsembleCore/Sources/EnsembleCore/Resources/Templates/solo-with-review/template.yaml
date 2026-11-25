@@ -1,4 +1,0 @@
-name: One agent, checked
-description: One builder per issue in its own worktree. Ensemble runs your checks; a checker pins comments from a fresh context.
-order: 2
-recommended_skills: []

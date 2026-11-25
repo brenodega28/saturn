@@ -30,7 +30,7 @@ Replace the v5 main window's single-screen middle column with page tabs, followi
 
 - Dragging tabs into a new window, or tearing them off
 - Split panes or showing two pages side by side
-- Running terminals through the Ensemble daemon (they run in the app process)
+- Running terminals through the Saturn daemon (they run in the app process)
 - Editing files in code tabs (they stay read-only)
 - Restoring a terminal's output or running processes after a relaunch
 - Redesigning the left chat sidebar
@@ -49,8 +49,8 @@ Replace the v5 main window's single-screen middle column with page tabs, followi
 - [x] The side bar toggle in the tab strip shows and hides the side bar, and the chat column then uses the full width. The narrow-window pill behaviour still works
 - [x] Open tabs, their order, the active tab and the side bar's open state and tab survive a relaunch. Tabs pointing at deleted chats, runs or projects are dropped silently, and terminals restart fresh in their directory
 - [x] The colors come from the existing `Tokens` in both dark and light themes. No hard-coded hex values
-- [x] `swift test --package-path Packages/EnsembleCore` passes, and the app builds with `xcodegen generate && xcodebuild` for the Ensemble scheme
+- [x] `swift test --package-path Packages/SaturnCore` passes, and the app builds with `xcodegen generate && xcodebuild` for the Saturn scheme
 
 ## Verification
 
-Build the app (`xcodegen generate`, then `xcodebuild -scheme Ensemble build`) and run the EnsembleCore tests. Unit-test `MainPages`: open, focus, close and neighbour selection, reorder, dedupe of tool tabs, and JSON round-trip with stale pages dropped. In the running app, check each state against the V5_pages_* boards in dark and light. That covers a chat tab with the side bar on Summary, Log with each filter, the side bar hidden, a terminal tab (run `git status`, resize, close it and confirm the shell process is gone with `ps`), a code tab opened from ⌘P, the + menu, every tab closed, and tool screens opening as tabs and deduping. Drag-reorder the tabs, use ⌘W, ⌘⇧[ ], ⌘1–9, quit and relaunch, and confirm the tabs come back. Delete a chat that has an open tab and confirm the tab disappears.
+Build the app (`xcodegen generate`, then `xcodebuild -scheme Saturn build`) and run the SaturnCore tests. Unit-test `MainPages`: open, focus, close and neighbour selection, reorder, dedupe of tool tabs, and JSON round-trip with stale pages dropped. In the running app, check each state against the V5_pages_* boards in dark and light. That covers a chat tab with the side bar on Summary, Log with each filter, the side bar hidden, a terminal tab (run `git status`, resize, close it and confirm the shell process is gone with `ps`), a code tab opened from ⌘P, the + menu, every tab closed, and tool screens opening as tabs and deduping. Drag-reorder the tabs, use ⌘W, ⌘⇧[ ], ⌘1–9, quit and relaunch, and confirm the tabs come back. Delete a chat that has an open tab and confirm the tab disappears.

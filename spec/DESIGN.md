@@ -1,12 +1,12 @@
-# Ensemble v5 — design brief
+# Saturn v5 — design brief
 
-Work in the Ensemble design canvas: https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD
+Work in the Saturn design canvas: https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD
 
 The reference is the board **App v5 · Chats with the Lead** (`V5.dc.html`) on the page **App v5 · Black**. It is the only v5 screen so far: one dark window with an open chat in which the Lead has written a spec. Everything listed below is missing and has to be designed before it can be built. Keep the v5 board as the source of the look, and add the new boards next to it on the v5 page (or on new v5 pages, grouped by area).
 
 ## What v5 is
 
-Ensemble is a macOS app that runs AI coding agents. In v5 you only talk to the **Lead**. The Lead writes a spec, you approve it, and the Lead starts **workers** (other agents, each in its own git worktree and branch). Deterministic **checks** run on each worker's work before you see it. When you approve, the work is merged into the base branch locally, and you can push it afterwards.
+Saturn is a macOS app that runs AI coding agents. In v5 you only talk to the **Lead**. The Lead writes a spec, you approve it, and the Lead starts **workers** (other agents, each in its own git worktree and branch). Deterministic **checks** run on each worker's work before you see it. When you approve, the work is merged into the base branch locally, and you can push it afterwards.
 
 The window is chat-first:
 
@@ -91,7 +91,7 @@ Every screen and state needs a **dark and a light** version.
 
 ## Ground rules
 
-- Match the v5 board: Archivo for display text, SF Pro / Inter for UI text, JetBrains Mono for code, paths, branches and numbers; the same radii, spacing and pill buttons.
+- Match the v5 board: SF Pro Display for display text, SF Pro for UI text, SF Mono for code, paths, branches and numbers; the same radii, spacing and pill buttons.
 - Use realistic content in the same style as the v5 board (shopfront, billing-service, docs-site; Refunds v2, Order export CSV).
 - Don't add anything listed under "Removed from the app".
 - Window size 1600×1000, as on the v5 board.

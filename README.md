@@ -1,4 +1,4 @@
-# Ensemble
+# Saturn
 
 A macOS app that runs a crew of Claude Code agents on a project, each in its own git worktree. See [spec/roadmap.md](spec/roadmap.md).
 
@@ -12,23 +12,23 @@ A macOS app that runs a crew of Claude Code agents on a project, each in its own
 
 ```sh
 xcodegen generate
-open Ensemble.xcodeproj
+open Saturn.xcodeproj
 ```
 
-`project.yml` is the source of truth; `Ensemble.xcodeproj` is generated and git-ignored. Re-run `xcodegen generate` after adding or removing files.
+`project.yml` is the source of truth; `Saturn.xcodeproj` is generated and git-ignored. Re-run `xcodegen generate` after adding or removing files.
 
 Engine tests run without Xcode:
 
 ```sh
-swift test --package-path Packages/EnsembleCore
+swift test --package-path Packages/SaturnCore
 ```
 
 ## Layout
 
 ```
-Ensemble/              macOS app target (SwiftUI)
-Packages/EnsembleCore  UI-free engine: storage, git, worktrees, environment checks, Keychain
-Packages/EnsembleUI    shared SwiftUI components and theme
+Saturn/              macOS app target (SwiftUI)
+Packages/SaturnCore  UI-free engine: storage, git, worktrees, environment checks, Keychain
+Packages/SaturnUI    shared SwiftUI components and theme
 Configs/               build settings (copy Local.xcconfig.example to Local.xcconfig for Sparkle keys)
 scripts/release.sh     Developer ID archive, notarization, DMG and Sparkle appcast
 ```

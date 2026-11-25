@@ -1,4 +1,4 @@
-name: Ensemble
+name: Saturn
 options:
   bundleIdPrefix: dev.monoliti
   deploymentTarget:
@@ -11,10 +11,10 @@ configFiles:
   Release: Configs/Base.xcconfig
 
 packages:
-  EnsembleCore:
-    path: Packages/EnsembleCore
-  EnsembleUI:
-    path: Packages/EnsembleUI
+  SaturnCore:
+    path: Packages/SaturnCore
+  SaturnUI:
+    path: Packages/SaturnUI
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     from: 2.10.0
@@ -23,50 +23,50 @@ packages:
     exactVersion: 1.18.0
 
 targets:
-  Ensemble:
+  Saturn:
     type: application
     platform: macOS
     sources:
-      - path: Ensemble
+      - path: Saturn
         excludes:
           - Daemon/*.plist
-      - path: Ensemble/Daemon/dev.monoliti.ensembled.plist
+      - path: Saturn/Daemon/dev.monoliti.saturnd.plist
         buildPhase:
           copyFiles:
             destination: wrapper
             subpath: Contents/Library/LaunchAgents
     postCompileScripts:
-      - name: Embed ensembled
+      - name: Embed saturnd
         basedOnDependencyAnalysis: false
         script: |
           set -euo pipefail
-          PACKAGE="$SRCROOT/Packages/EnsembleCore"
+          PACKAGE="$SRCROOT/Packages/SaturnCore"
           if [ "$CONFIGURATION" = "Release" ]; then SWIFT_CONFIG=release; else SWIFT_CONFIG=debug; fi
-          BUILD=(/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/xcrun swift build --package-path "$PACKAGE" -c "$SWIFT_CONFIG" --product ensembled)
+          BUILD=(/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$HOME" DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/xcrun swift build --package-path "$PACKAGE" -c "$SWIFT_CONFIG" --product saturnd)
           "${BUILD[@]}"
           BIN="$("${BUILD[@]}" --show-bin-path)"
           DEST="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
           mkdir -p "$DEST"
-          rm -rf "$DEST/ensembled" "$DEST/EnsembleCore_EnsembleCore.bundle"
-          cp -f "$BIN/ensembled" "$DEST/ensembled"
-          cp -R "$BIN/EnsembleCore_EnsembleCore.bundle" "$DEST/EnsembleCore_EnsembleCore.bundle"
+          rm -rf "$DEST/saturnd" "$DEST/SaturnCore_SaturnCore.bundle"
+          cp -f "$BIN/saturnd" "$DEST/saturnd"
+          cp -R "$BIN/SaturnCore_SaturnCore.bundle" "$DEST/SaturnCore_SaturnCore.bundle"
           if [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]; then
-            /usr/bin/codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$DEST/EnsembleCore_EnsembleCore.bundle"
-            /usr/bin/codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --options runtime --timestamp=none --identifier dev.monoliti.ensembled "$DEST/ensembled"
+            /usr/bin/codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$DEST/SaturnCore_SaturnCore.bundle"
+            /usr/bin/codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --options runtime --timestamp=none --identifier dev.monoliti.saturnd "$DEST/saturnd"
           fi
     dependencies:
-      - package: EnsembleCore
-      - package: EnsembleUI
+      - package: SaturnCore
+      - package: SaturnUI
       - package: Sparkle
       - package: SwiftTerm
     entitlements:
-      path: Ensemble/Ensemble.entitlements
+      path: Saturn/Saturn.entitlements
       properties:
         com.apple.security.app-sandbox: false
     info:
-      path: Ensemble/Info.plist
+      path: Saturn/Info.plist
       properties:
-        CFBundleDisplayName: Ensemble
+        CFBundleDisplayName: Saturn
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
@@ -78,21 +78,22 @@ targets:
         SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
         SUEnableAutomaticChecks: true
         CFBundleURLTypes:
-          - CFBundleURLName: dev.monoliti.Ensemble.chat-link
+          - CFBundleURLName: dev.monoliti.Saturn.chat-link
             CFBundleTypeRole: Viewer
             CFBundleURLSchemes:
+              - saturn
               - ensemble
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.monoliti.Ensemble
+        PRODUCT_BUNDLE_IDENTIFIER: dev.monoliti.Saturn
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
 schemes:
-  Ensemble:
+  Saturn:
     build:
       targets:
-        Ensemble: all
+        Saturn: all
     run:
       config: Debug
     archive:

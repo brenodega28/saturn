@@ -1,6 +1,6 @@
 ---
 title: Chat cost on left bar rows
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Swift Dev 1, reason: "One small, connected change: the SaturnCore query, ChatSummary, the row and the footer, with tests"}
@@ -31,16 +31,16 @@ Match the "Left bar v6 · Finished folded" artboard: each chat row in the left b
 
 ## Acceptance criteria
 
-- [ ] A chat with recorded usage shows its total cost, such as "$4.15", on the second line of its left bar row, right after the machine label, in mono 11pt text2
-- [ ] The cost adds up usage from the chat's Lead, its runs and the agents of those runs, and matches what the chat-spend warning query counts for the same chat
-- [ ] A chat with no usage, or under half a cent, shows no cost text and no extra gap
-- [ ] Finished chats in the Finished panel show their cost
-- [ ] The cost updates without a relaunch when new usage is recorded, for example while a run is going
-- [ ] The project name truncates before the cost does, and the cost never wraps
-- [ ] The sidebar footer reads "$N · wk"
-- [ ] Chat-spend milestone warnings still fire only for open chats (existing tests pass)
-- [ ] New SaturnCore tests cover `chatSpend()`: lead, run and agent usage summed per chat, finished and closed chats included, and chats without usage left out
-- [ ] A unit test covers `ChatCost.label`: 0 gives nil, 0.004 gives nil, 4.149 gives "$4.15", 115 gives "$115.00"
+- [x] A chat with recorded usage shows its total cost, such as "$4.15", on the second line of its left bar row, right after the machine label, in mono 11pt text2
+- [x] The cost adds up usage from the chat's Lead, its runs and the agents of those runs, and matches what the chat-spend warning query counts for the same chat
+- [x] A chat with no usage, or under half a cent, shows no cost text and no extra gap
+- [x] Finished chats in the Finished panel show their cost
+- [x] The cost updates without a relaunch when new usage is recorded, for example while a run is going
+- [x] The project name truncates before the cost does, and the cost never wraps
+- [x] The sidebar footer reads "$N · wk"
+- [x] Chat-spend milestone warnings still fire only for open chats (existing tests pass)
+- [x] New SaturnCore tests cover `chatSpend()`: lead, run and agent usage summed per chat, finished and closed chats included, and chats without usage left out
+- [x] A unit test covers `ChatCost.label`: 0 gives nil, 0.004 gives nil, 4.149 gives "$4.15", 115 gives "$115.00"
 
 ## Verification
 

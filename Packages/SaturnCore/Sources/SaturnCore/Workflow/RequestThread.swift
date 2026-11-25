@@ -53,7 +53,7 @@ public struct RequestThread: Sendable, Hashable {
         var dated: [(date: Date, order: Int, item: Item)] = []
         func add(_ date: Date, _ item: Item) { dated.append((date, dated.count, item)) }
 
-        if !messages.contains(where: { $0.kind == .user }) {
+        if !task.isOnboarding, !messages.contains(where: { $0.kind == .user }) {
             add(task.createdAt, .request(task))
         }
         var proposalsAwaitingReply: [LeadMessage] = []

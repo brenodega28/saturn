@@ -2,12 +2,14 @@ import Foundation
 
 public enum LeadChatError: Error, LocalizedError, Equatable {
     case proposalClosed
+    case setupClosed
     case runInProgress
     case unknownWorkflow(String)
 
     public var errorDescription: String? {
         switch self {
         case .proposalClosed: "This proposal was already started or dismissed."
+        case .setupClosed: "This setup was already applied or dismissed."
         case .runInProgress: "A run for this request is still going. Wait for it to end, or cancel it first."
         case .unknownWorkflow(let id): "The workflow “\(id)” no longer exists in .saturn/workflows."
         }
@@ -49,6 +51,55 @@ public final class LeadChat {
         }
         try await send(typed, attachments: attachments, to: task, in: project, now: now)
         return task
+    }
+
+    @discardableResult
+    public func openOnboarding(in project: Project, scan: ProjectScan, now: Date = .now) async throws -> Chat {
+        guard let projectId = project.id else { throw AgentError.emptyTask }
+        if let open = try database.openOnboardingChat(projectId: projectId) { return open }
+        let summary = scan.onboardingSummary
+        let chat = try database.insert(Chat(
+            projectId: projectId, title: "Set up \(project.name)", body: summary, source: .chat,
+            status: .incoming, isOnboarding: true, createdAt: now, updatedAt: now
+        ))
+        guard let chatId = chat.id else { return chat }
+        try database.insert(LeadMessage(projectId: projectId, taskId: chatId, kind: .note, text: summary, createdAt: now))
+        try await driver.ensureServer()
+        let session = try leadSession(for: chat, in: project)
+        session.send(Self.onboardingPrompt(summary))
+        return chat
+    }
+
+    static func onboardingPrompt(_ summary: String) -> String {
+        "Saturn note (not written by the user): Saturn just opened this project and ran its deterministic setup. Onboard the project as your onboarding instructions describe.\n\n\(summary)"
+    }
+
+    public func applySetup(_ message: LeadMessage, in project: Project, now: Date = .now) throws -> [SetupFile] {
+        var current = try openSetup(message)
+        guard let proposal = current.setupProposal else { throw LeadChatError.setupClosed }
+        let files = try proposal.apply(to: project.filesRoot, now: now)
+        current.status = .applied
+        try database.save(current)
+        if let task = try database.task(id: current.taskId), let session = leadSession(for: task) {
+            session.send(Self.setupAppliedNote(files))
+        }
+        return files
+    }
+
+    static func setupAppliedNote(_ files: [SetupFile]) -> String {
+        "Saturn note (not written by the user): the user applied your setup. Saturn wrote \(files.map(\.path).joined(separator: ", ")) and reloaded the project config. Confirm briefly what changed."
+    }
+
+    public func dismissSetup(_ message: LeadMessage) throws {
+        var current = try openSetup(message)
+        current.status = .dismissed
+        try database.save(current)
+    }
+
+    private func openSetup(_ message: LeadMessage) throws -> LeadMessage {
+        guard let id = message.id, let current = try database.leadMessage(id: id),
+              current.kind == .setupProposal, current.status == .open else { throw LeadChatError.setupClosed }
+        return current
     }
 
     static func titleSource(text: String, attachments: [ChatAttachment]) -> String {

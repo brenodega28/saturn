@@ -19,16 +19,28 @@ public struct ProjectScan: Sendable, Hashable {
     public var checks: CheckSuggestions
     public var docs: [String]
     public var baseBranch: String?
+    public var isEffectivelyEmpty: Bool
 
     public init(
         found: [DetectedTechnology] = [], skillReasons: [String: String] = [:], checks: CheckSuggestions = CheckSuggestions(checks: [], protectedPaths: [], evidence: []),
-        docs: [String] = [], baseBranch: String? = nil
+        docs: [String] = [], baseBranch: String? = nil, isEffectivelyEmpty: Bool = false
     ) {
         self.found = found
         self.skillReasons = skillReasons
         self.checks = checks
         self.docs = docs
         self.baseBranch = baseBranch
+        self.isEffectivelyEmpty = isEffectivelyEmpty
+    }
+
+    public var onboardingSummary: String {
+        let technologies = found.filter { $0.name != "AGENTS.md" }.map { "\($0.name) (\($0.location))" }
+        return [
+            "Saturn's scan of this project:",
+            "- Technologies found: \(technologies.isEmpty ? "none" : technologies.joined(separator: ", "))",
+            "- Docs found: \(docs.isEmpty ? "none" : docs.joined(separator: ", "))",
+            "- Effectively empty: \(isEffectivelyEmpty ? "yes, there is no source code yet" : "no, the repo has source code")",
+        ].joined(separator: "\n")
     }
 
     public var suggestedSkills: [String] {
@@ -47,6 +59,18 @@ public enum ProjectScanner {
         return scan
     }
 
+    static func isEffectivelyEmpty(_ files: [String], read: (String) -> String) -> Bool {
+        files.allSatisfy { path in
+            let name = (path as NSString).lastPathComponent.uppercased()
+            if path.hasPrefix(ProjectConfig.directoryName + "/") || path.hasPrefix(".git/") || path == ".git" || path == ".gitignore" { return true }
+            if !path.contains("/"), name.hasPrefix("LICENSE") || name.hasPrefix("LICENCE") { return true }
+            if !path.contains("/"), name.hasPrefix("README") {
+                return read(path).trimmingCharacters(in: .whitespacesAndNewlines).count < nearEmptyReadmeLength
+            }
+            return false
+        }
+    }
+
     static func defaultBranch(of repository: URL, git: GitClient) async -> String? {
         if let remoteHead = try? await git.run(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], in: repository) {
             let name = remoteHead.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -58,10 +82,13 @@ public enum ProjectScanner {
         return try? await git.currentBranch(in: repository)
     }
 
+    public static let nearEmptyReadmeLength = 200
+
     public static func scanFiles(repository: URL) -> ProjectScan {
         let files = CheckDetector.listFiles(in: repository)
         var scan = ProjectScan(checks: CheckDetector.suggest(repository: repository))
         func read(_ path: String) -> String { (try? String(contentsOf: repository.appending(path: path), encoding: .utf8)) ?? "" }
+        scan.isEffectivelyEmpty = isEffectivelyEmpty(files, read: read)
         func folder(of path: String) -> String {
             let parent = (path as NSString).deletingLastPathComponent
             return parent.isEmpty ? "repo root" : parent + "/"

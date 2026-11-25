@@ -211,6 +211,7 @@ final class DebugTrace: @unchecked Sendable {
             "offset": request.offset.map { JSONValue($0) } ?? .null, "limit": request.limit.map { JSONValue($0) } ?? .null,
         ]))
         case .draftSpec(let request): (HandoffTool.draftSpec.rawValue, JSONValue(encoding: request) ?? .null)
+        case .setupProposal(let proposal): (HandoffTool.proposeSetup.rawValue, JSONValue(encoding: proposal) ?? .null)
         case .replySpec(let text): (HandoffTool.replySpec.rawValue, .object(["text": JSONValue(text)]))
         case .setChatStatus(let status, let reason): (HandoffTool.setChatStatus.rawValue, .object(["status": JSONValue(status.rawValue), "reason": JSONValue(reason)]))
         }

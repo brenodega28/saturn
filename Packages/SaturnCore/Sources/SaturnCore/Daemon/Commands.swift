@@ -333,6 +333,25 @@ public enum ChatCommands {
         public init(messageID: Int64) { self.messageID = messageID }
     }
 
+    public struct ApplySetupProposal: DaemonCommand {
+        public static let name = "chat.applySetupProposal"
+        public var messageID: Int64
+        public init(messageID: Int64) { self.messageID = messageID }
+    }
+
+    public struct DismissSetupProposal: DaemonCommand {
+        public static let name = "chat.dismissSetupProposal"
+        public var messageID: Int64
+        public init(messageID: Int64) { self.messageID = messageID }
+    }
+
+    public struct OpenOnboarding: DaemonCommand {
+        public static let name = "chat.openOnboarding"
+        public typealias Response = Chat
+        public var projectID: Int64
+        public init(projectID: Int64) { self.projectID = projectID }
+    }
+
     public struct PostNotice: DaemonCommand {
         public static let name = "chat.postNotice"
         public var request: ChatRequest

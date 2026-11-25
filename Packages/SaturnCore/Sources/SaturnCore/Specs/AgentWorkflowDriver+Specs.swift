@@ -46,7 +46,7 @@ extension AgentWorkflowDriver {
     }
 
     func specDraftReply(_ document: SpecDocument, review: SpecReviewStatus, agent: Agent) -> String {
-        let folder = (try? runtime.database.project(id: agent.projectId)).flatMap { $0 }.map { ProjectConfigLoader.loadSpecs(repository: $0.url).folder } ?? SpecsConfig.defaultFolder
+        let folder = (try? runtime.database.project(id: agent.projectId)).flatMap { $0 }.map { ProjectConfigLoader.loadSpecs(repository: $0.filesRoot).folder } ?? SpecsConfig.defaultFolder
         let count = document.acceptanceCriteria.count
         let saved = "Saved spec v\(document.version) “\(document.title)” with \(count) acceptance criteri\(count == 1 ? "on" : "a") and \(document.version == 1 ? "rendered" : "re-rendered") its review page. The chat shows the user a spec card to open, approve or ask for changes."
         let page = review.url != nil

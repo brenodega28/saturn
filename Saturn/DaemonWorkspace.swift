@@ -38,6 +38,7 @@ final class DaemonWorkspace: Identifiable {
     var projectFileLists: [Int64: [String]] = [:]
     var setupAttempts: Set<Int64> = []
     var setupsInFlight: Set<Int64> = []
+    var onboardingsInFlight: Set<Int64> = []
     var focusedPinIDs: [Int64: Int64] = [:]
     var remoteStatuses: [Int64: RemoteProjectStatus] = [:]
     var remoteFileSyncs: [Int64: Task<Void, Error>] = [:]
@@ -345,6 +346,7 @@ final class DaemonWorkspace: Identifiable {
             reloadProjects()
             showChat(in: project)
             await applyRecommendedSetup(project)
+            await openOnboardingIfNeeded(project)
             await refresh(project)
         } catch {
             alert = AppAlert(title: "Couldn’t open \(url.lastPathComponent)", message: error.localizedDescription)

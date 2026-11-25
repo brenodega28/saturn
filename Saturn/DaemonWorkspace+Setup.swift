@@ -40,5 +40,20 @@ extension DaemonWorkspace {
         reloadConfig(for: project)
         app.selection = .project(ref(id))
         showChat(in: project)
+        await openOnboarding(project)
+    }
+
+    func openOnboardingIfNeeded(_ project: Project) async {
+        guard !project.isRemote, hasConfig(project), OnboardingDefinition.bundled.needsOnboarding(repository: project.filesRoot) else { return }
+        await openOnboarding(project)
+    }
+
+    func openOnboarding(_ project: Project) async {
+        guard let id = project.id, !project.isRemote, !onboardingsInFlight.contains(id) else { return }
+        onboardingsInFlight.insert(id)
+        defer { onboardingsInFlight.remove(id) }
+        guard let chat = await command("Couldn’t start onboarding with the Lead", ChatCommands.OpenOnboarding(projectID: id)) else { return }
+        leadChatRevision += 1
+        showRequest(chat)
     }
 }

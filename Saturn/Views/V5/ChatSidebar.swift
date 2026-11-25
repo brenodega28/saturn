@@ -173,6 +173,9 @@ struct ChatRow: View {
                         Text(summary.project.name).lineLimit(1).layoutPriority(1)
                         Text("·").foregroundStyle(Tokens.text3)
                         MachineLabel(workspace: workspace, size: 12, showsLocal: true)
+                        if let cost = ChatCost.label(summary.costUSD) {
+                            Text(cost).font(Tokens.mono(11)).foregroundStyle(Tokens.text2).fixedSize()
+                        }
                         Spacer(minLength: 4)
                         WorkerStack(workers: summary.workers, project: summary.project, size: 16)
                     }
@@ -188,7 +191,7 @@ struct ChatRow: View {
         .onHover { isHovered = $0 }
         .contextMenu { ChatRowMenu(chat: summary.chat, rename: startRename) }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(summary.chat.title), \(summary.stage.title), \(summary.project.name)\(workspace.isRemote ? ", on \(workspace.displayName)" : "")")
+        .accessibilityLabel("\(summary.chat.title), \(summary.stage.title), \(summary.project.name)\(workspace.isRemote ? ", on \(workspace.displayName)" : "")\(ChatCost.label(summary.costUSD).map { ", \($0) spent" } ?? "")")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -399,6 +402,13 @@ enum ChatTime {
         if calendar.isDate(date, inSameDayAs: now) { return date.formatted(date: .omitted, time: .shortened) }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) { return "Yesterday" }
         return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+}
+
+enum ChatCost {
+    static func label(_ costUSD: Double) -> String? {
+        let text = costUSD.formatted(.currency(code: "USD").locale(Locale(identifier: "en_US")))
+        return costUSD > 0 && text != "$0.00" ? text : nil
     }
 }
 

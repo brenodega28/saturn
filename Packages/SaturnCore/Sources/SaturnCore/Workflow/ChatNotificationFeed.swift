@@ -41,6 +41,7 @@ public struct ChatNotification: Sendable, Hashable {
                 title: "\(agent) needs your OK", body: Self.excerpt(message.text), dedupeKey: key, messageId: id
             )
         case .proposal:
+            guard message.status == .open else { return nil }
             self.init(
                 event: .runProposal, projectId: message.projectId, taskId: message.taskId,
                 title: "Run proposed: \(message.title ?? "Untitled")", body: Self.excerpt(message.text), dedupeKey: key, messageId: id

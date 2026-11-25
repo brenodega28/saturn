@@ -300,7 +300,7 @@ public final class LeadChat {
 
     private func openProposal(_ proposal: LeadMessage) throws -> LeadMessage {
         guard let id = proposal.id, let current = try database.leadMessage(id: id),
-              current.kind == .proposal, current.status == .open else { throw LeadChatError.proposalClosed }
+              current.kind == .proposal, current.status == .open || current.status == .starting else { throw LeadChatError.proposalClosed }
         return current
     }
 

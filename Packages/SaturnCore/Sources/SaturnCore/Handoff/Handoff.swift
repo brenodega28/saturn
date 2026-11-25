@@ -483,7 +483,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .attachEvidence:
             "Attach evidence for the user to see with your change: a screenshot or recording of UI you changed, or benchmark output for performance work. The file must be in your worktree or a folder you can read; Saturn keeps a copy."
         case .proposeRun:
-            "Propose a workflow run for this request. The user sees it with a Start button; nothing runs until they click it. If they start it, you plan it. Give the workflow id, a short title and a brief with everything the planner needs from this conversation. Then end your turn."
+            "Propose a workflow run for this request. If the workflow has no planning step, Saturn starts the run right away. Otherwise the user sees it with a Start button; nothing runs until they click it, and if they start it, you plan it. Give the workflow id, a short title and a brief with everything the planner needs from this conversation. Then end your turn."
         case .messageAgent:
             "Send an instruction to another agent in this project, by its name. It arrives as that agent's next message. Use it to pass on the user's instructions or to steer agents you lead. An agent a lead started can message only that lead."
         case .listAgents:

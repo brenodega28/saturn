@@ -142,11 +142,6 @@ extension DaemonWorkspace {
             alert = AppAlert(title: "Couldn’t delete the chat", message: error.localizedDescription)
         }
     }
-
-    func copyChatLink(_ chat: Chat) {
-        guard let id = chat.id else { return }
-        copyToPasteboard(ChatLink(requestID: id).url.absoluteString)
-    }
 }
 
 extension ChatStage {

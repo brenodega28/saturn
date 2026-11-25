@@ -289,7 +289,7 @@ struct ChatRowMenu: View {
             Button("Reopen") { workspace.reopenChat(chat) }
         }
         Divider()
-        Button("Copy link to chat") { workspace.copyChatLink(chat) }
+        Button("Copy link to chat") { workspace.copyLink(to: chat) }
         Divider()
         Button("Delete…", role: .destructive) { model.pendingChatDeletion = DaemonChat(daemon: workspace.id, chat: chat) }
     }

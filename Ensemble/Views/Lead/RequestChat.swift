@@ -106,7 +106,7 @@ struct RequestChat: View {
     }
 
     private func revealHighlight(_ proxy: ScrollViewProxy) {
-        guard let link = model.chatHighlight, link.requestID == task.id, let data else { return }
+        guard let link = model.highlight(for: task, in: workspace), let data else { return }
         model.chatHighlight = nil
         guard let messageID = link.messageID,
               let target = data.thread.items.first(where: { if case .message(let message) = $0 { message.id == messageID } else { false } })?.id
@@ -296,15 +296,15 @@ private extension SessionActivity {
 }
 
 struct ClearingNotice: View {
-    @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let agents: [Agent]
 
     var body: some View {
         if !agents.isEmpty {
-            Text("Starting this run clears \(model.database.previousRunSummary(of: agents))")
+            Text("Starting this run clears \(workspace.database.previousRunSummary(of: agents))")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.secondaryText)
-                .help(agents.map { model.displayName(of: $0) }.joined(separator: ", "))
+                .help(agents.map { workspace.displayName(of: $0) }.joined(separator: ", "))
         }
     }
 }
@@ -365,7 +365,7 @@ struct ProposalCard: View {
             .font(.system(size: 12.5, weight: .medium))
             .foregroundStyle(Tokens.link)
             if proposal.status == .open {
-                ClearingNotice(agents: model.previousRunAgents(of: proposal, in: project))
+                ClearingNotice(agents: workspace.previousRunAgents(of: proposal, in: project))
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
                     Button("Dismiss") { workspace.dismissProposal(proposal) }

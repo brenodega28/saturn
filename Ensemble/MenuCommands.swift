@@ -415,7 +415,7 @@ extension CommandRegistry {
         })
         register(MenuCommand(id: "chat.copy-link", title: "Copy Link to Chat", menu: "Chat", section: 3, order: 0,
                              isEnabled: { selected($0) != nil }) { context in
-            if let (workspace, chat) = focused(context) { workspace.copyChatLink(chat) }
+            if let (workspace, chat) = focused(context) { workspace.copyLink(to: chat) }
         })
         register(MenuCommand(id: "chat.delete", title: "Delete Chat…", menu: "Chat", section: 3, order: 1,
                              isEnabled: { selected($0) != nil }) { context in

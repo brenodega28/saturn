@@ -44,7 +44,7 @@ struct MarkdownText: View {
         return linked
     }
 
-    private static var chatLinkPattern: Regex<Substring> { /(?i)ensemble:\/\/chat\/\d+(?:\?message=\d+)?/ }
+    private static var chatLinkPattern: Regex<Substring> { /(?i)ensemble:\/\/chat\/\d+(?:\?(?:daemon=[0-9a-f-]{36}|message=\d+)(?:&(?:daemon=[0-9a-f-]{36}|message=\d+))?)?/ }
 
     static func caret(size: CGFloat) -> AttributedString {
         var caret = AttributedString(" ▍")

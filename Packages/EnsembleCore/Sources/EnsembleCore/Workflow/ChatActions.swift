@@ -32,6 +32,16 @@ extension AppDatabase {
         }
     }
 
+    @discardableResult
+    public func renameChatIfUntitled(id: Int64, from placeholder: String, to title: String) throws -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return try writer.write { db in
+            try db.execute(sql: "UPDATE task SET title = ? WHERE id = ? AND title = ?", arguments: [trimmed, id, placeholder])
+            return db.changesCount > 0
+        }
+    }
+
     public func markViewed(chatId: Int64, at date: Date = .now) throws {
         try writer.write { db in
             try db.execute(sql: "UPDATE task SET viewedAt = ? WHERE id = ?", arguments: [date, chatId])

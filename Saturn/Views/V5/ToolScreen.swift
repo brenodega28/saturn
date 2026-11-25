@@ -174,17 +174,10 @@ private struct ProjectPageContent: View {
             TerminalPage(pageID: page.id, project: project, directory: directory)
         case .code(_, let path):
             CodePage(pageID: page.id, project: project, path: path)
+        case .project(_, let section):
+            ProjectPage(project: project, section: section)
         case .tool(let tool, _):
-            ToolScreen(title: tool.title, project: project) {
-                if let tab = tool.projectTab {
-                    ProjectScreenAccessory(project: project, tab: tab)
-                }
-            } content: {
-                if let tab = tool.projectTab {
-                    ProjectScreen(project: project, tab: tab)
-                        .environment(\.isInWorkbench, tool == .code)
-                }
-            }
+            ProjectPage(project: project, section: ProjectSection(tool: tool) ?? .overview)
         case .run(let runID, _):
             ToolScreen(title: workspace.title(of: page.kind), project: project) {
                 RunDetailView(runID: runID, project: project)

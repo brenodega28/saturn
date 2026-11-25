@@ -55,6 +55,38 @@ public struct PageList<Kind: Codable & Hashable & Sendable>: Codable, Hashable, 
     }
 
     @discardableResult
+    public mutating func openOrUpdate(_ kind: Kind, matching matches: (Kind) -> Bool) -> UUID {
+        guard let index = pages.firstIndex(where: { matches($0.kind) }) else { return open(kind, unique: false) }
+        pages[index].kind = kind
+        activeID = pages[index].id
+        return pages[index].id
+    }
+
+    public mutating func migrate<Key: Hashable>(_ transform: (Kind) -> Kind, uniqueBy key: (Kind) -> Key?) {
+        var survivors: [Key: Int] = [:]
+        var migrated: [Page<Kind>] = []
+        var nextActive = activeID
+        for page in pages {
+            let kind = transform(page.kind)
+            guard let pageKey = key(kind) else {
+                migrated.append(Page(id: page.id, kind: kind))
+                continue
+            }
+            if let index = survivors[pageKey] {
+                if page.id == activeID {
+                    migrated[index].kind = kind
+                    nextActive = migrated[index].id
+                }
+                continue
+            }
+            survivors[pageKey] = migrated.count
+            migrated.append(Page(id: page.id, kind: kind))
+        }
+        pages = migrated
+        activeID = nextActive
+    }
+
+    @discardableResult
     public mutating func show(_ kind: Kind, replacingActiveWhen replaceable: (Kind) -> Bool) -> UUID {
         if let existing = page(matching: kind) {
             activeID = existing.id

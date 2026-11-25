@@ -80,7 +80,7 @@ extension DaemonWorkspace {
 
     func openRequest(_ item: ChatRequest) {
         if item.kind == .pinReview {
-            showPage(.tool(.changes, project: ref(item.projectId)))
+            if let project = project(withID: item.projectId) { openProject(project, section: .changes) }
         } else if let taskID = item.taskId {
             showRequest(id: taskID, inProjectID: item.projectId)
         }

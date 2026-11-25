@@ -6,6 +6,7 @@ struct PaletteCommand: Identifiable {
     enum Glyph {
         case symbol(String)
         case role(RoleDefinition?)
+        case project(Project)
     }
 
     let id: String
@@ -16,7 +17,13 @@ struct PaletteCommand: Identifiable {
     var tint: Color = Theme.fillSelected
     var shortcut: String = ""
     var newWindow: DetailDestination?
+    var matchesTitleOnly = false
     let action: () -> Void
+
+    func matches(_ needle: String) -> Bool {
+        if matchesTitleOnly { return ProjectSearch.matches(title, query: needle) }
+        return title.localizedCaseInsensitiveContains(needle) || keywords.localizedCaseInsensitiveContains(needle) || meta.localizedCaseInsensitiveContains(needle)
+    }
 }
 
 struct PaletteGroup: Identifiable {
@@ -170,6 +177,8 @@ struct CommandPalette: View {
         switch command.glyph {
         case .role(let role):
             AgentAvatar(size: 24, appearance: RoleAppearance(role: role))
+        case .project(let project):
+            ProjectTile(project: project, size: 24)
         case .symbol(let name):
             Image(systemName: name)
                 .font(.system(size: 11, weight: .bold))
@@ -216,6 +225,7 @@ struct CommandPalette: View {
         } else {
             source = [
                 PaletteGroup(name: searchText.isEmpty ? "Recent chats" : "Chats", commands: chatCommands),
+                PaletteGroup(name: "Projects", commands: projectCommands),
                 PaletteGroup(name: "Runs", commands: runCommands),
                 PaletteGroup(name: "Actions", commands: actionCommands),
                 PaletteGroup(name: "Agents", commands: agentCommands),
@@ -224,9 +234,7 @@ struct CommandPalette: View {
         }
         let needle = searchText
         return source.compactMap { group in
-            let matches = needle.isEmpty ? group.commands : group.commands.filter {
-                $0.title.localizedCaseInsensitiveContains(needle) || $0.keywords.localizedCaseInsensitiveContains(needle) || $0.meta.localizedCaseInsensitiveContains(needle)
-            }
+            let matches = needle.isEmpty ? group.commands : group.commands.filter { $0.matches(needle) }
             let limited = group.name == "Files" || group.name.hasSuffix("chats") || group.name == "Chats" ? Array(matches.prefix(8)) : matches
             return limited.isEmpty ? nil : PaletteGroup(name: group.name, commands: limited)
         }
@@ -374,14 +382,19 @@ struct CommandPalette: View {
         commands += [
             PaletteCommand(id: "go-usage", title: "Usage", meta: String(format: "$%.2f this week · $%.2f this month", model.weeklySpend, model.monthlySpend), glyph: .symbol("chart.bar")) { model.open(.usage) },
         ]
-        commands += model.allOpenProjects.compactMap { workspace, project in
-            guard let ref = workspace.ref(of: project), ref != model.currentRef else { return nil }
-            return PaletteCommand(
-                id: "project-\(ref.daemon)-\(ref.id)", title: project.name,
-                meta: workspace.isRemote ? "Switch project · \(workspace.displayName)" : "Switch project", glyph: .symbol("folder")
-            ) { workspace.expand(project) }
-        }
         return commands
+    }
+
+    private var projectCommands: [PaletteCommand] {
+        projectsCurrentFirst.compactMap { workspace, project in
+            guard let ref = workspace.ref(of: project) else { return nil }
+            let location = workspace.isRemote ? workspace.displayName : "This Mac"
+            let path = workspace.isRemote ? project.path : project.path.abbreviatingHome
+            return PaletteCommand(
+                id: "project-\(ref.daemon)-\(ref.id)", title: project.name, meta: "\(location) · \(path)",
+                glyph: .project(project), matchesTitleOnly: true
+            ) { workspace.openProject(project) }
+        }
     }
 
     private var fileCommands: [PaletteCommand] {

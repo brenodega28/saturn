@@ -1,6 +1,6 @@
 ---
 title: One-stop approval on the Lavish spec page
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Swift Dev 1, reason: "One task: spec model, renderer, Lavish approve routing and the run-engine hold rule are tightly coupled and tested together."}
@@ -31,15 +31,15 @@ Today a request needs up to three separate approvals before code is written: the
 
 ## Acceptance criteria
 
-- [ ] The spec review page shows a "Plan & approvals" section listing the workflow, its steps, each worker with role/name/reason (and skills/model when given), and the total agent count.
-- [ ] The same section lists the approvals still to come after starting, derived from the workflow (approval steps, review routes) plus a line about permission prompts for risky commands.
-- [ ] Using the page's "Approve & start" action approves the spec and starts the run with no further click in the Saturn chat; the page shows a reply confirming it.
-- [ ] Approving from the page when a run is already active, or the spec is committed, replies on the page with the reason and starts nothing.
-- [ ] A run started from an approved spec whose lead plan has the same or fewer workers with approved roles goes from plan to build without a plan_approval hold.
-- [ ] A run whose lead plan exceeds the approved workers (more agents or a new role) still holds for plan approval and the hold body names the excess.
-- [ ] Runs started without a spec keep today's plan-approval behaviour governed by approve_plans.
-- [ ] draft_spec accepts and round-trips `workflow`, worker `skills` and `model` through the spec markdown; older specs without them still parse.
-- [ ] Unit tests cover rendering, approve routing from Lavish prompts, and the hold-skip rule; `swift test` in Packages/SaturnCore passes.
+- [x] The spec review page shows a "Plan & approvals" section listing the workflow, its steps, each worker with role/name/reason (and skills/model when given), and the total agent count.
+- [x] The same section lists the approvals still to come after starting, derived from the workflow (approval steps, review routes) plus a line about permission prompts for risky commands.
+- [x] Using the page's "Approve & start" action approves the spec and starts the run with no further click in the Saturn chat; the page shows a reply confirming it.
+- [x] Approving from the page when a run is already active, or the spec is committed, replies on the page with the reason and starts nothing.
+- [x] A run started from an approved spec whose lead plan has the same or fewer workers with approved roles goes from plan to build without a plan_approval hold.
+- [x] A run whose lead plan exceeds the approved workers (more agents or a new role) still holds for plan approval and the hold body names the excess.
+- [x] Runs started without a spec keep today's plan-approval behaviour governed by approve_plans.
+- [x] draft_spec accepts and round-trips `workflow`, worker `skills` and `model` through the spec markdown; older specs without them still parse.
+- [x] Unit tests cover rendering, approve routing from Lavish prompts, and the hold-skip rule; `swift test` in Packages/SaturnCore passes.
 
 ## Verification
 

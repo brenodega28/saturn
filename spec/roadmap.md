@@ -115,7 +115,6 @@ Packages/
 Goal: a native shell that can open a project and manage worktrees safely.
 
 - [x] Xcode project (macOS 26, Swift 6 strict concurrency) with the `SaturnCore` and `SaturnUI` packages
-- [x] CI on GitHub Actions: build and test `SaturnCore` on every push
 - [ ] Developer ID signing, notarization and a Sparkle update feed for dev builds
 - [x] App shell: sidebar (Inbox, Projects, Usage), project tabs (Tasks, Lead, Agents, Changes, Workflows, Settings), ⌘K palette stub
 - [x] Welcome screen: Open Folder, Clone Repository, recent projects

@@ -86,13 +86,13 @@ The **Debug** menu has a Worktrees window for creating and removing worktrees un
 
 ### Releases
 
-`scripts/release.sh` (run by `.github/workflows/release.yml` on `v*` tags) needs a Developer ID Application certificate and these values:
+`scripts/release.sh` needs a Developer ID Application certificate and reads these environment variables:
 
-| Name | Kind | Purpose |
+| Variable | Sensitive | Purpose |
 | --- | --- | --- |
-| `DEVELOPER_ID_P12_BASE64`, `DEVELOPER_ID_P12_PASSWORD` | secret | Developer ID Application certificate |
-| `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, `NOTARY_PASSWORD` | secret | `notarytool` credentials (app-specific password) |
-| `SPARKLE_PRIVATE_KEY` | secret | EdDSA private key from Sparkle's `generate_keys` |
-| `SPARKLE_PUBLIC_ED_KEY`, `SPARKLE_FEED_URL`, `SPARKLE_DOWNLOAD_URL_PREFIX` | variable | Public key, appcast URL, and where DMGs are hosted |
+| `DEVELOPER_ID_P12_BASE64`, `DEVELOPER_ID_P12_PASSWORD` | yes | Developer ID Application certificate |
+| `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, `NOTARY_PASSWORD` | yes | `notarytool` credentials (app-specific password) |
+| `SPARKLE_PRIVATE_KEY` | yes | EdDSA private key from Sparkle's `generate_keys` |
+| `SPARKLE_PUBLIC_ED_KEY`, `SPARKLE_FEED_URL`, `SPARKLE_DOWNLOAD_URL_PREFIX` | no | Public key, appcast URL, and where DMGs are hosted |
 
 The in-app updater stays off until a build has an `https` feed URL and a public key.

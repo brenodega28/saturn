@@ -70,6 +70,26 @@ import Testing
         #expect(code.onboardingSummary.contains("Docs found: README.md"))
     }
 
+    @Test func aFreshlySetUpEmptyRepoStillScansAsEmpty() throws {
+        let repository = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: repository) }
+        try "MIT".write(to: repository.appending(path: "LICENSE"), atomically: true, encoding: .utf8)
+        let before = ProjectScanner.scanFiles(repository: repository)
+        try ProjectSetupPlan.recommended(for: before).apply(to: repository)
+        let written = try AgentInstructions.setUp(repository: repository)
+        #expect(written == ["AGENTS.md", "CLAUDE.md"])
+
+        let scan = ProjectScanner.scanFiles(repository: repository)
+        #expect(scan.isEffectivelyEmpty)
+        #expect(scan.onboardingSummary.contains("Effectively empty: yes"))
+
+        try "# Agent instructions\n\nUse pnpm, never npm.\n".write(to: repository.appending(path: "AGENTS.md"), atomically: true, encoding: .utf8)
+        #expect(!ProjectScanner.scanFiles(repository: repository).isEffectivelyEmpty)
+        try AgentInstructions.template(repository: repository).write(to: repository.appending(path: "AGENTS.md"), atomically: true, encoding: .utf8)
+        try "@AGENTS.md\n\nAlways answer in French.\n".write(to: repository.appending(path: "CLAUDE.md"), atomically: true, encoding: .utf8)
+        #expect(!ProjectScanner.scanFiles(repository: repository).isEffectivelyEmpty)
+    }
+
     func makeChat() async throws -> (WorkflowDriverTests.Setup, LeadChat) {
         let setup = try await WorkflowDriverTests().makeSetup()
         return (setup, LeadChat(runtime: setup.harness.runtime, engine: setup.engine, driver: setup.driver))

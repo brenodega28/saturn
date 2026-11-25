@@ -59,8 +59,9 @@ public enum ProjectScanner {
         return scan
     }
 
-    static func isEffectivelyEmpty(_ files: [String], read: (String) -> String) -> Bool {
+    static func isEffectivelyEmpty(_ files: [String], read: (String) -> String, isGenerated: (String) -> Bool = { _ in false }) -> Bool {
         files.allSatisfy { path in
+            if isGenerated(path) { return true }
             let name = (path as NSString).lastPathComponent.uppercased()
             if path.hasPrefix(ProjectConfig.directoryName + "/") || path.hasPrefix(".git/") || path == ".git" || path == ".gitignore" { return true }
             if !path.contains("/"), name.hasPrefix("LICENSE") || name.hasPrefix("LICENCE") { return true }
@@ -88,7 +89,9 @@ public enum ProjectScanner {
         let files = CheckDetector.listFiles(in: repository)
         var scan = ProjectScan(checks: CheckDetector.suggest(repository: repository))
         func read(_ path: String) -> String { (try? String(contentsOf: repository.appending(path: path), encoding: .utf8)) ?? "" }
-        scan.isEffectivelyEmpty = isEffectivelyEmpty(files, read: read)
+        scan.isEffectivelyEmpty = isEffectivelyEmpty(files, read: read) { path in
+            AgentInstructions.isGenerated(path, contents: read(path), repository: repository)
+        }
         func folder(of path: String) -> String {
             let parent = (path as NSString).deletingLastPathComponent
             return parent.isEmpty ? "repo root" : parent + "/"

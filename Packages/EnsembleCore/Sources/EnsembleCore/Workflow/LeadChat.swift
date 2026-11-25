@@ -162,35 +162,95 @@ public final class LeadChat {
 
     @discardableResult
     public func start(_ proposal: LeadMessage, in project: Project) async throws -> Run {
-        var proposal = try openProposal(proposal)
-        guard let workflowID = proposal.workflow else { throw LeadChatError.proposalClosed }
-        guard try database.task(id: proposal.taskId) != nil else { throw RunEngineError.invalidState("The request is gone.") }
-        guard try !database.runs(taskId: proposal.taskId).contains(where: \.isActive) else { throw LeadChatError.runInProgress }
-        let config = ProjectConfigLoader.load(repository: project.filesRoot)
-        guard let workflow = config.workflow(workflowID) else { throw LeadChatError.unknownWorkflow(workflowID) }
-        try await clearPreviousRunAgents(taskId: proposal.taskId, in: project)
-        proposal = try openProposal(proposal)
-        guard let task = try database.task(id: proposal.taskId) else { throw RunEngineError.invalidState("The request is gone.") }
-        guard try !database.runs(taskId: proposal.taskId).contains(where: \.isActive) else { throw LeadChatError.runInProgress }
-        let lead = try database.leadAgent(taskId: proposal.taskId)
-        let spec = try pendingSpec(taskId: proposal.taskId, projectId: task.projectId)
-        if task.isClosed || task.isFinished {
-            try database.setClosed(taskId: proposal.taskId, reason: nil, at: .now)
-        }
-        let run = try engine.start(task: task, workflow: workflow, project: project, title: proposal.title, brief: proposal.text)
-        if let spec {
-            try attachSpec(to: run, taskId: proposal.taskId, document: spec, project: project, config: config)
-            let taskId = proposal.taskId
-            Task { [weak self] in await self?.driver.specReviews?.endSpecReview(taskId: taskId) }
-        }
-        if let lead, let runID = run.id {
-            runtime.session(for: lead)?.attach(toRun: runID)
-        }
-        var started = proposal
+        let current = try openProposal(proposal)
+        guard let workflow = current.workflow else { throw LeadChatError.proposalClosed }
+        let launch = RunLaunch(taskId: current.taskId, workflow: workflow, title: current.title, brief: current.text)
+        let run = try await start(launch, in: project) { _ = try self.openProposal(proposal) }
+        var started = try database.leadMessage(id: current.id ?? -1) ?? current
         started.status = .started
         started.runId = run.id
         try database.save(started)
         return run
+    }
+
+    @discardableResult
+    public func approveSpec(taskId: Int64, in project: Project) async throws -> Run {
+        guard let task = try database.task(id: taskId) else { throw RunEngineError.invalidState("The request is gone.") }
+        guard !(try hasActiveRun(taskId: taskId)) else { throw LeadChatError.runInProgress }
+        let store = SpecStore(paths: runtime.paths)
+        guard FileManager.default.fileExists(atPath: store.draftURL(projectId: task.projectId, taskId: taskId).path),
+              let document = try store.draft(projectId: task.projectId, taskId: taskId) else { throw SpecReviewError.noDraft }
+        guard document.status == .draft || document.status == .rejected || document.status == .approved else { throw SpecReviewError.committed }
+        if let proposal = try openProposal(taskId: taskId) {
+            return try await approving(document, in: task) { try await start(proposal, in: project) }
+        }
+        let config = ProjectConfigLoader.load(repository: project.filesRoot)
+        let workflow = [Self.specWorkflow, task.workflow, config.preferences.defaultWorkflow].compactMap(\.self).first { config.workflow($0) != nil }
+        guard let workflow else { throw LeadChatError.unknownWorkflow(Self.specWorkflow) }
+        let launch = RunLaunch(taskId: taskId, workflow: workflow, title: document.title, brief: Self.brief(for: document))
+        return try await approving(document, in: task) { try await start(launch, in: project) {} }
+    }
+
+    private func approving(_ document: SpecDocument, in task: Chat, start: () async throws -> Run) async throws -> Run {
+        try setSpecStatus(.approved, of: document, in: task)
+        do {
+            return try await start()
+        } catch {
+            try? setSpecStatus(document.status, of: document, in: task)
+            throw error
+        }
+    }
+
+    static let specWorkflow = "feature-delivery"
+
+    static func brief(for document: SpecDocument) -> String {
+        var parts = [document.summary.trimmingCharacters(in: .whitespacesAndNewlines)].filter { !$0.isEmpty }
+        if !document.acceptanceCriteria.isEmpty {
+            parts.append("Acceptance criteria:\n" + document.acceptanceCriteria.map { "- \($0.text)" }.joined(separator: "\n"))
+        }
+        return parts.joined(separator: "\n\n")
+    }
+
+    struct RunLaunch {
+        var taskId: Int64
+        var workflow: String
+        var title: String?
+        var brief: String
+    }
+
+    private func start(_ launch: RunLaunch, in project: Project, recheck: () throws -> Void) async throws -> Run {
+        let taskId = launch.taskId
+        guard try database.task(id: taskId) != nil else { throw RunEngineError.invalidState("The request is gone.") }
+        guard try !database.runs(taskId: taskId).contains(where: \.isActive) else { throw LeadChatError.runInProgress }
+        let config = ProjectConfigLoader.load(repository: project.filesRoot)
+        guard let workflow = config.workflow(launch.workflow) else { throw LeadChatError.unknownWorkflow(launch.workflow) }
+        try await clearPreviousRunAgents(taskId: taskId, in: project)
+        try recheck()
+        guard let task = try database.task(id: taskId) else { throw RunEngineError.invalidState("The request is gone.") }
+        guard try !database.runs(taskId: taskId).contains(where: \.isActive) else { throw LeadChatError.runInProgress }
+        let lead = try database.leadAgent(taskId: taskId)
+        let spec = try pendingSpec(taskId: taskId, projectId: task.projectId)
+        if task.isClosed || task.isFinished {
+            try database.setClosed(taskId: taskId, reason: nil, at: .now)
+        }
+        let run = try engine.start(task: task, workflow: workflow, project: project, title: launch.title, brief: launch.brief)
+        if let spec {
+            try attachSpec(to: run, taskId: taskId, document: spec, project: project, config: config)
+            Task { [weak self] in await self?.driver.specReviews?.endSpecReview(taskId: taskId) }
+        }
+        try database.markSpecDraftStarted(taskId: taskId, runId: run.id)
+        if let lead, let runID = run.id {
+            runtime.session(for: lead)?.attach(toRun: runID)
+        }
+        return run
+    }
+
+    private func setSpecStatus(_ status: SpecStatus, of document: SpecDocument, in task: Chat) throws {
+        guard let taskId = task.id else { return }
+        let store = SpecStore(paths: runtime.paths)
+        var updated = document
+        updated.status = status
+        try store.write(updated, to: store.draftURL(projectId: task.projectId, taskId: taskId))
     }
 
     private func clearPreviousRunAgents(taskId: Int64, in project: Project) async throws {
@@ -219,6 +279,10 @@ public final class LeadChat {
         var dismissed = try openProposal(proposal)
         dismissed.status = .dismissed
         try database.save(dismissed)
+    }
+
+    private func openProposal(taskId: Int64) throws -> LeadMessage? {
+        try database.leadMessages(taskId: taskId).last { $0.kind == .proposal && $0.status == .open }
     }
 
     private func openProposal(_ proposal: LeadMessage) throws -> LeadMessage {

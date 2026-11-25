@@ -42,6 +42,10 @@ final class DaemonWorkspace: Identifiable {
     var remoteFileSyncs: [Int64: Task<Void, Error>] = [:]
     @ObservationIgnored var fetchingFiles: Set<String> = []
     @ObservationIgnored var pendingCodeLines: [String: Int] = [:]
+    @ObservationIgnored var specTunnels: [Int: SSHPortForward] = [:]
+    @ObservationIgnored var specTunnelPorts: [Int64: Int] = [:]
+    @ObservationIgnored var specTunnelOpenings: [Int: Task<Int, Error>] = [:]
+    @ObservationIgnored private var quitObserver: NSObjectProtocol?
     @ObservationIgnored private var isStarted = false
 
     init(connection: DaemonConnection, app: AppModel) {
@@ -54,8 +58,12 @@ final class DaemonWorkspace: Identifiable {
             app?.alert = AppAlert(title: title, message: error.localizedDescription)
         }
         connection.onEvent = { [weak self] event in self?.receive(event) }
+        quitObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.closeSpecTunnels() }
+        }
         reloadProjects()
         observeReplica()
+        observeConnection()
     }
 
     nonisolated var id: DaemonID { connection.id }
@@ -111,6 +119,19 @@ final class DaemonWorkspace: Identifiable {
         }
     }
 
+    private func observeConnection() {
+        withObservationTracking {
+            _ = connection.isConnected
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if !self.isConnected { self.closeSpecTunnels() }
+                self.app.shareDaemonPeers()
+                self.observeConnection()
+            }
+        }
+    }
+
     func start() {
         guard !isStarted else { return }
         isStarted = true
@@ -123,6 +144,7 @@ final class DaemonWorkspace: Identifiable {
         chatNotifications.stop()
         pendingPermissions.stop()
         for runner in appRunners.values { runner.stopImmediately() }
+        closeSpecTunnels()
         connection.stop()
     }
 
@@ -153,6 +175,10 @@ final class DaemonWorkspace: Identifiable {
             chatNotifications.leadTurnEnded(taskId: taskId)
         case .specDrafted(let projectId, let taskId, _):
             specDrafted(projectId: projectId, taskId: taskId)
+        case .specReviewEnded(let taskId):
+            closeSpecTunnel(chatID: taskId)
+        case .readChat(let relayID, let daemon, let request):
+            Task { await relayChat(relayID, daemon: daemon, request: request) }
         case .agentReplied, .shuttingDown:
             break
         }

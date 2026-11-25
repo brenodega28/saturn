@@ -77,13 +77,95 @@ extension DaemonWorkspace {
 
     func specReview(chatID: Int64, in project: Project) async -> SpecReviewStatus {
         if project.isRemote { return SpecReviewStatus(reason: SpecReviewError.remote.localizedDescription) }
-        if connection.isRemote {
-            return SpecReviewStatus(reason: "Ensemble is connected to a daemon on another Mac, so the spec opens read-only. Send feedback in the chat.")
-        }
+        let review: SpecReviewStatus
         do {
-            return try await connection.send(ChatCommands.ReviewSpec(chatID: chatID))
+            review = try await connection.send(ChatCommands.ReviewSpec(chatID: chatID))
         } catch {
             return SpecReviewStatus(reason: error.localizedDescription)
+        }
+        guard connection.isRemote else { return review }
+        guard review.url != nil, let port = review.port else {
+            closeSpecTunnel(chatID: chatID)
+            return review
+        }
+        let failure = "Couldn’t forward the Lavish page from \(displayName) to this Mac, so the spec opens read-only"
+        guard let tunnel = specTunnel(remotePort: port) else { return SpecReviewStatus(reason: "\(failure).") }
+        do {
+            let opening = specTunnelOpenings[port] ?? Task { try await tunnel.open() }
+            specTunnelOpenings[port] = opening
+            defer { specTunnelOpenings[port] = nil }
+            let local = try await opening.value
+            specTunnelPorts[chatID] = port
+            return review.forwarded(to: local)
+        } catch {
+            return SpecReviewStatus(reason: "\(failure): \(error.localizedDescription)")
+        }
+    }
+
+    func specTunnel(remotePort: Int) -> SSHPortForward? {
+        if let tunnel = specTunnels[remotePort] { return tunnel }
+        guard let destination = connection.destination else { return nil }
+        let tunnel = SSHPortForward(client: SSHClient(destination: destination, runner: app.runner), remotePort: remotePort)
+        specTunnels[remotePort] = tunnel
+        return tunnel
+    }
+
+    func closeSpecTunnel(chatID: Int64) {
+        guard let port = specTunnelPorts.removeValue(forKey: chatID), !specTunnelPorts.values.contains(port) else { return }
+        specTunnels.removeValue(forKey: port)?.stop()
+    }
+
+    func closeSpecTunnels() {
+        specTunnels.values.forEach { $0.stop() }
+        specTunnels = [:]
+        specTunnelPorts = [:]
+    }
+
+    func approveSpec(for task: Chat, in project: Project) {
+        guard let taskID = task.id else { return }
+        if task.isClosed {
+            alert = AppAlert(title: "Couldn’t approve the spec", message: "This request is closed. Send a message to reopen it first.")
+            return
+        }
+        do {
+            try ensureWithinBudget(project)
+        } catch {
+            alert = AppAlert(title: "Couldn’t approve the spec", message: error.localizedDescription)
+            return
+        }
+        Task {
+            await command("Couldn’t approve the spec", ChatCommands.ApproveSpec(chatID: taskID))
+            closeSpecTunnel(chatID: taskID)
+            leadChatRevision += 1
+        }
+    }
+
+    func relayChat(_ relayID: UUID, daemon: DaemonID, request: ChatReadRequest) async {
+        guard daemon != id, let target = app.workspace(for: daemon) else { return }
+        var answer = RelayedChat(relayID: relayID, daemon: daemon)
+        if target.isConnected {
+            do {
+                answer.text = try await target.send(ChatCommands.Read(request: request))
+            } catch {
+                answer.error = error.localizedDescription
+            }
+        } else {
+            answer.error = "\(target.displayName) isn’t connected to Ensemble right now."
+        }
+        try? await send(ChatCommands.AnswerRelay(answer: answer))
+    }
+
+    var peerName: String {
+        connection.destination.map(SSHDestination.displayName) ?? connection.name
+    }
+}
+
+extension AppModel {
+    func shareDaemonPeers() {
+        let connected = orderedWorkspaces.filter(\.isConnected)
+        for workspace in connected {
+            let peers = connected.filter { $0.id != workspace.id }.map { DaemonPeer(id: $0.id, name: $0.peerName) }
+            Task { try? await workspace.send(ChatCommands.SetPeers(peers: peers)) }
         }
     }
 }

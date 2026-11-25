@@ -91,16 +91,26 @@ public final class SpecReviewSession {
 public struct SpecReviewStatus: Codable, Sendable, Hashable {
     public var url: String?
     public var reason: String?
+    public var port: Int?
 
     public init(url: String? = nil, reason: String? = nil) {
         self.url = url
         self.reason = reason
+        self.port = url.flatMap(URL.init(string:))?.port
+    }
+
+    public func forwarded(to localPort: Int) -> SpecReviewStatus {
+        guard let url, var components = URLComponents(string: url) else { return self }
+        components.port = localPort
+        var status = self
+        status.url = components.url?.absoluteString ?? url
+        return status
     }
 }
 
 @MainActor
 public protocol SpecReviewHost: AnyObject {
-    func specDrafted(projectId: Int64, taskId: Int64) async
+    func specDrafted(projectId: Int64, taskId: Int64) async -> SpecReviewStatus
     func replySpec(taskId: Int64, text: String) async throws
     func endSpecReview(taskId: Int64) async
 }
@@ -112,6 +122,7 @@ public final class SpecReviews: SpecReviewHost {
     public var makeRuntime: @MainActor () async throws -> LavishRuntime
     public var deliver: @MainActor (_ taskId: Int64, _ message: String) async -> Void = { _, _ in }
     public var drafted: @MainActor (_ projectId: Int64, _ taskId: Int64, _ path: String) -> Void = { _, _, _ in }
+    public var ended: @MainActor (_ taskId: Int64) -> Void = { _ in }
     public private(set) var sessions: [Int64: SpecReviewSession] = [:]
     private var opening: [Int64: Task<URL, Error>] = [:]
 
@@ -149,12 +160,11 @@ public final class SpecReviews: SpecReviewHost {
         return try await task.value
     }
 
-    public func specDrafted(projectId: Int64, taskId: Int64) async {
+    public func specDrafted(projectId: Int64, taskId: Int64) async -> SpecReviewStatus {
         let page = store.pageURL(projectId: projectId, taskId: taskId)
-        if (try? reviewablePage(taskId: taskId)) != nil {
-            _ = try? await ensure(taskId: taskId)
-        }
+        let review = await status(taskId: taskId)
         drafted(projectId, taskId, page.path)
+        return review
     }
 
     public func replySpec(taskId: Int64, text: String) async throws {
@@ -168,6 +178,7 @@ public final class SpecReviews: SpecReviewHost {
         guard let session = sessions.removeValue(forKey: taskId) else { return }
         save()
         await session.end()
+        ended(taskId)
     }
 
     public func resume() async {

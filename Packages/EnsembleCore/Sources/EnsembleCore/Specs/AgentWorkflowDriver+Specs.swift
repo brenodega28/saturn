@@ -3,7 +3,7 @@ import Foundation
 extension AgentWorkflowDriver {
     var specStore: SpecStore { SpecStore(paths: runtime.paths) }
 
-    func draftSpec(_ request: SpecDraftRequest, from agent: Agent) throws -> String {
+    func draftSpec(_ request: SpecDraftRequest, from agent: Agent) throws -> SpecDocument {
         guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can draft its spec.") }
         let store = specStore
         let url = store.draftURL(projectId: agent.projectId, taskId: taskId)
@@ -32,12 +32,27 @@ extension AgentWorkflowDriver {
         }
         document.verification = request.verification
         try store.write(document, to: url)
+        return document
+    }
 
+    func postSpecDraft(_ document: SpecDocument, from agent: Agent) async throws -> String {
+        guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can draft its spec.") }
+        let review = await specReviews?.specDrafted(projectId: agent.projectId, taskId: taskId)
+            ?? SpecReviewStatus(reason: "Live review in Lavish isn’t set up in this Ensemble, so the spec opens read-only.")
+        let info = SpecDraftInfo(version: document.version, criteria: document.acceptanceCriteria.count, review: review)
+        try runtime.database.insertSpecDraft(projectId: agent.projectId, taskId: taskId, title: document.title, info: info)
+        return specDraftReply(document, review: review, agent: agent)
+    }
+
+    func specDraftReply(_ document: SpecDocument, review: SpecReviewStatus, agent: Agent) -> String {
         let folder = (try? runtime.database.project(id: agent.projectId)).flatMap { $0 }.map { ProjectConfigLoader.loadSpecs(repository: $0.url).folder } ?? SpecsConfig.defaultFolder
         let count = document.acceptanceCriteria.count
-        return """
-            Saved spec v\(document.version) “\(document.title)” with \(count) acceptance criteri\(count == 1 ? "on" : "a") and \(document.version == 1 ? "rendered" : "re-rendered") its review page, which Ensemble opens for the user in Lavish. The user annotates the page; their notes arrive as chat messages tagged as spec feedback. Revise with this tool and answer on the page with `\(HandoffTool.replySpec.qualifiedName)`. When the user starts a run you propose, Ensemble commits it as \(folder)/\(Slug.make(document.title).nilIfEmpty ?? "spec").md on the run branch.
-            """
+        let saved = "Saved spec v\(document.version) “\(document.title)” with \(count) acceptance criteri\(count == 1 ? "on" : "a") and \(document.version == 1 ? "rendered" : "re-rendered") its review page. The chat shows the user a spec card to open, approve or ask for changes."
+        let page = review.url != nil
+            ? "The page is open in Lavish. The user annotates it; their notes arrive as chat messages tagged as spec feedback. Revise with this tool and answer on the page with `\(HandoffTool.replySpec.qualifiedName)`."
+            : "The Lavish review page did not open: \(review.reason ?? "unknown reason") The user can only read the spec, so ask for feedback in the chat and revise with this tool."
+        let start = "When the user approves the spec or starts a run you propose, Ensemble commits it as \(folder)/\(Slug.make(document.title).nilIfEmpty ?? "spec").md on the run branch."
+        return [saved, page, start].joined(separator: " ")
     }
 
     func replySpec(_ text: String, from agent: Agent) async throws -> String {

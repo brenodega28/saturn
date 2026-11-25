@@ -13,6 +13,14 @@ extension EnsembleHost {
         specReviews.drafted = { [weak self] projectId, taskId, path in
             self?.server?.broadcast(.event(.specDrafted(projectId: projectId, taskId: taskId, path: path)))
         }
+        specReviews.ended = { [weak self] taskId in
+            self?.server?.broadcast(.event(.specReviewEnded(taskId: taskId)))
+        }
+    }
+
+    func wireChatRelay() {
+        driver.daemonID = identity.id
+        driver.chatRouting = chatRelay
     }
 
     func lavishRuntime() async throws -> LavishRuntime {

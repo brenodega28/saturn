@@ -372,8 +372,8 @@ public enum ChatStatusTarget: String, Sendable, Hashable, CaseIterable {
     }
 }
 
-public struct ChatReadRequest: Sendable, Hashable {
-    public enum Section: String, Sendable, Hashable, CaseIterable {
+public struct ChatReadRequest: Sendable, Hashable, Codable {
+    public enum Section: String, Sendable, Hashable, CaseIterable, Codable {
         case overview
         case messages
         case run
@@ -387,11 +387,13 @@ public struct ChatReadRequest: Sendable, Hashable {
     public var agent: String?
     public var offset: Int?
     public var limit: Int?
+    public var daemon: DaemonID?
 
     public init(
         requestID: Int64, messageID: Int64? = nil, section: Section = .overview, runID: Int64? = nil,
-        agent: String? = nil, offset: Int? = nil, limit: Int? = nil
+        agent: String? = nil, offset: Int? = nil, limit: Int? = nil, daemon: DaemonID? = nil
     ) {
+        self.daemon = daemon
         self.requestID = requestID
         self.messageID = messageID
         self.section = section
@@ -494,7 +496,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
         case .askHuman:
             "Ask the user questions you can't answer from the code or docs. Put shared context in question. When you need several decisions, list each one in questions, with options when there are clear choices; the user answers them one at a time. After calling it, end your turn; the answers arrive as your next message, numbered like your questions."
         case .readChat:
-            "Read an Ensemble request chat from any project: its messages, runs, run step history and agent transcripts. A link ensemble://chat/<request_id>?message=<message_id> maps to request_id and message_id; call this tool whenever a message contains such a link. Start with the overview section, then page with offset and limit or pull the messages, run or transcript section."
+            "Read an Ensemble request chat from any project: its messages, runs, run step history and agent transcripts. A link ensemble://chat/<request_id>?message=<message_id> maps to request_id and message_id, and its ?daemon=<uuid> maps to daemon; call this tool whenever a message contains such a link. Start with the overview section, then page with offset and limit or pull the messages, run or transcript section."
         case .draftSpec:
             "Create or replace this request’s spec draft: a summary, interfaces, out of scope, checkable acceptance criteria, how to verify the whole change, and the workers you will start once it is approved, in start order, each with a one-line reason. Ensemble renders it as a review page the user annotates in Lavish; their notes arrive as chat messages tagged as spec feedback. Send the complete spec each time. Draft a spec before proposing a run for any non-trivial request; starting the run commits it."
         case .replySpec:
@@ -610,6 +612,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             func integer(_ description: String) -> JSONValue { .object(["type": .string("integer"), "description": .string(description)]) }
             return object([
                 "request_id": integer("The request id, the number after ensemble://chat/ in a link"),
+                "daemon": string("The daemon id (a UUID) from ?daemon= in a link; it names the machine that serves the chat. Omit it for chats on this machine"),
                 "message_id": integer("A message id from ?message= in a link; that message is marked in the output"),
                 "section": .object([
                     "type": .string("string"),
@@ -699,9 +702,14 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             let agent = arguments["agent"]?.string?.trimmingCharacters(in: .whitespaces).nilIfEmpty ?? integer("agent").map(String.init)
             if section == .run, runID == nil { throw HandoffError.missing("run_id") }
             if section == .transcript, agent == nil { throw HandoffError.missing("agent") }
+            let daemonText = arguments["daemon"]?.string?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+            let daemon = daemonText.flatMap(DaemonID.init(uuidString:))
+            if let daemonText, daemon == nil {
+                throw HandoffError.notAllowed("“\(daemonText)” isn’t a daemon id. Pass the UUID from ?daemon= in the chat link, or leave daemon out.")
+            }
             return .readChat(ChatReadRequest(
                 requestID: Int64(requestID), messageID: integer("message_id").map(Int64.init), section: section,
-                runID: runID.map(Int64.init), agent: agent, offset: integer("offset"), limit: integer("limit")
+                runID: runID.map(Int64.init), agent: agent, offset: integer("offset"), limit: integer("limit"), daemon: daemon
             ))
         case .draftSpec:
             let request = try decoder.decode(SpecDraftRequest.self, from: data)

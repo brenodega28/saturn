@@ -243,6 +243,8 @@ public enum DaemonEvent: Codable, Sendable, Hashable {
     case worktreeRemoving(path: String)
     case agentReplied(agentId: Int64)
     case specDrafted(projectId: Int64, taskId: Int64, path: String)
+    case specReviewEnded(taskId: Int64)
+    case readChat(relayID: UUID, daemon: DaemonID, request: ChatReadRequest)
     case shuttingDown
 }
 

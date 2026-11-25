@@ -139,10 +139,10 @@ Each phase ends with the app building, tests passing and the app usable.
     - Rename `ProjectTask` to `Chat` across the code.
     - Chats can be renamed, marked done, dropped, reopened (worktrees come back if they still exist) and deleted.
     - `ChatStage`, worked out from the chat, its runs, its open requests and the current workflow step:
-        - Needs you: an open request.
+        - Needs you: an open request, including a run waiting on your final approval.
         - Stuck: a run failed or can't proceed.
         - Building.
-        - In review: a review step is active, or the review is waiting for you.
+        - In review: a review step is active.
         - Done: merged or closed.
         - Closed chats also record Done or Dropped.
     - Worker statuses are separate from the stage: working, waiting on you, queued, idle, done, stopped, stuck. A worker with no output for the step's limit (default 10 min, or the step's timeout if shorter) is stuck, and a "stuck" request is posted in its chat, so you are told and the chat shows as Stuck.

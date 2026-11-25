@@ -41,7 +41,7 @@ struct CodeReader: View {
                             ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         if proxy.size.width >= 640, !symbols.isEmpty, markdownMode != .rendered {
-                            Divider().overlay(Tokens.hair)
+                            Rectangle().fill(Tokens.hair).frame(width: 1)
                             CodeOutlineList(browser: browser, symbols: symbols, current: current)
                                 .frame(width: 200)
                         }
@@ -50,11 +50,12 @@ struct CodeReader: View {
                 CodeStatusBar(browser: browser, path: path, lineCount: lines.count, language: language)
             } else {
                 VStack(spacing: 12) {
-                    Text("No file open").font(.system(size: 16, weight: .semibold))
-                    Text("Pick one in the explorer, or jump to any file with Go to file.")
-                        .foregroundStyle(Theme.secondaryText)
+                    Text("No file open").font(.system(size: 16, weight: .semibold)).foregroundStyle(Tokens.text)
+                    Text("Pick one in the tree, or jump to any file with Go to file.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Tokens.text2)
                     Button("Go to file ⌘P") { browser.presentFinder() }
-                        .buttonStyle(.primaryPill)
+                        .buttonStyle(SectionButtonStyle(kind: .primary))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(20)
@@ -78,7 +79,7 @@ struct CodeReader: View {
     private func unreadable(_ title: String, _ detail: String) -> some View {
         VStack(spacing: 8) {
             Text(title).font(.system(size: 15, weight: .semibold))
-            Text(detail).font(.system(size: 12.5)).foregroundStyle(Theme.secondaryText)
+            Text(detail).font(.system(size: 12.5)).foregroundStyle(Tokens.text2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -98,7 +99,7 @@ private struct CodeTabStrip: View {
                                 FileBadge(path: path, size: 14)
                                 Text((path as NSString).lastPathComponent)
                                     .font(.system(size: 12.5))
-                                    .foregroundStyle(isActive ? .white : Theme.secondaryText)
+                                    .foregroundStyle(isActive ? Tokens.text : Tokens.text2)
                                     .lineLimit(1)
                             }
                             .frame(maxHeight: .infinity)
@@ -109,7 +110,7 @@ private struct CodeTabStrip: View {
                         Button { browser.close(path) } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(Theme.tertiaryText)
+                                .foregroundStyle(Tokens.text3)
                                 .frame(width: 20, height: 20)
                                 .contentShape(.rect)
                         }
@@ -119,10 +120,7 @@ private struct CodeTabStrip: View {
                     .padding(.leading, 12)
                     .padding(.trailing, 6)
                     .frame(height: 38)
-                    .background(isActive ? CodeStyle.background : .clear)
-                    .overlay(alignment: .top) {
-                        if isActive { Rectangle().fill(Theme.accent).frame(height: 2) }
-                    }
+                    .background(isActive ? Tokens.selection : .clear)
                     .overlay(alignment: .trailing) { Rectangle().fill(Tokens.hair).frame(width: 1) }
                     .accessibilityElement(children: .contain)
                     .accessibilityAddTraits(isActive ? .isSelected : [])
@@ -132,8 +130,7 @@ private struct CodeTabStrip: View {
         .scrollIndicators(.hidden)
         .frame(height: 38)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Tokens.hover)
-        .overlay(alignment: .bottom) { Divider().overlay(Tokens.hair) }
+        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.hair).frame(height: 1) }
     }
 }
 
@@ -145,37 +142,28 @@ private struct FileBar: View {
     let openChanges: () -> Void
 
     var body: some View {
-        let parts = path.split(separator: "/").map(String.init)
         HStack(spacing: 10) {
-            HStack(spacing: 4) {
-                ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                    let isLast = index == parts.count - 1
-                    Text(part)
-                        .foregroundStyle(isLast ? .white : Theme.secondaryText)
-                        .fontWeight(isLast ? .semibold : .regular)
-                    if !isLast || symbol != nil {
-                        Text("›").foregroundStyle(Theme.tertiaryText).accessibilityHidden(true)
-                    }
-                }
+            HStack(spacing: 6) {
+                Text(path).foregroundStyle(Tokens.text)
                 if let symbol {
-                    Text(symbol.name).foregroundStyle(CodeStyle.color(.function)).fontWeight(.medium)
+                    Text("›").foregroundStyle(Tokens.text3).accessibilityHidden(true)
+                    Text(symbol.name).foregroundStyle(CodeStyle.color(.function))
                 }
             }
-            .font(.system(size: 12.5))
+            .font(Tokens.mono(12))
             .lineLimit(1)
             .truncationMode(.head)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Path \(path)")
-            Spacer(minLength: 8)
             ViewThatFits(in: .horizontal) {
                 actions(compact: false)
                 actions(compact: true)
             }
-            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .overlay(alignment: .bottom) { Divider().overlay(Tokens.hair) }
+        .frame(height: 44)
+        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.hair).frame(height: 1) }
     }
 
     private func actions(compact: Bool) -> some View {
@@ -192,42 +180,27 @@ private struct FileBar: View {
             }
             if let change = browser.change(for: path) {
                 Button(action: openChanges) {
-                    HStack(spacing: 6) {
-                        SourceDot(browser: browser)
-                        Text(compact
-                             ? "+\(change.addedLineCount)"
-                             : "\(change.status == .added ? "Added" : "Changed") by \(browser.source?.changeAuthor ?? "you") · +\(change.addedLineCount)")
-                    }
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.successText)
-                    .padding(.horizontal, 10)
-                    .frame(height: 26)
-                    .background(Theme.success.opacity(0.12), in: Capsule())
+                    Text(compact
+                         ? "+\(change.addedLineCount)"
+                         : "\(change.status == .added ? "New" : "Changed") by \(browser.source?.changeAuthor ?? "you") · +\(change.addedLineCount)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Tokens.review)
+                        .padding(.horizontal, 8)
+                        .frame(height: 20)
+                        .background(Tokens.reviewBackground, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .help("\(change.status == .added ? "Added" : "Changed") by \(browser.source?.changeAuthor ?? "you"). Review it in Changes")
             }
-            if !compact {
-                Text("Read-only")
+            Spacer(minLength: 0)
+            if compact {
+                Text("Read-only").font(.system(size: 12)).foregroundStyle(Tokens.text2)
+            } else {
+                Text("Read-only\(browser.source?.branch.map { _ in " · on " } ?? "")\(Text(browser.source?.branch ?? "").font(Tokens.mono(11.5)))")
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.secondaryText)
-                    .padding(.horizontal, 10)
-                    .frame(height: 26)
-                    .background(Tokens.fill, in: Capsule())
+                    .foregroundStyle(Tokens.text2)
+                    .lineLimit(1)
             }
-            Button { browser.presentFinder() } label: {
-                HStack(spacing: 4) {
-                    if !compact { Text("Go to file") }
-                    Text("⌘P").font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.secondaryText)
-                }
-                .font(.system(size: 12))
-                .padding(.horizontal, 12)
-                .frame(height: 28)
-                .background(Tokens.fill, in: Capsule())
-                .overlay(Capsule().strokeBorder(Tokens.hair2))
-            }
-            .buttonStyle(.plain)
-            .help("Go to file")
         }
         .fixedSize()
     }
@@ -238,7 +211,7 @@ private struct SourceDot: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(browser.source?.agent == nil ? AnyShapeStyle(Theme.success) : AnyShapeStyle(RoleAppearance(role: browser.source?.role).palette.gradient))
+            .fill(browser.source?.agent == nil ? AnyShapeStyle(Tokens.done) : AnyShapeStyle(RoleAppearance(role: browser.source?.role).palette.gradient))
             .frame(width: 14, height: 14)
             .accessibilityHidden(true)
     }
@@ -266,11 +239,11 @@ private struct CodeLines: View {
                         let focused = number == browser.focusLine
                         HStack(spacing: 0) {
                             Rectangle()
-                                .fill(pinned ? CodeStyle.pin : changed ? Theme.success : .clear)
-                                .frame(width: 4)
+                                .fill(pinned ? CodeStyle.pin : changed ? Tokens.review : .clear)
+                                .frame(width: 2)
                             Text("\(number)")
-                                .foregroundStyle(focused ? .white : Color.white.opacity(0.32))
-                                .frame(width: CGFloat(digits) * 8 + 28, alignment: .trailing)
+                                .foregroundStyle(focused ? Tokens.text : Tokens.text3)
+                                .frame(width: max(46, CGFloat(digits) * 8 + 14), alignment: .trailing)
                                 .padding(.trailing, 16)
                                 .onTapGesture { browser.focus(number) }
                             Text(CodeStyle.highlighted(text, language: language))
@@ -281,7 +254,7 @@ private struct CodeLines: View {
                         .font(CodeStyle.codeFont)
                         .frame(height: CodeStyle.lineHeight, alignment: .leading)
                         .frame(minWidth: viewport.size.width, alignment: .leading)
-                        .background(focused ? Theme.accent.opacity(0.14) : pinned ? CodeStyle.pin.opacity(0.06) : changed ? Theme.success.opacity(0.05) : .clear)
+                        .background(focused ? Tokens.selection : pinned ? Tokens.reviewBackground : changed ? Tokens.reviewBackground.opacity(0.5) : .clear)
                         .id(number)
                         ForEach(pins.filter { max($0.startLine, $0.endLine) == number }) { pin in
                             PinBanner(pin: pin, author: browser.source.flatMap { $0.agent == nil ? nil : $0.changeAuthor }, open: openChanges)
@@ -289,9 +262,10 @@ private struct CodeLines: View {
                         }
                     }
                 }
-                .padding(.top, 10)
+                .padding(.top, 12)
                 .padding(.bottom, 40)
             }
+            .background(Tokens.code)
             .onChange(of: browser.scrollRequest, initial: true) {
                 let target = browser.focusLine
                 Task { @MainActor in
@@ -315,7 +289,7 @@ private struct PinBanner: View {
                 Text(pin.title).font(.system(size: 12.5, weight: .semibold))
                 Text("\(author.map { "Pinned by \($0) · " } ?? "")lines \(pin.startLine)–\(pin.endLine)")
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.secondaryText)
+                    .foregroundStyle(Tokens.text2)
             }
             .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
@@ -323,14 +297,14 @@ private struct PinBanner: View {
                 .buttonStyle(.plain)
                 .fixedSize()
                 .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(Color(hex: 0xFF9A5C))
+                .foregroundStyle(Tokens.link)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(CodeStyle.pin.opacity(0.08), in: .rect(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(CodeStyle.pin.opacity(0.35)))
+        .padding(.vertical, 10)
+        .background(Tokens.reviewBackground, in: .rect(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Tokens.review.opacity(0.3)))
         .frame(maxWidth: 700, alignment: .leading)
-        .padding(EdgeInsets(top: 4, leading: 56, bottom: 6, trailing: 16))
+        .padding(EdgeInsets(top: 6, leading: 64, bottom: 8, trailing: 18))
         .help(pin.explanation)
     }
 }
@@ -345,7 +319,7 @@ private struct CodeOutlineList: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Outline")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.tertiaryText)
+                    .foregroundStyle(Tokens.text3)
                     .padding(.horizontal, 8)
                     .padding(.bottom, 6)
                     .accessibilityAddTraits(.isHeader)
@@ -360,10 +334,10 @@ private struct CodeOutlineList: View {
                                 .accessibilityHidden(true)
                             Text(symbol.name).lineLimit(1).truncationMode(.tail)
                             Spacer(minLength: 2)
-                            Text("\(symbol.line)").font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Color.white.opacity(0.4))
+                            Text("\(symbol.line)").font(Tokens.mono(10.5)).foregroundStyle(Tokens.text3)
                         }
                         .font(.system(size: 11.5, design: .monospaced))
-                        .foregroundStyle(Theme.primaryText.opacity(0.9))
+                        .foregroundStyle(Tokens.text)
                         .padding(.leading, 8 + CGFloat(symbol.depth) * 12)
                         .padding(.trailing, 8)
                         .frame(height: 26)
@@ -388,7 +362,7 @@ private struct CodeOutlineList: View {
     }
 
     private func kindColor(_ kind: CodeSymbol.Kind) -> Color {
-        kind == .type ? CodeStyle.color(.type) : kind == .function ? CodeStyle.color(.function) : Theme.secondaryText
+        kind == .type ? CodeStyle.color(.type) : kind == .function ? CodeStyle.color(.function) : Tokens.text2
     }
 }
 
@@ -410,10 +384,9 @@ private struct CodeStatusBar: View {
                 .truncationMode(.middle)
         }
         .font(.system(size: 11.5))
-        .foregroundStyle(Theme.secondaryText)
+        .foregroundStyle(Tokens.text3)
         .padding(.horizontal, 14)
-        .frame(height: 28)
-        .background(Tokens.hover)
-        .overlay(alignment: .top) { Divider().overlay(Tokens.hair) }
+        .frame(height: 26)
+        .overlay(alignment: .top) { Rectangle().fill(Tokens.hair).frame(height: 1) }
     }
 }

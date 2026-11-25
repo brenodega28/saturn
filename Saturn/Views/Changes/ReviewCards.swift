@@ -11,18 +11,18 @@ struct TierBadge: View {
         case .core:
             Label("Core · read line by line", systemImage: "exclamationmark.shield.fill")
                 .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(Theme.danger)
+                .foregroundStyle(Tokens.danger)
                 .padding(.horizontal, 8)
-                .frame(height: 22)
-                .background(Theme.danger.opacity(0.14), in: Capsule())
+                .frame(height: 20)
+                .background(Tokens.stuckBackground, in: Capsule())
                 .help("A core or security path: read every line before approving")
         case .low:
             Text("Low risk")
                 .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(Theme.tertiaryText)
+                .foregroundStyle(Tokens.text3)
                 .padding(.horizontal, 8)
-                .frame(height: 22)
-                .background(Theme.fillRaised, in: Capsule())
+                .frame(height: 20)
+                .background(Tokens.fill, in: Capsule())
                 .help("A low-risk path such as docs; a quick look is enough")
         case .standard:
             EmptyView()
@@ -37,7 +37,7 @@ struct GatesCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(report.summary, systemImage: report.passed ? "checkmark.shield" : "exclamationmark.shield.fill")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(report.passed ? Theme.warning : Theme.danger)
+                .foregroundStyle(report.passed ? Tokens.need : Tokens.danger)
             if !report.criteria.isEmpty {
                 CriteriaList(results: report.criteria)
             }
@@ -54,8 +54,8 @@ struct GatesCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.warning.opacity(0.06), in: .rect(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.warning.opacity(0.3)))
+        .background(Tokens.needBackground, in: .rect(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tokens.needLine))
     }
 }
 
@@ -153,7 +153,7 @@ struct EvidenceCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Tokens.hover, in: .rect(cornerRadius: 14, style: .continuous))
+        .background(Tokens.fill, in: .rect(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder

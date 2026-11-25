@@ -141,8 +141,9 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             }
             let (project, _) = try projectAndConfig(for: agent)
             try runtime.checkSkills(plan.tasks.flatMap(\.skills), in: project)
-            plans[agentID] = mergedPlan(plan, runId: agent.runId)
-            return "Plan received with \(plan.tasks.count) tasks. End your turn now; the user reviews it before anyone builds."
+            let merged = mergedPlan(plan, runId: agent.runId)
+            plans[agentID] = merged
+            return Self.planReceipt(count: plan.tasks.count, check: planCheck(merged, runId: agent.runId, project: project))
         case .verdict(let verdict):
             verdicts[agentID] = verdict
             return "Verdict “\(verdict.outcome)” recorded. End your turn now."
@@ -981,6 +982,23 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
 
     private func projectConfig(for agent: Agent) throws -> ProjectConfig {
         try projectAndConfig(for: agent).1
+    }
+
+    private func planCheck(_ plan: Plan, runId: Int64?, project: Project) -> PlanCheck {
+        let workers = runId.flatMap { SpecApproval.workers(runId: $0, paths: runtime.paths) }
+        return SpecApproval.check(plan, workers: workers, approvesPlans: ProjectPreferences.load(repository: project.filesRoot).approvePlans)
+    }
+
+    static func planReceipt(count: Int, check: PlanCheck) -> String {
+        let received = "Plan received with \(count) tasks."
+        switch check {
+        case .proceed:
+            return "\(received) The build starts now. End your turn; don’t ask the user to approve the plan."
+        case .hold(let excess?):
+            return "\(received) \(excess), so it waits for the user’s approval before anyone builds. End your turn now."
+        case .hold(nil):
+            return "\(received) End your turn now; the user reviews it before anyone builds."
+        }
     }
 
     private func projectAndConfig(for agent: Agent) throws -> (Project, ProjectConfig) {

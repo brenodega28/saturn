@@ -406,4 +406,50 @@ import Testing
         }
         #expect(throws: HandoffError.missing("agent")) { try HandoffTool.stopAgent.decode(.object([:])) }
     }
+
+    func leadInRun(withSpecWorkers workers: [SpecWorker]?) async throws -> (Setup, Int64) {
+        let (setup, lead) = try await makeLead()
+        let projectId = try #require(setup.project.id)
+        let task = try setup.harness.database.insert(Chat(projectId: projectId, title: "Receipt", body: "", source: .chat, status: .running, createdAt: .now, updatedAt: .now))
+        let run = try setup.harness.database.insert(Run(projectId: projectId, taskId: try #require(task.id), workflow: "feature-delivery", status: .running, startedAt: .now, baseBranch: "main"), state: RunEngineState())
+        let runId = try #require(run.id)
+        var agent = lead.agent
+        agent.runId = runId
+        try setup.harness.database.save(agent)
+        if let workers {
+            let store = SpecStore(paths: setup.harness.runtime.paths)
+            let spec = SpecDocument(title: "Receipt", status: .approved, workers: workers, linkedRuns: [runId])
+            try store.write(spec, to: store.draftURL(projectId: projectId, taskId: task.id!))
+            try store.save(RunSpecLink(projectId: projectId, taskId: task.id!, path: "spec/receipt.md", branch: RunSpecLink.branch(runId: runId)), runId: runId)
+        }
+        return (setup, lead.id)
+    }
+
+    let twoBuilders = Plan(summary: "s", tasks: [PlanTask(title: "a"), PlanTask(title: "b")])
+
+    @Test func aPlanWithinTheApprovedSpecSaysTheBuildStartsNow() async throws {
+        let (setup, lead) = try await leadInRun(withSpecWorkers: [SpecWorker(role: "builder", name: "Dev 1"), SpecWorker(role: "builder", name: "Dev 2")])
+        defer { setup.harness.cleanUp() }
+        let reply = try await setup.driver.receive(.plan(twoBuilders), from: lead)
+        #expect(reply.hasPrefix("Plan received with 2 tasks. The build starts now."))
+        #expect(!reply.contains("reviews"))
+    }
+
+    @Test func aPlanBeyondTheApprovedSpecWaitsAndNamesTheExcess() async throws {
+        let (setup, lead) = try await leadInRun(withSpecWorkers: [SpecWorker(role: "builder", name: "Dev 1")])
+        defer { setup.harness.cleanUp() }
+        let reply = try await setup.driver.receive(.plan(twoBuilders), from: lead)
+        #expect(reply.contains("Exceeds the approved spec: 2 builders planned, 1 approved"))
+        #expect(reply.contains("waits for the user’s approval"))
+    }
+
+    @Test func withoutASpecTheReceiptFollowsApprovePlans() async throws {
+        let (setup, lead) = try await leadInRun(withSpecWorkers: nil)
+        defer { setup.harness.cleanUp() }
+        #expect(try await setup.driver.receive(.plan(twoBuilders), from: lead).contains("the user reviews it before anyone builds"))
+        try ProjectConfigLoader.write(ProjectPreferences(approvePlans: false), repository: setup.project.filesRoot)
+        let reply = try await setup.driver.receive(.plan(twoBuilders), from: lead)
+        #expect(reply.contains("The build starts now"))
+        #expect(!reply.contains("reviews"))
+    }
 }

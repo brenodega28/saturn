@@ -58,6 +58,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     public var willRemoveWorktree: @MainActor (URL) async -> Void = { _ in }
     public var pollInterval: Duration = .milliseconds(250)
     public var memoryUpdater: PinnedMemoryUpdater?
+    public var autoStartProposal: (@MainActor (LeadMessage, Project) async throws -> Void)?
 
     private var plans: [Int64: Plan] = [:]
     private var verdicts: [Int64: Verdict] = [:]
@@ -72,6 +73,23 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     public weak var chatRouting: (any ChatRouting)?
     public var daemonID: DaemonID?
     private(set) lazy var questionRelay = QuestionRelay { [weak self] runId, batch in self?.deliverQuestions(batch, runId: runId) }
+
+    private func autoStarting(
+        _ message: LeadMessage, in project: Project, with start: @MainActor (LeadMessage, Project) async throws -> Void
+    ) async throws -> String {
+        let previous = try runtime.database.previousRunAgents(taskId: message.taskId)
+        do {
+            try await start(message, project)
+        } catch {
+            if var current = try runtime.database.leadMessage(id: message.id ?? -1), current.status == .starting {
+                current.status = .open
+                try runtime.database.save(current)
+            }
+            throw HandoffError.notAllowed("Saturn couldn’t start the run: \(error.localizedDescription) The user now sees your proposal with a Start button. Tell them what went wrong, then end your turn.")
+        }
+        let cleared = previous.isEmpty ? "" : " It cleared \(runtime.database.previousRunSummary(of: previous)) (\(previous.map { displayName(of: $0) }.joined(separator: ", "))). Tell the user in your reply."
+        return "The run started automatically because “\(message.workflow ?? "")” has no planning step.\(cleared) End your turn now."
+    }
 
     public var questionWindow: Duration {
         get { questionRelay.window }
@@ -175,17 +193,21 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             return "Your question was sent to the user. End your turn now; the answer arrives as your next message."
         case .proposal(let proposal):
             guard let taskId = agent.taskId else { throw HandoffError.notAllowed("Only a request’s lead can propose runs.") }
-            let config = try projectConfig(for: agent)
-            guard config.workflow(proposal.workflow) != nil else {
+            let (project, config) = try projectAndConfig(for: agent)
+            guard let workflow = config.workflow(proposal.workflow) else {
                 throw HandoffError.notAllowed("Unknown workflow “\(proposal.workflow)”. Use one of: \(config.workflows.map(\.id).joined(separator: ", ")).")
             }
             if try runtime.database.runs(taskId: taskId).contains(where: \.isActive) {
                 throw HandoffError.notAllowed("A run for this request is still going. Use message_agent to change it, or wait until it ends.")
             }
-            try runtime.database.insert(LeadMessage(
+            let autoStart = workflow.needsPlan ? nil : autoStartProposal
+            let message = try runtime.database.insert(LeadMessage(
                 projectId: agent.projectId, taskId: taskId, kind: .proposal, text: proposal.brief,
-                workflow: proposal.workflow, title: proposal.title, status: .open, createdAt: .now
+                workflow: proposal.workflow, title: proposal.title, status: autoStart == nil ? .open : .starting, createdAt: .now
             ))
+            if let autoStart {
+                return try await autoStarting(message, in: project, with: autoStart)
+            }
             let attached = (try? specStore.draft(projectId: agent.projectId, taskId: taskId)).flatMap { $0 }.flatMap { $0.status == .done ? nil : $0 }
             let note = attached.map { " The spec draft “\($0.title)” is attached; starting the run commits it and makes its acceptance criteria the run’s." } ?? ""
             let previous = try runtime.database.previousRunAgents(taskId: taskId)

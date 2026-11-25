@@ -149,6 +149,10 @@ public final class SaturnHost {
         }
         let updater = PinnedMemoryUpdater(runtime: runtime)
         driver.memoryUpdater = updater
+        driver.autoStartProposal = { [weak self] proposal, project in
+            guard let self else { return }
+            try await leadChat.start(proposal, in: project)
+        }
         updater.observe(engine)
         wireSpecReviews()
         wireChatRelay()

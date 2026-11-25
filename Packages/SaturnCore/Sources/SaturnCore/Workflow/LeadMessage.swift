@@ -13,6 +13,7 @@ public enum LeadMessageKind: String, Codable, Sendable, Hashable {
 
 public enum ProposalStatus: String, Codable, Sendable, Hashable {
     case open
+    case starting
     case started
     case dismissed
 }

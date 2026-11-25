@@ -56,6 +56,10 @@ public struct WorkflowDefinition: Sendable, Hashable, Identifiable, Codable {
 
     public var firstStep: WorkflowStep? { steps.first }
 
+    public var needsPlan: Bool {
+        steps.contains { $0.agent == .lead || $0.type == .spawn }
+    }
+
     public func step(_ id: String) -> WorkflowStep? {
         steps.first { $0.id == id }
     }

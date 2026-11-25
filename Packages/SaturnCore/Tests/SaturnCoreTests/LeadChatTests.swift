@@ -176,6 +176,65 @@ import Testing
         try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
     }
 
+    func chatLead(_ setup: Setup, _ chat: LeadChat) async throws -> (Chat, Agent) {
+        setup.driver.autoStartProposal = { try await chat.start($0, in: $1) }
+        let task = try await chat.createRequest("CHAT hi", in: setup.project)
+        try await waitUntil { messages(setup, task).contains { $0.kind == .lead } }
+        return (task, try #require(try setup.harness.database.leadAgent(taskId: task.id!)))
+    }
+
+    @Test func onlyWorkflowsWithALeadOrSpawnStepNeedAPlan() async throws {
+        let (setup, _, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        #expect(try #require(setup.config.workflow("feature-delivery")).needsPlan)
+        #expect(try #require(setup.config.workflow("small-task")).needsPlan == false)
+    }
+
+    @Test func aProposalWithNoPlanningStepStartsRightAway() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead) = try await chatLead(setup, chat)
+
+        let reply = try await setup.driver.receive(.proposal(RunProposal(workflow: "small-task", title: "Fix typo", brief: "Fix it")), from: lead.id!)
+
+        #expect(reply.contains("started automatically"))
+        let run = try #require(try setup.harness.database.runs(taskId: task.id!).first)
+        let proposal = try #require(messages(setup, task).last { $0.kind == .proposal })
+        #expect(proposal.status == .started && proposal.runId == run.id && run.workflow == "small-task")
+        #expect(ChatNotification(message: proposal) == nil)
+        try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
+    }
+
+    @Test func aProposalThatNeedsAPlanWaitsForStart() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead) = try await chatLead(setup, chat)
+
+        let reply = try await propose(setup, from: lead)
+
+        #expect(reply.contains("Start button"))
+        #expect(try setup.harness.database.runs(taskId: task.id!).isEmpty)
+        let proposal = try openProposal(setup, task)
+        #expect(ChatNotification(message: proposal)?.event == .runProposal)
+    }
+
+    @Test func aFailedAutoStartLeavesTheStartButtonAndTellsTheLead() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead) = try await chatLead(setup, chat)
+        setup.driver.autoStartProposal = { _, _ in throw LeadChatError.unknownWorkflow("small-task") }
+
+        await #expect(throws: HandoffError.self) {
+            try await setup.driver.receive(.proposal(RunProposal(workflow: "small-task", title: "Fix typo", brief: "Fix it")), from: lead.id!)
+        }
+
+        #expect(try setup.harness.database.runs(taskId: task.id!).isEmpty)
+        let proposal = try openProposal(setup, task)
+        let run = try await chat.start(proposal, in: setup.project)
+        #expect(run.workflow == "small-task")
+        try await setup.engine.cancel(try #require(setup.engine.runs[run.id!]))
+    }
+
     @Test func theLeadRelaysToRunAgentsAndSeesTheRunStatus() async throws {
         let (setup, chat, lead) = try await makeChat()
         defer { setup.harness.cleanUp() }

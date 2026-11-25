@@ -1,6 +1,6 @@
 ---
 title: "v5 sidebar option A: status groups"
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Sidebar Dev, reason: "One SwiftUI change across ChatSidebar, SidebarParts and CommandPalette; the pieces depend on each other, so one builder"}
@@ -34,16 +34,16 @@ Rebuild the left chat sidebar (Ensemble/Views/V5/ChatSidebar.swift and SidebarPa
 
 ## Acceptance criteria
 
-- [ ] The Chats/Projects segmented control and the project cards are gone from the sidebar
-- [ ] The filter row shows 'All projects ▾' and one chip per open project. A chip or menu item filters every group, Finished and Closed included, to that project, and the choice persists across relaunch
-- [ ] Open chats show under Needs you (needsYou and stuck), In progress (inReview and building) and Not started (idle), each with a correct count. Empty groups are hidden
-- [ ] Each group collapses and expands from its header, and the state persists
-- [ ] Finished chats appear only in the bottom panel, which stays pinned while the list scrolls. It collapses and expands, and its count is correct
-- [ ] 'Closed N ›' shows the closed chats in the bottom panel with Reopen on hover. Going back restores the Finished view
-- [ ] Chat rows show the stage glyph, a one-line title with the time, the project tile and name, the machine and the worker avatars. Selection, hover, unread, rename and the context menu still work
-- [ ] The ⌘K palette finds Agents, Workflows, Changes, Source and Settings for any open project, plus New chat in, Reveal or Copy SSH path, and Remove for that project, and each opens on or acts on the right project and daemon
-- [ ] The empty states (no projects, no chats) still show
-- [ ] Grouping and filtering have unit tests, and the existing tests pass
+- [x] The Chats/Projects segmented control and the project cards are gone from the sidebar
+- [x] The filter row shows 'All projects ▾' and one chip per open project. A chip or menu item filters every group, Finished and Closed included, to that project, and the choice persists across relaunch
+- [x] Open chats show under Needs you (needsYou and stuck), In progress (inReview and building) and Not started (idle), each with a correct count. Empty groups are hidden
+- [x] Each group collapses and expands from its header, and the state persists
+- [x] Finished chats appear only in the bottom panel, which stays pinned while the list scrolls. It collapses and expands, and its count is correct
+- [x] 'Closed N ›' shows the closed chats in the bottom panel with Reopen on hover. Going back restores the Finished view
+- [x] Chat rows show the stage glyph, a one-line title with the time, the project tile and name, the machine and the worker avatars. Selection, hover, unread, rename and the context menu still work
+- [x] The ⌘K palette finds Agents, Workflows, Changes, Source and Settings for any open project, plus New chat in, Reveal or Copy SSH path, and Remove for that project, and each opens on or acts on the right project and daemon
+- [x] The empty states (no projects, no chats) still show
+- [x] Grouping and filtering have unit tests, and the existing tests pass
 
 ## Verification
 

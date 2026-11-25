@@ -56,10 +56,7 @@ public final class RunEngine {
         self.minute = minute
         self.clock = clock
         if let paths = (driver as? AgentWorkflowDriver)?.runtime.paths {
-            self.approvedWorkers = { runID in
-                guard let spec = SpecStore(paths: paths).runSpec(runId: runID)?.document, SpecApproval.covers(spec) else { return nil }
-                return spec.workers
-            }
+            self.approvedWorkers = { runID in SpecApproval.workers(runId: runID, paths: paths) }
         }
         #if DEBUG
         self.debugTrace = (driver as? AgentWorkflowDriver)?.runtime.debugTrace

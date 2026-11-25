@@ -382,16 +382,8 @@ extension RunEngine {
         return workflow.steps[..<index].last { $0.type == .spawn || $0.type == .agent }?.id
     }
 
-    enum PlanCheck {
-        case proceed
-        case hold(excess: String?)
-    }
-
     func planCheck(_ plan: Plan, run: Run) -> PlanCheck {
-        if let runID = run.id, let workers = approvedWorkers(runID) {
-            return SpecApproval.excess(plan: plan, workers: workers).map { .hold(excess: $0) } ?? .proceed
-        }
-        return approvesPlans(projectID: run.projectId) ? .hold(excess: nil) : .proceed
+        SpecApproval.check(plan, workers: run.id.flatMap { approvedWorkers($0) }, approvesPlans: approvesPlans(projectID: run.projectId))
     }
 
     func approvesPlans(projectID: Int64) -> Bool {

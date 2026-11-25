@@ -35,7 +35,7 @@ struct NewChatPicker: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        let matches = NewChatFilter.match(model.allOpenProjects, name: \.project.name, filter: filter)
+        let matches = NewChatFilter.match(model.recentOpenProjects, name: \.project.name, filter: filter)
         VStack(alignment: .leading, spacing: 6) {
             Text("New chat in…").font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.text2)
             TextField("Filter projects", text: $filter)

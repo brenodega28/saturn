@@ -1,6 +1,6 @@
 ---
 title: "Update the vision and README to match today's Saturn"
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Docs Writer, reason: "One builder: the three docs share the tagline and wording, so splitting them would interfere."}
@@ -29,11 +29,11 @@ spec/mission.md still describes Saturn as a toolkit for a solo developer on one 
 
 ## Acceptance criteria
 
-- [ ] mission.md starts with a title and tagline, then has Mission and Vision sections, followed by Principles and Success criteria
-- [ ] The old tagline 'Agents propose, rails verify, humans approve' is gone from mission.md, README.md and the roadmap intro, replaced by one new tagline about an ADE that applies modern agentic norms
+- [x] mission.md starts with a title and tagline, then has Mission and Vision sections, followed by Principles and Success criteria
+- [x] The old tagline 'Agents propose, rails verify, humans approve' is gone from mission.md, README.md and the roadmap intro, replaced by one new tagline about an ADE that applies modern agentic norms
 - [ ] mission.md and README both describe: the Lead spawning builders/checkers according to task difficulty; agent profiles with different skills and objectives for correctness and performance (custom checkers); lightweight spec-driven development with Lavish as the interface for talking to the Lead about the plan; built-in SSH, remote daemons and worktrees
 - [ ] The target user is a solo developer working across several machines and remote hosts, and no doc says 'one machine' as a limit
-- [ ] Every feature claim in the README matches the code (e.g. the workflow end action, GitHub/push behavior, daemon, SSH); nothing describes a feature that doesn't exist
+- [x] Every feature claim in the README matches the code (e.g. the workflow end action, GitHub/push behavior, daemon, SSH); nothing describes a feature that doesn't exist
 - [ ] The roadmap no longer contradicts the vision (MVP table row, app-shell decision, mobile/Mac-only wording); phase records are untouched
 - [ ] Writing follows the repo's plain, short style; links (design canvas, Lavish, Kun Chen) are kept
 

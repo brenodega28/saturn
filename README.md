@@ -90,7 +90,6 @@ The **Debug** menu has a Worktrees window for creating and removing worktrees un
 
 | Variable | Sensitive | Purpose |
 | --- | --- | --- |
-| `DEVELOPER_ID_P12_BASE64`, `DEVELOPER_ID_P12_PASSWORD` | yes | Developer ID Application certificate |
 | `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, `NOTARY_PASSWORD` | yes | `notarytool` credentials (app-specific password) |
 | `SPARKLE_PRIVATE_KEY` | yes | EdDSA private key from Sparkle's `generate_keys` |
 | `SPARKLE_PUBLIC_ED_KEY`, `SPARKLE_FEED_URL`, `SPARKLE_DOWNLOAD_URL_PREFIX` | no | Public key, appcast URL, and where DMGs are hosted |

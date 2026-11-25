@@ -11,6 +11,7 @@ struct ReviewContext {
 
 struct FileCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let path: ChangedPath
     let pins: [Pin]
     let reviews: [FileReview]
@@ -42,7 +43,7 @@ struct FileCard: View {
         HStack(spacing: 10) {
             Button {
                 if !expanded && store.viewed.contains(path.path) {
-                    model.setViewed(false, path: path, in: run)
+                    workspace.setViewed(false, path: path, in: run)
                 }
                 withAnimation(.snappy(duration: 0.2)) { store.toggleExpanded(path) }
             } label: {
@@ -119,7 +120,7 @@ struct FileCard: View {
     private var uniqueAuthors: [(id: Int64?, name: String)] {
         var seen = Set<String>()
         return path.diffs.compactMap { diff in
-            seen.insert(diff.agentName).inserted ? (diff.agentId, model.displayName(of: diff)) : nil
+            seen.insert(diff.agentName).inserted ? (diff.agentId, workspace.displayName(of: diff)) : nil
         }
     }
 
@@ -128,7 +129,7 @@ struct FileCard: View {
         return Toggle(isOn: Binding(
             get: { isViewed },
             set: { newValue in
-                model.setViewed(newValue, path: path, in: run)
+                workspace.setViewed(newValue, path: path, in: run)
                 withAnimation(.snappy(duration: 0.2)) {
                     if newValue {
                         store.viewed.insert(path.path)
@@ -152,7 +153,7 @@ struct FileCard: View {
 
     @ViewBuilder
     private var expandedBody: some View {
-        let notes = reviews.flatMap { review in review.notes.map { (model.reviewerTitle(review, in: context.project), $0) } }
+        let notes = reviews.flatMap { review in review.notes.map { (workspace.reviewerTitle(review, in: context.project), $0) } }
         if !notes.isEmpty {
             ReviewerNotes(notes: notes)
         }
@@ -260,6 +261,7 @@ struct Badge: View {
 
 struct ReviewedPill: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let reviews: [FileReview]
     let project: Project
 
@@ -276,7 +278,7 @@ struct ReviewedPill: View {
     }
 
     private func names(_ state: FileReview.State) -> String {
-        reviews.filter { $0.state == state }.map { model.reviewerTitle($0, in: project) }.joined(separator: ", ")
+        reviews.filter { $0.state == state }.map { workspace.reviewerTitle($0, in: project) }.joined(separator: ", ")
     }
 
     private var appearance: (String, Color, Color) {
@@ -300,7 +302,7 @@ struct ReviewedPill: View {
             case .changesRequested: "requested changes"
             case .reviewing: "is reviewing"
             }
-            return "\(model.reviewerTitle(review, in: project)) (\(review.stepId)) \(state)"
+            return "\(workspace.reviewerTitle(review, in: project)) (\(review.stepId)) \(state)"
         }.joined(separator: "\n")
     }
 }
@@ -332,13 +334,14 @@ struct ReviewerNotes: View {
 
 struct BranchHeader: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let entry: BranchFileDiff
     let appearance: RoleAppearance
 
     var body: some View {
         HStack(spacing: 8) {
             AgentAvatar(size: 18, appearance: appearance).shadow(radius: 0)
-            Text(model.displayName(of: entry)).fontWeight(.semibold)
+            Text(workspace.displayName(of: entry)).fontWeight(.semibold)
             Spacer(minLength: 8)
             Text(entry.branch)
                 .font(.system(size: 11, design: .monospaced))
@@ -355,10 +358,11 @@ struct BranchHeader: View {
 
 struct OverlapNote: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let path: ChangedPath
 
     var body: some View {
-        Label("\(path.diffs.map { model.displayName(of: $0) }.joined(separator: " and ")) both change this file. Their changes merge cleanly.", systemImage: "arrow.triangle.merge")
+        Label("\(path.diffs.map { workspace.displayName(of: $0) }.joined(separator: " and ")) both change this file. Their changes merge cleanly.", systemImage: "arrow.triangle.merge")
             .font(.system(size: 12.5))
             .foregroundStyle(Theme.warning)
             .padding(.horizontal, 16)
@@ -370,6 +374,7 @@ struct OverlapNote: View {
 
 struct ConflictPanel: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let path: ChangedPath
     let context: ReviewContext
     @State private var sentTo: String?
@@ -388,7 +393,7 @@ struct ConflictPanel: View {
             HStack(spacing: 8) {
                 ForEach(askTargets, id: \.id) { target in
                     Button("Ask \(target.name) to combine") {
-                        sentTo = model.askToCombine(path, agentID: target.id) ? target.name : nil
+                        sentTo = workspace.askToCombine(path, agentID: target.id) ? target.name : nil
                     }
                     .buttonStyle(PillButtonStyle(target.id == askTargets.first?.id ? .primary : .secondary, height: 30))
                     .help("Sends \(target.name) a message describing the conflict")
@@ -414,7 +419,7 @@ struct ConflictPanel: View {
         var seen = Set<Int64>()
         return path.diffs.compactMap { entry in
             guard let id = entry.agentId, seen.insert(id).inserted else { return nil }
-            return (id, model.displayName(of: entry))
+            return (id, workspace.displayName(of: entry))
         }
     }
 }

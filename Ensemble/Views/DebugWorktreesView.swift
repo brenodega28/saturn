@@ -4,6 +4,7 @@ import SwiftUI
 
 struct DebugWorktreesView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @State private var projectID: Int64?
     @State private var agent = ""
     @State private var slug = "scratch"
@@ -21,31 +22,31 @@ struct DebugWorktreesView: View {
         }
         .frame(minWidth: 620, minHeight: 420)
         .background(Theme.windowBackground)
-        .onAppear { projectID = projectID ?? model.selectedProject?.id ?? model.openProjects.first?.id }
-        .onChange(of: model.openProjects) {
-            if project == nil { projectID = model.openProjects.first?.id }
+        .onAppear { projectID = projectID ?? model.selectedProject?.id ?? workspace.openProjects.first?.id }
+        .onChange(of: workspace.openProjects) {
+            if project == nil { projectID = workspace.openProjects.first?.id }
         }
     }
 
     private var project: Project? {
-        model.openProjects.first { $0.id == projectID } ?? model.openProjects.first
+        workspace.openProjects.first { $0.id == projectID } ?? workspace.openProjects.first
     }
 
     private func content(for project: Project) -> some View {
-        let state = model.state(for: project)
+        let state = workspace.state(for: project)
         return VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Picker("Project", selection: Binding(get: { project.id }, set: { projectID = $0 })) {
-                    ForEach(model.openProjects) { Text($0.name).tag($0.id) }
+                    ForEach(workspace.openProjects) { Text($0.name).tag($0.id) }
                 }
                 .fixedSize()
                 Spacer()
-                Button("Recover") { Task { await model.refresh(project) } }
+                Button("Recover") { Task { await workspace.refresh(project) } }
                     .buttonStyle(.pill)
             }
 
             HStack(spacing: 8) {
-                TextField("Agent", text: $agent, prompt: Text(model.nextDebugAgentName(in: project)))
+                TextField("Agent", text: $agent, prompt: Text(workspace.nextDebugAgentName(in: project)))
                     .textFieldStyle(.roundedBorder)
                 TextField("Slug", text: $slug)
                     .textFieldStyle(.roundedBorder)
@@ -96,7 +97,7 @@ struct DebugWorktreesView: View {
     }
 
     private func previewBranch(in project: Project) -> String {
-        let name = agent.isEmpty ? model.nextDebugAgentName(in: project) : agent
+        let name = agent.isEmpty ? workspace.nextDebugAgentName(in: project) : agent
         let agentSlug = Slug.make(name)
         let taskSlug = Slug.make(slug)
         guard !agentSlug.isEmpty, !taskSlug.isEmpty else { return "Enter an agent name and slug" }
@@ -105,14 +106,14 @@ struct DebugWorktreesView: View {
 
     private func create(in project: Project) async {
         await perform {
-            try await model.createWorktree(in: project, agent: agent.isEmpty ? model.nextDebugAgentName(in: project) : agent, slug: slug)
+            try await workspace.createWorktree(in: project, agent: agent.isEmpty ? workspace.nextDebugAgentName(in: project) : agent, slug: slug)
             agent = ""
         }
     }
 
     private func remove(_ worktree: Worktree, in project: Project, force: Bool, deleteBranch: Bool) async {
         await perform {
-            try await model.removeWorktree(worktree, in: project, force: force, deleteBranch: deleteBranch)
+            try await workspace.removeWorktree(worktree, in: project, force: force, deleteBranch: deleteBranch)
         }
     }
 
@@ -130,6 +131,7 @@ struct DebugWorktreesView: View {
 
 private struct RecoverySection: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let recovery: WorktreeRecovery
     let project: Project
 
@@ -147,7 +149,7 @@ private struct RecoverySection: View {
                     Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([directory]) }
                         .disabled(project.isRemote)
                     Button("Delete", role: .destructive) {
-                        Task { await model.deleteOrphanedDirectory(directory, in: project) }
+                        Task { await workspace.deleteOrphanedDirectory(directory, in: project) }
                     }
                 }
             }

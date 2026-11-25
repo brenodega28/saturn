@@ -13,16 +13,16 @@ extension EnvironmentValues {
 }
 
 extension View {
-    func opensCodeFiles(in projectID: Int64?, root: String?, model: AppModel) -> some View {
+    func opensCodeFiles(in projectID: Int64?, root: String?, workspace: DaemonWorkspace) -> some View {
         environment(\.codeFileOpener, projectID.map { projectID in
             CodeFileOpener(root: root) { path in
-                if !model.openCodeFile(path, cwd: root, projectID: projectID) { NSSound.beep() }
+                if !workspace.openCodeFile(path, cwd: root, projectID: projectID) { NSSound.beep() }
             }
         })
     }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     @discardableResult
     func openCodeFile(_ path: String, cwd: String?, projectID: Int64) -> Bool {
         guard let project = openProjects.first(where: { $0.id == projectID }) else { return false }
@@ -33,7 +33,7 @@ extension AppModel {
         let file = source.root.appending(path: location.relativePath)
         guard FileManager.default.fileExists(atPath: file.path, isDirectory: &isDirectory), !isDirectory.boolValue else { return false }
         let browser = codeBrowser(for: project)
-        sidebarDestination = .section(project: projectID, tab: .code)
+        setTab(.code, for: project)
         Task {
             if browser.source?.id != source.id || browser.snapshot == nil {
                 await browser.select(source)

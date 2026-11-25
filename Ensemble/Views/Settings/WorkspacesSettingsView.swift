@@ -6,6 +6,7 @@ struct WorkspacesSettingsView: View {
     static let cleanupChoices = [0, 5, 10, 30, 60, 120, 240]
 
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var scriptDraft = ""
     @State private var basePortDraft = ""
@@ -226,7 +227,7 @@ struct WorkspacesSettingsView: View {
     private func update(_ change: (inout ProjectSettings) -> Void) {
         var settings = project.settings
         change(&settings)
-        model.updateSettings(settings, for: project)
+        workspace.updateSettings(settings, for: project)
     }
 
     static func duration(_ minutes: Int) -> String {

@@ -12,17 +12,18 @@ struct LeadView: View {
 
 struct RequestCloseMenu: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let request: Chat
     let project: Project
 
     var body: some View {
-        Button("Copy Link") { model.copyLink(to: request) }
+        Button("Copy Link") { workspace.copyLink(to: request) }
         if !request.isClosed {
             Divider()
-            let hasActiveRun = model.requestHasActiveRun(request)
+            let hasActiveRun = workspace.requestHasActiveRun(request)
             ForEach(RequestCloseReason.allCases, id: \.self) { reason in
                 Button("Close as \(reason.title)") {
-                    Task { await model.closeRequest(request, as: reason, in: project) }
+                    Task { await workspace.closeRequest(request, as: reason, in: project) }
                 }
                 .disabled(hasActiveRun)
             }
@@ -55,13 +56,14 @@ extension RequestCloseReason {
 
 struct NewRequestHeldSends: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let held: [HeldSend]
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 ForEach(held) { send in
-                    RequestBubble(held: send, onCancel: model.cancelHeldSend)
+                    RequestBubble(held: send, onCancel: workspace.cancelHeldSend)
                 }
             }
             .frame(maxWidth: Tokens.Size.transcript)
@@ -76,14 +78,15 @@ struct NewRequestHeldSends: View {
 
 struct NewRequestIntro: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     var body: some View {
-        let config = model.config(for: project)
+        let config = workspace.config(for: project)
         Group {
             if config.workflows.isEmpty {
                 EmptyState("No workflows yet", message: "The lead starts a workflow from .ensemble/workflows/. Add the defaults to get Feature delivery and Small task.") {
-                    Button("Add Default Workflows") { model.installDefaultConfig(in: project) }
+                    Button("Add Default Workflows") { workspace.installDefaultConfig(in: project) }
                         .buttonStyle(.primaryPill)
                 }
             } else {

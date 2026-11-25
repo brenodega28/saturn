@@ -4,6 +4,7 @@ import Foundation
 import SwiftUI
 
 struct ChatSummary: Identifiable, Hashable {
+    let daemon: DaemonID
     let chat: Chat
     let project: Project
     let stage: ChatStage
@@ -11,10 +12,49 @@ struct ChatSummary: Identifiable, Hashable {
     let workers: [Agent]
     let isUnread: Bool
 
-    var id: Int64 { chat.id ?? -1 }
+    var id: String { "\(daemon.uuidString)-\(chat.id ?? -1)" }
 }
 
 extension AppModel {
+    func chatSummaries() -> (open: [ChatSummary], closed: [ChatSummary]) {
+        let all = workspaces.values.map { $0.chatSummaries() }
+        let open = all.flatMap(\.open).sorted { ($0.lastActivity, $0.id) > ($1.lastActivity, $1.id) }
+        let closed = all.flatMap(\.closed).sorted { ($0.chat.closedAt ?? .distantPast, $0.id) > ($1.chat.closedAt ?? .distantPast, $1.id) }
+        return (open, closed)
+    }
+
+    var appearance: Appearance {
+        get { AppDefaults.store.string(forKey: Appearance.storageKey).flatMap(Appearance.init(rawValue:)) ?? .fallback }
+        set { AppDefaults.store.set(newValue.rawValue, forKey: Appearance.storageKey) }
+    }
+
+    var allOpenProjects: [(workspace: DaemonWorkspace, project: Project)] {
+        orderedWorkspaces.flatMap { workspace in workspace.openProjects.map { (workspace, $0) } }
+    }
+
+    func requestNewChat() {
+        let projects = allOpenProjects
+        switch projects.count {
+        case 0: isOpenPanelPresented = true
+        case 1: projects[0].workspace.startNewChat(in: projects[0].project)
+        default: isNewChatPickerShown = true
+        }
+    }
+
+    func attentionCount(_ summaries: [ChatSummary]) -> Int {
+        summaries.count { $0.stage.needsAttention }
+    }
+
+    func openChat(_ summary: ChatSummary) {
+        workspace(for: summary.daemon)?.openChat(summary.chat)
+    }
+
+    func deleteChat(_ target: DaemonChat) async {
+        await workspace(for: target.daemon)?.deleteChat(target.chat)
+    }
+}
+
+extension DaemonWorkspace {
     func chatSummaries() -> (open: [ChatSummary], closed: [ChatSummary]) {
         var open: [ChatSummary] = []
         var closed: [ChatSummary] = []
@@ -46,44 +86,25 @@ extension AppModel {
                 )
                 let last = activity[chatID] ?? chat.updatedAt
                 let summary = ChatSummary(
-                    chat: chat, project: project, stage: ChatStage.of(facts), lastActivity: max(last, chat.createdAt),
+                    daemon: id, chat: chat, project: project, stage: ChatStage.of(facts), lastActivity: max(last, chat.createdAt),
                     workers: workersByChat[chatID] ?? [],
                     isUnread: ChatActivity.isUnread(viewedAt: chat.viewedAt, createdAt: chat.createdAt, lastActivity: activity[chatID])
                 )
                 if chat.isClosed { closed.append(summary) } else { open.append(summary) }
             }
         }
-        open.sort { ($0.lastActivity, $0.id) > ($1.lastActivity, $1.id) }
-        closed.sort { ($0.chat.closedAt ?? .distantPast, $0.id) > ($1.chat.closedAt ?? .distantPast, $1.id) }
         return (open, closed)
     }
 
     func summary(of chat: Chat) -> ChatSummary? {
         let all = chatSummaries()
-        return (all.open + all.closed).first { $0.id == chat.id }
-    }
-
-    var appearance: Appearance {
-        get { AppDefaults.store.string(forKey: Appearance.storageKey).flatMap(Appearance.init(rawValue:)) ?? .fallback }
-        set { AppDefaults.store.set(newValue.rawValue, forKey: Appearance.storageKey) }
+        return (all.open + all.closed).first { $0.chat.id == chat.id }
     }
 
     func chat(of agent: Agent) -> Chat? {
         if let chatID = agent.taskId { return try? database.task(id: chatID) }
         guard let runID = agent.runId, let run = liveRun(id: runID) else { return nil }
         return try? database.task(id: run.taskId)
-    }
-
-    func requestNewChat() {
-        switch openProjects.count {
-        case 0: isOpenPanelPresented = true
-        case 1: startNewChat(in: openProjects[0])
-        default: isNewChatPickerShown = true
-        }
-    }
-
-    func attentionCount(_ summaries: [ChatSummary]) -> Int {
-        summaries.count { $0.stage.needsAttention }
     }
 
     func openChat(_ chat: Chat) {
@@ -114,9 +135,9 @@ extension AppModel {
         do {
             try await send(ChatCommands.Delete(chatID: id))
             leadChatRevision += 1
-            pages.retain { $0.kind.chatID != id }
+            pages.retain { !$0.kind.shows(chat: id, on: self.id) }
             if leadSelections[chat.projectId] == .request(id) { leadSelections[chat.projectId] = nil }
-            dropStalePages()
+            app.dropStalePages()
         } catch {
             alert = AppAlert(title: "Couldn’t delete the chat", message: error.localizedDescription)
         }

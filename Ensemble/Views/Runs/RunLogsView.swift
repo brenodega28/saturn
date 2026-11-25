@@ -106,23 +106,24 @@ private struct RequestHistoryRow: View {
 
 private struct AgentTail: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let agent: Agent
     let project: Project
     let limit: Int
 
     var body: some View {
-        let session = model.connection.session(for: agent)
+        let session = workspace.connection.session(for: agent)
         let live = session?.agent ?? agent
         let transcript = session?.transcript
         let items = Array(TranscriptLayout.items(transcript?.entries ?? [], live: transcript?.liveEntry).suffix(limit))
         let root = transcript?.session?.cwd ?? live.worktreePath
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                AgentAvatar(size: 20, appearance: RoleAppearance(role: model.role(for: live, in: project)))
+                AgentAvatar(size: 20, appearance: RoleAppearance(role: workspace.role(for: live, in: project)))
                 Text(live.name).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
-                StatusLabel(status: model.displayStatus(of: live), isQueued: session?.isQueued == true, session: session)
+                StatusLabel(status: workspace.displayStatus(of: live), isQueued: session?.isQueued == true, session: session)
                 Spacer(minLength: 6)
-                Button("Open Session") { model.openAgentSession(agent, in: project) }
+                Button("Open Session") { workspace.openAgentSession(agent, in: project) }
                     .buttonStyle(PillButtonStyle(height: 24))
                     .font(.system(size: 11.5))
                     .fixedSize()
@@ -140,7 +141,7 @@ private struct AgentTail: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .card(cornerRadius: 16)
-        .opensCodeFiles(in: project.id, root: root, model: model)
+        .opensCodeFiles(in: project.id, root: root, workspace: workspace)
     }
 
     private static let itemHeightLimit: CGFloat = 320

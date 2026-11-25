@@ -41,14 +41,15 @@ struct RunAgentsPanel: View {
 
 private struct RunAgentRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let agent: Agent
     let stepTitle: String?
     let project: Project
 
     var body: some View {
-        let session = model.connection.session(for: agent)
+        let session = workspace.connection.session(for: agent)
         let live = session?.agent ?? agent
-        let role = model.role(for: live, in: project)
+        let role = workspace.role(for: live, in: project)
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 10) {
                 AgentAvatar(size: 30, appearance: RoleAppearance(role: role))
@@ -66,7 +67,7 @@ private struct RunAgentRow: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 6)
-                StatusLabel(status: model.displayStatus(of: live), isQueued: session?.isQueued == true, session: session)
+                StatusLabel(status: workspace.displayStatus(of: live), isQueued: session?.isQueued == true, session: session)
             }
             if let branch = live.branch {
                 Label(branch, systemImage: "arrow.triangle.branch")
@@ -94,7 +95,7 @@ private struct RunAgentRow: View {
                     .padding(.leading, 40)
             }
             FlowLayout(spacing: 6) {
-                Button("Open Session") { model.openAgentSession(agent, in: project) }
+                Button("Open Session") { workspace.openAgentSession(agent, in: project) }
                     .help("Show \(live.name)’s transcript and controls")
                 if let url = live.worktreeURL, !project.isRemote {
                     Button("Reveal Worktree") { NSWorkspace.shared.activateFileViewerSelecting([url]) }

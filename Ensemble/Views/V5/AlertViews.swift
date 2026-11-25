@@ -77,7 +77,7 @@ struct MenuBarStatus: View {
                 ForEach(waiting) { summary in
                     Button("\(summary.chat.title) · \(summary.stage.title)") {
                         NSApp.activate()
-                        model.openChat(summary.chat)
+                        model.openChat(summary)
                     }
                 }
             }

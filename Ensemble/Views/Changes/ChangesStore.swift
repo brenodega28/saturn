@@ -72,19 +72,19 @@ final class ChangesStore {
         runs.first { $0.id == selectedRunID } ?? runs.first
     }
 
-    func load(_ run: Run, in project: Project, model: AppModel) async {
+    func load(_ run: Run, in project: Project, workspace: DaemonWorkspace) async {
         isLoading = true
         defer { isLoading = false }
-        let loaded = await model.loadChanges(for: run, in: project)
+        let loaded = await workspace.loadChanges(for: run, in: project)
         guard selectedRunID == run.id || selectedRunID == nil else { return }
         changeSet = loaded
         loadedRunID = run.id
-        viewed = model.viewedPaths(in: run, current: loaded?.paths ?? [])
-        policy = model.config(for: project).review
-        labels = (try? model.database.task(id: run.taskId))??.labels ?? []
+        viewed = workspace.viewedPaths(in: run, current: loaded?.paths ?? [])
+        policy = workspace.config(for: project).review
+        labels = (try? workspace.database.task(id: run.taskId))??.labels ?? []
         if let id = run.id {
-            evidence = (try? model.database.evidence(runId: id)) ?? []
-            gates = model.latestGateReport(in: run)
+            evidence = (try? workspace.database.evidence(runId: id)) ?? []
+            gates = workspace.latestGateReport(in: run)
         }
         for path in allPaths where tier(of: path.path) == .low && !viewed.contains(path.path) {
             collapsed.insert(path.path)

@@ -17,7 +17,7 @@ struct PageTabStrip: View {
         HStack(alignment: .bottom, spacing: 4) {
             HStack(alignment: .bottom, spacing: 4) {
                 ForEach(model.pages.pages) { page in
-                    PageTab(page: page, stage: page.kind.chatID.flatMap { stages[$0] })
+                    PageTab(page: page, workspace: model.workspace(of: page.kind), stage: page.kind.chatID.flatMap { chatID in page.kind.daemon.flatMap { stages["\($0.uuidString)-\(chatID)"] } })
                         .onDrag {
                             dragged = page.id
                             return NSItemProvider(object: page.id.uuidString as NSString)
@@ -31,8 +31,9 @@ struct PageTabStrip: View {
                 .frame(height: 38)
             Spacer(minLength: 8)
             HStack(spacing: 6) {
-                if isNarrow, let page = model.activePage, let chat = model.sideBarChat(for: page.kind), let project = model.project(withID: chat.projectId) {
-                    ChatCardPill(project: project, chat: chat)
+                if isNarrow, let page = model.activePage, let workspace = model.workspace(of: page.kind),
+                   let chat = workspace.sideBarChat(for: page.kind), let project = workspace.project(withID: chat.projectId) {
+                    ChatCardPill(project: project, chat: chat).environment(workspace)
                 }
                 sideBarToggle
             }
@@ -85,6 +86,7 @@ private struct PageTab: View {
 
     @Environment(AppModel.self) private var model
     let page: MainPage
+    let workspace: DaemonWorkspace?
     let stage: ChatStage?
     @State private var isHovered = false
 
@@ -111,7 +113,7 @@ private struct PageTab: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .help(title)
+            .help(workspace.map { $0.isRemote ? "\(title) · \($0.displayName)" : title } ?? title)
             .accessibilityLabel(title)
             .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
             Button { model.pages.close(page.id) } label: {
@@ -144,8 +146,8 @@ private struct PageTab: View {
     @ViewBuilder
     private var icon: some View {
         switch page.kind {
-        case .chat(_, let projectID):
-            if let project = model.project(withID: projectID) { ProjectTile(project: project, size: 16) }
+        case .chat(_, let ref):
+            if let project = workspace?.project(withID: ref.id) { ProjectTile(project: project, size: 16) }
         default:
             Image(systemName: Self.symbol(for: page.kind))
                 .font(.system(size: 12.5))
@@ -159,9 +161,9 @@ private struct PageTab: View {
         Button("Close") { model.pages.close(page.id) }
         Button("Close Others") { model.pages.closeOthers(page.id) }
             .disabled(model.pages.pages.count < 2)
-        if let chatID = page.kind.chatID, let chat = try? model.database.task(id: chatID) {
+        if let chatID = page.kind.chatID, let workspace, let chat = try? workspace.database.task(id: chatID) {
             Divider()
-            ChatRowMenu(chat: chat, rename: {})
+            ChatRowMenu(chat: chat, rename: {}).environment(workspace)
         }
     }
 

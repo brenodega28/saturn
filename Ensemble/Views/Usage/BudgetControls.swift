@@ -183,12 +183,13 @@ struct ProjectBudgetCard: View {
 
 struct ProjectBudgetEditor: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     var showsName = true
     var period: BudgetPeriodKind = .month
 
     var body: some View {
-        let status = period == .week ? model.weeklyBudgetStatus(for: project) : model.budgetStatus(for: project)
+        let status = period == .week ? workspace.weeklyBudgetStatus(for: project) : workspace.budgetStatus(for: project)
         VStack(alignment: .leading, spacing: 10) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .center, spacing: 14) {
@@ -226,7 +227,7 @@ struct ProjectBudgetEditor: View {
         HStack(spacing: 8) {
             if status.blocksNewWork {
                 Button("Allow \(period.current)") {
-                    if period == .week { model.allowOverBudgetThisWeek(project) } else { model.allowOverBudgetThisMonth(project) }
+                    if period == .week { workspace.allowOverBudgetThisWeek(project) } else { workspace.allowOverBudgetThisMonth(project) }
                 }
                 .buttonStyle(PillButtonStyle(.secondary, height: 30))
                 .help("Let runs and agent turns in \(project.name) continue until the end of the \(period == .week ? "week" : "month")")
@@ -236,7 +237,7 @@ struct ProjectBudgetEditor: View {
                 budget: period == .week ? project.settings.weeklyBudgetUSD : project.settings.monthlyBudgetUSD,
                 label: "\(period.title) budget for \(project.name)"
             ) { value in
-                if period == .week { model.setWeeklyBudget(value, for: project) } else { model.setMonthlyBudget(value, for: project) }
+                if period == .week { workspace.setWeeklyBudget(value, for: project) } else { workspace.setMonthlyBudget(value, for: project) }
             }
             .fixedSize()
         }

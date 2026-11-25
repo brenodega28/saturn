@@ -61,21 +61,78 @@ struct MiddleColumn: View {
             VStack(spacing: 0) {
                 PageTabStrip(isNarrow: isNarrow)
                 if let page = model.activePage {
-                    HStack(spacing: 0) {
-                        PageContent(page: page)
-                            .id(page.id)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if model.pages.isSideBarOpen, !isNarrow, let chat = model.sideBarChat(for: page.kind),
-                           let project = model.project(withID: chat.projectId) {
-                            ChatSideBar(project: project, chat: chat)
-                        }
+                    if let workspace = model.workspace(of: page.kind) {
+                        PageHost(page: page, isNarrow: isNarrow)
+                            .environment(workspace)
+                    } else if case .tool(.usage, _) = page.kind {
+                        PageHost(page: page, isNarrow: isNarrow)
+                    } else {
+                        MachineOffline(name: model.knownDaemons.first { $0.id == page.kind.daemon }?.displayName) { model.pages.close(page.id) }
                     }
                 } else {
                     NoPagesView()
                 }
             }
         }
-        .overlay { PageFileFinder() }
+        .overlay { PageFileFinder().environment(model.currentWorkspace) }
+    }
+}
+
+private struct PageHost: View {
+    @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
+    let page: MainPage
+    let isNarrow: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if workspace.isRemote, !workspace.isConnected {
+                OfflineBanner(name: workspace.displayName)
+            }
+            HStack(spacing: 0) {
+                PageContent(page: page)
+                    .id(page.id)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if model.pages.isSideBarOpen, !isNarrow, let chat = workspace.sideBarChat(for: page.kind),
+                   let project = workspace.project(withID: chat.projectId) {
+                    ChatSideBar(project: project, chat: chat)
+                }
+            }
+        }
+    }
+}
+
+private struct OfflineBanner: View {
+    let name: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "bolt.horizontal.circle").font(.system(size: 12, weight: .semibold))
+            Text("\(name) is offline. This page shows what Ensemble last saw and updates when the server is back.")
+                .lineLimit(2)
+            Spacer()
+        }
+        .font(.system(size: 12.5))
+        .foregroundStyle(Tokens.text2)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 8)
+        .background(Tokens.fill)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct MachineOffline: View {
+    let name: String?
+    let close: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "server.rack").font(.system(size: 22)).foregroundStyle(Tokens.text2)
+            Text("\(name ?? "This server") is offline").font(.system(size: 15, weight: .semibold))
+            Text("The page comes back when Ensemble reconnects.").font(.system(size: 13)).foregroundStyle(Tokens.text2)
+            Button("Close Tab", action: close).buttonStyle(SecondaryPillStyle())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -88,11 +145,21 @@ private struct PageContent: View {
         case .tool(.usage, _):
             ToolScreen(title: MainTool.usage.title) { UsageView() }
         default:
-            if let project = model.project(of: page.kind) {
-                content(project)
-            } else {
-                PageUnavailable { model.pages.close(page.id) }
-            }
+            ProjectPageContent(page: page)
+        }
+    }
+}
+
+private struct ProjectPageContent: View {
+    @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
+    let page: MainPage
+
+    var body: some View {
+        if let project = workspace.project(of: page.kind) {
+            content(project)
+        } else {
+            PageUnavailable { model.pages.close(page.id) }
         }
     }
 
@@ -116,15 +183,15 @@ private struct PageContent: View {
                         .environment(\.isInWorkbench, tool == .code)
                 }
             }
-        case .run(let runID):
-            ToolScreen(title: model.title(of: page.kind), project: project) {
+        case .run(let runID, _):
+            ToolScreen(title: workspace.title(of: page.kind), project: project) {
                 RunDetailView(runID: runID, project: project)
                     .padding(EdgeInsets(top: 4, leading: 22, bottom: 20, trailing: 20))
                     .environment(\.isInWorkbench, true)
             }
-        case .agent(let agentID):
-            if let session = model.agentSessions(in: project).first(where: { $0.id == agentID }) {
-                ToolScreen(title: model.displayName(of: session.agent, in: project), project: project) {
+        case .agent(let agentID, _):
+            if let session = workspace.agentSessions(in: project).first(where: { $0.id == agentID }) {
+                ToolScreen(title: workspace.displayName(of: session.agent, in: project), project: project) {
                     AgentSessionView(session: session, project: project)
                         .padding(EdgeInsets(top: 4, leading: 22, bottom: 20, trailing: 20))
                 }
@@ -132,7 +199,7 @@ private struct PageContent: View {
                 PageUnavailable { model.pages.close(page.id) }
             }
         case .spec(let path, _):
-            ToolScreen(title: model.title(of: page.kind), project: project) {
+            ToolScreen(title: workspace.title(of: page.kind), project: project) {
                 SpecReviewPage(path: path, project: project)
             }
         }
@@ -175,14 +242,15 @@ struct NoPagesView: View {
 
 private struct PageFileFinder: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
 
     var body: some View {
         if model.isPageFinderShown, let project = model.currentProject {
-            let browser = model.codeBrowser(for: project)
+            let browser = workspace.codeBrowser(for: project)
             if browser.isFinderPresented {
                 CodeFinder(browser: browser) { path, line in
                     model.isPageFinderShown = false
-                    model.openFile(path, in: project, line: line)
+                    workspace.openFile(path, in: project, line: line)
                 }
                 .onDisappear { model.isPageFinderShown = false }
             }

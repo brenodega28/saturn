@@ -15,12 +15,12 @@ extension SpecStatus {
     }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     var specStore: SpecStore {
         if connection.isRemote, let root = connection.environment.dataDirectory {
             return SpecStore(paths: AppPaths(root: URL(fileURLWithPath: root, isDirectory: true)))
         }
-        return SpecStore(paths: daemonPaths)
+        return SpecStore(paths: app.daemonPaths)
     }
 
     func specDraftURL(for task: Chat) -> URL? {

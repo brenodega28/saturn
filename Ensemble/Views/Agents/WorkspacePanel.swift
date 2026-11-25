@@ -4,6 +4,7 @@ import SwiftUI
 
 struct WorkspacePanel: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let session: LiveAgentSession
     @State private var status: WorktreeStatus?
     @State private var errorMessage: String?
@@ -35,7 +36,7 @@ struct WorkspacePanel: View {
 
                 SetupLogSection(session: session)
 
-                if let worktree = agent.worktreeURL, !model.isRemote(agent) {
+                if let worktree = agent.worktreeURL, !workspace.isRemote(agent) {
                     VStack(alignment: .leading, spacing: 8) {
                         Button {
                             NSWorkspace.shared.activateFileViewerSelecting([worktree])
@@ -126,7 +127,7 @@ struct WorkspacePanel: View {
     }
 
     private func refresh() async {
-        guard let git = model.git(forAgent: session.agent), let worktree = session.agent.worktreeURL, session.agent.archivedAt == nil else { return }
+        guard let git = workspace.git(forAgent: session.agent), let worktree = session.agent.worktreeURL, session.agent.archivedAt == nil else { return }
         do {
             status = try await git.status(of: worktree, base: session.agent.baseBranch)
             errorMessage = nil
@@ -168,6 +169,7 @@ struct WorkspacePanel: View {
 
 private struct FileDiffSheet: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.dismiss) private var dismiss
     let session: LiveAgentSession
     let file: ChangedFile
@@ -202,7 +204,7 @@ private struct FileDiffSheet: View {
         .padding(20)
         .frame(width: 820, height: 600)
         .task {
-            guard let git = model.git(forAgent: session.agent), let worktree = session.agent.worktreeURL else { return }
+            guard let git = workspace.git(forAgent: session.agent), let worktree = session.agent.worktreeURL else { return }
             diff = (try? await git.diff(of: file.path, in: worktree, base: session.agent.baseBranch)) ?? "Couldn’t load the diff."
         }
     }

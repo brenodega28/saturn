@@ -4,6 +4,7 @@ import SwiftUI
 
 struct TranscriptView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let session: LiveAgentSession
 
     var body: some View {
@@ -14,7 +15,7 @@ struct TranscriptView: View {
         let root = transcript.session?.cwd ?? session.agent.worktreePath
         let activity = TranscriptLayout.activity(entries, live: live)
         let todos = TranscriptLayout.latestTodos(in: entries)
-        let held = model.heldSends(for: .session(session.id))
+        let held = workspace.heldSends(for: .session(session.id))
         VStack(spacing: 10) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
@@ -25,7 +26,7 @@ struct TranscriptView: View {
                     ForEach(held) { send in
                         TranscriptUserMessage(
                             text: send.message.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                            onCancel: send.isCancellable ? { model.cancelHeldSend(send) } : nil
+                            onCancel: send.isCancellable ? { workspace.cancelHeldSend(send) } : nil
                         )
                     }
                     if session.isRunning, session.isStopping || activity == .working {
@@ -43,7 +44,7 @@ struct TranscriptView: View {
             }
         }
         .animation(.snappy(duration: 0.25), value: todos.isEmpty)
-        .opensCodeFiles(in: session.agent.projectId, root: root, model: model)
+        .opensCodeFiles(in: session.agent.projectId, root: root, workspace: workspace)
     }
 }
 

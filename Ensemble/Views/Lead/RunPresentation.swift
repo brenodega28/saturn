@@ -87,9 +87,11 @@ extension AppModel {
     static func statusColor(needsYou: Bool, otherwise color: Color) -> Color {
         needsYou ? Theme.warning : color
     }
+}
 
+extension DaemonWorkspace {
     func statusColor(of run: Run) -> Color {
-        Self.statusColor(needsYou: runNeedsYou(run), otherwise: run.status.color)
+        AppModel.statusColor(needsYou: runNeedsYou(run), otherwise: run.status.color)
     }
 
     func statusLabel(of run: Run) -> String {
@@ -98,7 +100,7 @@ extension AppModel {
 
     func statusColor(of request: Chat, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> Color {
         let needsYou = pendingApprovalCount(of: request) > 0 || requestNeedsYou(request, latestRun: latestRun, needsYouTaskIDs: needsYouTaskIDs)
-        return Self.statusColor(needsYou: needsYou, otherwise: latestRun?.status.color ?? Theme.secondaryText)
+        return AppModel.statusColor(needsYou: needsYou, otherwise: latestRun?.status.color ?? Theme.secondaryText)
     }
 }
 

@@ -1,7 +1,7 @@
 import EnsembleCore
 import Foundation
 
-extension AppModel {
+extension DaemonWorkspace {
     func memory(for session: LiveAgentSession) -> AgentMemory? {
         guard let project = project(withID: session.agent.projectId) else { return nil }
         return AgentMemory(repository: project.filesRoot, agentName: session.agent.name)

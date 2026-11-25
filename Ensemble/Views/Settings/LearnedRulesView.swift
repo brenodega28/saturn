@@ -5,6 +5,7 @@ import SwiftUI
 
 struct LearnedRulesView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var corrections: [Correction] = []
     @State private var repeated: Set<Int64> = []
@@ -102,18 +103,18 @@ struct LearnedRulesView: View {
 
     private func reload() {
         guard let id = project.id else { return }
-        corrections = (try? model.database.corrections(projectId: id)) ?? []
-        repeated = (try? model.database.repeatedCorrections(projectId: id)) ?? []
+        corrections = (try? workspace.database.corrections(projectId: id)) ?? []
+        repeated = (try? workspace.database.repeatedCorrections(projectId: id)) ?? []
         status = AgentInstructions.status(repository: project.filesRoot)
     }
 
     private func setUpInstructions() {
-        guard let git = model.git(for: project) else { return }
+        guard let git = workspace.git(for: project) else { return }
         Task {
             do {
                 let written = try AgentInstructions.setUp(repository: project.filesRoot)
                 if !written.isEmpty {
-                    try await model.syncRemoteFiles(project)
+                    try await workspace.syncRemoteFiles(project)
                     try await AgentInstructions.commit(written, message: "Set up AGENTS.md for coding agents", repository: project.url, git: git)
                 }
                 message = written.isEmpty ? nil : "Committed \(written.joined(separator: " and "))."
@@ -135,6 +136,7 @@ private struct EncodeCorrectionSheet: View {
     }
 
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.dismiss) private var dismiss
     let project: Project
     let correction: Correction
@@ -220,10 +222,10 @@ private struct EncodeCorrectionSheet: View {
         Task {
             defer { isSaving = false }
             do {
-                try await model.syncRemoteFiles(project)
-                try await model.send(CodeCommands.EncodeCorrection(correctionID: correctionID, encoding: encoding))
-                try await model.pullRemoteFiles(project)
-                model.reloadConfig(for: project)
+                try await workspace.syncRemoteFiles(project)
+                try await workspace.send(CodeCommands.EncodeCorrection(correctionID: correctionID, encoding: encoding))
+                try await workspace.pullRemoteFiles(project)
+                workspace.reloadConfig(for: project)
                 done()
                 dismiss()
             } catch {

@@ -5,6 +5,7 @@ import SwiftUI
 
 struct SkillsSettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     @State private var marketplace = ""
     @State private var plugin = ""
@@ -14,8 +15,8 @@ struct SkillsSettingsView: View {
     @State private var hasUncommittedSettings = false
 
     var body: some View {
-        let plugins = project.id.flatMap { model.skillPlugins[$0] } ?? []
-        let skills = SkillLibrary.skills(in: project.filesRoot, pluginSkills: model.pluginSkills(for: project))
+        let plugins = project.id.flatMap { workspace.skillPlugins[$0] } ?? []
+        let skills = SkillLibrary.skills(in: project.filesRoot, pluginSkills: workspace.pluginSkills(for: project))
         SettingsPage("Skills", subtitle: "Skills installed for this project, from .claude/skills, the project’s plugins and ~/.claude/skills. The Lead chooses which skills each builder or checker loads; Ensemble never turns them on for every agent.") {
             installCard(plugins: plugins)
 
@@ -179,23 +180,23 @@ struct SkillsSettingsView: View {
         installError = nil
         defer { isInstalling = false }
         do {
-            let installed = try await model.installSkillPlugin(plugin, from: marketplace, in: project)
+            let installed = try await workspace.installSkillPlugin(plugin, from: marketplace, in: project)
             installMessage = "Installed \(installed.id) with \(installed.skills.count == 1 ? "1 skill" : "\(installed.skills.count) skills"). The Lead can now give them to agents."
             marketplace = ""
             plugin = ""
         } catch {
             installError = error.localizedDescription
         }
-        hasUncommittedSettings = await model.hasUncommittedSkillSettings(in: project)
+        hasUncommittedSettings = await workspace.hasUncommittedSkillSettings(in: project)
     }
 
     private func refreshPlugins() async {
         do {
-            try await model.loadSkillPlugins(for: project)
+            try await workspace.loadSkillPlugins(for: project)
         } catch {
             installError = "Couldn’t list this project’s plugins: \(error.localizedDescription)"
         }
-        hasUncommittedSettings = await model.hasUncommittedSkillSettings(in: project)
+        hasUncommittedSettings = await workspace.hasUncommittedSkillSettings(in: project)
     }
 
 }

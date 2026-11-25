@@ -3,12 +3,11 @@ import EnsembleCore
 import Foundation
 import UserNotifications
 
-extension AppModel {
+extension DaemonWorkspace {
     var needsYouCount: Int { requests.count }
 
     func startRequests() {
-        requestNotifier.onOpen = { [weak self] target in self?.openNotification(target) }
-        requestNotifier.onAction = { [weak self] action, messageID in self?.performNotificationAction(action, messageID: messageID) }
+        let notifier = app.requestNotifier
         requests.onNewItems = { [weak self] items in
             guard let self else { return }
             let visibleChat = visibleChat()
@@ -18,7 +17,7 @@ extension AppModel {
                         appActive: NSApp.isActive, visibleChat: visibleChat, target: (item.projectId, taskID(of: item))
                     )
             }
-            requestNotifier.post(wanted, projectName: { [weak self] id in self?.project(withID: id)?.name })
+            notifier.post(wanted, daemon: id, projectName: { [weak self] id in self?.projectLabel(id) })
         }
         chatNotifications.onNew = { [weak self] notifications in
             guard let self else { return }
@@ -29,17 +28,22 @@ extension AppModel {
                         appActive: NSApp.isActive, visibleChat: visibleChat, target: (notification.projectId, notification.taskId)
                     )
             }
-            requestNotifier.post(wanted, projectName: { [weak self] id in self?.project(withID: id)?.name })
+            notifier.post(wanted, daemon: id, projectName: { [weak self] id in self?.projectLabel(id) })
         }
         requests.start()
         chatNotifications.start()
         pendingPermissions.start()
-        requestNotifier.requestAuthorization()
+    }
+
+    private func projectLabel(_ projectID: Int64) -> String? {
+        guard let name = project(withID: projectID)?.name else { return nil }
+        return isRemote ? "\(name) · \(displayName)" : name
     }
 
     func visibleChat() -> (projectId: Int64, taskId: Int64)? {
-        guard case .chat(let taskID?, let projectID) = activePage?.kind, !requestPageProjectIDs.contains(projectID) else { return nil }
-        return (projectID, taskID)
+        guard case .chat(let taskID?, let project) = app.activePage?.kind, project.daemon == id,
+              !requestPageProjectIDs.contains(project.id) else { return nil }
+        return (project.id, taskID)
     }
 
     func taskID(of item: ChatRequest) -> Int64? {
@@ -76,7 +80,7 @@ extension AppModel {
 
     func openRequest(_ item: ChatRequest) {
         if item.kind == .pinReview {
-            showPage(.tool(.changes, projectID: item.projectId))
+            showPage(.tool(.changes, project: ref(item.projectId)))
         } else if let taskID = item.taskId {
             showRequest(id: taskID, inProjectID: item.projectId)
         }
@@ -150,9 +154,10 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
     static let permissionCategory = "permission"
     static let proposalCategory = "proposal"
     nonisolated static let messageKey = "messageId"
+    nonisolated static let daemonKey = "daemonId"
 
-    var onOpen: (@MainActor (NotificationTarget?) -> Void)?
-    var onAction: (@MainActor (Action, Int64) -> Void)?
+    var onOpen: (@MainActor (NotificationTarget?, DaemonID?) -> Void)?
+    var onAction: (@MainActor (Action, Int64, DaemonID?) -> Void)?
     private var hasRequestedAuthorization = false
     private var center: UNUserNotificationCenter { .current() }
 
@@ -172,7 +177,7 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
         center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
-    func post(_ items: [ChatRequest], projectName: (Int64) -> String?) {
+    func post(_ items: [ChatRequest], daemon: DaemonID, projectName: (Int64) -> String?) {
         for item in items {
             guard let id = item.id else { continue }
             let content = UNMutableNotificationContent()
@@ -181,12 +186,14 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
             content.body = item.body
             content.sound = .default
             content.threadIdentifier = item.taskId.map { "chat-\($0)" } ?? "project-\(item.projectId)"
-            content.userInfo = NotificationTarget.chatRequest(id: id).userInfo
-            center.add(UNNotificationRequest(identifier: "inbox-\(id)", content: content, trigger: nil))
+            var info = NotificationTarget.chatRequest(id: id).userInfo
+            info[Self.daemonKey] = daemon.uuidString
+            content.userInfo = info
+            center.add(UNNotificationRequest(identifier: "inbox-\(daemon.uuidString)-\(id)", content: content, trigger: nil))
         }
     }
 
-    func post(_ notifications: [ChatNotification], projectName: (Int64) -> String?) {
+    func post(_ notifications: [ChatNotification], daemon: DaemonID, projectName: (Int64) -> String?) {
         for notification in notifications {
             let content = UNMutableNotificationContent()
             content.title = notification.title
@@ -195,6 +202,7 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
             content.sound = .default
             content.threadIdentifier = "chat-\(notification.taskId)"
             var info = NotificationTarget.chat(projectId: notification.projectId, taskId: notification.taskId).userInfo
+            info[Self.daemonKey] = daemon.uuidString
             if let messageID = notification.messageId {
                 info[Self.messageKey] = messageID
                 switch notification.event {
@@ -204,7 +212,7 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
                 }
             }
             content.userInfo = info
-            center.add(UNNotificationRequest(identifier: notification.dedupeKey, content: content, trigger: nil))
+            center.add(UNNotificationRequest(identifier: "\(daemon.uuidString)-\(notification.dedupeKey)", content: content, trigger: nil))
         }
     }
 
@@ -240,19 +248,26 @@ final class RequestNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let info = response.notification.request.content.userInfo
+        let daemon = (info[Self.daemonKey] as? String).flatMap(UUID.init(uuidString:))
         if let action = Action(rawValue: response.actionIdentifier), let messageID = (info[Self.messageKey] as? NSNumber)?.int64Value ?? info[Self.messageKey] as? Int64 {
-            await MainActor.run { onAction?(action, messageID) }
+            await MainActor.run { onAction?(action, messageID, daemon) }
             return
         }
         let target = NotificationTarget(userInfo: info)
         await MainActor.run {
             NSApp.activate()
-            onOpen?(target)
+            onOpen?(target, daemon)
         }
     }
 }
 
 extension AppModel {
+    func openNotification(_ target: NotificationTarget?, on daemon: DaemonID?) {
+        workspace(for: daemon ?? localID)?.openNotification(target)
+    }
+}
+
+extension DaemonWorkspace {
     func performNotificationAction(_ action: RequestNotifier.Action, messageID: Int64) {
         guard let message = try? database.leadMessage(id: messageID) else { return }
         switch action {

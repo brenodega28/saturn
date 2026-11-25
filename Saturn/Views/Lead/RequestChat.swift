@@ -57,6 +57,7 @@ struct RequestChat: View {
                 .frame(maxWidth: .infinity)
                 .padding(EdgeInsets(top: 22, leading: 28, bottom: 16, trailing: 28))
             }
+            .scrollIndicators(.never)
             .defaultScrollAnchor(.bottom)
             .followsBottom(
                 of: FollowSignature(

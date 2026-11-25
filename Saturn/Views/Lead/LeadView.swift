@@ -68,6 +68,7 @@ struct NewRequestDeliveringSends: View {
             .frame(maxWidth: .infinity)
             .padding(EdgeInsets(top: 22, leading: 28, bottom: 16, trailing: 28))
         }
+        .scrollIndicators(.never)
         .defaultScrollAnchor(.bottom)
         .followsBottom(of: delivering.map(\.id), jumpingOn: delivering.count, releasingOn: false)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

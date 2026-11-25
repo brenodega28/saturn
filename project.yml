@@ -89,11 +89,30 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
+  SaturnTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: SaturnTests
+    dependencies:
+      - target: Saturn
+      - package: SaturnCore
+      - package: SaturnUI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.monoliti.SaturnTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Saturn.app/Contents/MacOS/Saturn
+        BUNDLE_LOADER: $(TEST_HOST)
+
 schemes:
   Saturn:
     build:
       targets:
         Saturn: all
+    test:
+      targets:
+        - SaturnTests
     run:
       config: Debug
     archive:

@@ -67,7 +67,7 @@ struct ChatCardPill: View {
     }
 }
 
-private struct CardRow<Trailing: View>: View {
+struct CardRow<Trailing: View>: View {
     let symbol: String
     let title: String
     @ViewBuilder let trailing: Trailing
@@ -103,7 +103,7 @@ private struct MachineRow: View {
     }
 }
 
-private struct WorktreeButton: View {
+struct WorktreeButton: View {
     @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
@@ -126,10 +126,11 @@ private struct WorktreeButton: View {
     }
 }
 
-private struct RunRow: View {
+struct RunRow: View {
     @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
+    var isFlat = false
 
     var body: some View {
         let target = workspace.selectedRunTarget(in: project)
@@ -153,10 +154,23 @@ private struct RunRow: View {
                 }
             }
             Spacer(minLength: 4)
+            if isFlat, case .running = state, let port = state.ports.first {
+                Button { workspace.openRunningApp(port: port) } label: {
+                    Image(systemName: "arrow.up.forward.square")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Tokens.text2)
+                        .frame(width: 28, height: 28)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help("Open localhost:\(port) in the browser")
+                .accessibilityLabel("Open in browser")
+            }
             if isActive {
                 Button { Task { await workspace.stopApp(in: project) } } label: { Label("Stop", systemImage: "stop.fill") }
                     .buttonStyle(RunButtonStyle(fill: Tokens.stuckBackground, text: Tokens.stuck))
                     .help("Stop the app and every process it started")
+                    .accessibilityLabel("Stop the app")
             }
             if !runsSelected {
                 Button { Task { await workspace.startApp(target, in: project) } } label: {
@@ -165,13 +179,14 @@ private struct RunRow: View {
                 .buttonStyle(RunButtonStyle(fill: Tokens.live, text: Color(hex: 0x04210D)))
                 .disabled(command == nil)
                 .help(command == nil ? "No run command found" : "Run \(command?.label ?? "") from \(target.branch)")
+                .accessibilityLabel(state.isFailed ? "Retry the app" : "Start the app")
             }
         }
         .font(.system(size: 13))
-        .padding(.horizontal, 10)
+        .padding(.horizontal, isFlat ? 12 : 10)
         .frame(minHeight: 44)
-        .background(Tokens.fill, in: .rect(cornerRadius: 10, style: .continuous))
-        .padding(.vertical, 2)
+        .background(isFlat ? .clear : Tokens.fill, in: .rect(cornerRadius: 10, style: .continuous))
+        .padding(.vertical, isFlat ? 0 : 2)
         .accessibilityElement(children: .contain)
     }
 
@@ -196,7 +211,7 @@ private struct RunRow: View {
     }
 }
 
-private struct RunButtonStyle: ButtonStyle {
+struct RunButtonStyle: ButtonStyle {
     let fill: Color
     let text: Color
     @Environment(\.isEnabled) private var isEnabled
@@ -219,27 +234,37 @@ extension AppRunState {
     }
 }
 
-private struct OutputRow: View {
+struct OutputRow: View {
     @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
+    var isOpen: Binding<Bool>?
 
     var body: some View {
         @Bindable var model = model
         let lines = workspace.appOutput(in: project)
-        Button { model.isAppOutputShown.toggle() } label: {
+        let shown = isOpen ?? $model.isAppOutputShown
+        Button { shown.wrappedValue.toggle() } label: {
             CardRow(symbol: "text.alignleft", title: "Output") {
                 Text(lines.isEmpty ? "Nothing yet" : "\(lines.count) line\(lines.count == 1 ? "" : "s")")
                     .font(.system(size: 12))
                     .foregroundStyle(lines.contains { $0.level == .error } ? Tokens.stuck : Tokens.text2)
+                if isOpen != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Tokens.text3)
+                        .rotationEffect(.degrees(shown.wrappedValue ? 90 : 0))
+                }
             }
         }
         .buttonStyle(.plain)
-        .help(model.isAppOutputShown ? "Hide the app’s output" : "Show the app’s output")
+        .help(shown.wrappedValue ? "Hide the app’s output" : "Show the app’s output")
+        .accessibilityLabel("Output")
+        .accessibilityValue(shown.wrappedValue ? "expanded" : "collapsed")
     }
 }
 
-private struct ChangesRow: View {
+struct ChangesRow: View {
     @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
@@ -260,7 +285,8 @@ private struct ChangesRow: View {
         }
         .buttonStyle(.plain)
         .help("Open Changes")
-        .task(id: run.map { "\($0.id ?? 0)-\($0.status.rawValue)-\($0.currentStep ?? "")" } ?? "none") {
+        .accessibilityLabel("Open Changes")
+        .task(id: Self.diffKey(run)) {
             if let run {
                 diff = await workspace.diffInfo(run)
             } else {
@@ -268,9 +294,13 @@ private struct ChangesRow: View {
             }
         }
     }
+
+    static func diffKey(_ run: Run?) -> String {
+        run.map { "\($0.id ?? 0)-\($0.status.rawValue)-\($0.currentStep ?? "")" } ?? "none"
+    }
 }
 
-private struct ChecksRow: View {
+struct ChecksRow: View {
     @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
@@ -444,24 +474,32 @@ struct AppOutputPanel: View {
             .padding(.horizontal, 12)
             .frame(height: 36)
             Divider().overlay(Tokens.hair)
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(lines) { entry in
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text(entry.date.formatted(date: .omitted, time: .standard)).foregroundStyle(Tokens.text3)
-                            Text(entry.message).foregroundStyle(entry.level == .error ? Tokens.danger : Tokens.text).textSelection(.enabled)
-                        }
-                        .font(Tokens.mono(11.5))
-                        .id(entry.id)
-                    }
-                }
-                .padding(12)
-            }
-            .defaultScrollAnchor(.bottom)
+            AppOutputLines(lines: lines).padding(12)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 260)
         .background(Tokens.code, in: .rect(cornerRadius: Tokens.Radius.popover, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Tokens.Radius.popover, style: .continuous).strokeBorder(Tokens.hair2))
+    }
+}
+
+struct AppOutputLines: View {
+    let lines: [LogEntry]
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 1) {
+                ForEach(lines) { entry in
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(entry.date.formatted(date: .omitted, time: .standard)).foregroundStyle(Tokens.text3)
+                        Text(entry.message).foregroundStyle(entry.level == .error ? Tokens.danger : Tokens.text).textSelection(.enabled)
+                    }
+                    .font(Tokens.mono(11.5))
+                    .id(entry.id)
+                }
+            }
+        }
+        .defaultScrollAnchor(.bottom)
+        .accessibilityLabel("App output")
     }
 }

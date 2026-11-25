@@ -27,14 +27,30 @@ struct WorkflowInspector: View {
                     InFlightBanner(runs: activeRuns, isDirty: editor.isDirty)
                 }
                 IssueList(issues: issues, showsFile: false)
-                selectionCard
-                    .padding(18)
-                    .card(cornerRadius: 20)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(caption)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Tokens.text3)
+                        .lineLimit(1)
+                    selectionCard
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .raisedCard()
                 tip
             }
             .padding(.bottom, 12)
         }
         .scrollIndicators(.never)
+    }
+
+    private var caption: String {
+        switch editor.selection {
+        case .workflow: "Workflow settings"
+        case .trigger: "Step · Trigger"
+        case .end: "Step · End"
+        case .step: "Step · \(editor.selectedStep?.displayTitle ?? "Step")"
+        }
     }
 
     @ViewBuilder
@@ -68,8 +84,8 @@ struct WorkflowInspector: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Tokens.hover, in: .rect(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Tokens.hair))
+        .background(Tokens.hover, in: .rect(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Tokens.hair))
     }
 }
 

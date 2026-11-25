@@ -13,7 +13,7 @@ Saturn is a native macOS app for solo developers that runs a crew of Claude Code
 - **Checks before review.** Saturn runs your project's format, lint, typecheck and test commands itself, outside the agent's session. Work reaches you only once they pass, and retries are capped.
 - **Protected tests.** Agents can't edit or disable the checks that judge them. Any change to a protected file is pinned for you to review.
 - **AI review that points, not blocks.** Reviewer agents leave pins on the lines you should read. Only you approve.
-- **Specs before runs.** The Lead drafts a short spec with scope and acceptance criteria. You review and annotate it before any work starts.
+- **Specs before runs.** The Lead drafts a short spec with scope and acceptance criteria. The spec opens in [Lavish](https://github.com/kunchenguid/lavish-axi), where you review and annotate it before any work starts.
 - **Config in your repo.** Roles, workflows and checks live in `.saturn/`, versioned with your code.
 - **Your own Claude account.** Saturn drives the `claude` CLI with your Claude sign-in or your own API key. No reselling.
 - **Local-first.** A finished run merges into your base branch on your Mac. You push when you choose.
@@ -45,9 +45,13 @@ Then build and run the **Saturn** scheme in Xcode 26 or later.
 
 1. **Open a project.** Pick a folder or clone a repository from the Welcome screen.
 2. **Start a chat.** Tell the Lead what you want done.
-3. **Review the spec.** The Lead drafts a spec naming the work and the workers. Annotate it or ask for changes.
+3. **Review the spec.** The Lead drafts a spec naming the work and the workers, and it opens in Lavish. Annotate it or ask for changes.
 4. **Start the run.** Builders work in their own worktrees. Saturn runs the checks, and reviewers pin what needs your eyes.
 5. **Approve.** Review the changes, approve, and the run merges locally. Push to origin from the chat.
+
+## Acknowledgements
+
+Much of Saturn's approach is inspired by the teachings of [Kun Chen](https://github.com/kunchenguid). Saturn integrates his [Lavish](https://github.com/kunchenguid/lavish-axi) editor for spec review.
 
 ## Development
 

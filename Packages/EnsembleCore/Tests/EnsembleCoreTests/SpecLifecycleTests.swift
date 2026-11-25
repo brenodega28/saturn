@@ -63,8 +63,8 @@ final class SpecGateDriver: WorkflowDriver {
 
         let reply = try await setup.driver.receive(.draftSpec(request), from: leadAgent.id!)
         #expect(reply.contains("rendered its review page"))
-        #expect(reply.contains("spec feedback"))
-        #expect(reply.contains(HandoffTool.replySpec.qualifiedName))
+        #expect(reply.contains("The Lavish review page did not open"))
+        #expect(!reply.contains(HandoffTool.replySpec.qualifiedName))
         #expect(reply.contains("spec/alpha-and-beta-files.md"))
         let url = draftURL(setup, task)
         #expect(url.path.hasPrefix(setup.harness.data.path))

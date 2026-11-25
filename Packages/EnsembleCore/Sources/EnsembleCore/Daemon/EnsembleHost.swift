@@ -53,6 +53,11 @@ public final class EnsembleHost {
     public let idleCleanup: IdleCleanupScheduler
     public let stallReporter: StallReporter
     public let specReviews: SpecReviews
+    public private(set) lazy var chatRelay = ChatRelay { [weak self] event in
+        guard let server = self?.server, server.clientCount > 0 else { return false }
+        server.broadcast(.event(event))
+        return true
+    }
     public let options: HostOptions
     public private(set) var settings: DaemonSettings
     public private(set) var environment = DaemonEnvironment()
@@ -146,6 +151,7 @@ public final class EnsembleHost {
         driver.memoryUpdater = updater
         updater.observe(engine)
         wireSpecReviews()
+        wireChatRelay()
         registerCommands()
     }
 

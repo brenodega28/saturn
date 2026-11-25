@@ -232,6 +232,32 @@ public enum ChatCommands {
         public init(chatID: Int64) { self.chatID = chatID }
     }
 
+    public struct ApproveSpec: DaemonCommand {
+        public static let name = "chat.approveSpec"
+        public typealias Response = Int64
+        public var chatID: Int64
+        public init(chatID: Int64) { self.chatID = chatID }
+    }
+
+    public struct Read: DaemonCommand {
+        public static let name = "chat.read"
+        public typealias Response = String
+        public var request: ChatReadRequest
+        public init(request: ChatReadRequest) { self.request = request }
+    }
+
+    public struct SetPeers: DaemonCommand {
+        public static let name = "chat.setPeers"
+        public var peers: [DaemonPeer]
+        public init(peers: [DaemonPeer]) { self.peers = peers }
+    }
+
+    public struct AnswerRelay: DaemonCommand {
+        public static let name = "chat.answerRelay"
+        public var answer: RelayedChat
+        public init(answer: RelayedChat) { self.answer = answer }
+    }
+
     public struct Finish: DaemonCommand {
         public static let name = "chat.finish"
         public var chatID: Int64

@@ -93,7 +93,6 @@ private struct PageTab: View {
     var body: some View {
         let isActive = model.pages.activeID == page.id
         let title = model.title(of: page.kind)
-        let attention = !isActive && (stage == .needsYou || stage == .stuck) ? stage : nil
         HStack(spacing: 4) {
             Button { model.pages.focus(page.id) } label: {
                 HStack(spacing: 8) {
@@ -102,19 +101,13 @@ private struct PageTab: View {
                         .font(.system(size: 13, weight: isActive ? .semibold : .medium))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    if let attention {
-                        Circle()
-                            .fill(attention.color)
-                            .frame(width: 7, height: 7)
-                            .accessibilityLabel(attention.title)
-                    }
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .help(workspace.map { $0.isRemote ? "\(title) · \($0.displayName)" : title } ?? title)
-            .accessibilityLabel(title)
+            .accessibilityLabel(accessibilityTitle(title))
             .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
             Button { model.pages.close(page.id) } label: {
                 Image(systemName: "xmark")
@@ -136,6 +129,8 @@ private struct PageTab: View {
         .frame(maxWidth: Self.maxWidth, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .background(isActive ? Tokens.window : Tokens.fill, in: TopRoundedRectangle(radius: 10))
+        .overlay(alignment: .top) { if isActive { Rectangle().fill(Tokens.accent).frame(height: 2) } }
+        .clipShape(TopRoundedRectangle(radius: 10))
         .overlay { if isActive { TabOutline(radius: 10).stroke(Tokens.hair2) } }
         .offset(y: 1)
         .zIndex(isActive ? 1 : 0)
@@ -146,13 +141,24 @@ private struct PageTab: View {
     @ViewBuilder
     private var icon: some View {
         switch page.kind {
-        case .chat(_, let ref), .newChat(_, let ref), .project(let ref, _):
+        case .chat:
+            StageDot(stage: stage).accessibilityHidden(true)
+        case .newChat:
+            StageDot(stage: nil).accessibilityHidden(true)
+        case .project(let ref, _):
             if let project = workspace?.project(withID: ref.id) { ProjectTile(project: project, size: 16) }
         default:
             Image(systemName: Self.symbol(for: page.kind))
                 .font(.system(size: 12.5))
                 .frame(width: 16)
                 .accessibilityHidden(true)
+        }
+    }
+
+    private func accessibilityTitle(_ title: String) -> String {
+        switch page.kind {
+        case .chat, .newChat: "\(stage?.title ?? "New chat"), \(title)"
+        default: title
         }
     }
 
@@ -182,6 +188,39 @@ private struct PageTab: View {
         case .agent: "person"
         case .spec: "doc.text"
         }
+    }
+}
+
+private struct StageDot: View {
+    let stage: ChatStage?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var pulses: Bool {
+        !reduceMotion && (stage == .building || stage == .inReview)
+    }
+
+    var body: some View {
+        ZStack {
+            if pulses {
+                halo.phaseAnimator([false, true]) { content, isExpanded in
+                    content
+                        .scaleEffect(isExpanded ? 1.15 : 0.6)
+                        .opacity(isExpanded ? 0.25 : 0.9)
+                } animation: { _ in .easeInOut(duration: 1.8) }
+            } else {
+                halo
+            }
+            Circle()
+                .fill(stage?.color ?? Tokens.idle)
+                .frame(width: 8, height: 8)
+        }
+        .frame(width: 14, height: 14)
+        .id(stage)
+        .accessibilityLabel(stage?.title ?? "New chat")
+    }
+
+    private var halo: some View {
+        Circle().fill(stage?.background ?? Tokens.fill)
     }
 }
 

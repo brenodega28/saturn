@@ -249,10 +249,14 @@ struct ChangesHeader: View {
         }
     }
 
+    private var sendsChangesBack: Bool {
+        context.holdsApproval && !store.changeRequests.isEmpty
+    }
+
     private var requestButton: some View {
         let requested = store.changeRequests
         return Button("Request changes") { workspace.sendChangesBack(in: run, pins: store.pins) }
-            .buttonStyle(SectionButtonStyle())
+            .buttonStyle(SectionButtonStyle(kind: sendsChangesBack ? .primary : .secondary))
             .disabled(!context.holdsApproval || requested.isEmpty)
             .help(!context.holdsApproval
                 ? "Available when the run reaches your approval step"
@@ -265,9 +269,11 @@ struct ChangesHeader: View {
         let unreadCore = store.unviewedCoreFiles.count
         let canApprove = store.openPins.count > 0 || context.holdsApproval
         return Button(context.holdsApproval ? "Approve & merge" : "Approve all pins") { workspace.approveAllPins(in: run) }
-            .buttonStyle(SectionButtonStyle(kind: .primary))
-            .disabled(!canApprove || unreadCore > 0)
-            .help(unreadCore > 0
+            .buttonStyle(SectionButtonStyle(kind: sendsChangesBack ? .secondary : .primary))
+            .disabled(!canApprove || unreadCore > 0 || sendsChangesBack)
+            .help(sendsChangesBack
+                ? "Send the \(store.changeRequests.count) requested change\(store.changeRequests.count == 1 ? "" : "s") back first, or approve those pins"
+                : unreadCore > 0
                 ? "Read and mark the \(unreadCore) core file\(unreadCore == 1 ? "" : "s") as viewed first"
                 : context.holdsApproval
                     ? "Approves every open pin and lets the run continue to merge"

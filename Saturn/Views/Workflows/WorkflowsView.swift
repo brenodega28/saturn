@@ -12,6 +12,7 @@ struct WorkflowsView: View {
     @State private var isTestRunPresented = false
     @State private var isHistoryPresented = false
     @State private var isInspectorPanelOpen = false
+    @AppStorage("workflowStepsLayout") private var stepsLayout = StepsLayout.list
 
     private struct PendingAction: Identifiable {
         let id = UUID()
@@ -20,37 +21,9 @@ struct WorkflowsView: View {
 
     var body: some View {
         let config = workspace.config(for: project)
-        GeometryReader { proxy in
-            let mode = WorkflowsLayoutMode(width: proxy.size.width)
-            HStack(alignment: .top, spacing: WorkflowsLayoutMode.columnSpacing) {
-                if mode.showsSidebar {
-                    WorkflowSidebar(
-                        config: config,
-                        editor: editor,
-                        hasConfig: workspace.hasConfig(project),
-                        project: project,
-                        open: openFromList,
-                        newBlank: { newBlank(config: config) },
-                        duplicate: { duplicate($0, config: config) },
-                        delete: confirmDelete
-                    )
-                    .frame(width: WorkflowsLayoutMode.sidebarWidth)
-                }
-                if let editor {
-                    editorArea(editor, config: config, mode: mode, height: proxy.size.height)
-                } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if !mode.showsSidebar {
-                            workflowMenu(config: config)
-                        }
-                        EmptyState("No workflow selected", message: "Workflows live in .saturn/workflows/ in this repository, versioned with your code. Pick one, or start a new one.") {
-                            Button("New workflow") { newWorkflow(from: nil, config: config) }
-                                .buttonStyle(.primaryPill)
-                        }
-                    }
-                }
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+        VStack(alignment: .leading, spacing: 18) {
+            intro(config: config)
+            layout(config: config)
         }
         .onAppear {
             openFirst(in: config)
@@ -86,6 +59,66 @@ struct WorkflowsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Removes .saturn/workflows/\(editor?.draft.id ?? "").yaml. Runs already in flight keep the version they started with.")
+        }
+    }
+
+    private func intro(config: ProjectConfig) -> some View {
+        SectionIntro(title: "Workflows", subtitle: subtitle(config: config)) {
+            if let editor {
+                headerActions(editor, issueCount: workspace.workflowIssues(editor, config: config).count)
+            } else {
+                Button("New workflow") { newWorkflow(from: nil, config: config) }
+                    .buttonStyle(CompactPrimaryPillStyle())
+            }
+        }
+    }
+
+    private func subtitle(config: ProjectConfig) -> String {
+        let base = "How a chat moves from your request to main. Each chat picks one"
+        guard let name = config.defaultWorkflowDefinition?.name else { return base + "." }
+        return base + "; \(name) is the default."
+    }
+
+    private func layout(config: ProjectConfig) -> some View {
+        GeometryReader { proxy in
+            let mode = WorkflowsLayoutMode(width: proxy.size.width)
+            HStack(alignment: .top, spacing: WorkflowsLayoutMode.columnSpacing) {
+                if mode.showsSidebar {
+                    WorkflowSidebar(
+                        config: config,
+                        editor: editor,
+                        hasConfig: workspace.hasConfig(project),
+                        project: project,
+                        open: openFromList,
+                        newBlank: { newBlank(config: config) },
+                        duplicate: { duplicate($0, config: config) },
+                        delete: confirmDelete
+                    )
+                    .frame(width: WorkflowsLayoutMode.sidebarWidth)
+                }
+                if let editor {
+                    editorArea(editor, config: config, mode: mode, height: proxy.size.height)
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if !mode.showsSidebar {
+                            workflowMenu(config: config)
+                        }
+                        EmptyState("No workflow selected", message: "Workflows live in .saturn/workflows/ in this repository, versioned with your code. Pick one, or start a new one.") {
+                            Button("New workflow") { newWorkflow(from: nil, config: config) }
+                                .buttonStyle(CompactPrimaryPillStyle())
+                        }
+                    }
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+        }
+    }
+
+    @ViewBuilder
+    private func steps(_ editor: WorkflowEditor, roles: [RoleDefinition]) -> some View {
+        switch stepsLayout {
+        case .list: WorkflowStepList(editor: editor, roles: roles)
+        case .canvas: WorkflowCanvas(editor: editor, roles: roles)
         }
     }
 
@@ -132,25 +165,28 @@ struct WorkflowsView: View {
             activeRuns: runs,
             suggestedLabels: workspace.suggestedWorkflowLabels(config, project: project)
         )
-        return VStack(alignment: .leading, spacing: 12) {
-            header(editor, config: config, issueCount: issues.count, mode: mode)
-            if mode.showsInspectorColumn {
-                HStack(alignment: .top, spacing: WorkflowsLayoutMode.columnSpacing) {
-                    WorkflowCanvas(editor: editor, roles: config.roles)
+        return HStack(alignment: .top, spacing: WorkflowsLayoutMode.columnSpacing) {
+            VStack(alignment: .leading, spacing: 12) {
+                header(editor, config: config, mode: mode)
+                if mode.showsInspectorColumn {
+                    steps(editor, roles: config.roles)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .layoutPriority(1)
-                    inspector
-                        .frame(width: WorkflowsLayoutMode.inspectorWidth)
+                } else {
+                    CanvasWithInspectorPanel(
+                        editor: editor,
+                        isPanelOpen: isInspectorPanelOpen,
+                        panelHeight: max(220, min(440, height * 0.45)),
+                        closePanel: { closeInspectorPanel(editor) },
+                        canvas: { steps(editor, roles: config.roles) },
+                        inspector: { inspector }
+                    )
                 }
-            } else {
-                CanvasWithInspectorPanel(
-                    editor: editor,
-                    roles: config.roles,
-                    isPanelOpen: isInspectorPanelOpen,
-                    panelHeight: max(220, min(440, height * 0.45)),
-                    closePanel: { closeInspectorPanel(editor) },
-                    inspector: { inspector }
-                )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .layoutPriority(1)
+            if mode.showsInspectorColumn {
+                inspector
+                    .frame(width: WorkflowsLayoutMode.inspectorWidth)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -164,101 +200,84 @@ struct WorkflowsView: View {
         editor.select(.workflow)
     }
 
-    private func header(_ editor: WorkflowEditor, config: ProjectConfig, issueCount: Int, mode: WorkflowsLayoutMode) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func header(_ editor: WorkflowEditor, config: ProjectConfig, mode: WorkflowsLayoutMode) -> some View {
+        ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(editor.draft.name.isEmpty ? "Untitled workflow" : editor.draft.name)
-                        .font(.system(size: 15, weight: .bold))
-                        .lineLimit(1)
-                        .help(editor.draft.name)
-                    Button {
-                        isHistoryPresented.toggle()
-                    } label: {
-                        Text("v\(editor.draft.version) · History")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(editor.isNew)
-                    .fixedSize()
-                    .help("Earlier versions, with their runs and average cost. Running tasks keep the version they started with.")
-                    .popover(isPresented: $isHistoryPresented, arrowEdge: .bottom) {
-                        WorkflowHistoryView(project: project, editor: editor) { isHistoryPresented = false }
-                    }
-                }
-                .layoutPriority(1)
+                nameAndStatus(editor)
                 Spacer(minLength: 12)
-                headerActions(editor, issueCount: issueCount)
-                    .fixedSize()
+                editingTools(editor, config: config, mode: mode)
             }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    triggerAndStatus(editor)
-                    Spacer(minLength: 12)
-                    editingTools(editor, config: config, mode: mode)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    triggerAndStatus(editor)
-                    editingTools(editor, config: config, mode: mode)
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                nameAndStatus(editor)
+                editingTools(editor, config: config, mode: mode)
             }
         }
     }
 
-    private func triggerAndStatus(_ editor: WorkflowEditor) -> some View {
+    private func nameAndStatus(_ editor: WorkflowEditor) -> some View {
         HStack(spacing: 8) {
+            Text(editor.draft.name.isEmpty ? "Untitled workflow" : editor.draft.name)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Tokens.text)
+                .lineLimit(1)
+                .help(editor.draft.name)
+            Button {
+                isHistoryPresented.toggle()
+            } label: {
+                Text("v\(editor.draft.version) · History")
+                    .font(Tokens.mono(11.5))
+                    .foregroundStyle(Tokens.text2)
+            }
+            .buttonStyle(.plain)
+            .disabled(editor.isNew)
+            .fixedSize()
+            .help("Earlier versions, with their runs and average cost. Running tasks keep the version they started with.")
+            .popover(isPresented: $isHistoryPresented, arrowEdge: .bottom) {
+                WorkflowHistoryView(project: project, editor: editor) { isHistoryPresented = false }
+            }
             Button {
                 editor.select(.trigger)
             } label: {
-                Text(editor.draft.trigger.summary)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.successText)
-                    .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .frame(height: 20)
-                    .background(Theme.success.opacity(0.15), in: Capsule())
+                TagPill(text: editor.draft.trigger.summary, color: Tokens.done, background: Tokens.doneBackground)
             }
             .buttonStyle(.plain)
             .help("Edit what starts this workflow")
             if editor.isDirty {
-                Text(editor.isNew ? "Not saved" : editor.willBumpVersion ? "Edited · saves as v\(editor.nextVersion)" : "Layout edited")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.warning)
-                    .lineLimit(1)
-                    .fixedSize()
+                TagPill(text: editor.isNew ? "Not saved" : editor.willBumpVersion ? "Edited · saves as v\(editor.nextVersion)" : "Layout edited", color: Tokens.need, background: Tokens.needBackground)
             }
         }
     }
 
-    @ViewBuilder
     private func editingTools(_ editor: WorkflowEditor, config: ProjectConfig, mode: WorkflowsLayoutMode) -> some View {
-        if !mode.showsSidebar {
-            HStack(spacing: 8) {
+        HStack(spacing: 8) {
+            if !mode.showsSidebar {
                 workflowMenu(config: config)
-                AddStepMenu(roles: config.roles, editor: editor)
-                if !mode.showsInspectorColumn {
-                    Toggle(isOn: Binding(
-                        get: { isInspectorPanelOpen },
-                        set: { isOpen in
-                            if isOpen { isInspectorPanelOpen = true } else { closeInspectorPanel(editor) }
-                        }
-                    )) {
-                        Label("Inspector", systemImage: "rectangle.bottomthird.inset.filled")
+            }
+            CapsuleTabs(StepsLayout.allCases, selection: $stepsLayout, title: \.title)
+                .fixedSize()
+                .help("Show the steps as a list, or as a canvas you can drag and connect")
+            AddStepMenu(roles: config.roles, editor: editor)
+            if !mode.showsInspectorColumn {
+                Toggle(isOn: Binding(
+                    get: { isInspectorPanelOpen },
+                    set: { isOpen in
+                        if isOpen { isInspectorPanelOpen = true } else { closeInspectorPanel(editor) }
                     }
-                    .toggleStyle(.button)
-                    .fixedSize()
-                    .help("Show the settings for the selected step, or for the whole workflow")
+                )) {
+                    Label("Inspector", systemImage: "rectangle.bottomthird.inset.filled")
                 }
+                .toggleStyle(.button)
+                .fixedSize()
+                .help("Show the settings for the selected step, or for the whole workflow")
             }
         }
     }
 
     private func headerActions(_ editor: WorkflowEditor, issueCount: Int) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             if !editor.isNew {
                 Button("Revert") { editor.revert() }
-                    .buttonStyle(.pill)
+                    .buttonStyle(CompactSecondaryPillStyle())
                     .disabled(!editor.isDirty)
                     .help("Throw away unsaved changes")
             }
@@ -270,7 +289,7 @@ struct WorkflowsView: View {
             } label: {
                 Label("Test run", systemImage: "play.fill")
             }
-            .buttonStyle(.pill)
+            .buttonStyle(CompactSecondaryPillStyle())
             .disabled(editor.draft.steps.isEmpty)
             .help("Dry-run this workflow on a sample task with every agent stubbed")
             if !editor.isNew, editor.isDirty, editor.nextVersion != editor.draft.version {
@@ -280,7 +299,7 @@ struct WorkflowsView: View {
                     .help("A short note for the version history")
             }
             Button(!editor.isNew && editor.isDirty && editor.nextVersion != editor.draft.version ? "Save as v\(editor.nextVersion)" : "Save") { save(editor) }
-                .buttonStyle(.primaryPill)
+                .buttonStyle(CompactPrimaryPillStyle())
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!editor.isDirty || editor.draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
                 .help(issueCount > 0 ? "Save anyway; the problems are listed in the inspector" : "Write the workflow to .saturn/workflows")
@@ -380,51 +399,31 @@ private struct WorkflowSidebar: View {
                 if !hasConfig {
                     Text("This project has no .saturn/ folder yet. Add the default workflows, or start a new one.")
                         .font(.system(size: 11.5))
-                        .foregroundStyle(Theme.secondaryText)
+                        .foregroundStyle(Tokens.text2)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 10)
+                        .padding(.horizontal, 12)
                 }
                 if let editor {
+                    Rectangle().fill(Tokens.hair).frame(height: 1).padding(.horizontal, 12)
                     RolePaletteList(roles: config.roles, editor: editor)
                     StepPalette(editor: editor)
                 }
             }
-            .padding(.vertical, 14)
-            .padding(.horizontal, 8)
+            .padding(.bottom, 14)
         }
         .scrollIndicators(.never)
-        .card(cornerRadius: 18)
     }
 
     private var workflows: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text("Workflows").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.secondaryText)
-                Spacer()
-                Menu {
-                    Button("Blank workflow", action: newBlank)
-                    if let current = editor?.draft {
-                        Button("Duplicate “\(current.name)”") { duplicate(current) }
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .accessibilityLabel("New workflow")
-                .help("New workflow, from blank or by duplicating this one")
-            }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 6)
-            IssueList(issues: unreadable)
+            IssueList(issues: config.unreadableWorkflowIssues)
             if let editor, editor.isNew {
-                row(name: editor.draft.name, detail: "Not saved · \(editor.draft.steps.count) steps", issueCount: 0, isSelected: true) {}
+                row(name: editor.draft.name, detail: "Not saved · \(editor.draft.steps.count) steps", isDefault: false, issueCount: 0, isSelected: true) {}
             }
+            let defaultID = config.defaultWorkflowDefinition?.id
             ForEach(config.workflows) { workflow in
                 let isSelected = editor?.isNew == false && editor?.saved?.id == workflow.id
-                let issueCount = config.issueCount(forWorkflow: workflow.id)
-                row(name: workflow.name, detail: "v\(workflow.version) · \(workflow.steps.count) step\(workflow.steps.count == 1 ? "" : "s")", issueCount: issueCount, isSelected: isSelected) {
+                row(name: workflow.name, detail: detail(of: workflow), isDefault: workflow.id == defaultID, issueCount: config.issueCount(forWorkflow: workflow.id), isSelected: isSelected) {
                     open(workflow)
                 }
                 .contextMenu {
@@ -435,47 +434,65 @@ private struct WorkflowSidebar: View {
             if config.workflows.isEmpty && editor?.isNew != true {
                 Text("No workflows yet.")
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.secondaryText)
-                    .padding(.horizontal, 10)
+                    .foregroundStyle(Tokens.text2)
+                    .padding(.horizontal, 12)
             }
+            Menu {
+                Button("Blank workflow", action: newBlank)
+                if let current = editor?.draft {
+                    Button("Duplicate “\(current.name)”") { duplicate(current) }
+                }
+            } label: {
+                Text("+ New workflow").font(.system(size: 12.5)).foregroundStyle(Tokens.link)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .help("New workflow, from blank or by duplicating this one")
             if let editor, !editor.isNew, let current = editor.saved {
                 Button("Delete “\(current.name)”…", role: .destructive) { delete(current) }
                     .buttonStyle(.plain)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(Theme.danger.opacity(0.9))
-                    .padding(.horizontal, 10)
-                    .padding(.top, 6)
+                    .foregroundStyle(Tokens.danger.opacity(0.9))
+                    .padding(.horizontal, 12)
+                    .padding(.top, 4)
                     .help("Remove this workflow’s YAML file")
             }
         }
     }
 
-    private var unreadable: [ConfigIssue] {
-        config.unreadableWorkflowIssues
+    private func detail(of workflow: WorkflowDefinition) -> String {
+        let summary = workflow.description.split(whereSeparator: \.isNewline).first.map(String.init)
+        return summary ?? "v\(workflow.version) · \(workflow.steps.count) step\(workflow.steps.count == 1 ? "" : "s")"
     }
 
-    private func row(name: String, detail: String, issueCount: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func row(name: String, detail: String, isDefault: Bool, issueCount: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: "point.3.connected.trianglepath.dotted")
-                    .font(.system(size: 13))
-                    .foregroundStyle(isSelected ? Theme.link : Theme.secondaryText)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(name).font(.system(size: 13, weight: isSelected ? .semibold : .regular)).lineLimit(1)
-                    Text(detail).font(.system(size: 11)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+            HStack(alignment: .top, spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(name).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Tokens.text).lineLimit(1)
+                        if isDefault {
+                            Text("Default").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Tokens.accent)
+                        }
+                    }
+                    Text(detail).font(.system(size: 12)).foregroundStyle(Tokens.text2).lineLimit(2)
                 }
                 Spacer(minLength: 4)
                 if issueCount > 0 {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.warning)
+                        .foregroundStyle(Tokens.need)
                         .accessibilityLabel("\(issueCount) problem\(issueCount == 1 ? "" : "s")")
                         .help("\(issueCount) problem\(issueCount == 1 ? "" : "s") in this workflow")
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(isSelected ? Theme.accent.opacity(0.28) : Color.clear, in: .rect(cornerRadius: 9, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? Tokens.selection : Color.clear, in: .rect(cornerRadius: 10, style: .continuous))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -577,17 +594,17 @@ private struct PaletteRow<Icon: View, Title: View, Trailing: View>: View {
     }
 }
 
-struct CanvasWithInspectorPanel<Inspector: View>: View {
+struct CanvasWithInspectorPanel<Canvas: View, Inspector: View>: View {
     let editor: WorkflowEditor
-    let roles: [RoleDefinition]
     let isPanelOpen: Bool
     let panelHeight: CGFloat
     let closePanel: () -> Void
+    @ViewBuilder let canvas: Canvas
     @ViewBuilder let inspector: Inspector
 
     var body: some View {
         VStack(spacing: 12) {
-            WorkflowCanvas(editor: editor, roles: roles)
+            canvas
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
             if isPanelOpen {
@@ -639,6 +656,6 @@ private struct InspectorPanel<Content: View>: View {
         }
         .padding(.horizontal, 14)
         .padding(.top, 10)
-        .card(cornerRadius: 20)
+        .raisedCard()
     }
 }

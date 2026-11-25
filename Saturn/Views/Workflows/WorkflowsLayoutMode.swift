@@ -5,13 +5,13 @@ enum WorkflowsLayoutMode: Equatable, CaseIterable {
     case medium
     case narrow
 
-    static let sidebarWidth: CGFloat = 220
+    static let sidebarWidth: CGFloat = 230
     static let inspectorWidth: CGFloat = 300
-    static let columnSpacing: CGFloat = 14
-    static let minimumCanvasShare: CGFloat = 0.6
+    static let columnSpacing: CGFloat = 20
+    static let minimumStepsWidth: CGFloat = 340
 
     init(width: CGFloat) {
-        self = [Self.wide, .medium].first { $0.canvasWidth(in: width) >= width * Self.minimumCanvasShare } ?? .narrow
+        self = [Self.wide, .medium].first { $0.canvasWidth(in: width) >= Self.minimumStepsWidth } ?? .narrow
     }
 
     var reservedWidth: CGFloat {

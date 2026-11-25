@@ -84,11 +84,15 @@ extension DaemonWorkspace {
             return SpecReviewStatus(reason: error.localizedDescription)
         }
         guard connection.isRemote else { return review }
-        guard review.url != nil, let port = review.port else {
+        let failure = "Couldn’t forward the Lavish page from \(displayName) to this Mac, so the spec opens read-only"
+        guard review.url != nil else {
             closeSpecTunnel(chatID: chatID)
             return review
         }
-        let failure = "Couldn’t forward the Lavish page from \(displayName) to this Mac, so the spec opens read-only"
+        guard let port = review.lavishPort else {
+            closeSpecTunnel(chatID: chatID)
+            return SpecReviewStatus(reason: "\(failure): the daemon didn’t say which port Lavish uses.")
+        }
         guard let tunnel = specTunnel(remotePort: port) else { return SpecReviewStatus(reason: "\(failure).") }
         do {
             let opening = specTunnelOpenings[port] ?? Task { try await tunnel.open() }

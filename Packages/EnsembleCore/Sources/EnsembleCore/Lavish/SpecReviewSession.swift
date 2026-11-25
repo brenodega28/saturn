@@ -99,6 +99,10 @@ public struct SpecReviewStatus: Codable, Sendable, Hashable {
         self.port = url.flatMap(URL.init(string:))?.port
     }
 
+    public var lavishPort: Int? {
+        port ?? url.flatMap(URL.init(string:))?.port
+    }
+
     public func forwarded(to localPort: Int) -> SpecReviewStatus {
         guard let url, var components = URLComponents(string: url) else { return self }
         components.port = localPort

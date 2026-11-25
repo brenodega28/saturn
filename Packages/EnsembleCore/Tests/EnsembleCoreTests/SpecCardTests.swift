@@ -83,6 +83,11 @@ import Testing
         #expect(SpecReviewStatus(reason: "No Node").port == nil)
         let decoded = try? JSONDecoder().decode(SpecReviewStatus.self, from: Data(#"{"url":"http://127.0.0.1:9/x"}"#.utf8))
         #expect(decoded?.port == nil && decoded?.url == "http://127.0.0.1:9/x")
+        #expect(decoded?.lavishPort == 9)
+        #expect(decoded?.forwarded(to: 51234).url == "http://127.0.0.1:51234/x")
+        let portless = try? JSONDecoder().decode(SpecReviewStatus.self, from: Data(#"{"url":"http://127.0.0.1/x"}"#.utf8))
+        #expect(portless?.lavishPort == nil)
+        #expect(SpecReviewStatus(reason: "No Node").lavishPort == nil)
     }
 
     @Test func approvingWithoutAProposalStartsAFeatureDeliveryRunWithTheSpec() async throws {

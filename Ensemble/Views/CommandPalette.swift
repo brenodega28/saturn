@@ -274,6 +274,7 @@ struct CommandPalette: View {
         let action = Color(hex: 0x0A84FF, opacity: 0.5)
         guard let project = model.currentProject else {
             return [PaletteCommand(id: "new-project", title: "New Project…", glyph: .symbol("plus"), tint: action, shortcut: "⌘N") { model.newProject() }]
+                + projectActionCommands(tint: action)
         }
         let lead: RoleDefinition? = workspace.leadRole(in: project)
         let config = workspace.config(for: project)
@@ -303,7 +304,39 @@ struct CommandPalette: View {
                 workspace.testRun(workflow, in: project)
             }, at: min(commands.count, 4))
         }
-        return commands
+        return commands + projectActionCommands(tint: action)
+    }
+
+    private var projectsCurrentFirst: [(workspace: DaemonWorkspace, project: Project)] {
+        let all = model.allOpenProjects
+        let current = all.filter { $0.workspace.ref(of: $0.project) == model.currentRef }
+        return current + all.filter { $0.workspace.ref(of: $0.project) != model.currentRef }
+    }
+
+    private func paletteID(_ kind: String, _ workspace: DaemonWorkspace, _ project: Project) -> String {
+        "\(kind)-\(workspace.id.uuidString)-\(project.id ?? -1)"
+    }
+
+    private func projectActionCommands(tint: Color) -> [PaletteCommand] {
+        projectsCurrentFirst.flatMap { workspace, project -> [PaletteCommand] in
+            let meta = place(project, on: workspace)
+            let locate = project.isRemote
+                ? PaletteCommand(id: paletteID("copy-ssh", workspace, project), title: "Copy SSH path", meta: meta, glyph: .symbol("doc.on.doc"), tint: tint) {
+                    workspace.copyToPasteboard("\(project.location):\(project.path)")
+                }
+                : PaletteCommand(id: paletteID("reveal", workspace, project), title: "Reveal in Finder", meta: meta, glyph: .symbol("folder"), tint: tint) {
+                    NSWorkspace.shared.activateFileViewerSelecting([project.url])
+                }
+            return [
+                PaletteCommand(id: paletteID("new-chat-in", workspace, project), title: "New chat in \(project.name)", meta: meta, glyph: .symbol("square.and.pencil"), tint: tint) {
+                    workspace.startNewChat(in: project)
+                },
+                locate,
+                PaletteCommand(id: paletteID("remove", workspace, project), title: "Remove \(project.name) from Ensemble…", meta: meta, glyph: .symbol("minus.circle"), tint: tint) {
+                    workspace.close(project)
+                },
+            ]
+        }
     }
 
     private var agentCommands: [PaletteCommand] {
@@ -325,14 +358,15 @@ struct CommandPalette: View {
 
     private var goToCommands: [PaletteCommand] {
         var commands: [PaletteCommand] = []
-        if let project = model.currentProject {
+        for (workspace, project) in projectsCurrentFirst {
+            let meta = place(project, on: workspace)
             commands += ProjectTab.sidebarOrder.map { tab in
-                PaletteCommand(id: "go-\(tab.rawValue)", title: tab.title, meta: project.name, glyph: .symbol(tab.paletteSymbol)) {
-                    if let tool = MainTool(tab: tab) { model.open(tool) } else { workspace.expand(project) }
+                PaletteCommand(id: paletteID("go-\(tab.rawValue)", workspace, project), title: tab.paletteTitle, meta: meta, keywords: tab.title, glyph: .symbol(tab.paletteSymbol)) {
+                    if let tool = MainTool(tab: tab) { workspace.open(tool, in: project) } else { workspace.expand(project) }
                 }
             }
             commands += SettingsSection.allCases.map { section in
-                PaletteCommand(id: "settings-\(section.rawValue)", title: "Settings › \(section.title)", glyph: .symbol(section.symbol)) {
+                PaletteCommand(id: paletteID("settings-\(section.rawValue)", workspace, project), title: "Settings › \(section.title)", meta: meta, glyph: .symbol(section.symbol)) {
                     workspace.openSettings(section, in: project)
                 }
             }
@@ -407,6 +441,8 @@ struct CommandPalette: View {
 }
 
 extension ProjectTab {
+    var paletteTitle: String { self == .code ? "Source" : title }
+
     var paletteSymbol: String {
         switch self {
         case .lead: "bubble.left.and.bubble.right"

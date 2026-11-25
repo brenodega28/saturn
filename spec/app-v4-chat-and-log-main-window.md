@@ -8,11 +8,11 @@ created: 2026-11-02
 
 ## Summary
 
-Replace the v3 Workbench (navigator, editor tabs, inspector, bottom panel, status bar) with the "App v4 · Chat and log" design from the Ensemble design canvas (artboard project/V4.dc.html, page "App v4 · Simple", https://claude.ai/artifact/0ef6fc43-aaf9-46f5-97f8-239118e3d430). The main window has three columns inside one rounded glass container on the existing Backdrop: (1) a 236px project sidebar where each open project is a collapsible group listing its lead chats (requests), plus "+ New chat", with a row of tool icons pinned at the bottom; (2) the lead chat in the middle (760px max reading width, floating composer) with spec, permission and question cards inline in the conversation; (3) a 470px live Log column showing ActivityLog entries with All / This chat / Needs you filters. Clicking a tool icon temporarily replaces the chat column with that screen (with a back button), keeping sidebar and log visible. The design is matched pixel-for-pixel: sizes, paddings, radii, colors, fonts and copy as in the artboard.
+Replace the v3 Workbench (navigator, editor tabs, inspector, bottom panel, status bar) with the "App v4 · Chat and log" design from the Saturn design canvas (artboard project/V4.dc.html, page "App v4 · Simple", https://claude.ai/artifact/0ef6fc43-aaf9-46f5-97f8-239118e3d430). The main window has three columns inside one rounded glass container on the existing Backdrop: (1) a 236px project sidebar where each open project is a collapsible group listing its lead chats (requests), plus "+ New chat", with a row of tool icons pinned at the bottom; (2) the lead chat in the middle (760px max reading width, floating composer) with spec, permission and question cards inline in the conversation; (3) a 470px live Log column showing ActivityLog entries with All / This chat / Needs you filters. Clicking a tool icon temporarily replaces the chat column with that screen (with a back button), keeping sidebar and log visible. The design is matched pixel-for-pixel: sizes, paddings, radii, colors, fonts and copy as in the artboard.
 
 ## Interfaces
 
-- Ensemble/Views/V4/ (new folder, name at builder's discretion): MainWindowView (3 columns), ProjectSidebar, ChatColumn, LogColumn, ToolScreen container with back button
+- Saturn/Views/V4/ (new folder, name at builder's discretion): MainWindowView (3 columns), ProjectSidebar, ChatColumn, LogColumn, ToolScreen container with back button
 - RootView.content: WorkbenchView() replaced by the new main window view
 - Sidebar project group: name (11pt bold), Local icon (laptop glyph, tooltip 'Local · <path>'), attention dot when collapsed; expanded group lists that project's open lead requests (title, one-line status meta, status dot on the avatar, orange count badge when it needs the user), '+ New chat' calls startNewLeadRequest
 - Sidebar tool row (bottom, above a hairline): Inbox (with badge count), Changes (with badge), Search ⌘K (opens CommandPalette), Agents, Tasks, Workflows, Code, Usage (Quality stays a sub-view of Usage), Settings; icon-only 32px tall buttons with aria/help labels; wraps to a second row if it doesn't fit 236px
@@ -43,8 +43,8 @@ Replace the v3 Workbench (navigator, editor tabs, inspector, bottom panel, statu
 - [ ] Run detail and Agent session can still be opened (from chat run links, Log rows, and the Agents screen)
 - [x] ⌘K palette and menu-bar commands that pointed to Workbench panes either open the matching v4 screen or are removed; no command references deleted types
 - [ ] Side-by-side screenshot of the running app next to the V4 artboard at 1600×1000 matches layout, sizes, radii, colors and copy (allowing for real data)
-- [x] Existing EnsembleCore tests pass (swift test in Packages/EnsembleCore)
+- [x] Existing SaturnCore tests pass (swift test in Packages/SaturnCore)
 
 ## Verification
 
-Build with xcodebuild and run swift test in Packages/EnsembleCore. Launch the app on a project with at least two lead requests and an active run: check the sidebar, switch chats, start a new chat, trigger a spec / permission / question from the lead and act on each inline card, watch the Log fill live and exercise All / This chat / Needs you, click every tool icon and return with Back, open a Run detail from a Log row. Screenshot the window at 1600×1000 and compare it with project/V4.dc.html on the design canvas (qa-review skill).
+Build with xcodebuild and run swift test in Packages/SaturnCore. Launch the app on a project with at least two lead requests and an active run: check the sidebar, switch chats, start a new chat, trigger a spec / permission / question from the lead and act on each inline card, watch the Log fill live and exercise All / This chat / Needs you, click every tool icon and return with Back, open a Run detail from a Log row. Screenshot the window at 1600×1000 and compare it with project/V4.dc.html on the design canvas (qa-review skill).

@@ -19,7 +19,7 @@ When a chat keeps going after its earlier runs ended and the lead proposes a new
 - AppDatabase / LeadChat: `previousRunAgents(taskId:) -> [Agent]` — non-lead agents from this chat's ended runs plus agents spawned by them or the lead, excluding archived ones
 - LeadChat.start(_:in:) — before starting the engine run, deletes each previous-run agent's session via `runtime.delete(session, in:, git:, deleteBranch: false)` and inserts a `.note` LeadMessage: "Cleared N agents from earlier runs: Builder, Checker, …"
 - AgentWorkflowDriver `.proposal` handling — the tool result adds: "Starting it clears N agents from earlier runs (names). Tell the user in your reply." when that list is non-empty
-- ProposalCard (Ensemble/Views/Lead/RequestChat.swift) — while the proposal is open, shows a secondary line "Starting this run clears N agents from earlier runs" with the names in the help tooltip
+- ProposalCard (Saturn/Views/Lead/RequestChat.swift) — while the proposal is open, shows a secondary line "Starting this run clears N agents from earlier runs" with the names in the help tooltip
 
 ## Out of scope
 
@@ -37,8 +37,8 @@ When a chat keeps going after its earlier runs ended and the lead proposes a new
 - [x] A note "Cleared N agents from earlier runs: …" appears in the chat timeline
 - [x] Dismissing the proposal leaves every old agent in place
 - [x] The lead agent and its transcript survive
-- [x] New unit tests in LeadChatTests cover: clearing on start, no clearing on dismiss, lead kept, branches kept, proposal result text; `swift test` in Packages/EnsembleCore passes
+- [x] New unit tests in LeadChatTests cover: clearing on start, no clearing on dismiss, lead kept, branches kept, proposal result text; `swift test` in Packages/SaturnCore passes
 
 ## Verification
 
-Run `swift test` in Packages/EnsembleCore. Then in the app: finish a chat with a small-task run, send a follow-up, let the lead propose a run, check the card warning and the lead's reply, click Start run, and confirm the Workers list only shows new agents, a clear note is in the timeline, and `git branch --list 'crew/*'` still lists the old branches.
+Run `swift test` in Packages/SaturnCore. Then in the app: finish a chat with a small-task run, send a follow-up, let the lead propose a run, check the card warning and the lead's reply, click Start run, and confirm the Workers list only shows new agents, a clear note is in the timeline, and `git branch --list 'crew/*'` still lists the old branches.

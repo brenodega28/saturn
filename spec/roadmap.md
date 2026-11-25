@@ -1,6 +1,6 @@
-# Ensemble — Roadmap
+# Saturn — Roadmap
 
-Ensemble is a macOS app for solo developers that runs AI coding agents inside a verification harness: **agents propose, rails verify, humans approve** (see [mission.md](mission.md)). You define **roles** and **workflows** in the repo. Every coding agent works on a scoped task in its own git worktree and must pass the project's deterministic **checks** before its work reaches you. AI review flags what you must read as **pins**, and nothing reaches `main` without your approval.
+Saturn is a macOS app for solo developers that runs AI coding agents inside a verification harness: **agents propose, rails verify, humans approve** (see [mission.md](mission.md)). You define **roles** and **workflows** in the repo. Every coding agent works on a scoped task in its own git worktree and must pass the project's deterministic **checks** before its work reaches you. AI review flags what you must read as **pins**, and nothing reaches `main` without your approval.
 
 This document is the build order for the MVP and what comes after. Each phase ends with something usable and a clear exit check. Phases 0–7 were planned before the mission was written and are kept as a record of what was built. Phases 8–10 bring the product in line with the mission, Phase 11 closes the gaps with the [design canvas](https://claude.ai/artifact/2rBPXF4C8fJi8RvWDGB9BD), Phase 12 moved the app into an IDE-style work-tool shell, and Phase 13 replaces that with the chat-first v5 app (see [app-v5-chat-with-the-lead.md](app-v5-chat-with-the-lead.md)).
 
@@ -33,19 +33,19 @@ This document is the build order for the MVP and what comes after. Each phase en
 | Minimum OS        | macOS 26 Tahoe                                                                                                                             | Native Liquid Glass for the glassy design and the newest SwiftUI APIs                                                         |
 | Distribution      | Direct download: notarized, Developer ID–signed DMG, auto-updates with Sparkle                                                             | The App Store sandbox blocks spawning the `claude` CLI, running `git` and writing worktrees freely                            |
 | Agent runner      | Drive the `claude` CLI headlessly from Swift (`Process`), reading its streaming JSON output; one process per agent, cwd = its worktree     | No Node runtime to bundle; uses the user's own Claude Code login or API key; resumable sessions and MCP support come for free |
-| Engine boundary   | All logic in a UI-free Swift package, `EnsembleCore`; the app only renders state from it                                                   | Testable without the UI; the future iOS app reuses the models and talks to the Mac's engine                                   |
+| Engine boundary   | All logic in a UI-free Swift package, `SaturnCore`; the app only renders state from it                                                   | Testable without the UI; the future iOS app reuses the models and talks to the Mac's engine                                   |
 | Local storage     | SQLite through [GRDB](https://github.com/groue/GRDB.swift) for projects, tasks, runs, agents, usage                                        | Explicit migrations, safe concurrent access from the engine, no dependence on the UI layer                                    |
 | Secrets           | Provider keys in the macOS Keychain                                                                                                        | Never written to disk or to the repo                                                                                          |
-| Config in git     | `.ensemble/` is committed; `.ensemble/memory/` and `.ensemble/local.yaml` are git-ignored                                                  | Roles and workflows are versioned with the code; personal state stays local                                                   |
-| Pinned memory     | One Markdown file per pinned agent in `.ensemble/memory/<agent>.md`, loaded into its context at start                                      | Readable and editable in any editor as well as in the app's Memory panel                                                      |
-| Pins              | Ensemble runs a local MCP server that every agent is given; agents call its `create_pin` tool                                              | Structured pins without parsing agent prose                                                                                   |
+| Config in git     | `.saturn/` is committed; `.saturn/memory/` and `.saturn/local.yaml` are git-ignored                                                  | Roles and workflows are versioned with the code; personal state stays local                                                   |
+| Pinned memory     | One Markdown file per pinned agent in `.saturn/memory/<agent>.md`, loaded into its context at start                                      | Readable and editable in any editor as well as in the app's Memory panel                                                      |
+| Pins              | Saturn runs a local MCP server that every agent is given; agents call its `create_pin` tool                                              | Structured pins without parsing agent prose                                                                                   |
 | Delivery          | No GitHub integration: a finished run merges into the base branch on this Mac, and you push it from the chat | You review and land work locally; pushing stays your call |
 | Worktrees         | Under `<repo>/.crew/<agent>/`, branch `crew/<agent>/<slug>`, excluded through `.git/info/exclude`                                          | Isolated per coding agent, invisible to the user's own git status                                                             |
-| Verification      | Ensemble runs the project's checks itself, in the agent's worktree, outside the agent's session; results go back to the agent as feedback   | The agent can't skip, fake or reinterpret a check it doesn't run; a separate verification runtime is what stopped agents gaming builds elsewhere |
+| Verification      | Saturn runs the project's checks itself, in the agent's worktree, outside the agent's session; results go back to the agent as feedback   | The agent can't skip, fake or reinterpret a check it doesn't run; a separate verification runtime is what stopped agents gaming builds elsewhere |
 | Agent hooks       | Each worktree gets Claude Code hooks: lint after every edit, block edits to protected paths, block "done" while checks fail                | Enforcement in deterministic tools instead of prompt text                                                                     |
 | Instructions      | One lean `AGENTS.md` at the repo root (`CLAUDE.md` points to it); occasional know-how goes in skills                                       | Context files buy consistency and lower cost, not capability; bloat makes agents ignore them                                  |
 | AI review         | Reviewer roles comment through pins; they never approve and never block a run on their own                                                | Precision-tuned commenters help; rigid LLM gates block valid changes                                                          |
-| Mobile (later)    | iOS app is a remote control for the Mac: chats that need you, approvals, pins, run status. Agents always run on the Mac. Transport decided after the MVP | Keeps the engine in one place; the `EnsembleCore` boundary makes a remote client possible                                     |
+| Mobile (later)    | iOS app is a remote control for the Mac: chats that need you, approvals, pins, run status. Agents always run on the Mac. Transport decided after the MVP | Keeps the engine in one place; the `SaturnCore` boundary makes a remote client possible                                     |
 
 ---
 
@@ -76,7 +76,7 @@ Rules that hold everywhere:
 Roles and workflows live in the repo so they are versioned and diffable. Runtime state lives in the app's data folder.
 
 ```
-<repo>/.ensemble/
+<repo>/.saturn/
   roles/
     tech-lead.yaml
     django-developer.yaml
@@ -92,20 +92,20 @@ Roles and workflows live in the repo so they are versioned and diffable. Runtime
 <repo>/.claude/skills/ # skills, as Claude Code already expects
 <repo>/.crew/<agent>/  # git worktrees (excluded via .git/info/exclude)
 
-~/Library/Application Support/Ensemble/
-  ensemble.sqlite      # projects, tasks, runs, agents, usage
+~/Library/Application Support/Saturn/
+  saturn.sqlite      # projects, tasks, runs, agents, usage
   runs/<run-id>/       # transcripts and logs
 ```
 
 ### Code layout
 
 ```
-Ensemble.xcodeproj
-Ensemble/              # macOS app target: SwiftUI views, windows, menus
+Saturn.xcodeproj
+Saturn/              # macOS app target: SwiftUI views, windows, menus
 Packages/
-  EnsembleCore/        # models, config loader, run engine, worktree manager,
+  SaturnCore/        # models, config loader, run engine, worktree manager,
                        # agent runner, pin MCP server, GitHub client, storage
-  EnsembleUI/          # shared SwiftUI components (reused by iOS later)
+  SaturnUI/          # shared SwiftUI components (reused by iOS later)
 ```
 
 ---
@@ -114,8 +114,8 @@ Packages/
 
 Goal: a native shell that can open a project and manage worktrees safely.
 
-- [x] Xcode project (macOS 26, Swift 6 strict concurrency) with the `EnsembleCore` and `EnsembleUI` packages
-- [x] CI on GitHub Actions: build and test `EnsembleCore` on every push
+- [x] Xcode project (macOS 26, Swift 6 strict concurrency) with the `SaturnCore` and `SaturnUI` packages
+- [x] CI on GitHub Actions: build and test `SaturnCore` on every push
 - [ ] Developer ID signing, notarization and a Sparkle update feed for dev builds
 - [x] App shell: sidebar (Inbox, Projects, Usage), project tabs (Tasks, Lead, Agents, Changes, Workflows, Settings), ⌘K palette stub
 - [x] Welcome screen: Open Folder, Clone Repository, recent projects
@@ -142,7 +142,7 @@ Goal: run a single Claude Code agent in its own worktree and watch it work.
 
 Goal: agents come from roles, and several run in parallel.
 
-- [x] Role schema and loader for `.ensemble/roles/*.yaml`, with validation errors shown in the UI
+- [x] Role schema and loader for `.saturn/roles/*.yaml`, with validation errors shown in the UI
 - [x] Settings › Roles: role editor with a live preview of the context the agent will load (prompt, skills, docs, token sizes)
 - [x] Settings › Documentation and Skills: link repo files or write prompts; who reads what; SKILLS.md sync; missing-skill warning
 - [x] Spawn sheet: pick a role, a count, optionally Pin; "Will add" preview
@@ -170,7 +170,7 @@ Goal: workflows run from YAML before there is a visual editor.
 
 Goal: the human approval step is fast and trustworthy.
 
-- [x] Pin tool: expose an Ensemble MCP server to agents so they can create pins (file, lines, title, tags, explanation)
+- [x] Pin tool: expose a Saturn MCP server to agents so they can create pins (file, lines, title, tags, explanation)
 - [x] Changes tab: diffs across the run's branches, unified/split view, plain-language summary per file, generated files collapsed
 - [x] Pins: Looks right / Request change / Ask the agent; "Request change" re-enters the author's workflow step
 - [x] "Reviewed by" marker per file (lead, reviewer) and viewed state
@@ -186,7 +186,7 @@ Goal: work arrives on its own, and nothing waiting on you gets missed.
 
 - [x] Tasks tab: Incoming, Running, Waiting on you, Done, Failed; accept, dismiss, choose workflow
 - [x] GitHub integration: device-flow sign-in, pick repo, label filter → workflow mapping (polling first; webhooks need a server)
-- [x] Write-back: comment when a run starts and when it ends with the PR link; set `ensemble:running` / `ensemble:done` labels
+- [x] Write-back: comment when a run starts and when it ends with the PR link; set `saturn:running` / `saturn:done` labels
 - [x] Run detail: workflow graph with the live step highlighted, timeline of steps and hand-offs, loops taken, agents, cost, logs; pause, resume, cancel, retry step
 - [x] Global Inbox: agent questions, plan approvals, pin reviews and failures across all projects, actionable inline
 - [x] macOS notifications for anything that lands in the Inbox
@@ -197,7 +197,7 @@ Goal: work arrives on its own, and nothing waiting on you gets missed.
 
 Goal: edit workflows visually; the YAML stays the source of truth.
 
-- [x] Canvas editor reading and writing `.ensemble/workflows/*.yaml`
+- [x] Canvas editor reading and writing `.saturn/workflows/*.yaml`
 - [x] Palette of roles (not named agents) and step types; drag to add
 - [x] Inspector: who does it, instructions, inputs, hand-offs, rules, limits
 - [x] Trigger and End steps configurable in the canvas
@@ -210,7 +210,7 @@ Goal: edit workflows visually; the YAML stays the source of truth.
 
 Goal: ready for daily use.
 
-- [x] Pinned agents: memory in `.ensemble/memory/<agent>.md`, loaded at start and updated at the end of each run; Memory panel to view, edit and clear; memory badge on cards
+- [x] Pinned agents: memory in `.saturn/memory/<agent>.md`, loaded at start and updated at the end of each run; Memory panel to view, edit and clear; memory badge on cards
 - [x] Usage screen: spend by project, run, role and model; budgets per run and per month with alerts
 - [x] Settings › Workspaces: setup script per worktree (install deps, migrate DB), port allocation per worktree, cleanup policy
 - [x] Dev-server status and port shown in the Agent session panel
@@ -223,10 +223,10 @@ Goal: ready for daily use.
 
 Goal: correctness comes from what the agent must pass, not from what it is told.
 
-- [x] Check schema and loader for `.ensemble/checks.yaml`: one command each for format, lint, typecheck and test, with protected-path globs and timeouts; validation errors shown in the UI
+- [x] Check schema and loader for `.saturn/checks.yaml`: one command each for format, lint, typecheck and test, with protected-path globs and timeouts; validation errors shown in the UI
 - [x] Check detection on project open: suggest commands from the repo (package scripts, Makefile, test runners); warn when a project has no runnable test check
 - [x] Harness health: run every check in a fresh worktree after the setup script; flag missing dependencies, network or credentials before any agent starts
-- [x] **Check** step type: Ensemble runs the checks in the agent's worktree, outside the agent's session, and hands failures back to the author as feedback
+- [x] **Check** step type: Saturn runs the checks in the agent's worktree, outside the agent's session, and hands failures back to the author as feedback
 - [x] Capped retries per check step (default 2 rounds); after the cap the run goes to the Inbox with the failing output
 - [x] Context hygiene: after two failed correction rounds, restart the agent with a fresh session and a summary instead of piling on more context
 - [x] Agent hooks written into each worktree: format and lint after every edit, block edits to protected paths, block "done" while checks fail
@@ -257,7 +257,7 @@ Goal: the harness gets better every week, and you can see whether it's working.
 
 - [x] Lean `AGENTS.md`: create or import on setup, point `CLAUDE.md` to it, warn when it grows past about one page
 - [x] Encode a correction: from a pin or a "Request change", propose one line for `AGENTS.md`, a hook or a check, and commit it with your approval
-- [x] Repeated-mistake detection: when the same correction is made twice, Ensemble suggests encoding it
+- [x] Repeated-mistake detection: when the same correction is made twice, Saturn suggests encoding it
 - [x] Quality screen: PR size, time to approve, check failure rate and retries, rework and revert rate, duplication and complexity trend, cost per approved change; no "lines generated" or AI-share metrics
 - [x] Weekly summary in the Inbox: what moved, which rules were added, which checks failed most
 
@@ -284,7 +284,7 @@ Goal: the app matches the design canvas and works as one complete toolkit.
 
 ## Phase 12 — Work-tool shell
 
-Goal: Ensemble feels like Xcode or Android Studio: one fixed frame of panes around an editor, where new features arrive as tabs in existing panes instead of new screens. The layout comes from the shell redesign in the design canvas; that redesign is done before this phase starts.
+Goal: Saturn feels like Xcode or Android Studio: one fixed frame of panes around an editor, where new features arrive as tabs in existing panes instead of new screens. The layout comes from the shell redesign in the design canvas; that redesign is done before this phase starts.
 
 - [x] Extension registries in the app for navigator tabs, inspector tabs per selection type, bottom panel tabs, editor tab types, toolbar items and activity sources, status bar items, and commands; menus, the ⌘K palette and key bindings all read from the command registry
 - [x] Frame: toolbar, navigator, editor area, inspector, bottom panel and status bar; every pane can be shown, hidden and resized, with state saved per window
@@ -352,4 +352,4 @@ Goal: the app is chat-first. You talk only to the Lead, it starts the workers, a
 | Hallucinated or malicious dependencies                    | New-dependency check against the registry; you approve every new package                     |
 | Long runs interrupted by quit or sleep                    | Persisted run state and resume                                                               |
 | Agents run shell commands as the user                     | Worktree isolation; permission profiles with Allow / Ask / Never per capability (Phase 11)    |
-| The `claude` CLI's output format changes between versions | Parse it in one adapter inside `EnsembleCore`, pin a tested CLI version, warn on mismatch    |
+| The `claude` CLI's output format changes between versions | Parse it in one adapter inside `SaturnCore`, pin a tested CLI version, warn on mismatch    |

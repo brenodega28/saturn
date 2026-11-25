@@ -16,7 +16,7 @@ Today AppModel has one active DaemonConnection. Chats, pages, request feeds, per
 
 ## Interfaces
 
-- `@MainActor @Observable final class DaemonWorkspace` (new, Ensemble/DaemonWorkspace.swift): owns `connection: DaemonConnection`, `database`, `live`, `requests: ChatRequestFeed`, `chatNotifications`, `pendingPermissions`, `openProjects`, `recentProjects`, `projectStates`, `configs`, and the other project- or chat-keyed dictionaries now on AppModel (runDetailIDs, leadSelections, selectedAgents, changesRunSelections, skillPlugins, settingsSections, workflowEditors, appRunners, remoteStatuses, newChatOptionsByProject, projectFileLists, focusedPinIDs, …). It also owns the daemon-scoped methods that read or write those, such as reloadProjects, chatSummaries, chatLog, leadRequests, agentSessions and send.
+- `@MainActor @Observable final class DaemonWorkspace` (new, Saturn/DaemonWorkspace.swift): owns `connection: DaemonConnection`, `database`, `live`, `requests: ChatRequestFeed`, `chatNotifications`, `pendingPermissions`, `openProjects`, `recentProjects`, `projectStates`, `configs`, and the other project- or chat-keyed dictionaries now on AppModel (runDetailIDs, leadSelections, selectedAgents, changesRunSelections, skillPlugins, settingsSections, workflowEditors, appRunners, remoteStatuses, newChatOptionsByProject, projectFileLists, focusedPinIDs, …). It also owns the daemon-scoped methods that read or write those, such as reloadProjects, chatSummaries, chatLog, leadRequests, agentSessions and send.
 - `AppModel.workspaces: [DaemonID: DaemonWorkspace]` replaces `connection`, `connections`, `requests`, `chatNotifications` and `pendingPermissions`. `AppModel.orderedWorkspaces` puts the local machine first, then the rest by name. `AppModel.workspace(for: DaemonID) -> DaemonWorkspace?`.
 - `AppModel.activate(_:)` is removed, along with the per-daemon page key `pagesKey(for:)` and the `fleet.activeDaemon` default.
 - `MainPageKind` cases that name a project, chat, run or agent also carry `daemon: DaemonID`. On first launch after the change, pages saved under the old per-daemon keys move into the new single key, tagged with their daemon.
@@ -30,7 +30,7 @@ Today AppModel has one active DaemonConnection. Chats, pages, request feeds, per
 
 ## Out of scope
 
-- Daemon protocol or database schema changes in EnsembleCore. Ids stay per daemon, and the client qualifies them with DaemonID.
+- Daemon protocol or database schema changes in SaturnCore. Ids stay per daemon, and the client qualifies them with DaemonID.
 - Moving a chat or project from one machine to another, apart from the existing moveToServerDaemon flow.
 - Merged Usage or spend across machines beyond what it shows now. The footer budget keeps today's behavior unless it already reads the local daemon.
 - Visual redesign of the sidebar beyond the machine labels and full project cards for every group.
@@ -47,9 +47,9 @@ Today AppModel has one active DaemonConnection. Chats, pages, request feeds, per
 - [ ] When a remote daemon goes offline, its pages stay open and show an offline state. Its sidebar group shows 'offline'. Local pages keep working.
 - [ ] Removing a server in Settings → Servers closes only that machine's pages and sidebar entries.
 - [x] After a relaunch, open pages from every machine come back. Pages saved by the previous version under per-daemon keys are migrated once and nothing is lost.
-- [x] `activate(` and `fleet.activeDaemon` no longer appear in Ensemble/. No view reads a global `model.connection`.
-- [x] `swift test --package-path Packages/EnsembleCore` passes, and the app builds with xcodebuild after `xcodegen generate`.
+- [x] `activate(` and `fleet.activeDaemon` no longer appear in Saturn/. No view reads a global `model.connection`.
+- [x] `swift test --package-path Packages/SaturnCore` passes, and the app builds with xcodebuild after `xcodegen generate`.
 
 ## Verification
 
-Build: `xcodegen generate && xcodebuild -scheme Ensemble build`, then `swift test --package-path Packages/EnsembleCore`. End to end: run the app with the local daemon plus one SSH server, for example `bgomes@macserver.local`, and with projects open on both, including one project name that exists on both machines. Check every acceptance criterion by hand: the merged Chats list, the grouped full Projects cards, pages from both machines open side by side, a needs-you chat on the remote machine badged while working locally, sending and approving routed to the right daemon, the offline behavior when you kill the SSH daemon, and a relaunch that restores all pages. A QA checker runs these steps and reports screenshots.
+Build: `xcodegen generate && xcodebuild -scheme Saturn build`, then `swift test --package-path Packages/SaturnCore`. End to end: run the app with the local daemon plus one SSH server, for example `bgomes@macserver.local`, and with projects open on both, including one project name that exists on both machines. Check every acceptance criterion by hand: the merged Chats list, the grouped full Projects cards, pages from both machines open side by side, a needs-you chat on the remote machine badged while working locally, sending and approving routed to the right daemon, the offline behavior when you kill the SSH daemon, and a relaunch that restores all pages. A QA checker runs these steps and reports screenshots.

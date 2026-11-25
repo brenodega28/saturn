@@ -118,7 +118,7 @@ struct CommandPalette: View {
         .defaultFocus($isFocused, true)
         .task {
             isFocused = true
-            if let project = model.currentProject { await model.codeBrowser(for: project).refreshSources() }
+            if let project = model.currentProject { await workspace.codeBrowser(for: project).refreshSources() }
         }
         .onChange(of: query) { highlighted = 0 }
         .onKeyPress(.downArrow) {
@@ -232,33 +232,40 @@ struct CommandPalette: View {
         }
     }
 
+    private var workspace: DaemonWorkspace { model.currentWorkspace }
+
+    private func place(_ project: Project, on workspace: DaemonWorkspace) -> String {
+        workspace.isRemote ? "\(project.name) · \(workspace.displayName)" : project.name
+    }
+
     private var chatCommands: [PaletteCommand] {
         let summaries = model.chatSummaries()
-        return (summaries.open + summaries.closed).map { summary in
-            PaletteCommand(
+        return (summaries.open + summaries.closed).compactMap { summary in
+            guard let workspace = model.workspace(for: summary.daemon) else { return nil }
+            return PaletteCommand(
                 id: "chat-\(summary.id)", title: summary.chat.title,
-                meta: "\(summary.project.name) · \(ChatTime.label(summary.lastActivity)) · \(summary.stage.title)",
-                keywords: summary.chat.body, glyph: .symbol("bubble.left"), tint: Tokens.fill2
-            ) { model.openChat(summary.chat) }
+                meta: "\(place(summary.project, on: workspace)) · \(ChatTime.label(summary.lastActivity)) · \(summary.stage.title)",
+                keywords: summary.chat.body + " " + workspace.displayName, glyph: .symbol("bubble.left"), tint: Tokens.fill2
+            ) { workspace.openChat(summary.chat) }
         }
     }
 
     private var runCommands: [PaletteCommand] {
-        model.openProjects.flatMap { project -> [PaletteCommand] in
+        model.allOpenProjects.flatMap { workspace, project -> [PaletteCommand] in
             guard let projectID = project.id else { return [] }
-            let active = model.connection.activeRuns(projectID: projectID)
-            let recent = ((try? model.database.runs(projectId: projectID)) ?? []).sorted { $0.startedAt > $1.startedAt }.prefix(5)
+            let active = workspace.connection.activeRuns(projectID: projectID)
+            let recent = ((try? workspace.database.runs(projectId: projectID)) ?? []).sorted { $0.startedAt > $1.startedAt }.prefix(5)
             var seen = Set<Int64>()
             return (active + recent).compactMap { run in
-                guard let id = run.id, seen.insert(id).inserted else { return nil }
+                guard let id = run.id, seen.insert(id).inserted else { return PaletteCommand?.none }
                 let live = run
-                let step = live.currentStep.flatMap { stepID in model.config(for: project).workflow(live.workflow)?.step(stepID)?.displayTitle }
+                let step = live.currentStep.flatMap { stepID in workspace.config(for: project).workflow(live.workflow)?.step(stepID)?.displayTitle }
                 let state = live.isActive ? step : live.status.rawValue.replacingOccurrences(of: "_", with: " ")
-                let meta = [project.name, state, live.costUSD > 0 ? String(format: "$%.2f", live.costUSD) : nil].compactMap(\.self).joined(separator: " · ")
+                let meta = [place(project, on: workspace), state, live.costUSD > 0 ? String(format: "$%.2f", live.costUSD) : nil].compactMap(\.self).joined(separator: " · ")
                 return PaletteCommand(
-                    id: "run-\(id)", title: live.title, meta: meta, glyph: .symbol("play.fill"),
-                    tint: Color(hex: 0x1F5FD1), newWindow: .run(project: projectID, run: id)
-                ) { model.showRun(live) }
+                    id: "run-\(workspace.id)-\(id)", title: live.title, meta: meta, glyph: .symbol("play.fill"),
+                    tint: Color(hex: 0x1F5FD1), newWindow: .run(project: workspace.ref(projectID), run: id)
+                ) { workspace.showRun(live) }
             }
         }
     }
@@ -268,8 +275,8 @@ struct CommandPalette: View {
         guard let project = model.currentProject else {
             return [PaletteCommand(id: "new-project", title: "New Project…", glyph: .symbol("plus"), tint: action, shortcut: "⌘N") { model.newProject() }]
         }
-        let lead: RoleDefinition? = model.leadRole(in: project)
-        let config = model.config(for: project)
+        let lead: RoleDefinition? = workspace.leadRole(in: project)
+        let config = workspace.config(for: project)
         var commands = [
             PaletteCommand(id: "new-chat", title: "New chat", meta: lead.map { "with \($0.name)" } ?? "", glyph: .symbol("plus"), tint: action, shortcut: "⌘N") {
                 DispatchQueue.main.async { model.requestNewChat() }
@@ -279,39 +286,39 @@ struct CommandPalette: View {
                 model.appearance = model.appearance == .light ? .dark : .light
             },
             PaletteCommand(id: "encode", title: "Encode a correction…", meta: "AGENTS.md, check or protected path", glyph: .symbol("arrow.triangle.2.circlepath"), tint: action) {
-                model.openSettings(.learnedRules, in: project)
+                workspace.openSettings(.learnedRules, in: project)
             },
             PaletteCommand(id: "spawn", title: "Spawn agent…", glyph: .symbol("plus"), tint: action, shortcut: "⇧⌘A") { model.spawnAgent() },
             PaletteCommand(id: "pause-all", title: "Pause all agents", meta: project.name, glyph: .symbol("pause.fill"), tint: action, shortcut: "⇧⌘P") {
-                model.pauseAllAgents(in: project)
+                workspace.pauseAllAgents(in: project)
             },
         ]
-        if model.hasPendingPins(in: project) {
+        if workspace.hasPendingPins(in: project) {
             commands.insert(PaletteCommand(id: "pins", title: "Approve pins", meta: "Changes", glyph: .symbol("pin.fill"), tint: action) {
-                model.setTab(.changes, for: project)
+                workspace.setTab(.changes, for: project)
             }, at: 2)
         }
         if let workflow = config.workflow(config.preferences.defaultWorkflow ?? "") ?? config.workflows.first {
             commands.insert(PaletteCommand(id: "test-run", title: "Test run \(workflow.displayName)", meta: "dry run", glyph: .symbol("play"), tint: action) {
-                model.testRun(workflow, in: project)
+                workspace.testRun(workflow, in: project)
             }, at: min(commands.count, 4))
         }
         return commands
     }
 
     private var agentCommands: [PaletteCommand] {
-        let projects = model.currentProject.map { [$0] } ?? model.openProjects
+        let projects = model.currentProject.map { [$0] } ?? workspace.openProjects
         return projects.flatMap { project in
-            model.agentSessions(in: project)
+            workspace.agentSessions(in: project)
                 .filter { $0.agent.archivedAt == nil }
                 .map { session in
-                    let role = model.config(for: project).role(session.agent.role)
+                    let role = workspace.config(for: project).role(session.agent.role)
                     let detail = session.agent.task.isEmpty ? (role?.name ?? session.agent.role) + (session.agent.isPinned ? " · pinned" : "") : session.agent.task
                     return PaletteCommand(
-                        id: "agent-\(session.id)", title: model.displayName(of: session.agent, in: project), meta: detail,
+                        id: "agent-\(session.id)", title: workspace.displayName(of: session.agent, in: project), meta: detail,
                         keywords: role?.name ?? "", glyph: .role(role),
-                        newWindow: project.id.map { .agent(project: $0, agent: session.id) }
-                    ) { model.openAgent(session, in: project) }
+                        newWindow: workspace.ref(of: project).map { .agent(project: $0, agent: session.id) }
+                    ) { workspace.openAgent(session, in: project) }
                 }
         }
     }
@@ -321,28 +328,31 @@ struct CommandPalette: View {
         if let project = model.currentProject {
             commands += ProjectTab.sidebarOrder.map { tab in
                 PaletteCommand(id: "go-\(tab.rawValue)", title: tab.title, meta: project.name, glyph: .symbol(tab.paletteSymbol)) {
-                    if let tool = MainTool(tab: tab) { model.open(tool) } else { model.expand(project) }
+                    if let tool = MainTool(tab: tab) { model.open(tool) } else { workspace.expand(project) }
                 }
             }
             commands += SettingsSection.allCases.map { section in
                 PaletteCommand(id: "settings-\(section.rawValue)", title: "Settings › \(section.title)", glyph: .symbol(section.symbol)) {
-                    model.openSettings(section, in: project)
+                    workspace.openSettings(section, in: project)
                 }
             }
         }
         commands += [
             PaletteCommand(id: "go-usage", title: "Usage", meta: String(format: "$%.2f this week · $%.2f this month", model.weeklySpend, model.monthlySpend), glyph: .symbol("chart.bar")) { model.open(.usage) },
         ]
-        commands += model.openProjects.compactMap { project in
-            guard let id = project.id, id != model.currentProject?.id else { return nil }
-            return PaletteCommand(id: "project-\(id)", title: project.name, meta: "Switch project", glyph: .symbol("folder")) { model.expand(project) }
+        commands += model.allOpenProjects.compactMap { workspace, project in
+            guard let ref = workspace.ref(of: project), ref != model.currentRef else { return nil }
+            return PaletteCommand(
+                id: "project-\(ref.daemon)-\(ref.id)", title: project.name,
+                meta: workspace.isRemote ? "Switch project · \(workspace.displayName)" : "Switch project", glyph: .symbol("folder")
+            ) { workspace.expand(project) }
         }
         return commands
     }
 
     private var fileCommands: [PaletteCommand] {
-        guard let project = model.currentProject, let projectID = project.id else { return [] }
-        let files = model.codeBrowser(for: project).snapshot?.files ?? []
+        guard let project = model.currentProject, let ref = workspace.ref(of: project) else { return [] }
+        let files = workspace.codeBrowser(for: project).snapshot?.files ?? []
         let needle = searchText
         return files
             .filter { ($0 as NSString).lastPathComponent.localizedCaseInsensitiveContains(needle) }
@@ -350,8 +360,8 @@ struct CommandPalette: View {
             .map { path in
                 PaletteCommand(
                     id: "file-\(path)", title: (path as NSString).lastPathComponent, meta: path, glyph: .symbol("doc.text"),
-                    newWindow: .file(project: projectID, path: path)
-                ) { model.openFile(path, in: project) }
+                    newWindow: .file(project: ref, path: path)
+                ) { workspace.openFile(path, in: project) }
             }
     }
 

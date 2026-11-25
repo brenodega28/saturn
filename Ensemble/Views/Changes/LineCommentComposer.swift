@@ -62,6 +62,7 @@ struct LineCommentComposer: View {
 
 struct NewLineComment: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let selection: LineSelection
     let entry: BranchFileDiff
     let file: String
@@ -72,7 +73,7 @@ struct NewLineComment: View {
         LineCommentComposer(
             caption: "Comment on \(selection.side == .old ? "removed " : "")line\(selection.range.count == 1 ? "" : "s") \(rangeLabel)",
             onSave: { text in
-                model.addComment(in: run, branchAgentId: entry.agentId, file: file, side: selection.side, lines: selection.range, text: text)
+                workspace.addComment(in: run, branchAgentId: entry.agentId, file: file, side: selection.side, lines: selection.range, text: text)
                 store.clearLineSelection()
             },
             onCancel: store.clearLineSelection

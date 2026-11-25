@@ -18,8 +18,6 @@ struct ServerProblem: Equatable {
 }
 
 extension AppModel {
-    static let activeDaemonKey = "fleet.activeDaemon"
-
     static func loadKnownDaemons(_ paths: AppPaths) -> [KnownDaemon] {
         guard let data = try? Data(contentsOf: paths.knownDaemons) else { return [] }
         return (try? JSONDecoder().decode([KnownDaemon].self, from: data)) ?? []
@@ -32,17 +30,6 @@ extension AppModel {
         try? encoder.encode(knownDaemons.filter { $0.destination != nil }).write(to: clientPaths.knownDaemons, options: .atomic)
     }
 
-    var orderedConnections: [DaemonConnection] {
-        connections.values.sorted { lhs, rhs in
-            if lhs.isRemote != rhs.isRemote { return !lhs.isRemote }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
-    }
-
-    func displayName(of connection: DaemonConnection) -> String {
-        connection.destination.map(SSHDestination.displayName) ?? "This Mac"
-    }
-
     var helperDirectory: URL {
         LocalDaemon.helper.deletingLastPathComponent()
     }
@@ -51,36 +38,41 @@ extension AppModel {
         RemoteDaemonInstaller(client: SSHClient(destination: destination, runner: runner), helperDirectory: helperDirectory)
     }
 
-    func adopt(_ connection: DaemonConnection) {
-        connection.onError = { [weak self] title, error in
-            self?.alert = AppAlert(title: title, message: error.localizedDescription)
+    func workspace(forServer destination: String) -> DaemonWorkspace? {
+        workspaces.values.first { $0.connection.destination == destination }
+    }
+
+    @discardableResult
+    private func adopt(_ connection: DaemonConnection) -> DaemonWorkspace {
+        let workspace = DaemonWorkspace(connection: connection, app: self)
+        add(workspace)
+        workspace.start()
+        return workspace
+    }
+
+    func adoptKnownDaemons() {
+        for known in knownDaemons {
+            guard let destination = known.destination, workspaces[known.id] == nil else { continue }
+            let identity = DaemonIdentity(id: known.id, name: known.name)
+            let client = DaemonClient(
+                clientID: LocalDaemon.clientID(clientPaths), transport: RemoteDaemonInstaller.transport(destination: destination),
+                replicasDirectory: clientPaths.replicasDirectory, knownDaemon: identity
+            )
+            guard let replica = client.replica else { continue }
+            let remote = DaemonConnection(client: client, replica: replica)
+            remote.destination = destination
+            adopt(remote)
         }
-        connections[connection.id] = connection
     }
 
     func connectRemoteDaemons() async {
-        for known in knownDaemons {
-            guard let destination = known.destination, connections[known.id] == nil else { continue }
-            await connectRemote(known, destination: destination)
+        adoptKnownDaemons()
+        for workspace in orderedWorkspaces where workspace.isRemote && !workspace.isConnected {
+            guard let destination = workspace.connection.destination else { continue }
+            await checkServer(destination, activeRuns: 0, confirmedRestart: false)
+            workspace.connection.start()
+            Task { await workspace.refreshAllProjects() }
         }
-        if let stored = AppDefaults.store.string(forKey: Self.activeDaemonKey).flatMap(UUID.init(uuidString:)),
-           stored != connection.id, connections[stored] != nil {
-            activate(stored)
-        }
-    }
-
-    private func connectRemote(_ known: KnownDaemon, destination: String, confirmedRestart: Bool = false) async {
-        let identity = DaemonIdentity(id: known.id, name: known.name)
-        let client = DaemonClient(
-            clientID: LocalDaemon.clientID(clientPaths), transport: RemoteDaemonInstaller.transport(destination: destination),
-            replicasDirectory: clientPaths.replicasDirectory, knownDaemon: identity
-        )
-        guard let replica = client.replica else { return }
-        let remote = DaemonConnection(client: client, replica: replica)
-        remote.destination = destination
-        adopt(remote)
-        await checkServer(destination, activeRuns: 0, confirmedRestart: confirmedRestart)
-        remote.start()
     }
 
     func checkServer(_ destination: String, activeRuns: Int, confirmedRestart: Bool) async {
@@ -100,13 +92,13 @@ extension AppModel {
         }
     }
 
-    func upgradeServer(_ connection: DaemonConnection) async {
-        guard let destination = connection.destination else { return }
-        await checkServer(destination, activeRuns: connection.live.activeRunCount, confirmedRestart: true)
+    func upgradeServer(_ workspace: DaemonWorkspace) async {
+        guard let destination = workspace.connection.destination else { return }
+        await checkServer(destination, activeRuns: workspace.live.activeRunCount, confirmedRestart: true)
     }
 
     @discardableResult
-    func addServer(_ input: String) async -> DaemonConnection? {
+    func addServer(_ input: String) async -> DaemonWorkspace? {
         let destination: String
         do {
             destination = try SSHDestination.normalize(input)
@@ -114,7 +106,7 @@ extension AppModel {
             alert = AppAlert(title: "That isn’t an SSH destination", message: error.localizedDescription)
             return nil
         }
-        if let existing = connections.values.first(where: { $0.destination == destination }) { return existing }
+        if let existing = workspace(forServer: destination) { return existing }
         addingServers.insert(destination)
         defer { addingServers.remove(destination) }
         do {
@@ -128,84 +120,44 @@ extension AppModel {
             guard let replica = client.replica, let identity = client.identity else { throw ChannelError.closed }
             let remote = DaemonConnection(client: client, replica: replica)
             remote.destination = destination
-            adopt(remote)
+            let workspace = adopt(remote)
             knownDaemons.removeAll { $0.id == identity.id || $0.destination == destination }
             knownDaemons.append(KnownDaemon(id: identity.id, name: identity.name, destination: destination))
             saveKnownDaemons()
             serverProblems[destination] = nil
-            return remote
+            return workspace
         } catch {
             alert = AppAlert(title: "Couldn’t add \(SSHDestination.displayName(destination))", message: error.localizedDescription)
             return nil
         }
     }
 
-    func removeServer(_ remote: DaemonConnection) {
+    func removeServer(_ remote: DaemonWorkspace) {
         guard remote.isRemote else { return }
-        if connection === remote, let local = connections.values.first(where: { !$0.isRemote }) { activate(local.id) }
-        remote.stop()
-        connections[remote.id] = nil
         knownDaemons.removeAll { $0.id == remote.id }
         saveKnownDaemons()
+        remove(remote)
+        pages.retain { $0.kind.daemon != remote.id }
+        if case .project(let ref) = selection, ref.daemon == remote.id { selection = nil }
+        if lastProjectID?.daemon == remote.id { lastProjectID = nil }
+        tabs = tabs.filter { $0.key.daemon != remote.id }
+        projectsChanged(in: local)
     }
 
-    func stopServerDaemon(_ remote: DaemonConnection) {
-        guard let destination = remote.destination else { return }
+    func stopServerDaemon(_ remote: DaemonWorkspace) {
+        guard let destination = remote.connection.destination else { return }
         Task {
-            await command("Couldn’t stop the daemon on \(SSHDestination.displayName(destination))", SettingsCommands.Shutdown())
+            await remote.command("Couldn’t stop the daemon on \(SSHDestination.displayName(destination))", SettingsCommands.Shutdown())
         }
     }
 
-    func activate(_ id: DaemonID) {
-        guard let target = connections[id], target !== connection else { return }
-        requests.stop()
-        chatNotifications.stop()
-        pendingPermissions.stop()
-        connection = target
-        requests = ChatRequestFeed(database: target.database)
-        chatNotifications = ChatNotificationFeed(database: target.database)
-        pendingPermissions = PendingPermissionFeed(database: target.database)
-        target.onEvent = { [weak self] event in self?.receive(event) }
-        selection = nil
-        tabs = [:]
-        runDetailIDs = [:]
-        leadSelections = [:]
-        requestPageProjectIDs = []
-        selectedAgents = [:]
-        projectStates = [:]
-        configs = [:]
-        changesRunSelections = [:]
-        AppDefaults.store.set(id.uuidString, forKey: Self.activeDaemonKey)
-        startRequests()
-        reloadProjects()
-        pages.reload(storageKey: Self.pagesKey(for: id))
-        dropStalePages()
-        Task { await refreshAllProjects() }
-        Task { await checkEnvironment() }
-    }
-
-    func projects(on daemon: DaemonConnection) -> [Project] {
-        _ = daemon.revision
-        return (try? daemon.database.openProjects()) ?? []
-    }
-
-    func open(_ project: Project, on daemon: DaemonConnection) {
-        activate(daemon.id)
-        if let opened = project.id.flatMap(self.project(withID:)) { showChat(in: opened) }
-    }
-
-    func connection(forServer destination: String) async -> DaemonConnection? {
-        if let existing = connections.values.first(where: { $0.destination == destination }) { return existing }
-        return await addServer(destination)
-    }
-
     func openOnServer(_ destination: String, path: String) async throws {
-        guard let remote = await connection(forServer: destination) else { return }
+        let existing = workspace(forServer: destination)
+        guard let remote = existing == nil ? await addServer(destination) : existing else { return }
         let project = try await remote.send(ProjectCommands.Open(path: path))
-        activate(remote.id)
-        reloadProjects()
-        if let opened = project.id.flatMap(self.project(withID:)) { showChat(in: opened) }
-        await refresh(project)
+        remote.reloadProjects()
+        if let opened = project.id.flatMap(remote.project(withID:)) { remote.showChat(in: opened) }
+        await remote.refresh(project)
     }
 
     func moveToServerDaemon(_ project: Project) async {
@@ -216,13 +168,15 @@ extension AppModel {
             alert = AppAlert(title: "Couldn’t move \(project.name) to \(SSHDestination.displayName(destination))’s daemon", message: error.localizedDescription)
             return
         }
-        guard let local = connections.values.first(where: { !$0.isRemote }), let id = project.id else { return }
-        local.perform("Couldn’t close the old SSH project", ProjectCommands.Close(projectID: id))
+        guard let id = project.id else { return }
+        local.dispatch("Couldn’t close the old SSH project", ProjectCommands.Close(projectID: id))
     }
+}
 
+extension DaemonWorkspace {
     func filesMirror(for project: Project) -> DaemonFilesMirror? {
         guard connection.isRemote else { return nil }
-        return DaemonFilesMirror(connection: connection, project: project, cacheRoot: clientPaths.replicaFiles(connection.id))
+        return DaemonFilesMirror(connection: connection, project: project, cacheRoot: app.clientPaths.replicaFiles(connection.id))
     }
 
     func pullConfigFiles(_ project: Project) async {
@@ -243,7 +197,7 @@ extension AppModel {
     func storeAPIKeyOnServer(_ key: String) async -> Bool {
         guard let destination = connection.destination else { return false }
         do {
-            try await installer(for: destination).storeAPIKey(key, home: connection.environment.homeDirectory)
+            try await app.installer(for: destination).storeAPIKey(key, home: connection.environment.homeDirectory)
         } catch {
             alert = AppAlert(title: "Couldn’t save the API key on \(SSHDestination.displayName(destination))", message: error.localizedDescription)
         }
@@ -252,12 +206,12 @@ extension AppModel {
 
     func removeAPIKeyOnServer() async -> Bool {
         guard let destination = connection.destination else { return false }
-        try? await installer(for: destination).deleteAPIKey()
+        try? await app.installer(for: destination).deleteAPIKey()
         return true
     }
 
     func cachedDaemonFile(_ kind: FileKind, id: String, name: String, maximumAge: TimeInterval = .infinity) -> URL {
-        let url = clientPaths.replicaFiles(connection.id)
+        let url = app.clientPaths.replicaFiles(connection.id)
             .appending(path: "\(kind.rawValue)/\(id.replacingOccurrences(of: "/", with: "-"))", directoryHint: .isDirectory)
             .appending(path: name)
         let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? nil

@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ChatRequestCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let item: ChatRequest
 
     var body: some View {
@@ -16,7 +17,7 @@ struct ChatRequestCard: View {
                 Text(RequestNotifier.kindTitle(item.kind))
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(item.kind.tint)
-                if let runTitle = model.runTitle(for: item), !runTitle.isEmpty {
+                if let runTitle = workspace.runTitle(for: item), !runTitle.isEmpty {
                     Text("· \(runTitle)").font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText).lineLimit(1)
                 }
                 Spacer()
@@ -53,11 +54,11 @@ struct ChatRequestCard: View {
         HStack {
             Spacer()
             if item.kind == .pinReview {
-                Button("Open in Changes") { model.openRequest(item) }
+                Button("Open in Changes") { workspace.openRequest(item) }
                     .buttonStyle(PillButtonStyle(height: 28))
                     .help("Review the pins in Changes")
             }
-            Button("Dismiss") { model.dismissRequest(item) }
+            Button("Dismiss") { workspace.dismissRequest(item) }
                 .buttonStyle(PillButtonStyle(height: 28))
                 .help("Mark this as handled")
         }

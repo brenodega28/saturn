@@ -48,6 +48,7 @@ extension DocReaders {
 
 struct DocsSettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     @State private var mode = Mode.file
@@ -67,7 +68,7 @@ struct DocsSettingsView: View {
     }
 
     var body: some View {
-        let config = model.config(for: project)
+        let config = workspace.config(for: project)
         let docs = config.docs.docs
         SettingsPage("Documentation", subtitle: "Context your agents read before they work. Link a file from the repo to keep it in sync, or write a prompt that lives in .ensemble/docs.yaml.") {
             addCard(config: config)
@@ -103,7 +104,7 @@ struct DocsSettingsView: View {
         }
         .fileImporter(isPresented: $isImporting, allowedContentTypes: [.plainText, .text, .pdf, .data], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
-                for url in urls { addFile(url, config: model.config(for: project)) }
+                for url in urls { addFile(url, config: workspace.config(for: project)) }
             }
         }
     }
@@ -303,7 +304,7 @@ struct DocsSettingsView: View {
         } catch {
             errorMessage = "Couldn’t save docs.yaml: \(error.localizedDescription)"
         }
-        model.reloadConfig(for: project)
+        workspace.reloadConfig(for: project)
     }
 
     private func realPath(_ url: URL) -> String {

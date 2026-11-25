@@ -18,6 +18,7 @@ struct AgentSidePanel: View {
 
 struct MemoryPanel: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let session: LiveAgentSession
     let project: Project
     @State private var text = ""
@@ -34,7 +35,7 @@ struct MemoryPanel: View {
             HStack(spacing: 8) {
                 Text("Memory").font(.system(size: 13, weight: .semibold))
                 Spacer()
-                if model.isUpdatingMemory(session) {
+                if workspace.isUpdatingMemory(session) {
                     ProgressView().controlSize(.mini)
                     Text("updating").font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText)
                 } else {
@@ -91,13 +92,13 @@ struct MemoryPanel: View {
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.memory.opacity(0.22)))
         .task(id: refreshKey) { reload() }
         .sheet(isPresented: $isEditing, onDismiss: reload) {
-            MemoryEditorSheet(agentName: model.displayName(of: session.agent, in: project), file: memory.url, initialText: text) { edited in
-                model.saveMemory(edited, for: session)
+            MemoryEditorSheet(agentName: workspace.displayName(of: session.agent, in: project), file: memory.url, initialText: text) { edited in
+                workspace.saveMemory(edited, for: session)
             }
         }
-        .confirmationDialog("Clear \(model.displayName(of: session.agent, in: project))’s memory?", isPresented: $isConfirmingClear) {
+        .confirmationDialog("Clear \(workspace.displayName(of: session.agent, in: project))’s memory?", isPresented: $isConfirmingClear) {
             Button("Clear Memory", role: .destructive) {
-                model.clearMemory(for: session)
+                workspace.clearMemory(for: session)
                 reload()
             }
             Button("Cancel", role: .cancel) {}
@@ -107,7 +108,7 @@ struct MemoryPanel: View {
     }
 
     private var refreshKey: String {
-        "\(session.id)-\(session.agent.status.rawValue)-\(session.transcript.entries.count)-\(model.isUpdatingMemory(session))"
+        "\(session.id)-\(session.agent.status.rawValue)-\(session.transcript.entries.count)-\(workspace.isUpdatingMemory(session))"
     }
 
     private func reload() {
@@ -122,7 +123,7 @@ struct MemoryPanel: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
-                model.forgetMemoryNote(at: index, for: session)
+                workspace.forgetMemoryNote(at: index, for: session)
                 reload()
             } label: {
                 Image(systemName: "xmark")

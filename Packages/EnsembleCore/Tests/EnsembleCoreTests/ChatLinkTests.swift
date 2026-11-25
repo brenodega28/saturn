@@ -66,4 +66,42 @@ import Testing
     @Test func ignoresUnrelatedQueryItems() {
         #expect(ChatLink(string: "ensemble://chat/42?from=slack&message=7") == ChatLink(requestID: 42, messageID: 7))
     }
+
+    private static let daemon = UUID(uuidString: "6F9619FF-8B86-D011-B42D-00C04FC964FF")!
+
+    @Test func buildsDaemonLink() {
+        #expect(ChatLink(requestID: 42, messageID: 7, daemon: Self.daemon).url.absoluteString
+            == "ensemble://chat/42?daemon=6f9619ff-8b86-d011-b42d-00c04fc964ff&message=7")
+    }
+
+    @Test(arguments: [ChatLink(requestID: 42, daemon: daemon), ChatLink(requestID: 42, messageID: 7, daemon: daemon)])
+    func roundTripsWithDaemon(link: ChatLink) {
+        #expect(ChatLink(url: link.url) == link)
+        #expect(ChatLink(string: link.url.absoluteString) == link)
+    }
+
+    @Test func parsesDaemonAndMessage() {
+        let link = ChatLink(string: "ensemble://chat/42?message=7&daemon=6F9619FF-8B86-D011-B42D-00C04FC964FF")
+        #expect(link == ChatLink(requestID: 42, messageID: 7, daemon: Self.daemon))
+    }
+
+    @Test func parsesLinkWithoutDaemon() {
+        let link = ChatLink(string: "ensemble://chat/42?message=7")
+        #expect(link == ChatLink(requestID: 42, messageID: 7))
+        #expect(link?.daemon == nil)
+    }
+
+    @Test(arguments: [
+        "ensemble://chat/42?daemon=nope&message=7",
+        "ensemble://chat/42?daemon=&message=7",
+        "ensemble://chat/42?daemon&message=7",
+    ])
+    func ignoresInvalidDaemon(string: String) {
+        #expect(ChatLink(string: string) == ChatLink(requestID: 42, messageID: 7))
+    }
+
+    @Test func ignoresRepeatedDaemon() {
+        let other = UUID().uuidString
+        #expect(ChatLink(string: "ensemble://chat/42?daemon=\(Self.daemon.uuidString)&daemon=\(other)")?.daemon == nil)
+    }
 }

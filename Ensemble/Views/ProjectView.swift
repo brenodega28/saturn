@@ -4,12 +4,13 @@ import SwiftUI
 
 struct ProjectScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.openWindow) private var openWindow
     let project: Project
     let tab: ProjectTab
 
     var body: some View {
-        let state = model.state(for: project)
+        let state = workspace.state(for: project)
         VStack(alignment: .leading, spacing: 14) {
             if let recovery = state.recovery, !recovery.isClean {
                 RecoveryBanner(recovery: recovery) { openWindow(id: WindowID.debugWorktrees) }

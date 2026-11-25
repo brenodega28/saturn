@@ -23,12 +23,12 @@ struct MainWindowView: View {
         .insetsWindowButtons(leading: 22, centerFromTop: 32)
         .sheet(isPresented: $model.isNewAgentPresented) {
             if let project = model.currentProject {
-                NewAgentSheet(project: project)
+                NewAgentSheet(project: project).environment(model.currentWorkspace)
             }
         }
-        .sheet(item: $model.pinPrompt) { prompt in PinPromptSheet(prompt: prompt) }
+        .sheet(item: $model.pinPrompt) { prompt in PinPromptSheet(prompt: prompt).inWorkspace(prompt.daemon) }
         .confirmationDialog(
-            "Delete “\(model.pendingChatDeletion?.title ?? "")”?",
+            "Delete “\(model.pendingChatDeletion?.chat.title ?? "")”?",
             isPresented: Binding(get: { model.pendingChatDeletion != nil }, set: { if !$0 { model.pendingChatDeletion = nil } }),
             titleVisibility: .visible
         ) {

@@ -39,12 +39,13 @@ struct ChatCardRows: View {
 
 struct ChatCardPill: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let chat: Chat
     @State private var isOpen = false
 
     var body: some View {
-        let port = model.appRunner(for: project)?.state.ports.first
+        let port = workspace.appRunner(for: project)?.state.ports.first
         Button { isOpen.toggle() } label: {
             HStack(spacing: 8) {
                 if let port { Text(verbatim: ":\(port)").font(Tokens.mono(12)) }
@@ -104,11 +105,12 @@ private struct MachineRow: View {
 
 private struct WorktreeButton: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     var body: some View {
         @Bindable var model = model
-        let target = model.selectedRunTarget(in: project)
+        let target = workspace.selectedRunTarget(in: project)
         Button { model.isRunMenuOpen.toggle() } label: {
             CardRow(symbol: "arrow.triangle.branch", title: target.branch) {
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(Tokens.text2)
@@ -126,12 +128,13 @@ private struct WorktreeButton: View {
 
 private struct RunRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     var body: some View {
-        let target = model.selectedRunTarget(in: project)
-        let runner = model.appRunner(for: project)
-        let command = model.runCommand(for: project, in: target.folder)
+        let target = workspace.selectedRunTarget(in: project)
+        let runner = workspace.appRunner(for: project)
+        let command = workspace.runCommand(for: project, in: target.folder)
         let state = runner?.state ?? .idle
         let isActive = runner?.isActive ?? false
         let runsSelected = runner?.isRunning(in: target.folder) ?? false
@@ -141,7 +144,7 @@ private struct RunRow: View {
                 Text(Self.title(state, ports: state.ports, isRemote: project.isRemote))
                     .foregroundStyle(Tokens.text)
                 if command == nil, !isActive {
-                    Button("Tell Ensemble how to start this app") { model.openSettings(.workspaces, in: project) }
+                    Button("Tell Ensemble how to start this app") { workspace.openSettings(.workspaces, in: project) }
                         .buttonStyle(.plain)
                         .foregroundStyle(Tokens.link)
                         .font(.system(size: 11.5))
@@ -151,12 +154,12 @@ private struct RunRow: View {
             }
             Spacer(minLength: 4)
             if isActive {
-                Button { Task { await model.stopApp(in: project) } } label: { Label("Stop", systemImage: "stop.fill") }
+                Button { Task { await workspace.stopApp(in: project) } } label: { Label("Stop", systemImage: "stop.fill") }
                     .buttonStyle(RunButtonStyle(fill: Tokens.stuckBackground, text: Tokens.stuck))
                     .help("Stop the app and every process it started")
             }
             if !runsSelected {
-                Button { Task { await model.startApp(target, in: project) } } label: {
+                Button { Task { await workspace.startApp(target, in: project) } } label: {
                     Label(state.isFailed ? "Retry" : "Start", systemImage: state.isFailed ? "arrow.clockwise" : "play.fill")
                 }
                 .buttonStyle(RunButtonStyle(fill: Tokens.live, text: Color(hex: 0x04210D)))
@@ -218,11 +221,12 @@ extension AppRunState {
 
 private struct OutputRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     var body: some View {
         @Bindable var model = model
-        let lines = model.appOutput(in: project)
+        let lines = workspace.appOutput(in: project)
         Button { model.isAppOutputShown.toggle() } label: {
             CardRow(symbol: "text.alignleft", title: "Output") {
                 Text(lines.isEmpty ? "Nothing yet" : "\(lines.count) line\(lines.count == 1 ? "" : "s")")
@@ -237,13 +241,14 @@ private struct OutputRow: View {
 
 private struct ChangesRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let chat: Chat
     @State private var diff: DiffInfo?
 
     var body: some View {
-        let run = model.latestRun(of: chat)
-        Button { model.open(.changes) } label: {
+        let run = workspace.latestRun(of: chat)
+        Button { workspace.open(.changes, in: project) } label: {
             CardRow(symbol: "plus.forwardslash.minus", title: "Changes") {
                 if let diff, diff.lines > 0 {
                     Text("+\(diff.added.formatted())").font(Tokens.mono(12)).foregroundStyle(Tokens.done)
@@ -257,7 +262,7 @@ private struct ChangesRow: View {
         .help("Open Changes")
         .task(id: run.map { "\($0.id ?? 0)-\($0.status.rawValue)-\($0.currentStep ?? "")" } ?? "none") {
             if let run {
-                diff = await model.diffInfo(run)
+                diff = await workspace.diffInfo(run)
             } else {
                 diff = nil
             }
@@ -267,13 +272,14 @@ private struct ChangesRow: View {
 
 private struct ChecksRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let chat: Chat
     @State private var isExpanded = false
 
     var body: some View {
-        let run = model.latestRun(of: chat)
-        let checks = model.chatChecks(for: chat, run: run)
+        let run = workspace.latestRun(of: chat)
+        let checks = workspace.chatChecks(for: chat, run: run)
         VStack(alignment: .leading, spacing: 0) {
             Button { isExpanded.toggle() } label: {
                 CardRow(symbol: "checkmark.square", title: "Checks") {
@@ -301,7 +307,7 @@ private struct ChecksRow: View {
                         Text(Self.note(checks.state)).font(.system(size: 12)).foregroundStyle(Tokens.text2).fixedSize(horizontal: false, vertical: true)
                     }
                     if let run {
-                        Button("Open run details →") { model.openRunDetail(run) }
+                        Button("Open run details →") { workspace.openRunDetail(run) }
                             .buttonStyle(.plain)
                             .font(.system(size: 12))
                             .foregroundStyle(Tokens.link)
@@ -360,29 +366,30 @@ private struct ChecksRow: View {
 
 struct RunTargetList: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let selected: RunTarget
 
     var body: some View {
-        let targets = model.runTargets(in: project)
-        let runner = model.appRunner(for: project)
+        let targets = workspace.runTargets(in: project)
+        let runner = workspace.appRunner(for: project)
         VStack(alignment: .leading, spacing: 1) {
             Text("Run the app from").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Tokens.text2).padding(8)
             ForEach(targets) { target in
                 let isSelected = target.id == selected.id
                 Button {
-                    model.selectRunTarget(target, in: project)
+                    workspace.selectRunTarget(target, in: project)
                     model.isRunMenuOpen = false
                     if runner?.isActive == true, runner?.isRunning(in: target.folder) == false {
                         Task {
-                            await model.stopApp(in: project)
-                            await model.startApp(target, in: project)
+                            await workspace.stopApp(in: project)
+                            await workspace.startApp(target, in: project)
                         }
                     }
                 } label: {
                     HStack(spacing: 10) {
                         if let agent = target.agent {
-                            AgentAvatar(size: 22, appearance: RoleAppearance(role: model.role(for: agent, in: project)))
+                            AgentAvatar(size: 22, appearance: RoleAppearance(role: workspace.role(for: agent, in: project)))
                         } else {
                             Image(systemName: "laptopcomputer").frame(width: 22, height: 22).foregroundStyle(Tokens.text2)
                         }
@@ -415,18 +422,19 @@ struct RunTargetList: View {
 
 struct AppOutputPanel: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
 
     var body: some View {
-        let lines = model.appOutput(in: project)
+        let lines = workspace.appOutput(in: project)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 Text("Output").font(.system(size: 12.5, weight: .semibold))
-                if let label = model.appRunner(for: project)?.label {
+                if let label = workspace.appRunner(for: project)?.label {
                     Text(label).font(Tokens.mono(11.5)).foregroundStyle(Tokens.text2).lineLimit(1)
                 }
                 Spacer()
-                Button("Clear") { model.clearAppOutput(in: project) }.buttonStyle(.plain).foregroundStyle(Tokens.link)
+                Button("Clear") { workspace.clearAppOutput(in: project) }.buttonStyle(.plain).foregroundStyle(Tokens.link)
                 Button { model.isAppOutputShown = false } label: { Image(systemName: "xmark") }
                     .buttonStyle(.plain)
                     .foregroundStyle(Tokens.text2)

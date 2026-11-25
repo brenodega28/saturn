@@ -4,6 +4,7 @@ import SwiftUI
 
 struct RunDetailHeader: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.isInWorkbench) private var isInWorkbench
     let snapshot: RunDetailSnapshot
     let project: Project
@@ -43,7 +44,7 @@ struct RunDetailHeader: View {
         HStack(alignment: .top, spacing: 10) {
             if !isInWorkbench {
                 Button {
-                    model.closeRunDetail(in: project)
+                    workspace.closeRunDetail(in: project)
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 13, weight: .semibold))
@@ -61,7 +62,7 @@ struct RunDetailHeader: View {
                         .font(.system(size: 16, weight: .bold))
                         .lineLimit(2)
                         .textSelection(.enabled)
-                    StatusChip(text: model.statusLabel(of: run), color: model.statusColor(of: run))
+                    StatusChip(text: workspace.statusLabel(of: run), color: workspace.statusColor(of: run))
                 }
                 Text(subtitle)
                     .font(.system(size: 12))
@@ -74,7 +75,7 @@ struct RunDetailHeader: View {
 
     private var subtitle: String {
         let workflow = snapshot.workflow.map { "\($0.name) v\(run.workflowVersion ?? String($0.version))" } ?? run.workflow
-        let step = run.isActive ? model.currentStepTitle(of: run).map { "at \($0)" } : nil
+        let step = run.isActive ? workspace.currentStepTitle(of: run).map { "at \($0)" } : nil
         return [workflow, step, "started \(run.startedAt.formatted(date: .abbreviated, time: .shortened))"]
             .compactMap(\.self).joined(separator: " · ")
     }
@@ -171,6 +172,7 @@ private struct RunStats: View {
 
 struct RunDetailControls: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let snapshot: RunDetailSnapshot
     let reload: () -> Void
     @State private var isConfirmingCancel = false
@@ -183,21 +185,21 @@ struct RunDetailControls: View {
             if run.status == .running || run.status == .pending {
                 Button {
                     Task {
-                        model.pauseRun(run)
+                        workspace.pauseRun(run)
                         reload()
                     }
                 } label: { Label("Pause", systemImage: "pause.fill") }
                     .help("Interrupt the current step and hold the run; resume later")
             } else if run.status == .paused || run.status == .interrupted {
                 Button {
-                    model.resumeRun(run)
+                    workspace.resumeRun(run)
                     reload()
                 } label: { Label("Resume", systemImage: "play.fill") }
                     .help("Continue the run from where it stopped")
             }
             if canRetry {
                 Button {
-                    model.retryStep(run)
+                    workspace.retryStep(run)
                     reload()
                 } label: { Label("Retry Step", systemImage: "arrow.clockwise") }
                     .help("Run the failed step again")
@@ -209,7 +211,7 @@ struct RunDetailControls: View {
                     .help("Stop the run and dismiss what it’s waiting on")
             }
             Button {
-                model.openRunInLead(run)
+                workspace.openRunInLead(run)
             } label: { Label("Open in Lead Chat", systemImage: "bubble.left.and.text.bubble.right") }
                 .help("Show this run in the Lead tab")
         }
@@ -218,7 +220,7 @@ struct RunDetailControls: View {
         .confirmationDialog("Cancel “\(RunDetailFormat.runTitle(run))”?", isPresented: $isConfirmingCancel) {
             Button("Cancel Run", role: .destructive) {
                 Task {
-                    model.cancelRun(run)
+                    workspace.cancelRun(run)
                     reload()
                 }
             }

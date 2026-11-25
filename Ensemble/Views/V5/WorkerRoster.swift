@@ -4,13 +4,14 @@ import SwiftUI
 
 struct WorkerRoster: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let chat: Chat
     let project: Project
 
     static let nudge = "You’ve had no output for a while. If you’re waiting on a prompt or a command that hangs, stop it, then say where you are and what’s left."
 
     var body: some View {
-        let workers = model.chatWorkers(chat, in: project)
+        let workers = workspace.chatWorkers(chat, in: project)
         if !workers.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
@@ -53,15 +54,16 @@ struct ChatWorker {
 
 struct WorkerRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let worker: ChatWorker
     let project: Project
     @State private var isHovered = false
 
     var body: some View {
-        let name = model.displayName(of: worker.agent, in: project)
+        let name = workspace.displayName(of: worker.agent, in: project)
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
-                AgentAvatar(size: 20, appearance: RoleAppearance(role: model.role(for: worker.agent, in: project)), isFailing: worker.state == .failed || worker.state == .stuck)
+                AgentAvatar(size: 20, appearance: RoleAppearance(role: workspace.role(for: worker.agent, in: project)), isFailing: worker.state == .failed || worker.state == .stuck)
                 Text(name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Tokens.text)
                 Text(worker.agent.branch ?? (worker.agent.readOnly ? "no worktree · reads the others" : ""))
                     .font(Tokens.mono(11.5))
@@ -103,7 +105,7 @@ struct WorkerRow: View {
     @ViewBuilder
     private var actions: some View {
         HStack(spacing: 10) {
-            Button("Open") { model.openAgentSession(worker.agent, in: project) }
+            Button("Open") { workspace.openAgentSession(worker.agent, in: project) }
             if worker.state == .failed || worker.state == .stopped, let session = worker.session {
                 Button("Retry") { session.resume() }
             }
@@ -144,7 +146,7 @@ struct WorkerRow: View {
     }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func chatWorkers(_ chat: Chat, in project: Project, now: Date = .now) -> [ChatWorker] {
         guard let chatID = chat.id else { return [] }
         let runs = (try? database.runs(taskId: chatID)) ?? []

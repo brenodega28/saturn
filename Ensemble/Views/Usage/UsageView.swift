@@ -4,6 +4,7 @@ import SwiftUI
 
 struct UsageView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @AppStorage("usage.period", store: AppDefaults.store) private var period: UsagePeriod = .month
     @AppStorage(AppModel.globalMonthlyBudgetKey, store: AppDefaults.store) private var globalBudget: Double = 0
     @AppStorage(AppModel.globalWeeklyBudgetKey, store: AppDefaults.store) private var globalWeeklyBudget: Double = 0
@@ -126,7 +127,7 @@ struct UsageView: View {
                     overallField
                 }
             }
-            ForEach(model.openProjects) { project in
+            ForEach(workspace.openProjects) { project in
                 Divider().overlay(Tokens.hair)
                 ProjectBudgetEditor(project: project, period: budgetPeriod)
             }
@@ -181,8 +182,8 @@ struct UsageView: View {
 
     private func roleName(_ id: String?) -> String? {
         guard let id else { return nil }
-        for project in model.openProjects {
-            if let role = model.config(for: project).role(id) { return role.name }
+        for project in workspace.openProjects {
+            if let role = workspace.config(for: project).role(id) { return role.name }
         }
         return id
     }

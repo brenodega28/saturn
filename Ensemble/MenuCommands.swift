@@ -16,7 +16,7 @@ struct WorkflowMenuAction: Equatable {
         case history
     }
 
-    let project: Int64
+    let project: ProjectRef
     let kind: Kind
 }
 
@@ -28,14 +28,24 @@ struct PinPrompt: Identifiable {
 
     let pin: Pin
     let kind: Kind
+    let daemon: DaemonID
 
-    var id: String { "\(pin.id ?? -1)-\(kind)" }
+    var id: String { "\(daemon.uuidString)-\(pin.id ?? -1)-\(kind)" }
 }
 
 struct CommandContext {
     let model: AppModel
+    var workspace: DaemonWorkspace
     let openWindow: OpenWindowAction?
     var target: CommandTarget?
+
+    @MainActor
+    init(model: AppModel, workspace: DaemonWorkspace? = nil, openWindow: OpenWindowAction?, target: CommandTarget? = nil) {
+        self.model = model
+        self.workspace = workspace ?? model.currentWorkspace
+        self.openWindow = openWindow
+        self.target = target
+    }
 }
 
 struct MenuCommand: Identifiable {
@@ -124,29 +134,29 @@ extension CommandContext {
 
     var agentSession: LiveAgentSession? {
         if case .agent(let project, let agent) = target {
-            return model.project(withID: project).flatMap { model.agentSessions(in: $0).first { $0.id == agent } }
+            return workspace.project(withID: project).flatMap { workspace.agentSessions(in: $0).first { $0.id == agent } }
         }
         guard case .agent(let agent) = model.mainScreen, let project = model.currentProject else { return nil }
-        return model.agentSessions(in: project).first { $0.id == agent }
+        return workspace.agentSessions(in: project).first { $0.id == agent }
     }
 
     var agentProject: Project? {
-        if case .agent(let project, _) = target { return model.project(withID: project) }
+        if case .agent(let project, _) = target { return workspace.project(withID: project) }
         guard case .agent = model.mainScreen else { return nil }
         return model.currentProject
     }
 
     var run: Run? {
-        if case .run(_, let run) = target { return model.run(withID: run) }
-        if case .run(let run) = model.mainScreen, let live = model.run(withID: run) { return live }
-        if let session = agentSession, let run = session.agent.runId.flatMap(model.run(withID:)) { return run }
-        return model.runToStop()
+        if case .run(_, let run) = target { return workspace.run(withID: run) }
+        if case .run(let run) = model.mainScreen, let live = workspace.run(withID: run) { return live }
+        if let session = agentSession, let run = session.agent.runId.flatMap(workspace.run(withID:)) { return run }
+        return workspace.runToStop()
     }
 
     var pin: Pin? {
-        if case .pin(_, let pin) = target { return try? model.database.pin(id: pin) }
+        if case .pin(_, let pin) = target { return try? workspace.database.pin(id: pin) }
         guard isReviewing else { return nil }
-        return model.focusedPin()
+        return workspace.focusedPin()
     }
 
     var isReviewing: Bool {
@@ -154,12 +164,12 @@ extension CommandContext {
     }
 
     var file: (project: Project, path: String)? {
-        if case .file(let project, let path) = target, let project = model.project(withID: project) { return (project, path) }
+        if case .file(let project, let path) = target, let project = workspace.project(withID: project) { return (project, path) }
         return nil
     }
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func run(withID id: Int64) -> Run? {
         (try? database.run(id: id)) ?? nil
     }
@@ -169,7 +179,8 @@ extension AppModel {
     }
 
     func runToStop() -> Run? {
-        guard let project = currentProject?.id else { return nil }
+        guard let ref = app.currentRef, ref.daemon == id else { return nil }
+        let project = ref.id
         return connection.activeRuns(projectID: project).max { $0.startedAt < $1.startedAt }
     }
 
@@ -180,26 +191,21 @@ extension AppModel {
     }
 
     func focusedPin() -> Pin? {
-        guard let project = currentProject, let id = project.id else { return nil }
+        guard let project = app.currentProject, app.currentWorkspace === self, let id = project.id else { return nil }
         let open = openPins(in: project)
         if let focused = focusedPinIDs[id], let match = open.first(where: { $0.pin.id == focused }) { return match.pin }
         return open.first?.pin
     }
 
     func stepPin(by offset: Int, opening: Bool = true) {
-        guard let project = currentProject, let id = project.id else { return }
+        guard let project = app.currentProject, app.currentWorkspace === self, let id = project.id else { return }
         let pins = openPins(in: project)
         guard !pins.isEmpty else { return }
         let current = focusedPinIDs[id].flatMap { focused in pins.firstIndex { $0.pin.id == focused } }
         let next = pins[current.map { ($0 + offset + pins.count) % pins.count } ?? 0]
         focusedPinIDs[id] = next.pin.id
         codeBrowser(for: project).open(next.pin.file, line: next.pin.startLine)
-        if opening { open(.code) }
-    }
-
-    func copyToPasteboard(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        if opening { app.open(.code) }
     }
 
     func heldForFailure(_ run: Run) -> Bool {
@@ -243,28 +249,28 @@ extension CommandRegistry {
     private func registerFileContextCommands() {
         register(MenuCommand(id: "file.open-editor", title: "Open", menu: "Context", isEnabled: { $0.file != nil }) { context in
             guard let file = context.file else { return }
-            context.model.openFile(file.path, in: file.project)
+            context.workspace.openFile(file.path, in: file.project)
         })
         register(MenuCommand(id: "file.protect", title: "Protect Path", menu: "Context", isEnabled: { context in
             guard let file = context.file else { return false }
-            return !(context.model.config(for: file.project).checks?.protectedPaths.contains(file.path) ?? false)
+            return !(context.workspace.config(for: file.project).checks?.protectedPaths.contains(file.path) ?? false)
         }) { context in
             guard let file = context.file else { return }
-            var checks = context.model.config(for: file.project).checks ?? ChecksConfig(checks: [])
+            var checks = context.workspace.config(for: file.project).checks ?? ChecksConfig(checks: [])
             checks.protectedPaths.append(file.path)
             do {
                 try ProjectConfigLoader.write(checks, repository: file.project.filesRoot)
-                context.model.reloadConfig(for: file.project)
+                context.workspace.reloadConfig(for: file.project)
             } catch {
                 context.model.alert = AppAlert(title: "Couldn’t protect \(file.path)", message: error.localizedDescription)
             }
         })
         register(MenuCommand(id: "file.reveal", title: "Reveal in Code", menu: "Context", isEnabled: { $0.file != nil }) { context in
             guard let file = context.file else { return }
-            context.model.revealInCode(file.path, in: file.project)
+            context.workspace.revealInCode(file.path, in: file.project)
         })
         register(MenuCommand(id: "file.copy-path", title: "Copy Path", menu: "Context", shortcut: KeyboardShortcut("c", modifiers: [.command, .option]), isEnabled: { $0.file != nil }) { context in
-            if let file = context.file { context.model.copyToPasteboard(file.path) }
+            if let file = context.file { context.workspace.copyToPasteboard(file.path) }
         })
     }
 
@@ -288,7 +294,7 @@ extension CommandRegistry {
         })
         register(MenuCommand(id: "file.close-project", title: "Close Project", menu: "File", section: 1, order: 1, shortcut: KeyboardShortcut("w", modifiers: [.command, .shift]),
                              isEnabled: { $0.model.currentProject != nil }) { context in
-            if let project = context.model.currentProject { context.model.close(project) }
+            if let project = context.model.currentProject { context.workspace.close(project) }
         })
     }
 
@@ -312,7 +318,7 @@ extension CommandRegistry {
         })
         register(MenuCommand(id: "view.chat", title: "Chat", menu: "View", section: 1, order: 0, shortcut: KeyboardShortcut("0"),
                              isEnabled: { $0.model.currentProject != nil }, isChecked: { $0.model.mainScreen.isChat }) { context in
-            if let project = context.model.currentProject { context.model.expand(project) }
+            if let project = context.model.currentProject { context.workspace.expand(project) }
         })
         for (index, tool) in MainTool.allCases.enumerated() {
             register(MenuCommand(
@@ -335,20 +341,20 @@ extension CommandRegistry {
                              isEnabled: { $0.model.currentProject != nil }) { context in
             guard let project = context.model.currentProject else { return }
             context.model.open(.code)
-            context.model.codeBrowser(for: project).presentFinder(.symbols)
+            context.workspace.codeBrowser(for: project).presentFinder(.symbols)
         })
         register(MenuCommand(id: "navigate.go-run", title: "Go to Run…", menu: "Navigate", section: 1, order: 2) { $0.model.openPalette() })
         register(MenuCommand(id: "navigate.go-agent", title: "Go to Agent…", menu: "Navigate", section: 1, order: 3) { $0.model.openPalette(.agents) })
         register(MenuCommand(id: "navigate.next-pin", title: "Next Pin", menu: "Navigate", section: 2, order: 0, shortcut: KeyboardShortcut("'"),
-                             isEnabled: { $0.model.focusedPin() != nil }) { $0.model.stepPin(by: 1) })
+                             isEnabled: { $0.workspace.focusedPin() != nil }) { $0.workspace.stepPin(by: 1) })
         register(MenuCommand(id: "navigate.previous-pin", title: "Previous Pin", menu: "Navigate", section: 2, order: 1, shortcut: KeyboardShortcut("'", modifiers: [.command, .shift]),
-                             isEnabled: { $0.model.focusedPin() != nil }) { $0.model.stepPin(by: -1) })
+                             isEnabled: { $0.workspace.focusedPin() != nil }) { $0.workspace.stepPin(by: -1) })
     }
 
     private func registerAgentCommands() {
         register(MenuCommand(id: "agent.open", title: "Open Session", menu: "Context", section: 0, order: 1,
                              isEnabled: { $0.agentSession != nil }) { context in
-            if let session = context.agentSession, let project = context.agentProject { context.model.openAgentSession(session.agent, in: project) }
+            if let session = context.agentSession, let project = context.agentProject { context.workspace.openAgentSession(session.agent, in: project) }
         })
         register(MenuCommand(id: "agent.spawn", title: "Spawn…", menu: "Agent", section: 0, order: 1, shortcut: KeyboardShortcut("a", modifiers: [.command, .shift]),
                              isEnabled: { $0.model.currentProject != nil }) { $0.model.spawnAgent() })
@@ -361,7 +367,7 @@ extension CommandRegistry {
         register(MenuCommand(id: "agent.take-over", title: "Take Over", menu: "Agent", section: 1, order: 3,
                              isEnabled: { $0.agentSession?.agent.worktreeURL != nil }) { context in
             context.agentSession?.takeOver()
-            context.model.takeOver(context.agentSession)
+            context.workspace.takeOver(context.agentSession)
         })
         register(MenuCommand(id: "agent.restart", title: "Restart", menu: "Agent", section: 1, order: 4,
                              isEnabled: { $0.agentSession != nil }) { $0.agentSession?.restart() })
@@ -372,98 +378,102 @@ extension CommandRegistry {
         })
         register(MenuCommand(id: "agent.copy-worktree", title: "Copy Worktree Path", menu: "Context", section: 3, order: 0,
                              isEnabled: { $0.agentSession?.agent.worktreePath != nil }) { context in
-            if let path = context.agentSession?.agent.worktreePath { context.model.copyToPasteboard(path) }
+            if let path = context.agentSession?.agent.worktreePath { context.workspace.copyToPasteboard(path) }
         })
     }
 
     private func registerChatCommands() {
+        func focused(_ context: CommandContext) -> (workspace: DaemonWorkspace, chat: Chat)? {
+            guard let target = context.model.focusedChatTarget, let workspace = context.model.workspace(for: target.daemon) else { return nil }
+            return (workspace, target.chat)
+        }
         func selected(_ context: CommandContext) -> Chat? {
-            context.model.focusedChat
+            focused(context)?.chat
         }
         register(MenuCommand(id: "chat.new", title: "New Chat…", menu: "Chat", section: 0, order: 0) { $0.model.requestNewChat() })
         register(MenuCommand(id: "chat.finish", title: "Mark as Finished", menu: "Chat", section: 1, order: 0,
                              isEnabled: { selected($0).map { !$0.isClosed && !$0.isFinished } ?? false }) { context in
-            if let chat = selected(context) { context.model.finishChat(chat) }
+            if let (workspace, chat) = focused(context) { workspace.finishChat(chat) }
         })
         register(MenuCommand(id: "chat.done", title: "Resolve Chat", menu: "Chat", section: 1, order: 1,
                              isEnabled: { selected($0).map { !$0.isClosed } ?? false }) { context in
-            guard let chat = selected(context), let project = context.model.currentProject else { return }
-            Task { await context.model.closeRequest(chat, as: .done, in: project) }
+            guard let (workspace, chat) = focused(context), let project = workspace.project(withID: chat.projectId) else { return }
+            Task { await workspace.closeRequest(chat, as: .done, in: project) }
         })
         register(MenuCommand(id: "chat.drop", title: "Close Chat", menu: "Chat", section: 1, order: 2,
                              isEnabled: { selected($0).map { !$0.isClosed } ?? false }) { context in
-            guard let chat = selected(context), let project = context.model.currentProject else { return }
-            Task { await context.model.closeRequest(chat, as: .dropped, in: project) }
+            guard let (workspace, chat) = focused(context), let project = workspace.project(withID: chat.projectId) else { return }
+            Task { await workspace.closeRequest(chat, as: .dropped, in: project) }
         })
         register(MenuCommand(id: "chat.reopen", title: "Reopen Chat", menu: "Chat", section: 1, order: 3,
                              isEnabled: { selected($0).map { $0.isClosed || $0.isFinished } ?? false }) { context in
-            if let chat = selected(context) { context.model.reopenChat(chat) }
+            if let (workspace, chat) = focused(context) { workspace.reopenChat(chat) }
         })
         register(MenuCommand(id: "chat.stop-lead", title: "Stop the Lead", menu: "Chat", section: 2, order: 0,
-                             isEnabled: { context in context.model.isLeadBusy(selected(context)) }) { context in
-            if let chat = selected(context) { context.model.stopLead(chat) }
+                             isEnabled: { context in focused(context).map { $0.workspace.isLeadBusy($0.chat) } ?? false }) { context in
+            if let (workspace, chat) = focused(context) { workspace.stopLead(chat) }
         })
         register(MenuCommand(id: "chat.copy-link", title: "Copy Link to Chat", menu: "Chat", section: 3, order: 0,
                              isEnabled: { selected($0) != nil }) { context in
-            if let chat = selected(context) { context.model.copyChatLink(chat) }
+            if let (workspace, chat) = focused(context) { workspace.copyLink(to: chat) }
         })
         register(MenuCommand(id: "chat.delete", title: "Delete Chat…", menu: "Chat", section: 3, order: 1,
                              isEnabled: { selected($0) != nil }) { context in
-            context.model.pendingChatDeletion = selected(context)
+            context.model.pendingChatDeletion = context.model.focusedChatTarget
         })
     }
 
     private func registerRunCommands() {
         register(MenuCommand(id: "run.open", title: "Open Run", menu: "Context", section: 0, order: 0,
                              isEnabled: { $0.run != nil }) { context in
-            if let run = context.run { context.model.openRunDetail(run) }
+            if let run = context.run { context.workspace.openRunDetail(run) }
         })
         register(MenuCommand(id: "run.app-start", title: "Run the App", menu: "Run", section: 0, order: 0, shortcut: KeyboardShortcut("r"),
                              isEnabled: { $0.model.currentProject != nil }) { context in
             guard let project = context.model.currentProject else { return }
-            let target = context.model.selectedRunTarget(in: project)
-            Task { await context.model.startApp(target, in: project) }
+            let target = context.workspace.selectedRunTarget(in: project)
+            Task { await context.workspace.startApp(target, in: project) }
         })
         register(MenuCommand(id: "run.app-stop", title: "Stop the App", menu: "Run", section: 0, order: 1, shortcut: KeyboardShortcut("."),
-                             isEnabled: { context in context.model.currentProject.flatMap(context.model.appRunner(for:))?.isActive ?? false }) { context in
+                             isEnabled: { context in context.model.currentProject.flatMap(context.workspace.appRunner(for:))?.isActive ?? false }) { context in
             guard let project = context.model.currentProject else { return }
-            Task { await context.model.stopApp(in: project) }
+            Task { await context.workspace.stopApp(in: project) }
         })
         register(MenuCommand(id: "run.checks", title: "Run Checks", menu: "Run", section: 0, order: 2, shortcut: KeyboardShortcut("u"),
                              isEnabled: { $0.run != nil }) { context in
             guard let run = context.run else { return }
-            if let id = run.id, let hold = context.model.connection.holds[id], hold.isChecksExhausted(in: run.snapshotWorkflow) {
-                context.model.resolveFailure(run, retry: true)
+            if let id = run.id, let hold = context.workspace.connection.holds[id], hold.isChecksExhausted(in: run.snapshotWorkflow) {
+                context.workspace.resolveFailure(run, retry: true)
             }
-            context.model.openRunDetail(run)
+            context.workspace.openRunDetail(run)
         })
         register(MenuCommand(id: "run.retry-step", title: "Retry Step", menu: "Run", section: 1, order: 0,
-                             isEnabled: { $0.run.map($0.model.heldForFailure) ?? false }) { context in
+                             isEnabled: { $0.run.map($0.workspace.heldForFailure) ?? false }) { context in
             guard let run = context.run else { return }
-            context.model.resolveFailure(run, retry: true)
+            context.workspace.resolveFailure(run, retry: true)
         })
         register(MenuCommand(id: "run.dry-run", title: "Dry Run", menu: "Run", section: 1, order: 1,
                              isEnabled: { $0.model.currentProject != nil }) { context in
             guard let project = context.model.currentProject else { return }
-            let config = context.model.config(for: project)
+            let config = context.workspace.config(for: project)
             let workflow = context.run.flatMap { config.workflow($0.workflow) } ?? config.workflow(config.preferences.defaultWorkflow ?? "") ?? config.workflows.first
-            if let workflow { context.model.testRun(workflow, in: project) }
+            if let workflow { context.workspace.testRun(workflow, in: project) }
         })
         register(MenuCommand(id: "run.pause", title: "Pause", menu: "Context", section: 2, order: 0,
                              isEnabled: { $0.run?.status == .running }) { context in
             guard let run = context.run else { return }
-            context.model.pauseRun(run)
+            context.workspace.pauseRun(run)
         })
         register(MenuCommand(id: "run.stop-target", title: "Stop", menu: "Context", section: 2, order: 1,
                              isEnabled: { $0.run.map { ProjectSignals.activeStatuses.contains($0.status) } ?? false }) { context in
             guard let run = context.run else { return }
-            context.model.cancelRun(run)
+            context.workspace.cancelRun(run)
         })
         register(MenuCommand(id: "run.pause-all", title: "Pause All", menu: "Run", section: 2, order: 0, shortcut: KeyboardShortcut("p", modifiers: [.command, .shift]),
                              isEnabled: { $0.model.currentProject != nil }) { $0.model.pauseAllAgentsInSelectedProject() })
         register(MenuCommand(id: "run.copy-id", title: "Copy Run ID", menu: "Context", section: 3, order: 1,
                              isEnabled: { $0.run?.id != nil }) { context in
-            if let id = context.run?.id { context.model.copyToPasteboard(String(id)) }
+            if let id = context.run?.id { context.workspace.copyToPasteboard(String(id)) }
         })
     }
 
@@ -471,56 +481,56 @@ extension CommandRegistry {
         register(MenuCommand(id: "review.approve-pin", title: "Approve Pin", menu: "Review", section: 0, order: 0, shortcut: KeyboardShortcut(.return),
                              isEnabled: { $0.pin != nil }) { context in
             guard let pin = context.pin else { return }
-            context.model.setPin(pin, status: .approved)
-            context.model.stepPin(by: 1, opening: false)
+            context.workspace.setPin(pin, status: .approved)
+            context.workspace.stepPin(by: 1, opening: false)
         })
         register(MenuCommand(id: "review.request-change", title: "Request Change…", menu: "Review", section: 0, order: 1, shortcut: KeyboardShortcut(.return, modifiers: [.command, .option]),
                              isEnabled: { $0.pin != nil }) { context in
-            if let pin = context.pin { context.model.pinPrompt = PinPrompt(pin: pin, kind: .requestChange) }
+            if let pin = context.pin { context.model.pinPrompt = PinPrompt(pin: pin, kind: .requestChange, daemon: context.workspace.id) }
         })
         register(MenuCommand(id: "review.ask-agent", title: "Ask Agent…", menu: "Review", section: 0, order: 2,
                              isEnabled: { $0.pin?.agentId != nil }) { context in
-            if let pin = context.pin { context.model.pinPrompt = PinPrompt(pin: pin, kind: .askAgent) }
+            if let pin = context.pin { context.model.pinPrompt = PinPrompt(pin: pin, kind: .askAgent, daemon: context.workspace.id) }
         })
         register(MenuCommand(id: "review.dismiss", title: "Dismiss", menu: "Context", section: 0, order: 3,
                              isEnabled: { $0.pin != nil }) { context in
-            if let pin = context.pin { context.model.setPin(pin, status: .approved, response: "Dismissed") }
+            if let pin = context.pin { context.workspace.setPin(pin, status: .approved, response: "Dismissed") }
         })
         register(MenuCommand(id: "review.approve-all", title: "Approve All & Continue", menu: "Review", section: 1, order: 0,
-                             isEnabled: { context in context.run.map { ((try? context.model.database.openPinCount(runId: $0.id ?? -1)) ?? 0) > 0 || context.model.holdsForApproval($0) } ?? false }) { context in
-            if let run = context.run { context.model.approveAllPins(in: run) }
+                             isEnabled: { context in context.run.map { ((try? context.workspace.database.openPinCount(runId: $0.id ?? -1)) ?? 0) > 0 || context.workspace.holdsForApproval($0) } ?? false }) { context in
+            if let run = context.run { context.workspace.approveAllPins(in: run) }
         })
         register(MenuCommand(id: "review.encode", title: "Encode Correction…", menu: "Review", section: 2, order: 0, shortcut: KeyboardShortcut("e", modifiers: [.command, .shift]),
                              isEnabled: { $0.model.currentProject != nil }) { context in
-            if let project = context.model.currentProject { context.model.openSettings(.learnedRules, in: project) }
+            if let project = context.model.currentProject { context.workspace.openSettings(.learnedRules, in: project) }
         })
         register(MenuCommand(id: "review.copy-link", title: "Copy Link", menu: "Context", section: 3, order: 0,
                              isEnabled: { $0.pin != nil }) { context in
-            if let pin = context.pin { context.model.copyToPasteboard("\(pin.file):\(pin.startLine)-\(pin.endLine)") }
+            if let pin = context.pin { context.workspace.copyToPasteboard("\(pin.file):\(pin.startLine)-\(pin.endLine)") }
         })
     }
 
     private func registerWorkflowCommands() {
         register(MenuCommand(id: "workflow.new", title: "New Workflow…", menu: "Workflow", section: 0, order: 0,
                              isEnabled: { $0.model.currentProject != nil }) { context in
-            guard let id = context.model.currentProject?.id else { return }
+            guard let ref = context.model.currentRef else { return }
             context.model.open(.workflows)
-            context.model.workflowMenuAction = WorkflowMenuAction(project: id, kind: .newWorkflow)
+            context.model.workflowMenuAction = WorkflowMenuAction(project: ref, kind: .newWorkflow)
         })
         register(MenuCommand(id: "workflow.edit", title: "Edit", menu: "Workflow", section: 0, order: 1,
                              isEnabled: { $0.model.currentProject != nil }) { $0.model.open(.workflows) })
         register(MenuCommand(id: "workflow.test-run", title: "Test Run", menu: "Workflow", section: 0, order: 2,
                              isEnabled: { $0.model.currentProject != nil }) { context in
             guard let project = context.model.currentProject, let id = project.id else { return }
-            let config = context.model.config(for: project)
-            let workflow = context.model.workflowEditors[id]?.saved ?? config.workflow(config.preferences.defaultWorkflow ?? "") ?? config.workflows.first
-            if let workflow { context.model.testRun(workflow, in: project) }
+            let config = context.workspace.config(for: project)
+            let workflow = context.workspace.workflowEditors[id]?.saved ?? config.workflow(config.preferences.defaultWorkflow ?? "") ?? config.workflows.first
+            if let workflow { context.workspace.testRun(workflow, in: project) }
         })
         register(MenuCommand(id: "workflow.history", title: "Version History", menu: "Workflow", section: 0, order: 3,
                              isEnabled: { $0.model.currentProject != nil }) { context in
-            guard let id = context.model.currentProject?.id else { return }
+            guard let ref = context.model.currentRef else { return }
             context.model.open(.workflows)
-            context.model.workflowMenuAction = WorkflowMenuAction(project: id, kind: .history)
+            context.model.workflowMenuAction = WorkflowMenuAction(project: ref, kind: .history)
         })
     }
 
@@ -542,6 +552,7 @@ extension CommandRegistry {
 
 struct ContextCommands: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.openWindow) private var openWindow
     let groups: [[String]]
     let target: CommandTarget
@@ -552,7 +563,7 @@ struct ContextCommands: View {
     static let file = [["file.open-editor"], ["file.protect"], ["file.reveal", "file.copy-path"]]
 
     var body: some View {
-        let context = CommandContext(model: model, openWindow: openWindow).with(target)
+        let context = CommandContext(model: model, workspace: workspace, openWindow: openWindow).with(target)
         let groups = groups.map { $0.compactMap(CommandRegistry.shared.command) }.filter { !$0.isEmpty }
         ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
             if index > 0 { Divider() }
@@ -572,6 +583,7 @@ struct ContextCommands: View {
 
 struct PinPromptSheet: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.dismiss) private var dismiss
     let prompt: PinPrompt
     @State private var text = ""
@@ -597,10 +609,10 @@ struct PinPromptSheet: View {
                 Button(prompt.kind == .requestChange ? "Request Change" : "Send") {
                     switch prompt.kind {
                     case .requestChange:
-                        model.setPin(prompt.pin, status: .changeRequested, response: text.isEmpty ? nil : text)
+                        workspace.setPin(prompt.pin, status: .changeRequested, response: text.isEmpty ? nil : text)
                         dismiss()
                     case .askAgent:
-                        if model.askAgent(about: prompt.pin, question: text) { dismiss() } else { result = "Couldn’t reach the agent." }
+                        if workspace.askAgent(about: prompt.pin, question: text) { dismiss() } else { result = "Couldn’t reach the agent." }
                     }
                 }
                 .keyboardShortcut(.defaultAction)

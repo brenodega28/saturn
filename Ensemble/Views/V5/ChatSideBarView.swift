@@ -67,12 +67,13 @@ private struct SideBarTabs: View {
 
 private struct ChatSummaryPane: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let chat: Chat
 
     var body: some View {
-        let stage = model.summary(of: chat)?.stage ?? .idle
-        let workers = model.chatWorkers(chat, in: project)
+        let stage = workspace.summary(of: chat)?.stage ?? .idle
+        let workers = workspace.chatWorkers(chat, in: project)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -84,6 +85,7 @@ private struct ChatSummaryPane: View {
                     HStack(spacing: 8) {
                         ProjectTile(project: project, size: 14)
                         Text(project.name).foregroundStyle(Tokens.text2)
+                        MachineLabel(workspace: workspace, size: 12)
                         HStack(spacing: 5) {
                             Circle().fill(stage.color).frame(width: 6, height: 6).accessibilityHidden(true)
                             Text(stage.title)
@@ -119,16 +121,17 @@ private struct ChatSummaryPane: View {
 
 private struct SideBarWorkerRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let worker: ChatWorker
     let project: Project
     @State private var isHovered = false
 
     var body: some View {
-        let name = model.displayName(of: worker.agent, in: project)
-        Button { model.openAgentSession(worker.agent, in: project) } label: {
+        let name = workspace.displayName(of: worker.agent, in: project)
+        Button { workspace.openAgentSession(worker.agent, in: project) } label: {
             HStack(spacing: 9) {
                 AgentAvatar(
-                    size: 20, appearance: RoleAppearance(role: model.role(for: worker.agent, in: project)),
+                    size: 20, appearance: RoleAppearance(role: workspace.role(for: worker.agent, in: project)),
                     isFailing: worker.state == .failed || worker.state == .stuck
                 )
                 Text(name).foregroundStyle(Tokens.text).lineLimit(1)
@@ -174,12 +177,13 @@ enum ChatLogFilter: String, CaseIterable {
 
 private struct ChatLogPane: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let project: Project
     let chat: Chat
     @State private var filter = ChatLogFilter.all
 
     var body: some View {
-        let entries = model.chatLog(for: chat, in: project).filter(filter.matches)
+        let entries = workspace.chatLog(for: chat, in: project).filter(filter.matches)
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 ForEach(ChatLogFilter.allCases, id: \.self) { option in
@@ -232,13 +236,14 @@ private struct ChatLogPane: View {
 
 private struct ChatLogRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let entry: ChatLogEntry
     let project: Project
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(spacing: 0) {
-                AgentAvatar(size: 20, appearance: RoleAppearance(role: entry.agent.flatMap { model.role(for: $0, in: project) } ?? model.leadRole(in: project)))
+                AgentAvatar(size: 20, appearance: RoleAppearance(role: entry.agent.flatMap { workspace.role(for: $0, in: project) } ?? workspace.leadRole(in: project)))
                 Rectangle().fill(Tokens.hair).frame(width: 2).frame(minHeight: 8, maxHeight: .infinity)
             }
             .frame(width: 20)
@@ -305,7 +310,7 @@ struct ChatLogEntry: Identifiable, Hashable {
     var isCheck = false
 }
 
-extension AppModel {
+extension DaemonWorkspace {
     func chatLog(for chat: Chat, in project: Project) -> [ChatLogEntry] {
         guard let chatID = chat.id else { return [] }
         _ = connection.revision
@@ -344,7 +349,7 @@ extension AppModel {
             if let id = agent.id { agentsByID[id] = agent }
         }
         let runIDs = Set(runs.compactMap(\.id))
-        for log in activityLog.entries where log.level >= .warning && (log.runId.map(runIDs.contains) == true || log.agentId.map { agentsByID[$0] != nil } == true) {
+        for log in app.activityLog.entries where log.level >= .warning && (log.runId.map(runIDs.contains) == true || log.agentId.map { agentsByID[$0] != nil } == true) {
             let agent = log.agentId.flatMap { agentsByID[$0] }
             entries.append(ChatLogEntry(
                 id: "log-\(log.id)", date: log.date, who: agent.map { displayName(of: $0, in: project) } ?? log.source,

@@ -4,6 +4,7 @@ import SwiftUI
 
 struct RunDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let runID: Int64
     let project: Project
     @State private var snapshot: RunDetailSnapshot?
@@ -13,15 +14,15 @@ struct RunDetailView: View {
     static let wideLayoutWidth: CGFloat = 900
 
     var body: some View {
-        let live = model.connection.run(id: runID)
-        let hold = model.connection.holds[runID]
+        let live = workspace.connection.run(id: runID)
+        let hold = workspace.connection.holds[runID]
         let isActive = (live ?? snapshot?.run)?.isActive ?? true
         Group {
             if let snapshot {
                 content(snapshot)
             } else if hasLoaded {
                 EmptyState("This run is gone", message: "It may have been deleted. Go back to the project.") {
-                    Button("Back") { model.closeRunDetail(in: project) }.buttonStyle(.pill)
+                    Button("Back") { workspace.closeRunDetail(in: project) }.buttonStyle(.pill)
                 }
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -45,7 +46,7 @@ struct RunDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     RunDetailHeader(snapshot: snapshot, project: project, reload: reload)
-                    if let hold = model.connection.holds[runID], hold.isChecksExhausted(in: snapshot.workflow) {
+                    if let hold = workspace.connection.holds[runID], hold.isChecksExhausted(in: snapshot.workflow) {
                         ChecksExhaustedCard(run: snapshot.run, project: project, rounds: snapshot.run.checkRounds(at: hold.stepId, in: project), reload: reload)
                     }
                     if isWide {
@@ -67,7 +68,7 @@ struct RunDetailView: View {
     @ViewBuilder
     private func graphCard(_ snapshot: RunDetailSnapshot) -> some View {
         if let graph = snapshot.graph {
-            RunGraphCard(graph: graph, roles: model.config(for: project).roles, workflowName: snapshot.workflow?.displayName)
+            RunGraphCard(graph: graph, roles: workspace.config(for: project).roles, workflowName: snapshot.workflow?.displayName)
         } else {
             Text("The workflow this run started with couldn’t be read.")
                 .font(.system(size: 13))
@@ -95,7 +96,7 @@ struct RunDetailView: View {
     }
 
     private func reload() {
-        snapshot = model.runDetailSnapshot(runID: runID)
+        snapshot = workspace.runDetailSnapshot(runID: runID)
         hasLoaded = true
     }
 }

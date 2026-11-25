@@ -42,13 +42,14 @@ struct RunTimelineView: View {
 
 private struct TimelineRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let entry: RunHistory.Entry
     let snapshot: RunDetailSnapshot
     let project: Project
     @Binding var isExpanded: Bool
 
     var body: some View {
-        let roles = model.config(for: project).roles
+        let roles = workspace.config(for: project).roles
         let agents = snapshot.agents.filter { agent in agent.id.map(entry.agentIDs.contains) == true }
         VStack(alignment: .leading, spacing: 6) {
             Button {
@@ -136,7 +137,7 @@ private struct TimelineRow: View {
     }
 
     private var needsYou: Bool {
-        model.stepNeedsYou(entry.status, in: snapshot.run, agentIDs: entry.agentIDs)
+        workspace.stepNeedsYou(entry.status, in: snapshot.run, agentIDs: entry.agentIDs)
     }
 
     private var outcomeColor: Color {
@@ -168,15 +169,16 @@ private struct HopLine: View {
 
 struct AgentLink: View {
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     let agent: Agent
     let role: RoleDefinition?
     let project: Project
 
     var body: some View {
-        let live = model.connection.session(for: agent)?.agent ?? agent
-        let status = model.displayStatus(of: live)
+        let live = workspace.connection.session(for: agent)?.agent ?? agent
+        let status = workspace.displayStatus(of: live)
         Button {
-            model.openAgentSession(agent, in: project)
+            workspace.openAgentSession(agent, in: project)
         } label: {
             HStack(spacing: 5) {
                 AgentAvatar(size: 16, appearance: RoleAppearance(role: role))

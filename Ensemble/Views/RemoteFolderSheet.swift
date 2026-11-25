@@ -9,6 +9,7 @@ struct RemoteFolderSheet: View {
     }
 
     @Environment(AppModel.self) private var model
+    @Environment(DaemonWorkspace.self) private var workspace
     @Environment(\.dismiss) private var dismiss
     @AppStorage("remoteFolder.lastHost", store: AppDefaults.store) private var lastHost = ""
 
@@ -126,7 +127,7 @@ struct RemoteFolderSheet: View {
         isConnecting = true
         errorMessage = nil
         defer { isConnecting = false }
-        let host = model.remoteHost(destination)
+        let host = workspace.remoteHost(destination)
         do {
             let info = try await host.probe()
             connection = (destination, info)
@@ -148,7 +149,7 @@ struct RemoteFolderSheet: View {
         Task {
             defer { isOpening = false }
             do {
-                try await model.openRemoteFolder(host: connection.destination, path: path)
+                try await model.openOnServer(connection.destination, path: path)
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

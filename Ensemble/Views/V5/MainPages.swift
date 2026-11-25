@@ -3,13 +3,13 @@ import Foundation
 import Observation
 
 enum MainPageKind: Codable, Hashable, Sendable {
-    case chat(chatID: Int64?, projectID: Int64)
-    case terminal(projectID: Int64, directory: String)
-    case code(projectID: Int64, path: String)
-    case tool(MainTool, projectID: Int64?)
-    case run(Int64)
-    case agent(Int64)
-    case spec(path: String, projectID: Int64)
+    case chat(chatID: Int64?, project: ProjectRef)
+    case terminal(project: ProjectRef, directory: String)
+    case code(project: ProjectRef, path: String)
+    case tool(MainTool, project: ProjectRef?)
+    case run(Int64, daemon: DaemonID)
+    case agent(Int64, daemon: DaemonID)
+    case spec(path: String, project: ProjectRef)
 
     var isChat: Bool {
         if case .chat = self { return true }
@@ -19,6 +19,48 @@ enum MainPageKind: Codable, Hashable, Sendable {
     var chatID: Int64? {
         if case .chat(let chatID, _) = self { return chatID }
         return nil
+    }
+
+    var project: ProjectRef? {
+        switch self {
+        case .chat(_, let project), .terminal(let project, _), .code(let project, _), .spec(_, let project): project
+        case .tool(_, let project): project
+        case .run, .agent: nil
+        }
+    }
+
+    var daemon: DaemonID? {
+        switch self {
+        case .run(_, let daemon), .agent(_, let daemon): daemon
+        default: project?.daemon
+        }
+    }
+
+    func shows(chat chatID: Int64, on daemon: DaemonID) -> Bool {
+        self.chatID == chatID && self.daemon == daemon
+    }
+}
+
+private enum LegacyPageKind: Codable, Hashable, Sendable {
+    case chat(chatID: Int64?, projectID: Int64)
+    case terminal(projectID: Int64, directory: String)
+    case code(projectID: Int64, path: String)
+    case tool(MainTool, projectID: Int64?)
+    case run(Int64)
+    case agent(Int64)
+    case spec(path: String, projectID: Int64)
+
+    func tagged(_ daemon: DaemonID) -> MainPageKind {
+        let ref = { ProjectRef(daemon: daemon, id: $0) }
+        return switch self {
+        case .chat(let chatID, let projectID): .chat(chatID: chatID, project: ref(projectID))
+        case .terminal(let projectID, let directory): .terminal(project: ref(projectID), directory: directory)
+        case .code(let projectID, let path): .code(project: ref(projectID), path: path)
+        case .tool(let tool, let projectID): .tool(tool, project: projectID.map(ref))
+        case .run(let id): .run(id, daemon: daemon)
+        case .agent(let id): .agent(id, daemon: daemon)
+        case .spec(let path, let projectID): .spec(path: path, project: ref(projectID))
+        }
     }
 }
 
@@ -45,6 +87,15 @@ final class MainPages {
         var sideBarTab: SideBarTab
     }
 
+    private struct LegacySaved: Codable {
+        var list: PageList<LegacyPageKind>
+        var isSideBarOpen: Bool
+        var sideBarTab: SideBarTab
+    }
+
+    static let storageKey = "pages.all"
+    static let migratedKey = "pages.migratedFromDaemonKeys"
+
     private(set) var list = PageList<MainPageKind>()
     var isSideBarOpen = true {
         didSet { save() }
@@ -52,27 +103,22 @@ final class MainPages {
     var sideBarTab = SideBarTab.summary {
         didSet { save() }
     }
-    @ObservationIgnored private var storageKey: String
+    @ObservationIgnored private let storageKey: String
     @ObservationIgnored var onActivate: ((MainPage?) -> Void)?
     @ObservationIgnored var onClose: ((MainPage) -> Void)?
 
-    init(storageKey: String) {
+    init(storageKey: String = MainPages.storageKey, legacyDaemons: [DaemonID] = []) {
         self.storageKey = storageKey
         load()
+        migrate(legacyDaemons)
     }
 
     var pages: [MainPage] { list.pages }
     var activeID: UUID? { list.activeID }
     var active: MainPage? { list.active }
 
-    func page(showing chatID: Int64) -> MainPage? {
-        pages.first { $0.kind.chatID == chatID }
-    }
-
-    func reload(storageKey: String) {
-        self.storageKey = storageKey
-        load()
-        onActivate?(active)
+    func page(showing chatID: Int64, on daemon: DaemonID) -> MainPage? {
+        pages.first { $0.kind.shows(chat: chatID, on: daemon) }
     }
 
     @discardableResult
@@ -157,6 +203,27 @@ final class MainPages {
         list = saved.map { PageList(pages: $0.list.pages, activeID: $0.list.activeID) } ?? PageList()
         isSideBarOpen = saved?.isSideBarOpen ?? true
         sideBarTab = saved?.sideBarTab ?? .summary
+    }
+
+    private func migrate(_ daemons: [DaemonID]) {
+        let defaults = AppDefaults.store
+        guard !defaults.bool(forKey: Self.migratedKey) else { return }
+        defaults.set(true, forKey: Self.migratedKey)
+        var pages = list.pages
+        var activeID = list.activeID
+        for daemon in daemons {
+            let key = "pages.\(daemon.uuidString.lowercased())"
+            guard let data = defaults.data(forKey: key), let saved = try? JSONDecoder().decode(LegacySaved.self, from: data) else { continue }
+            let migrated = saved.list.pages.map { MainPage(id: $0.id, kind: $0.kind.tagged(daemon)) }
+            pages += migrated.filter { page in !pages.contains { $0.id == page.id || $0.kind == page.kind } }
+            if activeID == nil { activeID = saved.list.activeID }
+            if list.pages.isEmpty, daemons.first == daemon {
+                isSideBarOpen = saved.isSideBarOpen
+                sideBarTab = saved.sideBarTab
+            }
+        }
+        list = PageList(pages: pages, activeID: activeID)
+        save()
     }
 
     private func save() {

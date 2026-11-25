@@ -15,19 +15,21 @@ struct HeldSend: Identifiable, Hashable {
 }
 
 extension AppModel {
+    static let sendHoldSecondsKey = "chat.sendHoldSeconds"
+    static let defaultSendHoldSeconds = 3
+
+    static var sendHoldSeconds: Int {
+        max(AppDefaults.store.object(forKey: sendHoldSecondsKey) as? Int ?? defaultSendHoldSeconds, 0)
+    }
+}
+
+extension DaemonWorkspace {
     func chatLeadRole(in project: Project) -> RoleDefinition? {
         leadRole(in: project)
     }
 
-    static let sendHoldSecondsKey = "chat.sendHoldSeconds"
-    static let defaultSendHoldSeconds = 3
-
-    var sendHoldSeconds: Int {
-        max(AppDefaults.store.object(forKey: Self.sendHoldSecondsKey) as? Int ?? Self.defaultSendHoldSeconds, 0)
-    }
-
     func holdSend(_ message: PendingMessage, to target: PendingSendTarget, deliver: @escaping @MainActor (PendingMessage) -> Void) {
-        pendingSends.schedule(message, for: target, delay: TimeInterval(sendHoldSeconds), deliver: deliver)
+        pendingSends.schedule(message, for: target, delay: TimeInterval(AppModel.sendHoldSeconds), deliver: deliver)
     }
 
     func heldSends(for target: PendingSendTarget?) -> [HeldSend] {

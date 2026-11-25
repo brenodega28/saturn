@@ -1,7 +1,7 @@
 import EnsembleCore
 import Foundation
 
-extension AppModel {
+extension DaemonWorkspace {
     func reviewableRuns(in project: Project) -> [Run] {
         guard let id = project.id else { return [] }
         _ = connection.revision
@@ -11,7 +11,7 @@ extension AppModel {
     func openChanges(for run: Run) {
         guard let runID = run.id else { return }
         changesRunSelections[run.projectId] = runID
-        showPage(.tool(.changes, projectID: run.projectId))
+        showPage(.tool(.changes, project: ref(run.projectId)))
     }
 
     func holdsForApproval(_ run: Run) -> Bool {

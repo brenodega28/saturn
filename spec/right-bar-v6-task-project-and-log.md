@@ -1,6 +1,6 @@
 ---
 title: "Right bar v6: Task, Project and Log"
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: SwiftUI Dev, reason: "Builds the whole right bar in ChatSideBarView.swift and the files around it. It's one task because all three tabs share one header and one model."}
@@ -31,14 +31,14 @@ Replace the current chat side bar (`ChatSideBar` in Saturn/Views/V5/ChatSideBarV
 
 ## Acceptance criteria
 
-- [ ] Opening a chat shows the new right bar with Task, Project and Log icon tabs; the old Summary/Log folder tabs and the 'This chat only' label are gone
+- [x] Opening a chat shows the new right bar with Task, Project and Log icon tabs; the old Summary/Log folder tabs and the 'This chat only' label are gone
 - [ ] The bar's background, borders, header heights, section header style, row height, corner radius and hover look match ChatSidebar (the left bar), side by side
-- [ ] The selected tab survives an app restart; a saved `summary` value opens on Task
+- [x] The selected tab survives an app restart; a saved `summary` value opens on Task
 - [ ] Task: shows the chat's status pill, title, the stage bar marking the current stage, the branch picker (switching the worktree works as before), the Run/Stop row with Open in browser, the output that expands, Changes with the file list linking to the Changes screen, the Checks list that folds, and Workers with their state; Review changes opens the Changes screen
 - [ ] Project: shows the project tile, name, machine and path, stat tiles computed from real data (active chats, workers running, needs you, finished), the project's agents with their model, role and state, and Repository facts (default branch, remote, run command, instructions file); Manage opens the Agents screen
-- [ ] Log: the filters All, Lead, Workers and Tools narrow the entries correctly; entries show an avatar, name, tag chip, time and text, plus a mono detail block when one is present; an empty filter shows 'Nothing logged for this filter yet.'
+- [x] Log: the filters All, Lead, Workers and Tools narrow the entries correctly; entries show an avatar, name, tag chip, time and text, plus a mono detail block when one is present; an empty filter shows 'Nothing logged for this filter yet.'
 - [ ] Hide side bar hides the bar and the existing toggle shows it again
-- [ ] Every control has an accessibility label; the code builds with no new warnings; the existing unit tests pass, and new tests cover the SideBarTab migration and the log filter matching
+- [x] Every control has an accessibility label; the code builds with no new warnings; the existing unit tests pass, and new tests cover the SideBarTab migration and the log filter matching
 
 ## Verification
 

@@ -1,6 +1,6 @@
 ---
 title: "Spec card with Lavish link, Approve and Request changes"
-status: in-progress
+status: done
 version: 1
 workers:
   - {role: builder, name: Swift Dev, reason: "One builder: the card, approve flow, tunnel and read_chat all touch the same spec/daemon plumbing and can't be tested apart"}
@@ -32,16 +32,16 @@ Today, after the lead calls draft_spec, the only way to reach the spec is a tab 
 
 ## Acceptance criteria
 
-- [ ] After every draft_spec call, a spec card appears in the request chat without the user doing anything, both for local chats and for chats on another machine's daemon
+- [x] After every draft_spec call, a spec card appears in the request chat without the user doing anything, both for local chats and for chats on another machine's daemon
 - [ ] The card's 'Open spec' link opens the Spec tab showing the live Lavish page with annotation controls, for local and other-machine daemons
-- [ ] When Lavish can't start (no Node, error), the card shows the reason and the draft_spec tool result tells the lead the page did not open; no error is silently swallowed
-- [ ] Approve marks the spec approved and immediately starts a feature-delivery run for the request, with the spec committed to the run branch exactly as Start does today; the card then shows the run as started
-- [ ] Request changes opens or focuses the Spec tab on the Lavish page; feedback sent there still reaches the lead as spec feedback
-- [ ] Re-running draft_spec adds a new card and marks earlier cards for that request as superseded (no Approve/Request changes buttons)
-- [ ] For a daemon on another Mac, the Lavish port is forwarded over SSH to 127.0.0.1 only, and the tunnel is closed when the review ends or the connection drops
-- [ ] read_chat with request_id and daemon from an ensemble://chat/<id>?daemon=<uuid> link reads that chat when that daemon is connected, and gives a clear error otherwise
-- [ ] `swift test --package-path Packages/EnsembleCore` passes with new tests for the spec card message, ApproveSpec, the error surfacing and read_chat's daemon routing; the app builds with `xcodegen generate && xcodebuild -scheme Ensemble build`
-- [ ] No unnecessary code comments; short, descriptive names
+- [x] When Lavish can't start (no Node, error), the card shows the reason and the draft_spec tool result tells the lead the page did not open; no error is silently swallowed
+- [x] Approve marks the spec approved and immediately starts a feature-delivery run for the request, with the spec committed to the run branch exactly as Start does today; the card then shows the run as started
+- [x] Request changes opens or focuses the Spec tab on the Lavish page; feedback sent there still reaches the lead as spec feedback
+- [x] Re-running draft_spec adds a new card and marks earlier cards for that request as superseded (no Approve/Request changes buttons)
+- [x] For a daemon on another Mac, the Lavish port is forwarded over SSH to 127.0.0.1 only, and the tunnel is closed when the review ends or the connection drops
+- [x] read_chat with request_id and daemon from an ensemble://chat/<id>?daemon=<uuid> link reads that chat when that daemon is connected, and gives a clear error otherwise
+- [x] `swift test --package-path Packages/EnsembleCore` passes with new tests for the spec card message, ApproveSpec, the error surfacing and read_chat's daemon routing; the app builds with `xcodegen generate && xcodebuild -scheme Ensemble build`
+- [x] No unnecessary code comments; short, descriptive names
 
 ## Verification
 

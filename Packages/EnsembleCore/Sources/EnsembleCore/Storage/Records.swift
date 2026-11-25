@@ -155,7 +155,6 @@ public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
     public var endedAt: Date?
     public var title: String
     public var workflowSnapshot: String
-    public var budgetUSD: Double?
     public var endAction: String?
     public var lastError: String?
     public var brief: String?
@@ -170,7 +169,7 @@ public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
         id: Int64? = nil, projectId: Int64, taskId: Int64, workflow: String, workflowVersion: String? = nil,
         currentStep: String? = nil, status: RunStatus, outcome: String? = nil, costUSD: Double = 0,
         startedAt: Date, endedAt: Date? = nil, title: String = "", workflowSnapshot: String = "",
-        budgetUSD: Double? = nil, endAction: String? = nil, lastError: String? = nil,
+        endAction: String? = nil, lastError: String? = nil,
         brief: String? = nil, deliveryBranch: String? = nil, baseBranch: String? = nil, mergedAt: Date? = nil, pushedAt: Date? = nil,
         linesChanged: Int? = nil, filesChanged: Int? = nil
     ) {
@@ -183,7 +182,6 @@ public struct Run: Codable, Sendable, Hashable, Identifiable, FetchableRecord, M
         self.pushedAt = pushedAt
         self.title = title
         self.workflowSnapshot = workflowSnapshot
-        self.budgetUSD = budgetUSD
         self.endAction = endAction
         self.lastError = lastError
         self.id = id

@@ -23,8 +23,4 @@ extension AgentRuntime {
         }
         return updated
     }
-
-    public func checkMonthlyBudget(for agent: Agent, at date: Date = .now) throws {
-        try database.checkProjectBudget(projectId: agent.projectId, at: date)
-    }
 }

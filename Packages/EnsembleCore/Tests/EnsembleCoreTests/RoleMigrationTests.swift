@@ -122,7 +122,7 @@ import Yams
         let workflow = try YAMLDecoder().decode(WorkflowDefinition.self, from: try read(".ensemble/workflows/feature-delivery.yaml", in: root))
         #expect(workflow.steps.map(\.agent) == [.lead, .builder, .builder, .checker, .checker])
         #expect(workflow.steps.map(\.model) == ["opus", "opus", "claude-sonnet-5-5", nil, nil])
-        #expect(workflow.steps.map(\.budget) == [nil, 4, 1, nil, nil])
+        #expect(!(try read(".ensemble/workflows/feature-delivery.yaml", in: root)).contains("budget"))
         #expect(workflow.steps.allSatisfy { $0.legacyRole == nil })
         let yaml = try read(".ensemble/workflows/feature-delivery.yaml", in: root)
         #expect(!yaml.contains("role:"))

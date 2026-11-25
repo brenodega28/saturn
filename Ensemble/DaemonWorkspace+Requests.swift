@@ -274,8 +274,7 @@ extension DaemonWorkspace {
         case .allow: answerPermission(message, decision: .allow)
         case .deny: answerPermission(message, decision: .deny)
         case .approve:
-            guard let project = project(withID: message.projectId) else { return }
-            startProposal(message, in: project)
+            startProposal(message)
         }
     }
 }

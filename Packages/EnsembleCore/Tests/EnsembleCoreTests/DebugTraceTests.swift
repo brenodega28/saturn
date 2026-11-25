@@ -21,7 +21,7 @@ import Testing
         let logs = root.appending(path: "debug-logs")
         #expect(FileManager.default.fileExists(atPath: logs.appending(path: "README.md").path))
         let readme = try String(contentsOf: logs.appending(path: "README.md"), encoding: .utf8)
-        for type in ["launch", "session_init", "raw", "turn_summary", "lifecycle", "chat_message", "run_started", "step_started", "step_finished", "condition_evaluated", "routed", "hold", "hold_resolved", "question_relayed", "question_answered", "step_failed", "failure_action", "budget", "run_finished"] {
+        for type in ["launch", "session_init", "raw", "turn_summary", "lifecycle", "chat_message", "run_started", "step_started", "step_finished", "condition_evaluated", "routed", "hold", "hold_resolved", "question_relayed", "question_answered", "step_failed", "failure_action", "run_finished"] {
             #expect(readme.contains("`\(type)`"), "README misses \(type)")
         }
 

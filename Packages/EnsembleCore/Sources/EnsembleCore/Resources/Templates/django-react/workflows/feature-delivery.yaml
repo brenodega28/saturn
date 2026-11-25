@@ -4,7 +4,6 @@ description: The Lead specs the work for builders with the Django and React skil
 trigger:
   sources: [chat]
   labels: [feature]
-budget: 20
 steps:
   - id: plan
     type: agent
@@ -12,7 +11,6 @@ steps:
     agent: lead
     model: opus
     instructions: Plan one task by default and give its builder the django-developer skill, the react-developer skill or both. Split backend and frontend into separate tasks only when each works and can be tested on its own, with neither needing the other's output. Write a short spec unless the request fits in one sentence. Submit the plan.
-    budget: 2
     next: build
   - id: build
     type: spawn

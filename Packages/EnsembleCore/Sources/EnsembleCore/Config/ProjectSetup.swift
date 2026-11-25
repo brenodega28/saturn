@@ -117,9 +117,6 @@ public struct ProjectSetupPlan: Sendable, Hashable {
     public var endAction: EndAction
     public var approvePlans: Bool
     public var checks: ChecksConfig?
-    public var weeklyBudgetUSD: Double?
-    public var monthlyBudgetUSD: Double?
-    public var perRunBudgetUSD: Double?
     public var maxConcurrentAgents: Int
     public var testsWithoutAsking: Bool
     public var networkWithoutAsking: Bool
@@ -130,7 +127,7 @@ public struct ProjectSetupPlan: Sendable, Hashable {
         baseBranch: String = "main", branchPrefix: String = ProjectPreferences.defaultBranchPrefix,
         skills: [String] = [], workflows: [WorkflowDefinition] = [], defaultWorkflow: String = "feature-delivery",
         endAction: EndAction = .merge, approvePlans: Bool = true, checks: ChecksConfig? = nil,
-        weeklyBudgetUSD: Double? = 60, monthlyBudgetUSD: Double? = 200, perRunBudgetUSD: Double? = 8, maxConcurrentAgents: Int = 4,
+        maxConcurrentAgents: Int = 4,
         testsWithoutAsking: Bool = true, networkWithoutAsking: Bool = false, installsWithoutAsking: Bool = false, docs: [String] = []
     ) {
         self.baseBranch = baseBranch
@@ -141,9 +138,6 @@ public struct ProjectSetupPlan: Sendable, Hashable {
         self.endAction = endAction
         self.approvePlans = approvePlans
         self.checks = checks
-        self.weeklyBudgetUSD = weeklyBudgetUSD
-        self.monthlyBudgetUSD = monthlyBudgetUSD
-        self.perRunBudgetUSD = perRunBudgetUSD
         self.maxConcurrentAgents = maxConcurrentAgents
         self.testsWithoutAsking = testsWithoutAsking
         self.networkWithoutAsking = networkWithoutAsking
@@ -180,8 +174,6 @@ public struct ProjectSetupPlan: Sendable, Hashable {
 
     public func settings(updating settings: ProjectSettings) -> ProjectSettings {
         var settings = settings
-        settings.weeklyBudgetUSD = weeklyBudgetUSD
-        settings.monthlyBudgetUSD = monthlyBudgetUSD
         settings.maxConcurrentAgents = max(1, maxConcurrentAgents)
         return settings
     }
@@ -190,7 +182,6 @@ public struct ProjectSetupPlan: Sendable, Hashable {
         workflows.map { workflow in
             var workflow = workflow
             workflow.end.action = endAction
-            if let perRunBudgetUSD { workflow.budget = perRunBudgetUSD }
             return workflow
         }
     }
@@ -246,7 +237,6 @@ public enum ProjectSetup {
     trigger:
       sources: [chat]
       labels: [hotfix]
-    budget: 5
     steps:
       - id: build
         type: agent

@@ -2,13 +2,9 @@ import Foundation
 
 public struct DaemonSettings: Codable, Sendable, Hashable {
     public var providerMode: ProviderMode?
-    public var globalMonthlyBudgetUSD: Double?
-    public var globalWeeklyBudgetUSD: Double?
 
-    public init(providerMode: ProviderMode? = nil, globalMonthlyBudgetUSD: Double? = nil, globalWeeklyBudgetUSD: Double? = nil) {
+    public init(providerMode: ProviderMode? = nil) {
         self.providerMode = providerMode
-        self.globalMonthlyBudgetUSD = globalMonthlyBudgetUSD
-        self.globalWeeklyBudgetUSD = globalWeeklyBudgetUSD
     }
 }
 

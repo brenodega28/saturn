@@ -420,20 +420,6 @@ public enum RunCommands {
         }
     }
 
-    public struct ResolveBudget: DaemonCommand {
-        public static let name = "run.resolveBudget"
-        public var runID: Int64
-        public var proceed: Bool
-        public var raiseRunBudgetTo: Double?
-        public var requestID: Int64?
-        public init(runID: Int64, proceed: Bool, raiseRunBudgetTo: Double? = nil, requestID: Int64? = nil) {
-            self.runID = runID
-            self.proceed = proceed
-            self.raiseRunBudgetTo = raiseRunBudgetTo
-            self.requestID = requestID
-        }
-    }
-
     public struct ResolveFailure: DaemonCommand {
         public static let name = "run.resolveFailure"
         public var runID: Int64
@@ -698,16 +684,6 @@ public enum SettingsCommands {
         public typealias Response = DaemonEnvironment
         public var mode: ProviderMode
         public init(mode: ProviderMode) { self.mode = mode }
-    }
-
-    public struct SetBudgets: DaemonCommand {
-        public static let name = "settings.setBudgets"
-        public var monthlyUSD: Double?
-        public var weeklyUSD: Double?
-        public init(monthlyUSD: Double?, weeklyUSD: Double?) {
-            self.monthlyUSD = monthlyUSD
-            self.weeklyUSD = weeklyUSD
-        }
     }
 
     public struct Get: DaemonCommand {

@@ -32,19 +32,6 @@ struct HoldCard: View {
                     reload: reload
                 ) { model, continueOnce in workspace.resolveLoopLimit(run, continueOnce: continueOnce) }
             }
-        case .runBudget:
-            DecisionCard(title: hold.message, detail: timeline.holdItem?.body, isStuck: true) {
-                RaiseBudgetControls(run: run, reload: reload)
-            }
-        case .stepBudget:
-            DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
-                DecisionButtons(
-                    primary: ("Keep going", "Keep the step’s result and carry on"),
-                    secondary: ("Stop here", "Fail the run here"),
-                    failureTitle: "Couldn’t resolve the budget",
-                    reload: reload
-                ) { model, proceed in workspace.resolveBudget(run, proceed: proceed) }
-            }
         case .gates:
             DecisionCard(title: hold.message, detail: timeline.holdItem?.body) {
                 DecisionButtons(
@@ -116,40 +103,6 @@ private struct DecisionButtons: View {
     private func decide(_ choice: Bool) {
         resolve(model, choice)
         reload()
-    }
-}
-
-private struct RaiseBudgetControls: View {
-    @Environment(AppModel.self) private var model
-    @Environment(DaemonWorkspace.self) private var workspace
-    let run: Run
-    let reload: () -> Void
-    @State private var budget: Double?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text("New budget").font(.system(size: 12.5)).foregroundStyle(Theme.secondaryText)
-            TextField("Budget", value: $budget, format: .currency(code: "USD"))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 110)
-                .accessibilityLabel("New run budget in dollars")
-            Button("Raise Budget") {
-                workspace.resolveBudget(run, proceed: true, raiseRunBudgetTo: budget)
-                reload()
-            }
-            .buttonStyle(PillButtonStyle(.primary, height: 30))
-            .disabled((budget ?? 0) <= run.costUSD)
-            .help("Raise the run’s budget and continue")
-            Button("Stop") {
-                workspace.resolveBudget(run, proceed: false)
-                reload()
-            }
-            .buttonStyle(PillButtonStyle(height: 30))
-            .help("Fail the run here")
-        }
-        .onAppear {
-            if budget == nil { budget = ((max(run.budgetUSD ?? 0, run.costUSD) * 1.5) * 100).rounded() / 100 }
-        }
     }
 }
 

@@ -113,7 +113,6 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Decodable {
     public var editsCode: Bool
     public var permissionProfile: String
     public var canSpawn: Bool
-    public var budgetPerRun: Double?
 
     public init(
         id: String,
@@ -128,8 +127,7 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Decodable {
         docs: [String] = [],
         editsCode: Bool = true,
         permissionProfile: String = "default",
-        canSpawn: Bool = false,
-        budgetPerRun: Double? = nil
+        canSpawn: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -144,7 +142,6 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Decodable {
         self.editsCode = editsCode
         self.permissionProfile = permissionProfile
         self.canSpawn = canSpawn
-        self.budgetPerRun = budgetPerRun
     }
 
     enum CodingKeys: String, CodingKey {
@@ -152,7 +149,6 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Decodable {
         case editsCode = "edits_code"
         case permissionProfile = "permission_profile"
         case canSpawn = "can_spawn"
-        case budgetPerRun = "budget_per_run"
     }
 
     public init(from decoder: Decoder) throws {
@@ -170,7 +166,6 @@ public struct RoleDefinition: Sendable, Hashable, Identifiable, Decodable {
         self.editsCode = try container.decodeIfPresent(Bool.self, forKey: .editsCode) ?? true
         self.permissionProfile = try container.decodeIfPresent(String.self, forKey: .permissionProfile) ?? "default"
         self.canSpawn = try container.decodeIfPresent(Bool.self, forKey: .canSpawn) ?? false
-        self.budgetPerRun = try container.decodeIfPresent(Double.self, forKey: .budgetPerRun)
     }
 
     public var kind: AgentKind { AgentKind.of(self) }

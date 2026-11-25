@@ -95,8 +95,6 @@ extension HoldReason {
         case .planApproval: "Waiting for plan approval"
         case .approval: "Waiting for your approval"
         case .loopLimit: "Loop limit reached"
-        case .stepBudget: "Step went over budget"
-        case .runBudget: "Run reached its budget"
         case .stepFailed: "Step failed"
         case .timedOut: "Step timed out"
         case .gates: "Gate findings"

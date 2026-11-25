@@ -4,7 +4,6 @@ description: One builder builds, checks and gates verify it, a checker reviews f
 trigger:
   sources: [chat]
   labels: [small]
-budget: 5
 steps:
   - id: build
     type: agent

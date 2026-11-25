@@ -71,7 +71,7 @@ enum DebugTraceReadme {
 
     ## Run events (runs/*/trace.jsonl)
 
-    - `run_started`: `workflow`, `workflowVersion`, `title`, `taskId`, `projectId`, `budgetUSD`, `endAction`,
+    - `run_started`: `workflow`, `workflowVersion`, `title`, `taskId`, `projectId`, `endAction`,
       `steps`, `firstStep`, `briefHash`, `briefPreview`.
     - `step_started`: `kind` (agent, spawn, condition, approval, notify, end), `role`, `iteration`, `attempt`,
       `start` (fresh, retry, resume), `status`, and `input` (inline JSON) or `inputHash` + `inputLength`. The input
@@ -88,14 +88,12 @@ enum DebugTraceReadme {
     - `routed`: `from`, `to`, `outcome`, `isLoopBack`, `loopCount` (times this route was taken), `maxLoops`,
       `nextIteration`, `feedback` (what a loop-back sends to the earlier step).
     - `hold`: the run waits for the user and a chat request was created. `reason` (plan_approval, approval,
-      loop_limit, step_budget, run_budget, step_failed, timed_out), `requestKind`, `requestId`, `outcome`, `title`,
+      loop_limit, step_failed, timed_out), `requestKind`, `requestId`, `outcome`, `title`,
       `body`.
     - `chat_request`: a chat request created without holding the run (notify steps). `kind`, `title`, `body`.
     - `hold_resolved`: the user answered a hold. `reason`, `decision` (approved, rejected, changes_requested,
       continue, retry, fail), `response` (the user's text, such as a rejection note or change request), `waitMS`
       (since the inbox item was created), `requestId`.
-    - `budget`: `event` exceeded (with `runCostUSD`, `runBudgetUSD`) or decision (`proceed`, `previousBudgetUSD`,
-      `newBudgetUSD`, `runCostUSD`).
     - `step_failed`: `error`, `errorType`, `onFailure` (the step's setting), `attempt`.
     - `failure_action`: what the engine did next: `action` retry, fail, ask, or ask_after_timeout.
     - `question_relayed`: an agent called ask_human. `target` lead (batched to the request lead) or user (inbox),

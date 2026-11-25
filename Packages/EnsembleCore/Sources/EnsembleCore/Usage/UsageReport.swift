@@ -51,7 +51,7 @@ public enum UsagePeriod: String, CaseIterable, Sendable, Identifiable {
     public func start(at date: Date, calendar: Calendar = .current) -> Date? {
         switch self {
         case .week: calendar.dateInterval(of: .weekOfYear, for: date)?.start
-        case .month: BudgetMonth.start(of: date, calendar: calendar)
+        case .month: calendar.dateInterval(of: .month, for: date)?.start
         case .allTime: nil
         }
     }

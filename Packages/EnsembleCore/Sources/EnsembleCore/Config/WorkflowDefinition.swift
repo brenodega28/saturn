@@ -8,7 +8,6 @@ public struct WorkflowDefinition: Sendable, Hashable, Identifiable, Codable {
     public var version: Int
     public var description: String
     public var trigger: WorkflowTrigger
-    public var budget: Double?
     public var steps: [WorkflowStep]
     public var end: WorkflowEnd
 
@@ -18,7 +17,6 @@ public struct WorkflowDefinition: Sendable, Hashable, Identifiable, Codable {
         version: Int = 1,
         description: String = "",
         trigger: WorkflowTrigger = WorkflowTrigger(),
-        budget: Double? = nil,
         steps: [WorkflowStep],
         end: WorkflowEnd = WorkflowEnd()
     ) {
@@ -27,13 +25,12 @@ public struct WorkflowDefinition: Sendable, Hashable, Identifiable, Codable {
         self.version = version
         self.description = description
         self.trigger = trigger
-        self.budget = budget
         self.steps = steps
         self.end = end
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, version, description, trigger, budget, steps, end
+        case name, version, description, trigger, steps, end
     }
 
     public init(from decoder: Decoder) throws {
@@ -43,7 +40,6 @@ public struct WorkflowDefinition: Sendable, Hashable, Identifiable, Codable {
         self.version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         self.description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
         self.trigger = try container.decodeIfPresent(WorkflowTrigger.self, forKey: .trigger) ?? WorkflowTrigger()
-        self.budget = try container.decodeIfPresent(Double.self, forKey: .budget)
         self.steps = try container.decode([WorkflowStep].self, forKey: .steps)
         self.end = try container.decodeIfPresent(WorkflowEnd.self, forKey: .end) ?? WorkflowEnd()
     }
@@ -54,7 +50,6 @@ public struct WorkflowDefinition: Sendable, Hashable, Identifiable, Codable {
         try container.encode(version, forKey: .version)
         if !description.isEmpty { try container.encode(description, forKey: .description) }
         try container.encode(trigger, forKey: .trigger)
-        try container.encodeNumber(budget, forKey: .budget)
         try container.encode(steps, forKey: .steps)
         try container.encode(end, forKey: .end)
     }
@@ -180,7 +175,6 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
     public var condition: StepCondition?
     public var message: String?
     public var timeoutMinutes: Int?
-    public var budget: Double?
     public var onFailure: FailureAction
     public var next: String?
     public var routes: [String: WorkflowRoute]
@@ -202,7 +196,6 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         condition: StepCondition? = nil,
         message: String? = nil,
         timeoutMinutes: Int? = nil,
-        budget: Double? = nil,
         onFailure: FailureAction = .ask,
         next: String? = nil,
         routes: [String: WorkflowRoute] = [:],
@@ -223,7 +216,6 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         self.condition = condition
         self.message = message
         self.timeoutMinutes = timeoutMinutes
-        self.budget = budget
         self.onFailure = onFailure
         self.next = next
         self.routes = routes
@@ -231,7 +223,7 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, type, title, agent, model, role, instructions, checks, condition, message, budget, next, routes, position
+        case id, type, title, agent, model, role, instructions, checks, condition, message, next, routes, position
         case maxAgents = "max_agents"
         case maxRounds = "max_rounds"
         case testFirst = "test_first"
@@ -259,7 +251,6 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         self.condition = try container.decodeIfPresent(StepCondition.self, forKey: .condition)
         self.message = try container.decodeIfPresent(String.self, forKey: .message)
         self.timeoutMinutes = try container.decodeIfPresent(Int.self, forKey: .timeoutMinutes)
-        self.budget = try container.decodeIfPresent(Double.self, forKey: .budget)
         self.onFailure = try container.decodeIfPresent(FailureAction.self, forKey: .onFailure) ?? .ask
         self.next = try container.decodeIfPresent(String.self, forKey: .next)
         self.routes = try container.decodeIfPresent([String: WorkflowRoute].self, forKey: .routes) ?? [:]
@@ -283,7 +274,6 @@ public struct WorkflowStep: Sendable, Hashable, Identifiable, Codable {
         try container.encodeIfPresent(condition, forKey: .condition)
         try container.encodeIfPresent(message, forKey: .message)
         try container.encodeIfPresent(timeoutMinutes, forKey: .timeoutMinutes)
-        try container.encodeNumber(budget, forKey: .budget)
         if onFailure != .ask { try container.encode(onFailure, forKey: .onFailure) }
         try container.encodeIfPresent(next, forKey: .next)
         if !routes.isEmpty { try container.encode(routes, forKey: .routes) }

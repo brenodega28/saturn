@@ -277,9 +277,6 @@ public enum DryRun {
         case .loopLimit:
             notes.append("“\(title)” hit its loop limit; the run stops here.")
             try engine.resolveLoopLimit(run, continueOnce: false)
-        case .stepBudget, .runBudget:
-            notes.append("Budget check at “\(title)” passed automatically.")
-            try engine.resolveBudget(run, proceed: true)
         case .stepFailed, .timedOut:
             notes.append(hold.message)
             try engine.resolveFailure(run, retry: false)

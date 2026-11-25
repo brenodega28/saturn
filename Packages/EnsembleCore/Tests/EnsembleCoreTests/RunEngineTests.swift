@@ -207,54 +207,23 @@ import Testing
         #expect(try h.database.chatRequests(runId: id).map(\.status) == [.answered])
     }
 
-    @Test func runBudgetStopsAndAsksBeforeSpendingMore() async throws {
+    @Test func expensiveRunsKeepGoingWithoutAsking() async throws {
         let h = try H.make()
         defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "cheap", name: "Cheap", budget: 1, steps: [
+        let workflow = WorkflowDefinition(id: "pricey", name: "Pricey", steps: [
             WorkflowStep(id: "one", type: .agent, agent: .builder),
             WorkflowStep(id: "two", type: .agent, agent: .builder),
-            WorkflowStep(id: "three", type: .agent, agent: .builder),
         ])
-        h.driver.script("one", H.done(cost: 0.6))
-        h.driver.script("two", H.done(cost: 0.6))
-        h.driver.script("three", H.done(cost: 0.6))
+        h.driver.script("one", H.done(cost: 150))
+        h.driver.script("two", H.done(cost: 150))
 
         let id = try await h.start(workflow)
-
-        let hold = try #require(try h.hold(id))
-        #expect(hold.reason == .runBudget)
-        #expect(hold.stepId == "two")
-        #expect(hold.outcome == StepOutcome.done)
-        #expect(h.driver.calledSteps == ["one", "two"])
-        #expect(try h.run(id).costUSD == 1.2)
-        #expect(h.driver.agentCalls.last?.runBudgetRemainingUSD == 0.4)
-        #expect(try h.database.chatRequests(runId: id).last?.kind == .budget)
-
-        try h.engine.resolveBudget(try h.run(id), proceed: true, raiseRunBudgetTo: 5)
         await h.settle(id)
 
+        #expect(try h.hold(id) == nil)
         #expect(try h.run(id).status == .succeeded)
-        #expect(try h.run(id).budgetUSD == 5)
-        #expect(h.driver.calledSteps == ["one", "two", "three"])
-    }
-
-    @Test func stepBudgetOverrunCanFailTheRun() async throws {
-        let h = try H.make()
-        defer { h.cleanUp() }
-        let workflow = WorkflowDefinition(id: "capped", name: "Capped", steps: [
-            WorkflowStep(id: "build", type: .agent, agent: .builder, budget: 1),
-            WorkflowStep(id: "after", type: .agent, agent: .builder),
-        ])
-        h.driver.script("build", H.done(cost: 3))
-
-        let id = try await h.start(workflow)
-        #expect(try h.hold(id)?.reason == .stepBudget)
-        #expect(h.driver.agentCalls.first?.stepBudgetUSD == 1)
-
-        try h.engine.resolveBudget(try h.run(id), proceed: false)
-
-        #expect(try h.run(id).status == .failed)
-        #expect(h.driver.calledSteps == ["build"])
+        #expect(try h.run(id).costUSD == 300)
+        #expect(h.driver.calledSteps == ["one", "two"])
     }
 
     @Test func approvalRejectionLoopsBackWithTheNote() async throws {
@@ -510,7 +479,6 @@ import Testing
 
         let run = try h.run(id)
         #expect(run.workflowVersion == "1")
-        #expect(run.budgetUSD == 5)
         #expect(run.endAction == "merge")
         let snapshot = try h.engine.workflow(for: run)
         #expect(snapshot.id == "small-task")

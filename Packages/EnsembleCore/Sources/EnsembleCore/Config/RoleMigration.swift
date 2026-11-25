@@ -87,7 +87,6 @@ public enum RoleMigration {
                 if let role = roles[roleID] {
                     kind = role.kind
                     if step.model == nil { step.model = role.model }
-                    if step.budget == nil, let budget = role.budgetPerRun { step.budget = budget }
                 } else {
                     kind = AgentKind.guessing(roleID: roleID)
                     if AgentKind(rawValue: roleID) == nil {

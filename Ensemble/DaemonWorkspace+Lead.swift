@@ -200,18 +200,12 @@ extension DaemonWorkspace {
         }
     }
 
-    func startProposal(_ proposal: LeadMessage, in project: Project) {
+    func startProposal(_ proposal: LeadMessage) {
         if (try? database.task(id: proposal.taskId))?.isClosed == true {
             alert = AppAlert(title: "Couldn’t start the run", message: "This request is closed. Send a message to reopen it first.")
             return
         }
         guard let messageID = proposal.id else { return }
-        do {
-            try ensureWithinBudget(project)
-        } catch {
-            alert = AppAlert(title: "Couldn’t start the run", message: error.localizedDescription)
-            return
-        }
         dispatch("Couldn’t start the run", ChatCommands.StartProposal(messageID: messageID))
         leadChatRevision += 1
     }

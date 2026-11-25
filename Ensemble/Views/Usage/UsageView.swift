@@ -6,9 +6,6 @@ struct UsageView: View {
     @Environment(AppModel.self) private var model
     @Environment(DaemonWorkspace.self) private var workspace
     @AppStorage("usage.period", store: AppDefaults.store) private var period: UsagePeriod = .month
-    @AppStorage(AppModel.globalMonthlyBudgetKey, store: AppDefaults.store) private var globalBudget: Double = 0
-    @AppStorage(AppModel.globalWeeklyBudgetKey, store: AppDefaults.store) private var globalWeeklyBudget: Double = 0
-    @AppStorage("usage.budgetPeriod", store: AppDefaults.store) private var budgetPeriod: BudgetPeriodKind = .week
     @AppStorage(AppModel.usageResetPointKey, store: AppDefaults.store) private var usageResetPoint: Double = 0
     @State private var isConfirmingReset = false
 
@@ -26,7 +23,7 @@ struct UsageView: View {
                     if model.providerMode == .claudeSignIn {
                         estimateNote
                     }
-                    budgets
+                    spendWarningNote
                     breakdownHeader
                     if let report, !report.byProject.isEmpty {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
@@ -50,7 +47,7 @@ struct UsageView: View {
     private func totals(_ totals: UsageTotals) -> some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
             StatTile(title: "This week", value: totals.weekUSD)
-            StatTile(title: "This month", value: totals.monthUSD, budget: globalBudget > 0 ? globalBudget : nil, budgetSpent: model.monthlySpend)
+            StatTile(title: "This month", value: totals.monthUSD)
             StatTile(title: "All time", value: totals.allTimeUSD)
         }
     }
@@ -68,14 +65,14 @@ struct UsageView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("The This week and This month totals start counting from now. Usage history, all-time spend, breakdowns and budgets are unaffected, and you can undo this.")
+                Text("The This week and This month totals start counting from now. Usage history, all-time spend and breakdowns are unaffected, and you can undo this.")
             }
     }
 
     private func resetNote(_ resetPoint: Date) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "arrow.counterclockwise").foregroundStyle(Theme.secondaryText).accessibilityHidden(true)
-            Text("This week and this month are counting since \(Text(resetPoint, format: .relative(presentation: .named))). Budgets still count the whole month.")
+            Text("This week and this month are counting since \(Text(resetPoint, format: .relative(presentation: .named))).")
                 .font(.system(size: 12.5))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
@@ -105,65 +102,17 @@ struct UsageView: View {
         .background(Theme.info.opacity(0.1), in: .rect(cornerRadius: 12, style: .continuous))
     }
 
-    private var budgets: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Monthly budgets").font(.system(size: 15, weight: .semibold))
-                Text("You get a notice in a chat at 80% and 100%. A project at 100% stops starting runs and agent turns until you raise its budget or allow the rest of the month.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            CapsuleTabs(BudgetPeriodKind.allCases, selection: $budgetPeriod, title: \.title)
-                .fixedSize()
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 14) {
-                    overallSummary
-                    Spacer(minLength: 8)
-                    overallField
-                }
-                VStack(alignment: .leading, spacing: 10) {
-                    overallSummary
-                    overallField
-                }
-            }
-            ForEach(workspace.openProjects) { project in
-                Divider().overlay(Tokens.hair)
-                ProjectBudgetEditor(project: project, period: budgetPeriod)
-            }
+    private var spendWarningNote: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "bell").foregroundStyle(Theme.secondaryText).accessibilityHidden(true)
+            Text("There are no spending limits. A chat gets a notice when it passes \(ChatSpendWarning.milestoneList); nothing is ever paused.")
+                .font(.system(size: 12.5))
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(16)
-        .card(cornerRadius: 16)
-    }
-
-    private var overallSummary: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("All projects").font(.system(size: 13.5, weight: .semibold))
-            if budgetPeriod == .week {
-                BudgetMeter(spent: model.weeklySpend, budget: globalWeeklyBudget > 0 ? globalWeeklyBudget : nil, period: .week)
-            } else {
-                BudgetMeter(spent: model.monthlySpend, budget: globalBudget > 0 ? globalBudget : nil)
-            }
-            Text("Only alerts; it never blocks work.").font(.system(size: 11.5)).foregroundStyle(Theme.tertiaryText)
-        }
-        .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var overallField: some View {
-        Group {
-            if budgetPeriod == .week {
-                BudgetField(budget: globalWeeklyBudget > 0 ? globalWeeklyBudget : nil, label: "Overall weekly budget") { value in
-                    model.setGlobalWeeklyBudget(value)
-                    globalWeeklyBudget = value ?? 0
-                }
-            } else {
-                BudgetField(budget: globalBudget > 0 ? globalBudget : nil, label: "Overall monthly budget") { value in
-                    model.setGlobalMonthlyBudget(value)
-                    globalBudget = value ?? 0
-                }
-            }
-        }
-        .fixedSize()
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Tokens.hover, in: .rect(cornerRadius: 12, style: .continuous))
     }
 
     private var breakdownHeader: some View {
@@ -199,8 +148,6 @@ struct UsageView: View {
 private struct StatTile: View {
     let title: String
     let value: Double
-    var budget: Double?
-    var budgetSpent: Double?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -210,14 +157,6 @@ private struct StatTile: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            if let budget {
-                let fraction = (budgetSpent ?? value) / budget
-                ProportionBar(fraction: fraction, color: BudgetLevel(fraction: fraction).color)
-                    .accessibilityHidden(true)
-                Text("of \(budget.formatted(.currency(code: "USD"))) overall budget")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Theme.secondaryText)
-            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)

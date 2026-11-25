@@ -31,11 +31,6 @@ extension DaemonWorkspace {
         dispatch("Couldn’t answer the loop limit", RunCommands.ResolveLoopLimit(runID: id, continueOnce: continueOnce, requestID: heldRequestID(run)))
     }
 
-    func resolveBudget(_ run: Run, proceed: Bool, raiseRunBudgetTo budget: Double? = nil) {
-        guard let id = run.id else { return }
-        dispatch(proceed ? "Couldn’t raise the budget" : "Couldn’t stop the run", RunCommands.ResolveBudget(runID: id, proceed: proceed, raiseRunBudgetTo: budget, requestID: heldRequestID(run)))
-    }
-
     func resolveFailure(_ run: Run, retry: Bool) {
         guard let id = run.id else { return }
         dispatch(retry ? "Couldn’t retry the step" : "Couldn’t end the run", RunCommands.ResolveFailure(runID: id, retry: retry, requestID: heldRequestID(run)))

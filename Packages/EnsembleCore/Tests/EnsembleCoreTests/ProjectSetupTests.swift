@@ -58,7 +58,7 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".ensemble/roles").path))
         #expect(SkillLibrary.installedSkills(in: root, home: root).isSuperset(of: ["django-developer", "react-developer"]))
         #expect(config.workflows.map(\.id).sorted() == ["feature-delivery", "hotfix", "small-task"])
-        #expect(config.workflows.allSatisfy { $0.end.action == .push && $0.budget == 8 })
+        #expect(config.workflows.allSatisfy { $0.end.action == .push })
         #expect(config.preferences == ProjectPreferences(baseBranch: "develop", branchPrefix: "agents", defaultWorkflow: "feature-delivery", approvePlans: false))
         #expect(config.permissions.profile("developer")?.level(.network) == .allow)
         #expect(config.permissions.profile("developer")?.level(.installPackages) == .ask)

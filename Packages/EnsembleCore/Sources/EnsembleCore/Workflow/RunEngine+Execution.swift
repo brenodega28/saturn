@@ -20,14 +20,6 @@ extension RunEngine {
             return try await finish(&loaded, cursor: cursor)
         }
         guard let step = loaded.workflow.step(cursor.stepId) else { throw RunEngineError.unknownStep(cursor.stepId) }
-        if let budget = loaded.run.budgetUSD, loaded.run.costUSD >= budget {
-            try hold(
-                &loaded, .runBudget, stepId: step.id,
-                title: "“\(loaded.run.title)” reached its \(Self.dollars(budget)) budget",
-                body: "The run has spent \(Self.dollars(loaded.run.costUSD)) before “\(step.displayTitle)”. Raise the budget to continue, or fail the run."
-            )
-            return false
-        }
         switch step.type {
         case .agent, .spawn, .check, .gates:
             return try await executeWork(&loaded, step: step, cursor: cursor)
@@ -59,8 +51,7 @@ extension RunEngine {
         guard let runStepID = runStep.id else { throw RunEngineError.runNotFound }
         let context = StepContext(
             run: loaded.run, task: task, project: project, step: step, kind: step.agent, iteration: cursor.iteration,
-            attempt: cursor.attempt, runStepID: runStepID, start: cursor.start, inputs: inputs, stepBudgetUSD: step.budget,
-            runBudgetRemainingUSD: loaded.run.budgetUSD.map { max(0, $0 - loaded.run.costUSD) }
+            attempt: cursor.attempt, runStepID: runStepID, start: cursor.start, inputs: inputs
         )
         let driver = self.driver
         let result: Result<StepResult, any Error>
@@ -123,7 +114,7 @@ extension RunEngine {
             )
             return false
         }
-        return try conclude(&loaded, step: step, outcome: result.outcome, runStep: runStep, output: result.output, checkStepBudget: true)
+        return try route(&loaded, from: step, outcome: result.outcome, output: result.output, steps: [runStep])
     }
 
     private func changedNothing(since stepId: String, runID: Int64, runStepID: Int64, heads: [String: String]) throws -> Bool {
@@ -160,7 +151,7 @@ extension RunEngine {
         finished.outcome = outcome
         finished.output = encode(output)
         finished.endedAt = clock()
-        let advanced = try conclude(&loadedAfter, step: step, outcome: outcome, runStep: finished, output: output, checkStepBudget: false)
+        let advanced = try route(&loadedAfter, from: step, outcome: outcome, output: output, steps: [finished])
         loaded = loadedAfter
         return advanced
     }
@@ -180,7 +171,7 @@ extension RunEngine {
         runStep.outcome = StepOutcome.done
         runStep.output = encode(output)
         runStep.endedAt = clock()
-        return try conclude(&loaded, step: step, outcome: StepOutcome.done, runStep: runStep, output: output, checkStepBudget: false)
+        return try route(&loaded, from: step, outcome: StepOutcome.done, output: output, steps: [runStep])
     }
 
     private func finish(_ loaded: inout LoadedRun, cursor: RunCursor) async throws -> Bool {
@@ -219,27 +210,6 @@ extension RunEngine {
             loaded = done
             return false
         }
-    }
-
-    func conclude(_ loaded: inout LoadedRun, step: WorkflowStep, outcome: String, runStep: RunStep?, output: StepOutput, checkStepBudget: Bool) throws -> Bool {
-        let steps = runStep.map { [$0] } ?? []
-        if checkStepBudget, let limit = step.budget, let cost = runStep?.costUSD, cost > limit {
-            try hold(
-                &loaded, .stepBudget, stepId: step.id, runStepId: runStep?.id, outcome: outcome,
-                title: "“\(step.displayTitle)” went over its \(Self.dollars(limit)) budget",
-                body: "The step cost \(Self.dollars(cost)). Continue with its result, or fail the run.", steps: steps
-            )
-            return false
-        }
-        if let budget = loaded.run.budgetUSD, loaded.run.costUSD > budget {
-            try hold(
-                &loaded, .runBudget, stepId: step.id, runStepId: runStep?.id, outcome: outcome,
-                title: "“\(loaded.run.title)” went over its \(Self.dollars(budget)) budget",
-                body: "The run has spent \(Self.dollars(loaded.run.costUSD)). Raise the budget to continue, or fail the run.", steps: steps
-            )
-            return false
-        }
-        return try route(&loaded, from: step, outcome: outcome, output: output, steps: steps)
     }
 
     func route(_ loaded: inout LoadedRun, from step: WorkflowStep, outcome: String, output: StepOutput, steps: [RunStep]) throws -> Bool {
@@ -446,10 +416,6 @@ extension RunEngine {
         guard let from = workflow.steps.firstIndex(where: { $0.id == source }),
               let to = workflow.steps.firstIndex(where: { $0.id == target }) else { return false }
         return to <= from
-    }
-
-    static func dollars(_ amount: Double) -> String {
-        amount.formatted(.currency(code: "USD"))
     }
 
     static func describe(_ plan: Plan) -> String {

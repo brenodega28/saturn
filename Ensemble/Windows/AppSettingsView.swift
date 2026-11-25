@@ -51,7 +51,7 @@ struct SettingsPane<Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 content
-                Text("These settings apply to every project. Project settings (skills, checks, budgets, docs) live in each project’s Settings tab.")
+                Text("These settings apply to every project. Project settings (skills, checks, docs) live in each project’s Settings tab.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.secondaryText)
             }

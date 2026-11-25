@@ -89,7 +89,7 @@ public final class RunEngine {
         let draft = Run(
             projectId: projectId, taskId: taskId, workflow: workflow.id, workflowVersion: String(workflow.version),
             currentStep: first.id, status: .running, startedAt: now, title: title ?? task.title,
-            workflowSnapshot: try ProjectConfigLoader.encodeYAML(workflow), budgetUSD: workflow.budget,
+            workflowSnapshot: try ProjectConfigLoader.encodeYAML(workflow),
             endAction: workflow.end.action.rawValue, brief: brief
         )
         let state = RunEngineState(cursor: RunCursor(stepId: first.id, iteration: 1))
@@ -118,7 +118,7 @@ public final class RunEngine {
         runStep.status = .succeeded
         runStep.endedAt = clock()
         try release(&loaded, response: "approved")
-        if try conclude(&loaded, step: step, outcome: hold.outcome ?? StepOutcome.done, runStep: runStep, output: output, checkStepBudget: true) {
+        if try route(&loaded, from: step, outcome: hold.outcome ?? StepOutcome.done, output: output, steps: [runStep]) {
             launch(try loaded.id)
         }
     }
@@ -153,7 +153,7 @@ public final class RunEngine {
         runStep.endedAt = clock()
         try release(&loaded, response: note ?? outcome, decision: outcome)
         if approved { loaded.state.reviewNotes = [] }
-        if try conclude(&loaded, step: step, outcome: outcome, runStep: runStep, output: output, checkStepBudget: false) {
+        if try route(&loaded, from: step, outcome: outcome, output: output, steps: [runStep]) {
             launch(try loaded.id)
         }
     }
@@ -171,7 +171,7 @@ public final class RunEngine {
             output.summary = (output.summary ?? "") + " You continued past them."
             runStep.output = encode(output)
             try release(&loaded, response: note ?? "continue", decision: StepOutcome.passed)
-            if try conclude(&loaded, step: step, outcome: StepOutcome.passed, runStep: runStep, output: output, checkStepBudget: false) {
+            if try route(&loaded, from: step, outcome: StepOutcome.passed, output: output, steps: [runStep]) {
                 launch(try loaded.id)
             }
             return
@@ -211,34 +211,6 @@ public final class RunEngine {
         if try route(&loaded, from: step, outcome: outcome, output: output, steps: []) {
             launch(try loaded.id)
         }
-    }
-
-    public func resolveBudget(_ run: Run, proceed: Bool, raiseRunBudgetTo newBudget: Double? = nil) throws {
-        var loaded = try load(run)
-        guard let hold = loaded.state.hold, [.stepBudget, .runBudget].contains(hold.reason) else {
-            throw RunEngineError.notWaiting(.runBudget)
-        }
-        #if DEBUG
-        traceBudgetDecision(loaded, proceed: proceed, newBudget: newBudget)
-        #endif
-        guard proceed else {
-            try fail(&loaded, message: hold.message, response: "fail")
-            return
-        }
-        if hold.reason == .runBudget || newBudget != nil {
-            loaded.run.budgetUSD = newBudget
-        }
-        try release(&loaded, response: "continue")
-        guard let outcome = hold.outcome, let step = loaded.workflow.step(hold.stepId) else {
-            try commit(loaded)
-            launch(try loaded.id)
-            return
-        }
-        let output = try latestOutput(of: step.id, runID: loaded.id)
-        let advanced = hold.reason == .stepBudget
-            ? try conclude(&loaded, step: step, outcome: outcome, runStep: nil, output: output, checkStepBudget: false)
-            : try route(&loaded, from: step, outcome: outcome, output: output, steps: [])
-        if advanced { launch(try loaded.id) }
     }
 
     public func resolveFailure(_ run: Run, retry: Bool) throws {

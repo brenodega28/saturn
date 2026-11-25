@@ -276,7 +276,7 @@ struct StubRegistry: PackageRegistry {
     func context(run: Run, task: Chat, project: Project) -> StepContext {
         StepContext(
             run: run, task: task, project: project, step: WorkflowStep(id: "gates", type: .gates), kind: nil, iteration: 1, attempt: 1,
-            runStepID: 1, start: .fresh, inputs: StepInputs(taskTitle: task.title, taskBody: "", labels: task.labels), stepBudgetUSD: nil, runBudgetRemainingUSD: nil
+            runStepID: 1, start: .fresh, inputs: StepInputs(taskTitle: task.title, taskBody: "", labels: task.labels)
         )
     }
 

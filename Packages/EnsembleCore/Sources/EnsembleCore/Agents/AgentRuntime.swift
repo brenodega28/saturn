@@ -294,7 +294,6 @@ public final class AgentRuntime {
     }
 
     func turnSetup(for agent: Agent) throws -> TurnSetup {
-        try checkMonthlyBudget(for: agent)
         let project = try database.project(id: agent.projectId)
         try Self.refuseSSHProject(project)
         let repository = project?.url

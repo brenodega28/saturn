@@ -7,7 +7,6 @@ trigger:
   - github
   labels:
   - feature
-budget: 20
 steps:
 - id: plan
   type: agent
@@ -15,7 +14,6 @@ steps:
   agent: lead
   model: opus
   instructions: Plan one task by default. Split into more tasks only when every task works and can be tested on its own, with none needing another's output. Assign a role to each task and submit the plan.
-  budget: 2
   next: build
 - id: build
   type: spawn

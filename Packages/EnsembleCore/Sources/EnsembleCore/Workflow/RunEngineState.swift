@@ -5,8 +5,6 @@ public enum HoldReason: String, Sendable, Hashable, Codable, CaseIterable {
     case planApproval = "plan_approval"
     case approval
     case loopLimit = "loop_limit"
-    case stepBudget = "step_budget"
-    case runBudget = "run_budget"
     case stepFailed = "step_failed"
     case timedOut = "timed_out"
     case gates
@@ -16,7 +14,6 @@ public enum HoldReason: String, Sendable, Hashable, Codable, CaseIterable {
         case .planApproval: .planApproval
         case .approval: .approval
         case .loopLimit: .loopLimit
-        case .stepBudget, .runBudget: .budget
         case .stepFailed, .timedOut: .failure
         case .gates: .gate
         }

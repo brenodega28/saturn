@@ -154,7 +154,7 @@ struct WorkflowVersionTests {
         var edited = base
         edited.steps[0].instructions = "Build it carefully"
         #expect(edited.preparedForSave(comparedTo: base).version == 4)
-        edited.budget = 5
+        edited.steps[0].maxRounds = 5
         #expect(edited.preparedForSave(comparedTo: base).version == 4)
     }
 

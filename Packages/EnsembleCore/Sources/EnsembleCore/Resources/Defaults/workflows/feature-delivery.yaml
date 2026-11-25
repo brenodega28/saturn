@@ -4,7 +4,6 @@ description: The Lead plans and specs the work, builders build it, checks and ga
 trigger:
   sources: [chat]
   labels: [feature]
-budget: 20
 steps:
   - id: plan
     type: agent
@@ -12,7 +11,6 @@ steps:
     agent: lead
     model: opus
     instructions: Plan one task by default. Split into more tasks only when every task works and can be tested on its own, with none needing another's output. Name the files each task owns, choose the installed skills its builder should load, and write a short spec unless the request fits in one sentence. Submit the plan.
-    budget: 2
     next: build
   - id: build
     type: spawn

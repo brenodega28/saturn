@@ -125,129 +125,128 @@ import Testing
     }
 }
 
-@Suite struct BudgetTests {
-    let calendar = UsageReportTests.calendar()
+@Suite struct ChatSpendWarningTests {
+    let now = UsageReportTests.date("2026-10-22T12:00:00Z")
 
-    func date(_ text: String) -> Date { UsageReportTests.date(text) }
+    struct Fixture {
+        let database: AppDatabase
+        let project: Project
+        let chat: Chat
+        let lead: Agent
+        let run: Run
+        let builder: Agent
+    }
 
-    func makeProject(_ database: AppDatabase, budget: Double?) throws -> Project {
+    func makeFixture() throws -> Fixture {
+        let database = try AppDatabase.inMemory()
         let project = try database.openProject(at: URL(fileURLWithPath: "/tmp/shopfront"))
-        try database.updateSettings(ProjectSettings(monthlyBudgetUSD: budget), forProject: project.id!)
-        return try #require(try database.project(id: project.id!))
+        let chat = try database.insert(Chat(projectId: project.id!, title: "Refunds", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now))
+        let lead = try database.insert(Agent(projectId: project.id!, role: "lead", name: "Lead", status: .idle, taskId: chat.id, createdAt: now, updatedAt: now))
+        let run = try database.insert(Run(projectId: project.id!, taskId: chat.id!, workflow: "feature-delivery", status: .running, startedAt: now), state: RunEngineState())
+        let builder = try database.insert(Agent(projectId: project.id!, runId: run.id, role: "builder", name: "Dev 1", status: .idle, createdAt: now, updatedAt: now))
+        return Fixture(database: database, project: project, chat: chat, lead: lead, run: run, builder: builder)
     }
 
-    func spend(_ database: AppDatabase, _ project: Project, _ cost: Double, at: String) throws {
-        try database.record(UsageEntry(projectId: project.id!, model: "claude-sonnet-5-5", costUSD: cost, recordedAt: date(at)))
+    func spend(_ fixture: Fixture, _ cost: Double, agent: Agent? = nil, run: Run? = nil) throws {
+        try fixture.database.record(UsageEntry(
+            projectId: fixture.project.id!, runId: run?.id, agentId: agent?.id, model: "claude-sonnet-5-5", costUSD: cost, recordedAt: now
+        ))
     }
 
-    @Test func thresholdsAreCrossedAtEightyAndOneHundredPercent() {
-        #expect(BudgetThreshold.crossed(spent: 79.99, budget: 100) == [])
-        #expect(BudgetThreshold.crossed(spent: 80, budget: 100) == [.warning])
-        #expect(BudgetThreshold.crossed(spent: 100, budget: 100) == [.warning, .reached])
-        #expect(BudgetThreshold.crossed(spent: 500, budget: nil) == [])
-        #expect(BudgetThreshold.crossed(spent: 500, budget: 0) == [])
-        #expect(BudgetMonth.key(for: date("2026-10-31T23:59:00Z"), calendar: calendar) == "2026-10")
+    @Test func eachMilestoneIsAnnouncedOnceInTheChat() throws {
+        let fixture = try makeFixture()
+        let database = fixture.database
+
+        try spend(fixture, 9.99, agent: fixture.lead)
+        #expect(try database.recordChatSpendWarnings(at: now).isEmpty)
+
+        try spend(fixture, 0.01, agent: fixture.builder)
+        let first = try database.recordChatSpendWarnings(at: now)
+        #expect(first.map(\.title) == ["This chat has passed $10"])
+        #expect(first.first?.kind == .notice)
+        #expect(first.first?.taskId == fixture.chat.id)
+        #expect(first.first?.body.contains("$10.00 so far") == true)
+        #expect(try database.recordChatSpendWarnings(at: now).isEmpty)
+
+        try database.resolveChatRequest(id: first[0].id!, status: .dismissed)
+        #expect(try database.recordChatSpendWarnings(at: now).isEmpty)
+
+        try spend(fixture, 15, agent: fixture.builder, run: fixture.run)
+        #expect(try database.recordChatSpendWarnings(at: now).map(\.title) == ["This chat has passed $25"])
+
+        try spend(fixture, 80, run: fixture.run)
+        #expect(try database.recordChatSpendWarnings(at: now).map(\.title) == ["This chat has passed $100"])
+
+        try spend(fixture, 500, agent: fixture.lead)
+        #expect(try database.recordChatSpendWarnings(at: now).isEmpty)
+        #expect(try database.chatRequests(taskId: fixture.chat.id!).map(\.title) == [
+            "This chat has passed $10", "This chat has passed $25", "This chat has passed $100",
+        ])
     }
 
-    @Test func noticesAreCreatedOncePerThresholdPerMonth() throws {
+    @Test func spendIsCountedPerChatAndClosedChatsStayQuiet() throws {
+        let fixture = try makeFixture()
+        let database = fixture.database
+        let other = try database.insert(Chat(projectId: fixture.project.id!, title: "Docs", body: "", source: .chat, status: .running, createdAt: now, updatedAt: now))
+        let otherLead = try database.insert(Agent(projectId: fixture.project.id!, role: "lead", name: "Lead 2", status: .idle, taskId: other.id, createdAt: now, updatedAt: now))
+        let closed = try database.insert(Chat(projectId: fixture.project.id!, title: "Old", body: "", source: .chat, status: .done, closedAt: now, createdAt: now, updatedAt: now))
+        let closedLead = try database.insert(Agent(projectId: fixture.project.id!, role: "lead", name: "Lead 3", status: .idle, taskId: closed.id, createdAt: now, updatedAt: now))
+
+        try spend(fixture, 6, agent: fixture.lead)
+        try spend(fixture, 6, agent: otherLead)
+        try spend(fixture, 30, agent: closedLead)
+        try spend(fixture, 30)
+        #expect(try database.recordChatSpendWarnings(at: now).isEmpty)
+
+        try spend(fixture, 5, agent: otherLead)
+        let warnings = try database.recordChatSpendWarnings(at: now)
+        #expect(warnings.map(\.taskId) == [other.id])
+        #expect(warnings.map(\.title) == ["This chat has passed $10"])
+    }
+
+    @Test func weeklyAndMonthlySpendStillCountRealSpendAfterAUsageReset() throws {
         let database = try AppDatabase.inMemory()
-        let project = try makeProject(database, budget: 10)
-        let now = date("2026-10-22T12:00:00Z")
-
-        try spend(database, project, 7.9, at: "2026-10-02T10:00:00Z")
-        #expect(try database.recordBudgetNotices(globalBudgetUSD: nil, at: now, calendar: calendar).isEmpty)
-
-        try spend(database, project, 0.2, at: "2026-10-03T10:00:00Z")
-        let warning = try database.recordBudgetNotices(globalBudgetUSD: nil, at: now, calendar: calendar)
-        #expect(warning.map(\.title) == ["80% of the monthly budget used"])
-        #expect(warning.first?.kind == .notice)
-        #expect(warning.first?.projectId == project.id)
-        #expect(try database.recordBudgetNotices(globalBudgetUSD: nil, at: now, calendar: calendar).isEmpty)
-
-        try database.resolveChatRequest(id: warning[0].id!, status: .dismissed)
-        try spend(database, project, 2, at: "2026-10-04T10:00:00Z")
-        let reached = try database.recordBudgetNotices(globalBudgetUSD: nil, at: now, calendar: calendar)
-        #expect(reached.map(\.title) == ["Monthly budget reached"])
-        #expect(reached.first?.body.contains("Allow this month") == true)
-        #expect(try database.recordBudgetNotices(globalBudgetUSD: nil, at: now, calendar: calendar).isEmpty)
-
-        let november = date("2026-11-02T12:00:00Z")
-        #expect(try database.recordBudgetNotices(globalBudgetUSD: nil, at: november, calendar: calendar).isEmpty)
-        try spend(database, project, 9, at: "2026-11-02T10:00:00Z")
-        #expect(try database.recordBudgetNotices(globalBudgetUSD: nil, at: november, calendar: calendar).map(\.title) == ["80% of the monthly budget used"])
+        let calendar = UsageReportTests.calendar()
+        let project = try database.openProject(at: URL(fileURLWithPath: "/tmp/shopfront"))
+        for (cost, at) in [(6.0, "2026-10-19T09:00:00Z"), (9, "2026-10-02T09:00:00Z"), (2, "2026-10-21T09:00:00Z")] {
+            try database.record(UsageEntry(projectId: project.id!, model: "claude-sonnet-5-5", costUSD: cost, recordedAt: UsageReportTests.date(at)))
+        }
+        let totals = try database.usageTotals(at: now, calendar: calendar, countingSince: UsageReportTests.date("2026-10-20T00:00:00Z"))
+        #expect(abs(totals.monthUSD - 2) < 0.0001)
+        #expect(abs(try database.monthlySpend(at: now, calendar: calendar) - 17) < 0.0001)
+        #expect(abs(try database.weeklySpend(projectId: project.id!, at: now, calendar: calendar) - 8) < 0.0001)
     }
 
-    @Test func globalBudgetNoticesAreRaisedOnceAcrossProjects() throws {
-        let database = try AppDatabase.inMemory()
-        let shop = try makeProject(database, budget: nil)
-        let docs = try database.openProject(at: URL(fileURLWithPath: "/tmp/docs"))
-        let now = date("2026-10-22T12:00:00Z")
-        try spend(database, shop, 30, at: "2026-10-02T10:00:00Z")
-        try spend(database, docs, 21, at: "2026-10-05T10:00:00Z")
+    @Test func legacyBudgetHoldsBecomeRetryableFailures() throws {
+        let fixture = try makeFixture()
+        let database = fixture.database
+        let request = try database.createChatRequest(ChatRequest(
+            projectId: fixture.project.id!, runId: fixture.run.id, kind: .budget, title: "Run reached its budget", createdAt: now
+        ))
+        let held = RunEngineState(
+            cursor: RunCursor(stepId: "build", iteration: 1),
+            hold: RunHold(reason: .stepFailed, stepId: "build", requestId: request.id, message: "Raise the budget")
+        )
+        let legacy = try RunEngineState.encode(held).replacingOccurrences(of: "step_failed", with: "run_budget")
+        #expect(legacy.contains("run_budget"))
+        try database.writer.write { db in
+            try db.execute(sql: "UPDATE run SET engineState = ? WHERE id = ?", arguments: [legacy, fixture.run.id])
+            try AppDatabase.releaseBudgetHolds(db)
+        }
 
-        let notices = try database.recordBudgetNotices(globalBudgetUSD: 50, at: now, calendar: calendar)
-        #expect(notices.map(\.title) == ["80% of your overall monthly budget used", "Overall monthly budget reached"])
-        #expect(notices.allSatisfy { $0.projectId == docs.id })
-        #expect(try database.recordBudgetNotices(globalBudgetUSD: 50, at: now, calendar: calendar).isEmpty)
-    }
-
-    @Test func reachedProjectBudgetBlocksNewWorkUntilAllowedOrRaised() throws {
-        let database = try AppDatabase.inMemory()
-        let project = try makeProject(database, budget: 5)
-        let now = date("2026-10-22T12:00:00Z")
-        try database.checkProjectBudget(projectId: project.id!, at: now, calendar: calendar)
-
-        try spend(database, project, 5, at: "2026-10-20T10:00:00Z")
-        #expect(throws: BudgetError.self) { try database.checkProjectBudget(projectId: project.id!, at: now, calendar: calendar) }
-        #expect(try database.projectBudgetStatus(projectId: project.id!, at: now, calendar: calendar).blocksNewWork)
-
-        try database.allowOverBudget(projectId: project.id!, at: now, calendar: calendar)
-        try database.checkProjectBudget(projectId: project.id!, at: now, calendar: calendar)
-        #expect(try database.project(id: project.id!)?.settings.budgetOverrideMonth == "2026-10")
-
-        let november = date("2026-11-10T12:00:00Z")
-        try spend(database, project, 6, at: "2026-11-01T10:00:00Z")
-        #expect(throws: BudgetError.self) { try database.checkProjectBudget(projectId: project.id!, at: november, calendar: calendar) }
-
-        var settings = try #require(try database.project(id: project.id!)).settings
-        settings.monthlyBudgetUSD = 20
-        try database.updateSettings(settings, forProject: project.id!)
-        try database.checkProjectBudget(projectId: project.id!, at: november, calendar: calendar)
-    }
-
-    @Test func budgetsKeepCountingRealMonthlySpendAfterAUsageReset() throws {
-        let database = try AppDatabase.inMemory()
-        let project = try makeProject(database, budget: 10)
-        let now = date("2026-10-22T12:00:00Z")
-        try spend(database, project, 9, at: "2026-10-02T10:00:00Z")
-        try spend(database, project, 1, at: "2026-10-21T10:00:00Z")
-
-        let totals = try database.usageTotals(at: now, calendar: calendar, countingSince: date("2026-10-20T00:00:00Z"))
-        #expect(abs(totals.monthUSD - 1) < 0.0001)
-
-        #expect(abs(try database.monthlySpend(at: now, calendar: calendar) - 10) < 0.0001)
-        let status = try database.projectBudgetStatus(projectId: project.id!, at: now, calendar: calendar)
-        #expect(abs(status.spentUSD - 10) < 0.0001)
-        #expect(status.blocksNewWork)
-        #expect(throws: BudgetError.self) { try database.checkProjectBudget(projectId: project.id!, at: now, calendar: calendar) }
-        let notices = try database.recordBudgetNotices(globalBudgetUSD: nil, at: now, calendar: calendar)
-        #expect(notices.map(\.title) == ["80% of the monthly budget used", "Monthly budget reached"])
+        let hold = try #require(try database.engineState(runId: fixture.run.id!).hold)
+        #expect(hold.reason == .stepFailed)
+        #expect(hold.message.contains("Budget limits were removed"))
+        #expect(try database.chatRequest(id: request.id!)?.kind == .failure)
     }
 
     @MainActor
-    @Test func agentTurnsAreRefusedWhenTheProjectBudgetIsReached() async throws {
+    @Test func agentTurnsRunNoMatterHowMuchTheProjectHasSpent() async throws {
         let harness = try await AgentHarness.make()
         defer { harness.cleanUp() }
-        try harness.database.updateSettings(ProjectSettings(monthlyBudgetUSD: 1), forProject: harness.project.id!)
-        try harness.database.record(UsageEntry(projectId: harness.project.id!, model: "claude-fake-1", costUSD: 1.5, recordedAt: .now))
+        try harness.database.record(UsageEntry(projectId: harness.project.id!, model: "claude-fake-1", costUSD: 5_000, recordedAt: .now))
 
         let session = try await harness.spawn()
-        try await waitUntil { session.agent.status == .failed }
-        #expect(session.agent.lastError?.contains("monthly budget") == true)
-        #expect(harness.launches().isEmpty)
-
-        try harness.database.allowOverBudget(projectId: harness.project.id!)
-        session.resume()
         try await waitUntil { session.agent.status == .idle }
         #expect(harness.launches().count == 1)
     }

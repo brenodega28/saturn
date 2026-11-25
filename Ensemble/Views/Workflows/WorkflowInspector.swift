@@ -160,13 +160,6 @@ private struct WorkflowSettingsSection: View {
                     .labelsHidden()
                     .lineLimit(2...4)
             }
-            InspectorField("Budget per run") {
-                TextField("Budget", value: $editor.draft.budget, format: .currency(code: "USD"), prompt: Text("No limit"))
-                    .textFieldStyle(.roundedBorder)
-                    .labelsHidden()
-                    .frame(width: 130)
-                    .help("Runs pause and ask you when they spend more than this")
-            }
             InspectorField("Version") {
                 Text(versionText)
                     .font(.system(size: 12.5))
@@ -361,14 +354,6 @@ private struct StepSection: View {
                             .frame(width: 70)
                             .help("Stop the step and ask you after this many minutes")
                         Text("minutes").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
-                    }
-                    HStack(spacing: 10) {
-                        Text("Budget").font(.system(size: 12.5)).frame(width: 74, alignment: .leading)
-                        TextField("Budget", value: $step.budget, format: .currency(code: "USD"), prompt: Text("No limit"))
-                            .textFieldStyle(.roundedBorder)
-                            .labelsHidden()
-                            .frame(width: 100)
-                            .help("Ask you when this step costs more than this")
                     }
                     HStack(spacing: 10) {
                         Text("On failure").font(.system(size: 12.5)).frame(width: 74, alignment: .leading)

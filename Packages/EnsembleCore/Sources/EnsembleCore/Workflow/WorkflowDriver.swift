@@ -153,12 +153,10 @@ public struct StepContext: Sendable, Hashable {
     public var runStepID: Int64
     public var start: StepStart
     public var inputs: StepInputs
-    public var stepBudgetUSD: Double?
-    public var runBudgetRemainingUSD: Double?
 
     public init(
         run: Run, task: Chat, project: Project, step: WorkflowStep, kind: AgentKind?, iteration: Int, attempt: Int,
-        runStepID: Int64, start: StepStart, inputs: StepInputs, stepBudgetUSD: Double?, runBudgetRemainingUSD: Double?
+        runStepID: Int64, start: StepStart, inputs: StepInputs
     ) {
         self.run = run
         self.task = task
@@ -170,8 +168,6 @@ public struct StepContext: Sendable, Hashable {
         self.runStepID = runStepID
         self.start = start
         self.inputs = inputs
-        self.stepBudgetUSD = stepBudgetUSD
-        self.runBudgetRemainingUSD = runBudgetRemainingUSD
     }
 
     public var isLoopBack: Bool { iteration > 1 }

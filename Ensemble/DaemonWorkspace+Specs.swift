@@ -125,16 +125,10 @@ extension DaemonWorkspace {
         specTunnelPorts = [:]
     }
 
-    func approveSpec(for task: Chat, in project: Project) {
+    func approveSpec(for task: Chat) {
         guard let taskID = task.id else { return }
         if task.isClosed {
             alert = AppAlert(title: "Couldn’t approve the spec", message: "This request is closed. Send a message to reopen it first.")
-            return
-        }
-        do {
-            try ensureWithinBudget(project)
-        } catch {
-            alert = AppAlert(title: "Couldn’t approve the spec", message: error.localizedDescription)
             return
         }
         Task {

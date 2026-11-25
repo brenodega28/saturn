@@ -42,8 +42,8 @@ public enum ChatStage: String, Sendable, Hashable, CaseIterable {
         }
     }
 
-    static let stuckKinds: Set<ChatRequestKind> = [.failure, .budget, .loopLimit]
-    static let stuckHolds: Set<HoldReason> = [.stepFailed, .timedOut, .loopLimit, .stepBudget, .runBudget]
+    static let stuckKinds: Set<ChatRequestKind> = [.failure, .loopLimit]
+    static let stuckHolds: Set<HoldReason> = [.stepFailed, .timedOut, .loopLimit]
 
     public static func of(_ facts: Facts) -> ChatStage {
         if facts.isClosed { return facts.closeReason == .dropped ? .dropped : .done }

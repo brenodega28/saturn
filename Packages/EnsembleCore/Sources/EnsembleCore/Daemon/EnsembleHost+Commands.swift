@@ -202,7 +202,6 @@ extension EnsembleHost {
                 throw CommandFailure(code: .failed, message: "This request is closed. Send a message to reopen it first.")
             }
             let project = try requireProject(chat.projectId)
-            try database.checkProjectBudget(projectId: chat.projectId)
             guard let runID = try await leadChat.approveSpec(taskId: command.chatID, in: project).id else {
                 throw CommandFailure(code: .failed, message: "The run started without an id.")
             }
@@ -258,7 +257,6 @@ extension EnsembleHost {
                 throw CommandFailure(code: .failed, message: "This request is closed. Send a message to reopen it first.")
             }
             let project = try requireProject(proposal.projectId)
-            try database.checkProjectBudget(projectId: proposal.projectId)
             return try await leadChat.start(proposal, in: project)
         }
         router.register(ChatCommands.RejectProposal.self) { [unowned self] command in
@@ -319,11 +317,6 @@ extension EnsembleHost {
         }
         router.register(RunCommands.ResolveLoopLimit.self) { [unowned self] command in
             try engine.resolveLoopLimit(try heldRun(command.runID, requestID: command.requestID, reasons: [.loopLimit]), continueOnce: command.continueOnce)
-            return Done()
-        }
-        router.register(RunCommands.ResolveBudget.self) { [unowned self] command in
-            let run = try heldRun(command.runID, requestID: command.requestID, reasons: [.stepBudget, .runBudget])
-            try engine.resolveBudget(run, proceed: command.proceed, raiseRunBudgetTo: command.raiseRunBudgetTo)
             return Done()
         }
         router.register(RunCommands.ResolveFailure.self) { [unowned self] command in
@@ -475,14 +468,6 @@ extension EnsembleHost {
         router.register(SettingsCommands.SetProviderMode.self) { [unowned self] command in
             try updateSettings { $0.providerMode = command.mode }
             return await checkEnvironment()
-        }
-        router.register(SettingsCommands.SetBudgets.self) { [unowned self] command in
-            try updateSettings { settings in
-                settings.globalMonthlyBudgetUSD = command.monthlyUSD.flatMap { $0 > 0 ? $0 : nil }
-                settings.globalWeeklyBudgetUSD = command.weeklyUSD.flatMap { $0 > 0 ? $0 : nil }
-            }
-            checkBudgets()
-            return Done()
         }
         router.register(SettingsCommands.Get.self) { [unowned self] _ in settings }
         router.register(SettingsCommands.SaveAPIKey.self) { [unowned self] command in

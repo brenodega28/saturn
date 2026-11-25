@@ -7,10 +7,6 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
     public var basePort: Int?
     public var idleCleanupMinutes: Int
     public var setupTimeoutMinutes: Int
-    public var monthlyBudgetUSD: Double?
-    public var budgetOverrideMonth: String?
-    public var weeklyBudgetUSD: Double?
-    public var budgetOverrideWeek: String?
     public var reviewCapacity: Int
     public var runCommand: String
 
@@ -20,24 +16,16 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         basePort: Int? = nil,
         idleCleanupMinutes: Int = 10,
         setupTimeoutMinutes: Int = 10,
-        monthlyBudgetUSD: Double? = nil,
-        budgetOverrideMonth: String? = nil,
-        weeklyBudgetUSD: Double? = nil,
-        budgetOverrideWeek: String? = nil,
         reviewCapacity: Int = 3,
         runCommand: String = ""
     ) {
         self.runCommand = runCommand
-        self.weeklyBudgetUSD = weeklyBudgetUSD
-        self.budgetOverrideWeek = budgetOverrideWeek
         self.reviewCapacity = reviewCapacity
         self.setupTimeoutMinutes = setupTimeoutMinutes
         self.maxConcurrentAgents = maxConcurrentAgents
         self.setupScript = setupScript
         self.basePort = basePort
         self.idleCleanupMinutes = idleCleanupMinutes
-        self.monthlyBudgetUSD = monthlyBudgetUSD
-        self.budgetOverrideMonth = budgetOverrideMonth
     }
 
     public init(from decoder: Decoder) throws {
@@ -48,11 +36,7 @@ public struct ProjectSettings: Sendable, Hashable, Codable {
         self.basePort = try container.decodeIfPresent(Int.self, forKey: .basePort)
         self.idleCleanupMinutes = try container.decodeIfPresent(Int.self, forKey: .idleCleanupMinutes) ?? defaults.idleCleanupMinutes
         self.setupTimeoutMinutes = try container.decodeIfPresent(Int.self, forKey: .setupTimeoutMinutes) ?? defaults.setupTimeoutMinutes
-        self.monthlyBudgetUSD = try container.decodeIfPresent(Double.self, forKey: .monthlyBudgetUSD)
-        self.budgetOverrideMonth = try container.decodeIfPresent(String.self, forKey: .budgetOverrideMonth)
         self.reviewCapacity = try container.decodeIfPresent(Int.self, forKey: .reviewCapacity) ?? defaults.reviewCapacity
-        self.weeklyBudgetUSD = try container.decodeIfPresent(Double.self, forKey: .weeklyBudgetUSD)
-        self.budgetOverrideWeek = try container.decodeIfPresent(String.self, forKey: .budgetOverrideWeek)
         self.runCommand = try container.decodeIfPresent(String.self, forKey: .runCommand) ?? ""
     }
 }

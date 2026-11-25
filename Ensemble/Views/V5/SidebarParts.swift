@@ -134,28 +134,22 @@ struct MachineLabel: View {
 struct SidebarFooter: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
-    @State private var showsBudget = false
+    @State private var showsSpend = false
 
     var body: some View {
-        let spent = model.weeklySpend
-        let limit = model.globalWeeklyBudget
-        let ratio = limit.map { $0 > 0 ? spent / $0 : 0 } ?? 0
         HStack(spacing: 4) {
             footerButton("Usage", symbol: "chart.bar") { model.open(.usage) }
             footerButton("Settings (⌘,)", symbol: "gearshape") { openSettings() }
             Spacer()
-            Button { showsBudget.toggle() } label: {
-                HStack(spacing: 5) {
-                    if ratio >= 0.8 { Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)) }
-                    Text(BudgetLabel.text(spent: spent, limit: limit))
-                        .font(Tokens.mono(11.5))
-                }
-                .foregroundStyle(ratio >= 1 ? Tokens.stuck : ratio >= 0.8 ? Tokens.review : Tokens.text2)
-                .contentShape(.rect)
+            Button { showsSpend.toggle() } label: {
+                Text(String(format: "$%.0f wk", model.weeklySpend))
+                    .font(Tokens.mono(11.5))
+                    .foregroundStyle(Tokens.text2)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .help("Spend this week")
-            .popover(isPresented: $showsBudget, arrowEdge: .top) { BudgetPopover(spent: spent, limit: limit) }
+            .popover(isPresented: $showsSpend, arrowEdge: .top) { SpendPopover() }
         }
         .padding(.horizontal, 4)
     }
@@ -174,28 +168,14 @@ struct SidebarFooter: View {
     }
 }
 
-enum BudgetLabel {
-    static func text(spent: Double, limit: Double?) -> String {
-        let spentText = "$\(Int(spent.rounded()))"
-        guard let limit, limit > 0 else { return "\(spentText) wk" }
-        return spent > limit ? "\(spentText) / \(Int(limit)) · over" : "\(spentText) / \(Int(limit)) wk"
-    }
-}
-
-private struct BudgetPopover: View {
+private struct SpendPopover: View {
     @Environment(AppModel.self) private var model
-    let spent: Double
-    let limit: Double?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Spend").font(.system(size: 13, weight: .semibold))
-            meter("This week", spent: spent, limit: limit)
-            meter("This month", spent: model.monthlySpend, limit: model.globalMonthlyBudget)
-            if let limit, spent > limit {
-                Text("Over by $\(Int((spent - limit).rounded())). New workers wait until you raise the limit or the week resets.")
-                    .font(.system(size: 12)).foregroundStyle(Tokens.stuck).fixedSize(horizontal: false, vertical: true)
-            }
+            row("This week", spent: model.weeklySpend)
+            row("This month", spent: model.monthlySpend)
             Button("Open Usage →") { model.open(.usage) }
                 .buttonStyle(.plain)
                 .foregroundStyle(Tokens.link)
@@ -205,16 +185,12 @@ private struct BudgetPopover: View {
         .frame(width: 280)
     }
 
-    private func meter(_ title: String, spent: Double, limit: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title).foregroundStyle(Tokens.text2)
-                Spacer()
-                Text(limit.map { String(format: "$%.0f / $%.0f", spent, $0) } ?? String(format: "$%.0f", spent)).font(Tokens.mono(11.5))
-            }
-            .font(.system(size: 12))
-            ProgressView(value: min(spent, limit ?? spent), total: max(limit ?? spent, 1))
-                .tint(limit.map { spent > $0 ? Tokens.stuck : Tokens.text2 } ?? Tokens.text2)
+    private func row(_ title: String, spent: Double) -> some View {
+        HStack {
+            Text(title).foregroundStyle(Tokens.text2)
+            Spacer()
+            Text(String(format: "$%.0f", spent)).font(Tokens.mono(11.5))
         }
+        .font(.system(size: 12))
     }
 }

@@ -20,9 +20,9 @@ struct ChatStageTests {
 
     @Test func failuresAndLimitsAreStuck() {
         #expect(ChatStage.of(Facts(latestRun: run(.waitingOnYou), hold: hold(.stepFailed))) == .stuck)
-        #expect(ChatStage.of(Facts(latestRun: run(.waitingOnYou), hold: hold(.runBudget))) == .stuck)
+        #expect(ChatStage.of(Facts(latestRun: run(.waitingOnYou), hold: hold(.loopLimit))) == .stuck)
         #expect(ChatStage.of(Facts(latestRun: run(.failed))) == .stuck)
-        #expect(ChatStage.of(Facts(openRequests: [.budget])) == .stuck)
+        #expect(ChatStage.of(Facts(openRequests: [.failure])) == .stuck)
     }
 
     @Test func approvalsQuestionsPermissionsAndSpecsNeedYou() {

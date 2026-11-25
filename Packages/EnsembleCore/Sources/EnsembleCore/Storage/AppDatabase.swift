@@ -412,8 +412,24 @@ public final class AppDatabase: Sendable {
                 t.add(column: "finishedAt", .datetime)
             }
         }
+        migrator.registerMigration("v28-no-budget-holds", migrate: releaseBudgetHolds)
 
         return migrator
+    }
+
+    static func releaseBudgetHolds(_ db: Database) throws {
+        let message = "Budget limits were removed from Ensemble. Retry the step to continue."
+        try db.execute(sql: """
+            UPDATE chatRequest SET kind = ?, body = ?
+            WHERE status = 'open' AND id IN (
+                SELECT json_extract(engineState, '$.hold.requestId') FROM run
+                WHERE json_extract(engineState, '$.hold.reason') IN ('step_budget', 'run_budget')
+            )
+            """, arguments: [ChatRequestKind.failure.rawValue, message])
+        try db.execute(sql: """
+            UPDATE run SET engineState = json_set(engineState, '$.hold.reason', 'step_failed', '$.hold.message', ?)
+            WHERE json_extract(engineState, '$.hold.reason') IN ('step_budget', 'run_budget')
+            """, arguments: [message])
     }
 
     static func moveInboxIntoChats(_ db: Database) throws {

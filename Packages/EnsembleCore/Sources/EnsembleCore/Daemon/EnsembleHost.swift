@@ -219,7 +219,7 @@ public final class EnsembleHost {
                 guard let self else { return }
                 if self.runtime.usageRevision != lastRevision {
                     lastRevision = self.runtime.usageRevision
-                    self.checkBudgets()
+                    self.postChatSpendWarnings()
                 }
                 try? await Task.sleep(for: .seconds(2))
             }
@@ -272,8 +272,8 @@ public final class EnsembleHost {
         _ = try? stallReporter.report(stalled, now: now)
     }
 
-    func checkBudgets() {
-        _ = try? database.recordBudgetNotices(globalBudgetUSD: settings.globalMonthlyBudgetUSD, globalWeeklyBudgetUSD: settings.globalWeeklyBudgetUSD)
+    func postChatSpendWarnings() {
+        _ = try? database.recordChatSpendWarnings()
     }
 
     func updateSettings(_ change: (inout DaemonSettings) -> Void) throws {

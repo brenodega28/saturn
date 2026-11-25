@@ -245,8 +245,7 @@ final class SpecGateDriver: WorkflowDriver {
             let outputs = verdicts.enumerated().map { PreviousOutput(stepId: $0.element.0, iteration: $0.offset + 1, outcome: $0.element.1.outcome, output: StepOutput(verdict: $0.element.1)) }
             let context = StepContext(
                 run: run, task: task, project: setup.project, step: WorkflowStep(id: "gates", type: .gates), kind: nil, iteration: 1, attempt: 1,
-                runStepID: 0, start: .fresh, inputs: StepInputs(taskTitle: run.title, taskBody: "", previousOutputs: outputs),
-                stepBudgetUSD: nil, runBudgetRemainingUSD: nil
+                runStepID: 0, start: .fresh, inputs: StepInputs(taskTitle: run.title, taskBody: "", previousOutputs: outputs)
             )
             return try await setup.driver.runGateStep(context)
         }

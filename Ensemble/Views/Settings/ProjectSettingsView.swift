@@ -364,8 +364,6 @@ private struct AgentsSettings: View {
             .padding(16)
             .card(cornerRadius: 16)
 
-            ProjectBudgetCard(project: project)
-
             Text("Each workflow step picks its model; agents you spawn pick theirs in New Agent.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.secondaryText)

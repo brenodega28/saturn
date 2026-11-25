@@ -91,9 +91,9 @@ public enum PlanUsageSeverity: Sendable, Hashable {
     case danger
 
     public init(percent: Int) {
-        if percent >= BudgetThreshold.reached.rawValue {
+        if percent >= 100 {
             self = .danger
-        } else if percent >= BudgetThreshold.warning.rawValue {
+        } else if percent >= 80 {
             self = .warning
         } else {
             self = .normal

@@ -236,7 +236,6 @@ struct RequestChat: View {
         case .planApproval: return "Here’s the plan. Reorder tasks, change their skills, or drop tasks before I start."
         case .approval: return "It’s ready for your approval at “\(step)”."
         case .loopLimit: return "The work keeps going back and forth. Tell me whether to try once more."
-        case .stepBudget, .runBudget: return "We hit a budget limit. Decide whether to spend more."
         case .stepFailed, .timedOut: return "“\(step)” didn’t finish. Retry it, or stop the run."
         case .gates: return "The gates found things you need to decide on: continue, or send the work back."
         }
@@ -374,7 +373,7 @@ struct ProposalCard: View {
                     Button("Dismiss") { workspace.dismissProposal(proposal) }
                         .buttonStyle(SecondaryPillStyle())
                         .help("Don’t run this; keep talking to the lead")
-                    Button("Start run") { workspace.startProposal(proposal, in: project) }
+                    Button("Start run") { workspace.startProposal(proposal) }
                         .buttonStyle(PrimaryPillStyle())
                         .disabled(hasActiveRun || isRequestClosed || workflow == nil)
                         .help(Self.startHelp(hasActiveRun: hasActiveRun, isRequestClosed: isRequestClosed))
@@ -487,7 +486,7 @@ struct SpecCard: View {
                     Button("Request changes") { workspace.openSpecTab(for: task, in: project) }
                         .buttonStyle(SecondaryPillStyle())
                         .help("Annotate the spec page; your notes go to the lead")
-                    Button("Approve") { workspace.approveSpec(for: task, in: project) }
+                    Button("Approve") { workspace.approveSpec(for: task) }
                         .buttonStyle(PrimaryPillStyle())
                         .disabled(blocked != nil)
                         .help(blocked ?? "Approve the spec and start the run")
@@ -738,8 +737,7 @@ private struct RunCard: View {
         let step = run.isActive ? workspace.currentStepTitle(of: run) : nil
         let meta = [
             workflow?.displayName, step, agentCount > 0 ? "\(agentCount) agent\(agentCount == 1 ? "" : "s")" : nil,
-            run.budgetUSD.map { "\(run.costUSD.formatted(.currency(code: "USD"))) of \($0.formatted(.currency(code: "USD")))" }
-                ?? run.costUSD.formatted(.currency(code: "USD")),
+            run.costUSD.formatted(.currency(code: "USD")),
             run.elapsedDescription,
         ].compactMap(\.self)
         VStack(alignment: .leading, spacing: 10) {

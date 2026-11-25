@@ -100,10 +100,6 @@ public final class PinnedMemoryUpdater {
             guard let project = try runtime.database.project(id: projectID) else { return }
             let pinned = try runtime.runSessions(runId: runID, projectId: projectID).filter { $0.agent.isPinned }
             guard !pinned.isEmpty else { return }
-            if try runtime.database.projectBudgetStatus(projectId: projectID).blocksNewWork {
-                lastError = "Skipped memory updates for \(project.name): its monthly budget is used up."
-                return
-            }
             var started: [(AgentSession, AgentMemory)] = []
             for session in pinned where await canLaunch(session.agent, project: project) {
                 let memory = AgentMemory(repository: project.url, agentName: session.agent.name)

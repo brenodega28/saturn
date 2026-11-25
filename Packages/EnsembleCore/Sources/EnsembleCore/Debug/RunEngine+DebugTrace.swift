@@ -10,7 +10,6 @@ extension RunEngine {
             "title": JSONValue(run.title),
             "taskId": JSONValue(run.taskId),
             "projectId": JSONValue(run.projectId),
-            "budgetUSD": JSONValue(run.budgetUSD),
             "endAction": JSONValue(run.endAction),
             "steps": JSONValue(workflow.steps.map(\.id)),
             "firstStep": JSONValue(run.currentStep),
@@ -104,13 +103,6 @@ extension RunEngine {
             "title": JSONValue(title),
             "body": JSONValue(body),
         ], at: clock())
-        guard [.stepBudget, .runBudget].contains(hold.reason) else { return }
-        trace.runEvent("budget", runId: loaded.run.id ?? -1, title: loaded.run.title, stepId: hold.stepId, runStepId: hold.runStepId, fields: [
-            "event": JSONValue("exceeded"),
-            "reason": JSONValue(hold.reason.rawValue),
-            "runCostUSD": JSONValue(loaded.run.costUSD),
-            "runBudgetUSD": JSONValue(loaded.run.budgetUSD),
-        ], at: clock())
     }
 
     func traceChatRequest(_ loaded: LoadedRun, stepId: String, kind: ChatRequestKind, title: String, body: String) {
@@ -134,16 +126,6 @@ extension RunEngine {
             fields["waitMS"] = JSONValue(Int(now.timeIntervalSince(item.createdAt) * 1000))
         }
         trace.runEvent("hold_resolved", runId: loaded.run.id ?? -1, title: loaded.run.title, stepId: hold.stepId, runStepId: hold.runStepId, fields: fields, at: now)
-    }
-
-    func traceBudgetDecision(_ loaded: LoadedRun, proceed: Bool, newBudget: Double?) {
-        debugTrace?.runEvent("budget", runId: loaded.run.id ?? -1, title: loaded.run.title, stepId: loaded.state.hold?.stepId, fields: [
-            "event": JSONValue("decision"),
-            "proceed": JSONValue(proceed),
-            "previousBudgetUSD": JSONValue(loaded.run.budgetUSD),
-            "newBudgetUSD": JSONValue(newBudget),
-            "runCostUSD": JSONValue(loaded.run.costUSD),
-        ], at: clock())
     }
 
     func traceStepFailed(_ loaded: LoadedRun, stepId: String, runStepId: Int64, error: any Error, onFailure: FailureAction) {

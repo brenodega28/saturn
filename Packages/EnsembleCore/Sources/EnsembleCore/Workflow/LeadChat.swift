@@ -378,7 +378,6 @@ public final class LeadChat {
         case .planApproval: "approving the plan"
         case .approval: "an approval step"
         case .loopLimit: "deciding whether to loop again"
-        case .stepBudget, .runBudget: "a budget decision"
         case .stepFailed: "a failed step"
         case .timedOut: "a timed-out step"
         case .gates: "a decision on gate findings"

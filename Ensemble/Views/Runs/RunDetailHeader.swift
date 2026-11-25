@@ -129,13 +129,7 @@ private struct RunStats: View {
     var body: some View {
         let columns = [GridItem(.adaptive(minimum: 150), spacing: 12, alignment: .topLeading)]
         LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-            stat("Cost", value: costText) {
-                if let budget = run.budgetUSD, budget > 0 {
-                    ProgressView(value: min(run.costUSD, budget), total: budget)
-                        .tint(run.costUSD > budget ? Theme.danger : Theme.accent)
-                        .accessibilityLabel("Budget used")
-                }
-            }
+            stat("Cost", value: RunDetailFormat.dollars(run.costUSD)) { EmptyView() }
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 stat("Duration", value: RunDetailFormat.duration((run.endedAt ?? context.date).timeIntervalSince(run.startedAt))) { EmptyView() }
             }
@@ -147,11 +141,6 @@ private struct RunStats: View {
         let steps = snapshot.history?.entries.count ?? snapshot.steps.count
         let loops = snapshot.history?.loops.count ?? 0
         return "\(steps) run · \(loops) loop\(loops == 1 ? "" : "s")"
-    }
-
-    private var costText: String {
-        guard let budget = run.budgetUSD else { return RunDetailFormat.dollars(run.costUSD) }
-        return "\(RunDetailFormat.dollars(run.costUSD)) of \(RunDetailFormat.dollars(budget))"
     }
 
     private func stat<Extra: View>(_ title: String, value: String, @ViewBuilder extra: () -> Extra) -> some View {

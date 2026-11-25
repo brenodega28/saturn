@@ -44,6 +44,10 @@ extension AppModel {
         orderedWorkspaces.flatMap { workspace in workspace.openProjects.map { (workspace, $0) } }
     }
 
+    var recentOpenProjects: [(workspace: DaemonWorkspace, project: Project)] {
+        ProjectRecency.sorted(allOpenProjects, name: \.project.name) { $0.workspace.lastUsed($0.project) }
+    }
+
     func requestNewChat() {
         let projects = allOpenProjects
         switch projects.count {
@@ -113,6 +117,11 @@ extension DaemonWorkspace {
         return draftStore.newDrafts().compactMap { draft in
             projects[draft.projectID].map { DraftSummary(daemon: id, draft: draft, project: $0) }
         }
+    }
+
+    func lastUsed(_ project: Project) -> Date {
+        let activity = project.id.flatMap { try? database.lastActivity(projectId: $0) } ?? [:]
+        return ProjectRecency.lastUsed(project, chats: leadRequests(in: project), activity: activity)
     }
 
     func summary(of chat: Chat) -> ChatSummary? {

@@ -31,6 +31,46 @@ public final class LeadChat {
         self.titler = titler ?? ChatTitler(runtime: runtime)
         runtime.observeReplies { [weak self] agent, reply in self?.record(reply: reply, from: agent) }
         runtime.observeTurnEnds { [weak self] session in self?.cleanUpAfterLeadTurn(session) }
+        driver.engine = engine
+        engine.leadShouldHandle = { [weak self] run, hold, brief in self?.handOff(hold, of: run, brief: brief) }
+        engine.mergeFailed = { [weak self] run, error in self?.handOffMergeFailure(of: run, error: error) }
+    }
+
+    func handOff(_ hold: RunHold, of run: Run, brief: String) {
+        let note = "\(hold.message) — Saturn asked the lead to fix it before asking you."
+        tellLead(brief, note: note, runId: run.id, taskId: run.taskId)
+    }
+
+    func handOffMergeFailure(of run: Run, error: String) {
+        guard (try? database.leadAgent(taskId: run.taskId)) != nil else { return }
+        tellLead(Self.mergeFailureBrief(run, error: error), note: "Merging “\(run.title)” failed — Saturn sent the error to the lead.", runId: run.id, taskId: run.taskId)
+    }
+
+    static func mergeFailureBrief(_ run: Run, error: String) -> String {
+        """
+        Saturn note (not written by the user): the user clicked Merge for run \(run.id ?? 0) “\(run.title)” and it failed. The user saw this error too.
+
+        Branch: \(run.deliveryBranch ?? "unknown")
+        Base: \(run.baseBranch ?? "the base branch")
+        Error:
+        \(error)
+
+        Fix it on the branch: tell the builders what to change with `\(HandoffTool.messageAgent.qualifiedName)`, start new agents with `\(HandoffTool.spawnAgent.qualifiedName)`, or change the code yourself after `\(HandoffTool.openWorktree.qualifiedName)`. Then tell the user it is ready to merge again. If you can’t fix it, ask the user with `\(HandoffTool.askHuman.qualifiedName)`.
+        """
+    }
+
+    private func tellLead(_ brief: String, note: String, runId: Int64?, taskId: Int64) {
+        guard let task = try? database.task(id: taskId), let project = try? database.project(id: task.projectId) else { return }
+        _ = try? database.insert(LeadMessage(projectId: task.projectId, taskId: taskId, kind: .note, text: note, runId: runId, createdAt: .now))
+        Task { [weak self] in
+            guard let self else { return }
+            try? await driver.ensureServer()
+            guard let session = try? leadSession(for: task, in: project) else { return }
+            #if DEBUG
+            runtime.debugTrace?.chatMessage(brief, direction: "saturn_to_agent", chat: "lead", agent: session.agent)
+            #endif
+            session.send(brief)
+        }
     }
 
     @discardableResult
@@ -387,7 +427,9 @@ public final class LeadChat {
             if !agents.isEmpty {
                 lines.append("Agents: " + agents.map { "\(database.displayName(of: $0)) (\($0.kind?.rawValue ?? $0.role), \(Self.describe($0.status)))" }.joined(separator: "; ") + ".")
             }
-            if let hold = engine.holds[runID] {
+            if let hold = engine.holds[runID], hold.isLeadFixing {
+                lines.append("It is waiting for you to fix \(Self.describe(hold.reason)), then call `\(HandoffTool.resolveRunHold.qualifiedName)` with run_id \(runID).")
+            } else if let hold = engine.holds[runID] {
                 lines.append("It is waiting for the user: \(Self.describe(hold.reason)).")
             }
         } else if let outcome = run.outcome, !outcome.isEmpty {

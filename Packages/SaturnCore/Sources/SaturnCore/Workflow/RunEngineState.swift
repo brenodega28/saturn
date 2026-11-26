@@ -18,6 +18,27 @@ public enum HoldReason: String, Sendable, Hashable, Codable, CaseIterable {
         case .gates: .gate
         }
     }
+
+    public var leadCanFix: Bool { [.stepFailed, .timedOut, .loopLimit].contains(self) }
+
+    public var leadActions: [HoldAction] {
+        switch self {
+        case .stepFailed, .timedOut: [.retry, .fail]
+        case .loopLimit: [.continue, .fail]
+        case .planApproval, .approval, .gates: []
+        }
+    }
+}
+
+public enum HoldHandler: String, Sendable, Hashable, Codable {
+    case lead
+    case user
+}
+
+public enum HoldAction: String, Sendable, Hashable, CaseIterable {
+    case retry
+    case `continue`
+    case fail
 }
 
 public struct RunHold: Sendable, Hashable, Codable {
@@ -27,15 +48,38 @@ public struct RunHold: Sendable, Hashable, Codable {
     public var requestId: Int64?
     public var outcome: String?
     public var message: String
+    public var body: String?
+    public var handledBy: HoldHandler
 
-    public init(reason: HoldReason, stepId: String, runStepId: Int64? = nil, requestId: Int64? = nil, outcome: String? = nil, message: String) {
+    public init(
+        reason: HoldReason, stepId: String, runStepId: Int64? = nil, requestId: Int64? = nil, outcome: String? = nil, message: String,
+        body: String? = nil, handledBy: HoldHandler = .user
+    ) {
         self.reason = reason
         self.stepId = stepId
         self.runStepId = runStepId
         self.requestId = requestId
         self.outcome = outcome
         self.message = message
+        self.body = body
+        self.handledBy = handledBy
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.reason = try container.decode(HoldReason.self, forKey: .reason)
+        self.stepId = try container.decode(String.self, forKey: .stepId)
+        self.runStepId = try container.decodeIfPresent(Int64.self, forKey: .runStepId)
+        self.requestId = try container.decodeIfPresent(Int64.self, forKey: .requestId)
+        self.outcome = try container.decodeIfPresent(String.self, forKey: .outcome)
+        self.message = try container.decode(String.self, forKey: .message)
+        self.body = try container.decodeIfPresent(String.self, forKey: .body)
+        self.handledBy = try container.decodeIfPresent(HoldHandler.self, forKey: .handledBy) ?? .user
+    }
+
+    public var isLeadFixing: Bool { handledBy == .lead }
+
+    public var leadFixingTitle: String? { isLeadFixing ? "Lead is fixing: \(message)" : nil }
 }
 
 public enum StepStart: Sendable, Hashable, Codable {
@@ -72,12 +116,14 @@ public struct RunEngineState: Sendable, Hashable, Codable {
     public var extraLoops: [String: Int]
     public var feedback: Feedback?
     public var reviewNotes: [String]
+    public var leadAttempts: [String: Int]
 
     public init(
         cursor: RunCursor? = nil, hold: RunHold? = nil, loopCounts: [String: Int] = [:], extraLoops: [String: Int] = [:],
-        feedback: Feedback? = nil, reviewNotes: [String] = []
+        feedback: Feedback? = nil, reviewNotes: [String] = [], leadAttempts: [String: Int] = [:]
     ) {
         self.reviewNotes = reviewNotes
+        self.leadAttempts = leadAttempts
         self.cursor = cursor
         self.hold = hold
         self.loopCounts = loopCounts
@@ -93,7 +139,10 @@ public struct RunEngineState: Sendable, Hashable, Codable {
         self.extraLoops = try container.decodeIfPresent([String: Int].self, forKey: .extraLoops) ?? [:]
         self.feedback = try container.decodeIfPresent(Feedback.self, forKey: .feedback)
         self.reviewNotes = try container.decodeIfPresent([String].self, forKey: .reviewNotes) ?? []
+        self.leadAttempts = try container.decodeIfPresent([String: Int].self, forKey: .leadAttempts) ?? [:]
     }
+
+    public static let leadAttemptLimit = 2
 
     static func loopKey(from stepId: String, outcome: String) -> String { "\(stepId)->\(outcome)" }
 }
@@ -106,6 +155,6 @@ extension Run {
 
 extension RunHold {
     public func isChecksExhausted(in workflow: WorkflowDefinition?) -> Bool {
-        reason == .stepFailed && workflow?.step(stepId)?.type == .check
+        reason == .stepFailed && !isLeadFixing && workflow?.step(stepId)?.type == .check
     }
 }

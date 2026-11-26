@@ -91,11 +91,13 @@ extension AppModel {
 
 extension DaemonWorkspace {
     func statusColor(of run: Run) -> Color {
-        AppModel.statusColor(needsYou: runNeedsYou(run), otherwise: run.status.color)
+        if run.id.flatMap(leadFixing(runID:)) != nil { return RunStatus.running.color }
+        return AppModel.statusColor(needsYou: runNeedsYou(run), otherwise: run.status.color)
     }
 
     func statusLabel(of run: Run) -> String {
-        runNeedsYou(run) ? RunStatus.waitingOnYou.label : run.status.label
+        if let fixing = run.id.flatMap(leadFixing(runID:)) { return fixing }
+        return runNeedsYou(run) ? RunStatus.waitingOnYou.label : run.status.label
     }
 
     func statusColor(of request: Chat, latestRun: Run?, needsYouTaskIDs: Set<Int64>) -> Color {

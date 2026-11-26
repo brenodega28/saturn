@@ -126,6 +126,8 @@ public struct RunGraph: Sendable, Hashable {
         switch run.status {
         case .pending, .running:
             return .running
+        case .waitingOnYou where hold?.isLeadFixing == true:
+            return .running
         case .waitingOnYou:
             return hold.map { [.stepFailed, .timedOut].contains($0.reason) } == true ? .failed : .waiting
         case .paused, .interrupted:

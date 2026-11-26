@@ -71,6 +71,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
     var closingTasks: Set<Int64> = []
     public weak var specReviews: (any SpecReviewHost)?
     public weak var chatRouting: (any ChatRouting)?
+    public weak var engine: RunEngine?
     public var daemonID: DaemonID?
     private(set) lazy var questionRelay = QuestionRelay { [weak self] runId, batch in self?.deliverQuestions(batch, runId: runId) }
 
@@ -114,7 +115,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
         var leadTools: Set<HandoffTool> = isLead ? HandoffTool.leadTools : []
         if isLead, agent.readOnly, agent.worktreePath == nil { leadTools.insert(.openWorktree) }
         var chatTools: Set<HandoffTool> = agent.taskId == nil ? [] : [.proposeRun, .draftSpec, .messageAgent, .askHuman]
-        if isLead, agent.taskId != nil { chatTools.formUnion([.setChatStatus, .replySpec]) }
+        if isLead, agent.taskId != nil { chatTools.formUnion([.setChatStatus, .replySpec, .resolveRunHold]) }
         if isLead, let taskId = agent.taskId, (try? runtime.database.task(id: taskId))??.isOnboarding == true { chatTools.insert(.proposeSetup) }
         let spawnedTools: Set<HandoffTool> = agent.spawnedById == nil ? [] : [.messageAgent, .askHuman, .submitResult]
         let requestTools = chatTools.union(leadTools).union(spawnedTools).union([.readChat])
@@ -167,6 +168,7 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             guard let runId = agent.runId else { throw HandoffError.notAllowed("Evidence belongs to workflow runs.") }
             return try await attachEvidence(draft, runId: runId, agent: agent)
         case .question(let question, let questions):
+            escalateLeadHolds(from: agent, question: question, questions: questions)
             if let runId = agent.runId, try relayLead(for: agent, runId: runId) != nil {
                 awaitingLead.insert(agentID)
                 #if DEBUG
@@ -309,6 +311,39 @@ public final class AgentWorkflowDriver: WorkflowDriver, HandoffSink {
             let reply = try setChatStatus(status, reason: reason, from: agent)
             if status.closeReason != nil, let taskId = agent.taskId { await specReviews?.endSpecReview(taskId: taskId) }
             return reply
+        case .resolveRunHold(let runID, let action, let note):
+            return try resolveRunHold(runID, action: action, note: note, from: agent)
+        }
+    }
+
+    func resolveRunHold(_ runID: Int64, action: HoldAction, note: String?, from agent: Agent) throws -> String {
+        guard agent.kind == .lead, let taskId = agent.taskId else {
+            throw HandoffError.notAllowed("Only a chat’s lead can resolve its run holds.")
+        }
+        guard let engine, let run = try runtime.database.run(id: runID), run.taskId == taskId else {
+            throw HandoffError.notAllowed("Run \(runID) isn’t a run of your chat.")
+        }
+        let hold = try runtime.database.engineState(runId: runID).hold
+        do {
+            try engine.resolveLeadHold(run, action: action)
+        } catch let error as RunEngineError {
+            throw HandoffError.notAllowed(error.localizedDescription)
+        }
+        let step = hold.map { " on \($0.message)" } ?? ""
+        let text = "Lead chose \(action.rawValue)\(step)" + (note.map { " — \($0)" } ?? "")
+        try runtime.database.insert(LeadMessage(projectId: agent.projectId, taskId: taskId, kind: .note, text: text, runId: runID, createdAt: .now))
+        switch action {
+        case .retry: return "Saturn is running the step again. End your turn now; Saturn tells you if it fails again."
+        case .continue: return "Saturn allowed one more round. End your turn now; Saturn tells you if it stops again."
+        case .fail: return "The run is stopped as failed. Tell the user why in your reply."
+        }
+    }
+
+    private func escalateLeadHolds(from agent: Agent, question: String, questions: [HumanQuestion]) {
+        guard agent.kind == .lead, let taskId = agent.taskId, let engine else { return }
+        let note = ([question] + questions.map(\.question)).joined(separator: "\n")
+        for run in engine.leadHeldRuns(taskId: taskId) {
+            try? engine.escalateToUser(run, note: note)
         }
     }
 

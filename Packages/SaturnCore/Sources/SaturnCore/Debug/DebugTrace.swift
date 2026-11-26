@@ -214,6 +214,7 @@ final class DebugTrace: @unchecked Sendable {
         case .setupProposal(let proposal): (HandoffTool.proposeSetup.rawValue, JSONValue(encoding: proposal) ?? .null)
         case .replySpec(let text): (HandoffTool.replySpec.rawValue, .object(["text": JSONValue(text)]))
         case .setChatStatus(let status, let reason): (HandoffTool.setChatStatus.rawValue, .object(["status": JSONValue(status.rawValue), "reason": JSONValue(reason)]))
+        case .resolveRunHold(let runID, let action, let note): (HandoffTool.resolveRunHold.rawValue, .object(["runId": JSONValue(runID), "action": JSONValue(action.rawValue), "note": JSONValue(note)]))
         }
     }
 

@@ -41,7 +41,7 @@ private struct NeedsYouBanner: View {
         HStack(spacing: 14) {
             AgentAvatar(size: 34, appearance: RoleAppearance(role: workspace.leadRole(in: summary.project)))
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(summary.stage.title) · \(ChatTime.label(summary.lastActivity))")
+                Text("\(summary.statusTitle) · \(ChatTime.label(summary.lastActivity))")
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(summary.stage.color)
                 Text(chat.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Tokens.text).lineLimit(2)
@@ -98,7 +98,7 @@ private struct ActiveChatRow: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 WorkerStack(workers: summary.workers, project: summary.project, size: 20)
-                Text(summary.stage.title).font(.system(size: 12)).foregroundStyle(summary.stage.color).frame(width: 92, alignment: .leading).lineLimit(1)
+                Text(summary.statusTitle).font(.system(size: 12)).foregroundStyle(summary.stage.color).frame(width: 92, alignment: .leading).lineLimit(1)
                 Text(ChatTime.label(summary.lastActivity)).font(.system(size: 12)).foregroundStyle(Tokens.text3).frame(width: 64, alignment: .trailing)
             }
             .padding(.horizontal, 16)

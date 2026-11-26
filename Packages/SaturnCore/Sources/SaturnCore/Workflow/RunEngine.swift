@@ -36,6 +36,8 @@ public final class RunEngine {
     public internal(set) var waitingForCapacity: Set<Int64> = []
     @ObservationIgnored public var capacityPollInterval: Duration = .seconds(2)
     @ObservationIgnored public var approvedWorkers: @MainActor (_ runID: Int64) -> [SpecWorker]? = { _ in nil }
+    @ObservationIgnored public var leadShouldHandle: (@MainActor (_ run: Run, _ hold: RunHold, _ brief: String) -> Void)?
+    @ObservationIgnored public var mergeFailed: (@MainActor (_ run: Run, _ error: String) -> Void)?
 
     @ObservationIgnored let driver: any WorkflowDriver
     @ObservationIgnored let minute: Duration
@@ -252,6 +254,39 @@ public final class RunEngine {
         launch(try loaded.id)
     }
 
+    public func resolveLeadHold(_ run: Run, action: HoldAction) throws {
+        let loaded = try load(run)
+        guard let hold = loaded.state.hold, hold.isLeadFixing else {
+            throw RunEngineError.invalidState("Run \(try loaded.id) has no hold for the lead to resolve.")
+        }
+        let allowed = hold.reason.leadActions
+        guard allowed.contains(action) else {
+            throw RunEngineError.invalidState("“\(action.rawValue)” doesn’t fit this hold (\(hold.reason.rawValue)). Use \(allowed.map(\.rawValue).joined(separator: " or ")).")
+        }
+        switch action {
+        case .retry: try retryStep(run)
+        case .continue: try resolveLoopLimit(run, continueOnce: true)
+        case .fail where hold.reason == .loopLimit: try resolveLoopLimit(run, continueOnce: false)
+        case .fail: try resolveFailure(run, retry: false)
+        }
+    }
+
+    public func escalateToUser(_ run: Run, note: String?) throws {
+        var loaded = try load(run)
+        guard var hold = loaded.state.hold, hold.isLeadFixing else {
+            throw RunEngineError.invalidState("Run \(try loaded.id) has no hold the lead is handling.")
+        }
+        hold.handledBy = .user
+        loaded.state.hold = hold
+        let body = [hold.body ?? hold.message, note.map { "The lead asks: \($0)" }].compactMap(\.self).joined(separator: "\n\n")
+        let item = ChatRequest(projectId: loaded.run.projectId, runId: loaded.run.id, kind: hold.reason.requestKind, title: hold.message, body: body, createdAt: clock())
+        try commit(loaded, request: item)
+    }
+
+    public func leadHeldRuns(taskId: Int64) -> [Run] {
+        runs.values.filter { $0.taskId == taskId && holds[$0.id ?? -1]?.isLeadFixing == true }
+    }
+
     public func pause(_ run: Run) async throws {
         var loaded = try load(run)
         guard loaded.run.status == .running else { throw RunEngineError.invalidState("Only a running run can be paused.") }
@@ -317,7 +352,13 @@ public final class RunEngine {
         guard !pushingRuns.contains(runID) else { throw RunEngineError.invalidState("This run is being pushed.") }
         mergingRuns.insert(runID)
         defer { mergingRuns.remove(runID) }
-        let summary = try await driver.mergeDelivery(current, method: method)
+        let summary: String
+        do {
+            summary = try await driver.mergeDelivery(current, method: method)
+        } catch {
+            mergeFailed?(current, error.localizedDescription)
+            throw error
+        }
         guard var merged = try database.run(id: runID) else { throw RunEngineError.runNotFound }
         merged.mergedAt = clock()
         merged.outcome = summary.isEmpty ? "Merged \(branch) into \(current.baseBranch ?? "the base branch")." : summary

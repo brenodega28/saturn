@@ -172,7 +172,11 @@ public final class DaemonConnection: Identifiable {
         return (try? database.engineState(runId: runID))?.hold
     }
 
-    public var holds: [Int64: RunHold] {
+    public var holds: [Int64: RunHold] { allHolds.filter { !$0.value.isLeadFixing } }
+
+    public var leadHolds: [Int64: RunHold] { allHolds.filter { $0.value.isLeadFixing } }
+
+    private var allHolds: [Int64: RunHold] {
         _ = revision
         let states = (try? database.writer.read { db in
             try Row.fetchAll(db, sql: "SELECT id, engineState FROM run WHERE status IN ('waitingOnYou', 'running', 'paused', 'pending', 'interrupted')")

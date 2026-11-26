@@ -192,7 +192,7 @@ struct ChatRow: View {
         .onHover { isHovered = $0 }
         .contextMenu { ChatRowMenu(chat: summary.chat, rename: startRename) }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(summary.chat.title), \(summary.stage.title), \(summary.project.name)\(ChatCost.label(summary.costUSD).map { ", \($0) spent" } ?? "")\(workspace.isRemote ? ", on \(workspace.displayName)" : "")")
+        .accessibilityLabel("\(summary.chat.title), \(summary.statusTitle), \(summary.project.name)\(ChatCost.label(summary.costUSD).map { ", \($0) spent" } ?? "")\(workspace.isRemote ? ", on \(workspace.displayName)" : "")")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 

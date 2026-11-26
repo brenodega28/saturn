@@ -190,3 +190,93 @@ import Testing
         #expect(builders.allSatisfy { $0.status != .failed })
     }
 }
+
+@MainActor
+@Suite(.serialized) struct LeadHandledHoldTests {
+    typealias H = WorkflowHarness
+
+    func failedBuild(_ h: H) async throws -> (LeadInbox, Int64) {
+        let lead = LeadInbox(h)
+        h.driver.script("build", .failure("compiler exploded"), H.done())
+        return (lead, try await lead.start(RunEngineTests.oneBuild))
+    }
+
+    func facts(_ h: H, _ id: Int64) throws -> ChatStage.Facts {
+        let run = try h.run(id)
+        return ChatStage.Facts(latestRun: run, currentStep: RunEngineTests.oneBuild.step("build"), hold: try h.hold(id))
+    }
+
+    @Test func aLeadHoldIsWorkSaysLeadIsFixingAndIsNotStuck() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let (_, id) = try await failedBuild(h)
+
+        #expect(ChatStage.of(try facts(h, id)) == .building)
+        #expect(ChatStage.detail(try facts(h, id)) == "Lead is fixing: “build” failed")
+        let timeline = try h.database.timeline(for: try h.run(id), workflow: RunEngineTests.oneBuild)
+        #expect(timeline.stages.first { $0.id == "build" }?.state == .current)
+        #expect(timeline.leadFixing == "Lead is fixing: “build” failed")
+        #expect(timeline.holdItem == nil)
+        let graph = RunGraph(workflow: RunEngineTests.oneBuild, run: try h.run(id), steps: try h.steps(id), hold: try h.hold(id))
+        #expect(graph.node("build")?.state == .running)
+        #expect(try h.hold(id)?.isChecksExhausted(in: RunEngineTests.oneBuild) == false)
+
+        try h.engine.escalateToUser(try h.run(id), note: "Which compiler?")
+
+        #expect(ChatStage.of(try facts(h, id)) == .stuck)
+        #expect(ChatStage.detail(try facts(h, id)) == nil)
+        let escalated = try h.database.timeline(for: try h.run(id), workflow: RunEngineTests.oneBuild)
+        #expect(escalated.stages.first { $0.id == "build" }?.state == .failed)
+        #expect(escalated.holdItem?.body.contains("Which compiler?") == true)
+    }
+
+    @Test func aLeadHoldSendsNoNotificationUntilItEscalates() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let feed = ChatRequestFeed(database: h.database, launchedAt: .distantPast)
+        var notified: [ChatRequest] = []
+        feed.onNewItems = { notified += $0 }
+        feed.start()
+        defer { feed.stop() }
+        let (_, id) = try await failedBuild(h)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(notified.isEmpty)
+        #expect(feed.items.isEmpty)
+
+        try h.engine.escalateToUser(try h.run(id), note: "Which compiler?")
+
+        try await waitUntil { !notified.isEmpty }
+        #expect(notified.map(\.kind) == [.failure])
+        #expect(notified.first?.title == "“build” failed")
+    }
+
+    @Test func theLeadsReplyWhileFixingSendsNoNotificationUntilItEscalates() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let feed = ChatNotificationFeed(database: h.database, launchedAt: .distantPast)
+        var notified: [ChatNotification] = []
+        feed.onNew = { notified += $0 }
+        let (_, id) = try await failedBuild(h)
+        let run = try h.run(id)
+        func reply(_ text: String) throws {
+            _ = try h.database.insert(LeadMessage(projectId: run.projectId, taskId: run.taskId, kind: .lead, text: text, createdAt: .now))
+        }
+
+        try reply("Asking Dev 1 to fix the build.")
+        feed.leadTurnEnded(taskId: run.taskId)
+        #expect(notified.isEmpty)
+
+        try h.engine.escalateToUser(run, note: "Which compiler?")
+        try reply("I need your call on the compiler.")
+        feed.leadTurnEnded(taskId: run.taskId)
+        #expect(notified.map(\.event) == [.leadReply])
+    }
+
+    @Test func leadHoldsDontCountAsChangesWaitingOnYou() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let (_, id) = try await failedBuild(h)
+        #expect(h.engine.changesWaitingOnYou(projectID: try #require(h.project.id), excluding: -1) == 0)
+        #expect(h.engine.leadHeldRuns(taskId: try h.run(id).taskId).map(\.id) == [id])
+    }
+}

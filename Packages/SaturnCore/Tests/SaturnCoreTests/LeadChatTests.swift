@@ -641,6 +641,136 @@ import Testing
         defer { setup.harness.cleanUp() }
         await #expect(throws: AgentError.emptyTask) { try await chat.createRequest("  ", in: setup.project) }
     }
+
+    static let failingWorkflow = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
+
+    func heldRun(_ setup: Setup, in task: Chat, _ reason: HoldReason = .stepFailed, handledBy: HoldHandler = .lead) throws -> Run {
+        let hold = RunHold(reason: reason, stepId: "build", message: "“build” failed", body: "boom Retry the step, or fail the run.", handledBy: handledBy)
+        let run = try setup.harness.database.insert(Run(
+            projectId: task.projectId, taskId: task.id!, workflow: "one", workflowVersion: "1", currentStep: "build", status: .waitingOnYou,
+            startedAt: .now, title: "Add alpha", workflowSnapshot: try ProjectConfigLoader.encodeYAML(Self.failingWorkflow),
+            endAction: EndAction.merge.rawValue, deliveryBranch: "crew/delivery-run-9", baseBranch: "main"
+        ), state: RunEngineState(cursor: RunCursor(stepId: "build", iteration: 1), hold: hold))
+        try setup.engine.recover()
+        return run
+    }
+
+    func sentToLead(_ setup: Setup, _ lead: Agent) -> [String] {
+        setup.harness.runtime.session(for: lead)?.transcript.entries.compactMap { entry -> String? in
+            if case .user(let text) = entry.content { return text }
+            return nil
+        } ?? []
+    }
+
+    @Test func aLeadHandledHoldIsSentToTheChatLeadWithANoteForTheUser() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead) = try await chatLead(setup, chat)
+        #expect(setup.engine.leadShouldHandle != nil && setup.driver.engine === setup.engine)
+        let run = try heldRun(setup, in: task)
+        let hold = try #require(try setup.harness.database.engineState(runId: run.id!).hold)
+
+        chat.handOff(hold, of: run, brief: "Saturn note: run \(run.id!) failed at build.")
+
+        try await waitUntil { sentToLead(setup, lead).contains("Saturn note: run \(run.id!) failed at build.") }
+        let note = try #require(messages(setup, task).last { $0.kind == .note })
+        #expect(note.text == "“build” failed — Saturn asked the lead to fix it before asking you.")
+        #expect(note.runId == run.id)
+        #expect(ChatNotification(message: note) == nil)
+        #expect(try chat.statusNote(taskId: task.id!)?.contains("waiting for you to fix a failed step, then call `mcp__saturn__resolve_run_hold` with run_id \(run.id!)") == true)
+    }
+
+    @Test func onlyAChatLeadGetsTheResolveRunHoldTool() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (_, lead) = try await chatLead(setup, chat)
+        #expect(setup.driver.tools(for: lead).contains(.resolveRunHold))
+        let builder = try await setup.harness.runtime.spawn(in: setup.project, kind: .builder, count: 1, git: setup.harness.repo.git)
+        #expect(!setup.driver.tools(for: try #require(builder.first).agent).contains(.resolveRunHold))
+        #expect(try HandoffTool.resolveRunHold.decode(.object(["run_id": .number(4), "action": .string(" Retry "), "note": .string(" ")])) == .resolveRunHold(runID: 4, action: .retry, note: nil))
+        #expect(throws: HandoffError.self) { try HandoffTool.resolveRunHold.decode(.object(["run_id": .number(4), "action": .string("skip")])) }
+        #expect(throws: HandoffError.missing("run_id")) { try HandoffTool.resolveRunHold.decode(.object(["action": .string("fail")])) }
+    }
+
+    @Test func theLeadResolvesItsRunHoldLikeTheFailButton() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead) = try await chatLead(setup, chat)
+        let run = try heldRun(setup, in: task)
+
+        await #expect(throws: HandoffError.self) {
+            try await setup.driver.receive(.resolveRunHold(runID: run.id!, action: .continue, note: nil), from: lead.id!)
+        }
+        let reply = try await setup.driver.receive(.resolveRunHold(runID: run.id!, action: .fail, note: "The API is gone"), from: lead.id!)
+
+        #expect(reply.contains("stopped as failed"))
+        let failed = try #require(try setup.harness.database.run(id: run.id!))
+        #expect(failed.status == .failed && failed.lastError == "“build” failed")
+        #expect(messages(setup, task).last { $0.kind == .note }?.text == "Lead chose fail on “build” failed — The API is gone")
+        await #expect(throws: HandoffError.self) {
+            try await setup.driver.receive(.resolveRunHold(runID: run.id!, action: .fail, note: nil), from: lead.id!)
+        }
+    }
+
+    @Test func onlyTheLeadOfTheRunsChatMayResolveItsHold() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, _) = try await chatLead(setup, chat)
+        let run = try heldRun(setup, in: task)
+        let other = try await chat.createRequest("CHAT another", in: setup.project)
+        try await waitUntil { messages(setup, other).contains { $0.kind == .lead } }
+        let otherLead = try #require(try setup.harness.database.leadAgent(taskId: other.id!))
+
+        await #expect(throws: HandoffError.self) {
+            try await setup.driver.receive(.resolveRunHold(runID: run.id!, action: .fail, note: nil), from: otherLead.id!)
+        }
+        #expect(try setup.harness.database.run(id: run.id!)?.status == .waitingOnYou)
+    }
+
+    @Test func userHandledHoldsCantBeResolvedByTheLead() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead) = try await chatLead(setup, chat)
+        let run = try heldRun(setup, in: task, handledBy: .user)
+
+        await #expect(throws: HandoffError.notAllowed("Run \(run.id!) has no hold for the lead to resolve.")) {
+            try await setup.driver.receive(.resolveRunHold(runID: run.id!, action: .fail, note: nil), from: lead.id!)
+        }
+    }
+
+    @Test func theLeadAskingTheUserEscalatesTheHoldWithItsQuestion() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead) = try await chatLead(setup, chat)
+        let run = try heldRun(setup, in: task)
+        #expect(try setup.harness.database.chatRequests(runId: run.id!).isEmpty)
+
+        let reply = try await setup.driver.receive(.question("Should I drop the flaky test?", [HumanQuestion(question: "Drop it?")]), from: lead.id!)
+
+        #expect(reply.contains("sent to the user"))
+        let hold = try #require(try setup.harness.database.engineState(runId: run.id!).hold)
+        #expect(hold.handledBy == .user)
+        let card = try #require(try setup.harness.database.chatRequests(runId: run.id!).first { $0.kind == .failure })
+        #expect(card.id == hold.requestId && card.title == "“build” failed")
+        #expect(card.body == "boom Retry the step, or fail the run.\n\nThe lead asks: Should I drop the flaky test?\nDrop it?")
+        #expect(try setup.harness.database.openChatRequests(projectId: setup.project.id!).contains { $0.kind == .question && $0.title == "Lead asks" })
+    }
+
+    @Test func aFailedManualMergeIsSentToTheLeadWithTheBranchAndBase() async throws {
+        let (setup, chat, _) = try await makeChat()
+        defer { setup.harness.cleanUp() }
+        let (task, lead) = try await chatLead(setup, chat)
+        let run = try heldRun(setup, in: task)
+
+        setup.engine.mergeFailed?(run, "CONFLICT (content): Merge conflict in alpha.txt")
+
+        try await waitUntil { sentToLead(setup, lead).contains { $0.contains("the user clicked Merge for run \(run.id!)") } }
+        let brief = try #require(sentToLead(setup, lead).last { $0.contains("clicked Merge") })
+        #expect(brief.contains("Branch: crew/delivery-run-9") && brief.contains("Base: main"))
+        #expect(brief.contains("CONFLICT (content): Merge conflict in alpha.txt"))
+        #expect(brief.contains("tell the user it is ready to merge again"))
+        #expect(messages(setup, task).last { $0.kind == .note }?.text == "Merging “Add alpha” failed — Saturn sent the error to the lead.")
+    }
 }
 
 @Suite struct RequestThreadTests {

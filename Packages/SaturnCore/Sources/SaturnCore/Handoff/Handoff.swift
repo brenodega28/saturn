@@ -350,6 +350,7 @@ public enum HandoffMessage: Sendable, Hashable {
     case setupProposal(SetupProposal)
     case replySpec(String)
     case setChatStatus(ChatStatusTarget, reason: String?)
+    case resolveRunHold(runID: Int64, action: HoldAction, note: String?)
 }
 
 public enum ChatStatusTarget: String, Sendable, Hashable, CaseIterable {
@@ -470,6 +471,7 @@ public enum HandoffTool: String, Sendable, CaseIterable {
     case replySpec = "reply_spec"
     case setChatStatus = "set_chat_status"
     case proposeSetup = "propose_setup"
+    case resolveRunHold = "resolve_run_hold"
 
     public static let leadTools: Set<HandoffTool> = [.messageAgent, .listAgents, .spawnAgent, .stopAgent, .deleteAgent]
 
@@ -515,6 +517,8 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             "Propose this project's Saturn setup at the end of onboarding: the mission (markdown), where specs live (spec or .saturn/specs), named agent profiles tailored to the stack, a custom workflow that uses them (same shape as a .saturn/workflows YAML file, plus its id), and whether it becomes the default. Saturn checks it and returns any problems for you to fix. A valid setup shows the user a card listing every file Saturn will write; nothing is written until they click Apply. Then end your turn."
         case .setChatStatus:
             "Set this request chat’s status. finished: the work is done and waits on the user; agents, worktrees and branches stay. resolved: the user confirmed the goal is met. closed: the user abandoned it. Resolving or closing deletes the request’s agents, worktrees and branches after your turn ends. open: work resumes. Only open works while a run is going."
+        case .resolveRunHold:
+            "Resolve a run hold Saturn sent you: a failed, timed-out or looping step of this chat’s run. Fix the problem first, then pick retry (run the failed step again), continue (allow one more loop round) or fail (stop the run). These do exactly what the user’s Retry, Continue once and Fail buttons do."
         }
     }
 
@@ -685,6 +689,12 @@ public enum HandoffTool: String, Sendable, CaseIterable {
                 "status": .object(["type": .string("string"), "enum": .array(ChatStatusTarget.allCases.map { JSONValue.string($0.rawValue) })]),
                 "reason": string("One line shown to the user"),
             ], required: ["status"])
+        case .resolveRunHold:
+            return object([
+                "run_id": .object(["type": .string("integer"), "description": .string("The run id from Saturn’s message")]),
+                "action": .object(["type": .string("string"), "enum": .array(HoldAction.allCases.map { JSONValue.string($0.rawValue) })]),
+                "note": string("What you fixed, shown to the user"),
+            ], required: ["run_id", "action"])
         }
     }
 
@@ -772,6 +782,17 @@ public enum HandoffTool: String, Sendable, CaseIterable {
             }
             let reason = arguments["reason"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             return .setChatStatus(status, reason: reason)
+        case .resolveRunHold:
+            guard let runID = arguments["run_id"]?.int ?? arguments["run_id"]?.string.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) else {
+                throw HandoffError.missing("run_id")
+            }
+            let name = arguments["action"]?.string?.trimmingCharacters(in: .whitespaces).lowercased()
+            guard let name, !name.isEmpty else { throw HandoffError.missing("action") }
+            guard let action = HoldAction(rawValue: name) else {
+                throw HandoffError.notAllowed("Unknown action “\(name)”. Use one of: \(HoldAction.allCases.map(\.rawValue).joined(separator: ", ")).")
+            }
+            let note = arguments["note"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            return .resolveRunHold(runID: Int64(runID), action: action, note: note)
         }
     }
 }

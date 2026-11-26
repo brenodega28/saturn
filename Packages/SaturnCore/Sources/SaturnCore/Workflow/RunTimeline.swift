@@ -39,6 +39,7 @@ public struct RunTimeline: Sendable, Hashable {
     public var pendingPlan: Plan?
     public var questions: [ChatRequest]
     public var holdItem: ChatRequest?
+    public var leadFixing: String?
 
     public init(run: Run, workflow: WorkflowDefinition, steps: [RunStep], hold: RunHold?, inbox: [ChatRequest] = []) {
         self.entries = steps.compactMap { step in
@@ -60,6 +61,7 @@ public struct RunTimeline: Sendable, Hashable {
         }
         self.questions = inbox.filter { $0.kind == .question && $0.status == .open }
         self.holdItem = hold?.requestId.flatMap { id in inbox.first { $0.id == id } }
+        self.leadFixing = hold?.leadFixingTitle
     }
 
     public var approvedPlan: Plan? {
@@ -90,6 +92,7 @@ public struct RunTimeline: Sendable, Hashable {
             } else if id == run.currentStep {
                 switch run.status {
                 case .failed: state = .failed
+                case .waitingOnYou where hold?.isLeadFixing == true: state = .current
                 case .waitingOnYou: state = hold.map { [.stepFailed, .timedOut].contains($0.reason) } == true ? .failed : .waiting
                 case .cancelled: state = .upcoming
                 default: state = .current

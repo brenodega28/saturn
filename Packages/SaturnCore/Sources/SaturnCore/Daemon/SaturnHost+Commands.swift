@@ -9,6 +9,7 @@ extension SaturnHost {
         registerApprovalCommands()
         registerSettingsCommands()
         registerCodeCommands()
+        registerRemoteAccessCommands()
     }
 
     public func perform<C: DaemonCommand>(_ command: C) async throws -> C.Response {
@@ -16,8 +17,8 @@ extension SaturnHost {
         return try CommandCoding.response(of: C.self, from: result)
     }
 
-    func handle(_ envelope: CommandEnvelope) async -> ResultEnvelope {
-        await router.handle(envelope)
+    func handle(_ envelope: CommandEnvelope, origin: ClientOrigin = .local) async -> ResultEnvelope {
+        await router.handle(envelope, origin: origin)
     }
 
     func requireProject(_ id: Int64) throws -> Project {
@@ -588,5 +589,52 @@ extension SaturnHost {
             let directory = command.directory.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? project.url
             return try await requireGit(for: project).run(command.arguments, in: directory)
         }
+    }
+
+    private func registerRemoteAccessCommands() {
+        router.register(RemoteAccessCommands.Status.self) { [unowned self] _ in
+            try remoteAccessStatus()
+        }
+        router.register(RemoteAccessCommands.SetEnabled.self) { [unowned self] command in
+            let remote = try requireRemoteAccess()
+            let current = settings.remoteAccess ?? RemoteAccessSettings()
+            let port = command.port ?? current.port
+            guard port == 0 || (1024...65535).contains(port) else { throw CommandFailure(code: .invalidArguments, message: "Use a port from 1024 to 65535.") }
+            if command.enabled {
+                try await remote.start(port: port)
+            } else {
+                await remote.stop()
+            }
+            let saved = RemoteAccessSettings(enabled: command.enabled, port: remote.port ?? port)
+            try updateSettings { $0.remoteAccess = saved }
+            return try remoteAccessStatus()
+        }
+        router.register(RemoteAccessCommands.BeginPairing.self) { [unowned self] _ in
+            let remote = try requireRemoteAccess()
+            guard remote.isListening else { throw CommandFailure(code: .failed, message: "Turn on Remote access before pairing a device.") }
+            return remote.beginPairing()
+        }
+        router.register(RemoteAccessCommands.Revoke.self) { [unowned self] command in
+            let remote = try requireRemoteAccess()
+            guard try remote.revoke(command.deviceID) else { throw CommandFailure.notFound("The device") }
+            server?.closeSessions(of: command.deviceID)
+            return Done()
+        }
+    }
+
+    private func requireRemoteAccess() throws -> RemoteAccessServer {
+        guard let remote = server?.remoteAccess else {
+            throw CommandFailure(code: .failed, message: "Remote access needs the daemon to be listening for clients.")
+        }
+        return remote
+    }
+
+    private func remoteAccessStatus() throws -> RemoteAccessStatus {
+        let remote = try requireRemoteAccess()
+        let saved = settings.remoteAccess ?? RemoteAccessSettings()
+        return RemoteAccessStatus(
+            enabled: remote.isListening, port: remote.port ?? saved.port,
+            addresses: remote.addresses, pairedDevices: remote.devices
+        )
     }
 }

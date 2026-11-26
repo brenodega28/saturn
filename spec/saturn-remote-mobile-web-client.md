@@ -1,6 +1,6 @@
 ---
 title: "Saturn Remote: mobile web client"
-status: in-progress
+status: done
 version: 1
 workflow: feature-delivery
 workers:
@@ -42,22 +42,22 @@ Let the user control Saturn from a phone or another computer. saturnd gets an op
 
 ## Acceptance criteria
 
-- [ ] Remote access is off by default; with it off, nothing listens on any TCP port
-- [ ] When on, the listener binds only to 127.0.0.1 and Tailscale addresses (checked with `lsof -iTCP -sTCP:LISTEN`)
-- [ ] A WebSocket without a valid token is closed with 4401; a revoked token is rejected on the next connect and live sockets using it are closed
-- [ ] A remote client sending code.exec, code.writeFile, code.removeItem, settings.saveAPIKey, settings.shutdown or remote.* gets `.forbidden`, and the daemon doesn't run it (Swift test)
-- [ ] Pairing: the Mac app shows a QR code; opening its URL on a phone and entering the code stores a token, and the code works only once and expires after 5 minutes
-- [ ] The web client reaches the same chat list and statuses as the Mac app from snapshot + changes, and updates live within 1 s when a chat or run changes on the Mac
-- [ ] Chat screen matches Mobile v6: the header with status dot, title, project tile · host · cost; Lead messages; the spec card; the run event rows; the 'Ready for your review' card with +/− counts, files and checks; and the composer with workflow and model line
-- [ ] Sending a message from the composer calls chat.send and the reply streams in
-- [ ] Lead questions and permission prompts can be answered (approval.answerQuestion / answerPermission), and spec Approve & start (chat.approveSpec) and run approval/merge/push work from the phone
-- [ ] The left drawer lists chats grouped Needs you / In progress / Not started / Finished, with search and project chips filtering, and tapping a chat opens it
-- [ ] The right drawer's Task tab shows stages, branch, app runner status, changes, checks and workers; the Project tab shows the summary, stats and agents; the Log tab shows the run timeline
-- [ ] Dark and light follow prefers-color-scheme using the v6 token values. Touch targets are ≥44 px, and the layout fits 360–430 px wide with no horizontal scroll, scaling up to tablet/desktop widths
-- [ ] The client reconnects with resumeFrom seq after network loss, without a full reload, and shows an offline banner while it is disconnected
-- [ ] Installable as a PWA on iOS Safari (manifest + service worker valid in Lighthouse)
-- [ ] Dist is committed. `xcodegen generate` + the Xcode build work without Node installed
-- [ ] Existing Swift tests pass; new Swift tests cover auth, allowlist, bind addresses and WebSocket framing; web tests (Vitest) cover replica apply/resync and the main screens against the fixture server
+- [x] Remote access is off by default; with it off, nothing listens on any TCP port
+- [x] When on, the listener binds only to 127.0.0.1 and Tailscale addresses (checked with `lsof -iTCP -sTCP:LISTEN`)
+- [x] A WebSocket without a valid token is closed with 4401; a revoked token is rejected on the next connect and live sockets using it are closed
+- [x] A remote client sending code.exec, code.writeFile, code.removeItem, settings.saveAPIKey, settings.shutdown or remote.* gets `.forbidden`, and the daemon doesn't run it (Swift test)
+- [x] Pairing: the Mac app shows a QR code; opening its URL on a phone and entering the code stores a token, and the code works only once and expires after 5 minutes
+- [x] The web client reaches the same chat list and statuses as the Mac app from snapshot + changes, and updates live within 1 s when a chat or run changes on the Mac
+- [x] Chat screen matches Mobile v6: the header with status dot, title, project tile · host · cost; Lead messages; the spec card; the run event rows; the 'Ready for your review' card with +/− counts, files and checks; and the composer with workflow and model line
+- [x] Sending a message from the composer calls chat.send and the reply streams in
+- [x] Lead questions and permission prompts can be answered (approval.answerQuestion / answerPermission), and spec Approve & start (chat.approveSpec) and run approval/merge/push work from the phone
+- [x] The left drawer lists chats grouped Needs you / In progress / Not started / Finished, with search and project chips filtering, and tapping a chat opens it
+- [x] The right drawer's Task tab shows stages, branch, app runner status, changes, checks and workers; the Project tab shows the summary, stats and agents; the Log tab shows the run timeline
+- [x] Dark and light follow prefers-color-scheme using the v6 token values. Touch targets are ≥44 px, and the layout fits 360–430 px wide with no horizontal scroll, scaling up to tablet/desktop widths
+- [x] The client reconnects with resumeFrom seq after network loss, without a full reload, and shows an offline banner while it is disconnected
+- [x] Installable as a PWA on iOS Safari (manifest + service worker valid in Lighthouse)
+- [x] Dist is committed. `xcodegen generate` + the Xcode build work without Node installed
+- [x] Existing Swift tests pass; new Swift tests cover auth, allowlist, bind addresses and WebSocket framing; web tests (Vitest) cover replica apply/resync and the main screens against the fixture server
 
 ## Verification
 

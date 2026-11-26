@@ -1,6 +1,6 @@
 ---
 title: Chat shows messages only; run controls move to Task tab
-status: in-progress
+status: done
 version: 1
 workflow: small-task
 workers:
@@ -30,13 +30,13 @@ The request chat stops showing two kinds of cards. (1) The run progress card: th
 
 ## Acceptance criteria
 
-- [ ] Starting a run adds no card or 'Started the run.' bubble to the chat
-- [ ] No 'Proposed run' card appears in chat, open or started
-- [ ] With an active run, the Task tab shows Pause (or Resume when paused/interrupted), Retry Step when the hold is stepFailed/timedOut, and Cancel Run with the existing confirmation dialog, and each calls the same workspace action as before
-- [ ] The Task tab has a Details control that opens the run detail page
-- [ ] With an open proposal, the Task tab shows Start run and Dismiss, and they work; Start is disabled while a run is active or the request is closed
-- [ ] Lead messages, user messages and the other cards still render in chat as before
-- [ ] The app builds and the SaturnCore tests pass
+- [x] Starting a run adds no card or 'Started the run.' bubble to the chat
+- [x] No 'Proposed run' card appears in chat, open or started
+- [x] With an active run, the Task tab shows Pause (or Resume when paused/interrupted), Retry Step when the hold is stepFailed/timedOut, and Cancel Run with the existing confirmation dialog, and each calls the same workspace action as before
+- [x] The Task tab has a Details control that opens the run detail page
+- [x] With an open proposal, the Task tab shows Start run and Dismiss, and they work; Start is disabled while a run is active or the request is closed
+- [x] Lead messages, user messages and the other cards still render in chat as before
+- [x] The app builds and the SaturnCore tests pass
 
 ## Verification
 

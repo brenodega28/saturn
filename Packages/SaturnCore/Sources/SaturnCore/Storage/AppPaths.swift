@@ -32,6 +32,8 @@ public struct AppPaths: Sendable {
 
     public var daemonSettings: URL { root.appending(path: "daemon-settings.json") }
 
+    public var remoteDevices: URL { root.appending(path: "remote-devices.json") }
+
     public var daemonLog: URL { root.appending(path: "saturnd.log") }
 
     public var daemonBuild: URL { root.appending(path: "daemon-build.json") }

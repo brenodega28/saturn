@@ -32,6 +32,7 @@ struct AppSettingsView: View {
             Tab("Accounts", systemImage: "person.crop.circle", value: "accounts") { AccountsSettings() }
             Tab("Engines", systemImage: "terminal", value: "engines") { EnginesSettings() }
             Tab("Servers", systemImage: "server.rack", value: "servers") { ServersSettings() }
+            Tab("Remote Access", systemImage: "iphone.radiowaves.left.and.right", value: "remote") { SettingsPane { RemoteAccessSettingsView() } }
             Tab("Key Bindings", systemImage: "keyboard", value: "keys") {
                 KeyBindingsEditor().padding(20)
             }

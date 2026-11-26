@@ -12,3 +12,4 @@ Configs/Local.xcconfig
 *.xcuserstate
 xcuserdata/
 .claude/worktrees/
+web/node_modules/

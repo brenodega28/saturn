@@ -2,9 +2,20 @@ import Foundation
 import GRDB
 import Synchronization
 
+public enum ClientOrigin: Sendable, Hashable {
+    case local
+    case remote(deviceID: UUID)
+
+    public var isRemote: Bool {
+        if case .remote = self { return true }
+        return false
+    }
+}
+
 @MainActor
 public final class DaemonServer {
     public let socketPath: URL
+    public private(set) var remoteAccess: RemoteAccessServer!
     private weak var host: SaturnHost?
     private var listener: SocketListener?
     private var sessions: [UUID: ClientSession] = [:]
@@ -21,16 +32,28 @@ public final class DaemonServer {
         listener = try SocketListener(path: socket.path) { [weak self] descriptor in
             Task { @MainActor in self?.accept(LineChannel(socket: descriptor)) }
         }
+        remoteAccess = RemoteAccessServer(devicesFile: host.paths.remoteDevices) { [weak self] channel, deviceID in
+            self?.accept(channel, origin: .remote(deviceID: deviceID))
+        }
+        if let settings = host.settings.remoteAccess, settings.enabled {
+            Task { [weak self] in
+                do {
+                    try await self?.remoteAccess.start(port: settings.port)
+                } catch {
+                    FileHandle.standardError.write(Data("saturnd: Remote access didn’t start: \(error.localizedDescription)\n".utf8))
+                }
+            }
+        }
     }
 
     public var clientCount: Int { sessions.values.filter(\.isStreaming).count }
 
-    public func accept(_ channel: LineChannel) {
+    public func accept(_ channel: LineChannel, origin: ClientOrigin = .local) {
         guard let host else {
             channel.close()
             return
         }
-        let session = ClientSession(host: host, channel: channel)
+        let session = ClientSession(host: host, channel: channel, origin: origin)
         sessions[session.id] = session
         channel.whenClosed { [weak self] in
             Task { @MainActor in self?.sessions[session.id] = nil }
@@ -50,7 +73,14 @@ public final class DaemonServer {
         }
     }
 
+    func closeSessions(of deviceID: UUID) {
+        for session in sessions.values where session.origin == .remote(deviceID: deviceID) {
+            session.close()
+        }
+    }
+
     func stop() {
+        remoteAccess.shutdown()
         listener?.stop()
         listener = nil
         if let changeListener { host?.changeLog.removeListener(changeListener) }
@@ -65,6 +95,7 @@ public final class DaemonServer {
 final class ClientSession {
     let id = UUID()
     let channel: LineChannel
+    let origin: ClientOrigin
     private weak var host: SaturnHost?
     private let identity: DaemonIdentity
     private let database: AppDatabase
@@ -74,8 +105,9 @@ final class ClientSession {
     private(set) var isHandshaken = false
     private(set) var clientID: UUID?
 
-    init(host: SaturnHost, channel: LineChannel) {
+    init(host: SaturnHost, channel: LineChannel, origin: ClientOrigin = .local) {
         self.host = host
+        self.origin = origin
         self.identity = host.identity
         self.database = host.database
         self.channel = channel
@@ -129,11 +161,15 @@ final class ClientSession {
             guard isHandshaken else { return }
             Task { @MainActor [weak self] in
                 guard let self, let host = self.host else { return }
-                let result = await host.handle(envelope)
+                let result = await host.handle(envelope, origin: self.origin)
                 await self.pumpState.flushThenSend(.result(result))
             }
         case .file(let request):
             guard isHandshaken else { return }
+            if origin.isRemote, !RemoteAccessPolicy.allows(file: request.kind) {
+                send(.fileChunk(FileChunk(requestID: request.requestID, offset: request.offset, data: Data(), end: true, error: "A remote device can’t read this file.")))
+                return
+            }
             files[request.requestID]?.cancel()
             files[request.requestID] = stream(request)
         case .fileCancel(let request):

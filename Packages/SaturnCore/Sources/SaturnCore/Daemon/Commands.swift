@@ -914,3 +914,34 @@ public enum CodeCommands {
         }
     }
 }
+
+public enum RemoteAccessCommands {
+    public struct Status: DaemonCommand {
+        public static let name = "remote.status"
+        public typealias Response = RemoteAccessStatus
+        public init() {}
+    }
+
+    public struct SetEnabled: DaemonCommand {
+        public static let name = "remote.setEnabled"
+        public typealias Response = RemoteAccessStatus
+        public var enabled: Bool
+        public var port: Int?
+        public init(enabled: Bool, port: Int? = nil) {
+            self.enabled = enabled
+            self.port = port
+        }
+    }
+
+    public struct BeginPairing: DaemonCommand {
+        public static let name = "remote.beginPairing"
+        public typealias Response = RemotePairing
+        public init() {}
+    }
+
+    public struct Revoke: DaemonCommand {
+        public static let name = "remote.revoke"
+        public var deviceID: UUID
+        public init(deviceID: UUID) { self.deviceID = deviceID }
+    }
+}

@@ -1,6 +1,6 @@
 ---
 title: Send failed checks and merges to the lead before the user
-status: in-progress
+status: done
 version: 1
 workflow: feature-delivery
 workers:
@@ -34,16 +34,16 @@ Today, when a run step fails, times out or hits its loop limit, RunEngine.hold p
 
 ## Acceptance criteria
 
-- [ ] A QA step that returns failed past max_loops sends the lead a message describing the failure. No user card is created, and the chat stage shows 'Lead is fixing'.
-- [ ] A check or agent step that throws (stepFailed) or times out is routed to the lead the same way.
-- [ ] An end-step merge conflict or unsafe merge is routed to the lead, and the message names the branch and the conflicting files.
-- [ ] The lead calling resolve_run_hold with retry, continue or fail behaves exactly like the user's Retry, Continue once and Fail buttons.
-- [ ] The lead calling ask_human during a lead-handled hold posts the original user card plus the lead's question, and the hold becomes user-handled.
-- [ ] A third lead-handled hold on the same step goes straight to the user with the usual card.
-- [ ] A run without a chat lead (no owning task) keeps today's behaviour: the user card is posted at once.
-- [ ] A manual Merge button failure shows the error to the user and also sends it to the lead.
-- [ ] No macOS 'needs you' notification fires for a lead-handled hold. One fires when it escalates.
-- [ ] No regressions: swift test passes in Packages/SaturnCore, and new tests cover each case above in FailureRecoveryTests, RunEngineTests and LeadChatTests.
+- [x] A QA step that returns failed past max_loops sends the lead a message describing the failure. No user card is created, and the chat stage shows 'Lead is fixing'.
+- [x] A check or agent step that throws (stepFailed) or times out is routed to the lead the same way.
+- [x] An end-step merge conflict or unsafe merge is routed to the lead, and the message names the branch and the conflicting files.
+- [x] The lead calling resolve_run_hold with retry, continue or fail behaves exactly like the user's Retry, Continue once and Fail buttons.
+- [x] The lead calling ask_human during a lead-handled hold posts the original user card plus the lead's question, and the hold becomes user-handled.
+- [x] A third lead-handled hold on the same step goes straight to the user with the usual card.
+- [x] A run without a chat lead (no owning task) keeps today's behaviour: the user card is posted at once.
+- [x] A manual Merge button failure shows the error to the user and also sends it to the lead.
+- [x] No macOS 'needs you' notification fires for a lead-handled hold. One fires when it escalates.
+- [x] No regressions: swift test passes in Packages/SaturnCore, and new tests cover each case above in FailureRecoveryTests, RunEngineTests and LeadChatTests.
 
 ## Verification
 

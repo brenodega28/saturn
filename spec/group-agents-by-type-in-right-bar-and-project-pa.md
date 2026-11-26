@@ -1,6 +1,6 @@
 ---
 title: Group agents by type in right bar and project page
-status: in-progress
+status: done
 version: 1
 workflow: feature-delivery
 workers:
@@ -32,15 +32,15 @@ The right bar's Project tab Agents list, the project Overview's Agents strip and
 
 ## Acceptance criteria
 
-- [ ] With 1 lead per chat across 3 chats and 4 builders, the right bar Project tab shows exactly 2 rows (Lead ×3, Builder ×4), not 7
-- [ ] The section count in the right bar shows the number of types, with total instances visible
-- [ ] Clicking Show all on a type row lists every instance of that type; clicking an instance opens its session; Hide collapses it
-- [ ] Overview Agents strip shows one avatar per type with an instance-count badge when count > 1
-- [ ] Agents page shows one card per type; Show all N instances reveals the existing per-agent cards with their controls (pin, delete, etc.) intact
-- [ ] A type's status reflects its most urgent instance (any instance needing input shows Needs you)
-- [ ] Archived agents are excluded from the right bar and overview as today
-- [ ] Grouping logic is covered by a unit test; xcodebuild build and existing tests pass
-- [ ] React/SwiftUI style: no superfluous comments, short descriptive names
+- [x] With 1 lead per chat across 3 chats and 4 builders, the right bar Project tab shows exactly 2 rows (Lead ×3, Builder ×4), not 7
+- [x] The section count in the right bar shows the number of types, with total instances visible
+- [x] Clicking Show all on a type row lists every instance of that type; clicking an instance opens its session; Hide collapses it
+- [x] Overview Agents strip shows one avatar per type with an instance-count badge when count > 1
+- [x] Agents page shows one card per type; Show all N instances reveals the existing per-agent cards with their controls (pin, delete, etc.) intact
+- [x] A type's status reflects its most urgent instance (any instance needing input shows Needs you)
+- [x] Archived agents are excluded from the right bar and overview as today
+- [x] Grouping logic is covered by a unit test; xcodebuild build and existing tests pass
+- [x] React/SwiftUI style: no superfluous comments, short descriptive names
 
 ## Verification
 

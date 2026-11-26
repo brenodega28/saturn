@@ -212,10 +212,17 @@ public final class ChatNotificationFeed {
         let since = launchedAt
         do {
             let sources = try database.writer.read { db in try AppDatabase.fetchLeadTurnSources(db, taskId: taskId, since: since) }
-            receiveLeadTurnEnd(messages: sources.messages, runs: sources.runs.map(liveRun))
+            receiveLeadTurnEnd(messages: sources.messages, runs: sources.runs.map(liveRun).map(workingWhileLeadFixes))
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    func workingWhileLeadFixes(_ run: Run) -> Run {
+        guard run.status == .waitingOnYou, let id = run.id, (try? database.engineState(runId: id))?.hold?.isLeadFixing == true else { return run }
+        var working = run
+        working.status = .running
+        return working
     }
 
     public func receiveLeadTurnEnd(messages: [LeadMessage], runs: [Run]) {

@@ -79,6 +79,7 @@ extension DaemonWorkspace {
 
     func subtitle(of summary: ChatSummary) -> String {
         if let request = pendingAsk(for: summary.chat) { return request.title }
+        if let detail = summary.detail { return detail }
         if summary.stage.needsAttention, hasOpenProposal(summary.chat) { return "The spec is ready for your approval" }
         if let run = latestRun(of: summary.chat) {
             if run.isActive, let step = run.currentStep.flatMap({ runWorkflow(run)?.step($0) }) { return step.displayTitle }

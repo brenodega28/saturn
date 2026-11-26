@@ -45,12 +45,17 @@ public enum ChatStage: String, Sendable, Hashable, CaseIterable {
     static let stuckKinds: Set<ChatRequestKind> = [.failure, .loopLimit]
     static let stuckHolds: Set<HoldReason> = [.stepFailed, .timedOut, .loopLimit]
 
+    public static func detail(_ facts: Facts) -> String? {
+        facts.isClosed ? nil : facts.hold?.leadFixingTitle
+    }
+
     public static func of(_ facts: Facts) -> ChatStage {
         if facts.isClosed { return facts.closeReason == .dropped ? .dropped : .done }
-        if let hold = facts.hold, stuckHolds.contains(hold.reason) { return .stuck }
+        let hold = facts.hold.flatMap { $0.isLeadFixing ? nil : $0 }
+        if let hold, stuckHolds.contains(hold.reason) { return .stuck }
         if facts.openRequests.contains(where: stuckKinds.contains) { return .stuck }
         if let run = facts.latestRun, run.status == .failed || run.status == .interrupted { return .stuck }
-        if facts.hold != nil || facts.pendingPermissions > 0 || facts.hasOpenProposal { return .needsYou }
+        if hold != nil || facts.pendingPermissions > 0 || facts.hasOpenProposal { return .needsYou }
         if facts.openRequests.contains(where: { $0 != .notice && $0 != .pinReview }) { return .needsYou }
         if let run = facts.latestRun, run.isActive {
             return facts.currentStep?.agent == .checker || facts.currentStep?.type == .gates ? .inReview : .building

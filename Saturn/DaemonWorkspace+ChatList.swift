@@ -12,8 +12,10 @@ struct ChatSummary: Identifiable, Hashable {
     let workers: [Agent]
     let isUnread: Bool
     let costUSD: Double
+    var detail: String?
 
     var id: String { "\(daemon.uuidString)-\(chat.id ?? -1)" }
+    var statusTitle: String { detail ?? stage.title }
 }
 
 struct DraftSummary: Identifiable, Hashable {
@@ -94,7 +96,7 @@ extension DaemonWorkspace {
             for chat in chats {
                 guard let chatID = chat.id else { continue }
                 let latest = runsByChat[chatID]?.max { ($0.startedAt, $0.id ?? 0) < ($1.startedAt, $1.id ?? 0) }
-                let hold = latest?.id.flatMap { connection.holds[$0] }
+                let hold = latest?.id.flatMap { connection.hold(runID: $0) }
                 let lead = leadSession(for: chat)
                 let facts = ChatStage.Facts(
                     closeReason: chat.closeReason, isClosed: chat.isClosed, isFinished: chat.isFinished, latestRun: latest,
@@ -108,7 +110,7 @@ extension DaemonWorkspace {
                     daemon: id, chat: chat, project: project, stage: ChatStage.of(facts), lastActivity: max(last, chat.createdAt),
                     workers: workersByChat[chatID] ?? [],
                     isUnread: ChatActivity.isUnread(viewedAt: chat.viewedAt, createdAt: chat.createdAt, lastActivity: activity[chatID]),
-                    costUSD: spend[chatID] ?? 0
+                    costUSD: spend[chatID] ?? 0, detail: ChatStage.detail(facts)
                 )
                 if chat.isClosed { closed.append(summary) } else { open.append(summary) }
             }

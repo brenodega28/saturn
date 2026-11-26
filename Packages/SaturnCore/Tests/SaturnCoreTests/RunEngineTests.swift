@@ -718,4 +718,283 @@ import Testing
             try await Task.sleep(for: .milliseconds(5))
         }
     }
+
+    static let tightLoop = WorkflowDefinition(id: "tight", name: "Tight", steps: [
+        WorkflowStep(id: "build", type: .agent, agent: .builder, next: "qa"),
+        WorkflowStep(id: "qa", type: .agent, agent: .checker, routes: [
+            StepOutcome.passed: WorkflowRoute(to: "end"),
+            StepOutcome.failed: WorkflowRoute(to: "build", maxLoops: 1),
+        ]),
+    ])
+
+    static let oneBuild = WorkflowDefinition(id: "one", name: "One", steps: [WorkflowStep(id: "build", type: .agent, agent: .builder)])
+
+    @Test func aQAFailurePastItsLoopLimitGoesToTheLeadWithoutACard() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let lead = LeadInbox(h)
+        h.driver.script("build", H.done(), H.done(), H.done())
+        let issue = ReviewIssue(description: "Refund total is off by one cent", file: "refunds.py", agent: "Dev 1")
+        h.driver.script("qa", H.verdict(StepOutcome.failed, "1"), H.verdict(StepOutcome.failed, "Totals still wrong", issues: [issue]), H.verdict(StepOutcome.passed))
+
+        let id = try await lead.start(Self.tightLoop)
+
+        let hold = try #require(try h.hold(id))
+        #expect(hold.reason == .loopLimit && hold.handledBy == .lead)
+        #expect(try h.run(id).status == .waitingOnYou)
+        #expect(try h.database.chatRequests(runId: id).isEmpty)
+        #expect(try h.database.engineState(runId: id).leadAttempts == ["qa": 1])
+        let brief = try #require(lead.briefs.first?.brief)
+        #expect(lead.briefs.count == 1)
+        #expect(brief.contains("run \(id) “Refunds v2”") && brief.contains("stopped at “qa”") && brief.contains("loop limit"))
+        #expect(brief.contains("Totals still wrong") && brief.contains("Refund total is off by one cent (Dev 1, refunds.py)"))
+        #expect(brief.contains("mcp__saturn__resolve_run_hold") && brief.contains("`continue` or `fail`"))
+        #expect(brief.contains("mcp__saturn__message_agent") && brief.contains("mcp__saturn__spawn_agent") && brief.contains("mcp__saturn__open_worktree"))
+        #expect(brief.contains("mcp__saturn__ask_human"))
+
+        try h.engine.resolveLeadHold(try h.run(id), action: .continue)
+        await h.settle(id)
+
+        #expect(try h.run(id).status == .succeeded)
+        #expect(try h.database.engineState(runId: id).extraLoops["qa->failed"] == 1)
+    }
+
+    @Test func aFailedStepGoesToTheLeadAndItsRetryMatchesTheRetryButton() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let lead = LeadInbox(h)
+        h.driver.script("build", .failure("compiler exploded"), H.done())
+
+        let id = try await lead.start(Self.oneBuild)
+
+        let hold = try #require(try h.hold(id))
+        #expect(hold.reason == .stepFailed && hold.handledBy == .lead)
+        #expect(hold.body == "compiler exploded Retry the step, or fail the run.")
+        #expect(try h.database.chatRequests(runId: id).isEmpty)
+        #expect(lead.briefs.first?.brief.contains("compiler exploded") == true)
+        #expect(lead.briefs.first?.brief.contains("`retry` or `fail`") == true)
+
+        try h.engine.resolveLeadHold(try h.run(id), action: .retry)
+        await h.settle(id)
+
+        #expect(try h.run(id).status == .succeeded)
+        #expect(h.driver.agentCalls.map(\.attempt) == [1, 2])
+        #expect(h.driver.agentCalls.last?.start == .retry(previousRunStepID: try #require(hold.runStepId)))
+    }
+
+    @Test func aTimedOutStepGoesToTheLeadAndItsFailMatchesTheFailButton() async throws {
+        let h = try H.make(minute: .milliseconds(20))
+        defer { h.cleanUp() }
+        let lead = LeadInbox(h)
+        let slow = WorkflowDefinition(id: "slow", name: "Slow", steps: [
+            WorkflowStep(id: "build", type: .agent, agent: .builder, timeoutMinutes: 1, onFailure: .fail),
+        ])
+        h.driver.script("build", .hang)
+
+        let id = try await lead.start(slow)
+
+        #expect(try h.hold(id)?.reason == .timedOut)
+        #expect(try h.hold(id)?.handledBy == .lead)
+        #expect(lead.briefs.first?.brief.contains("ran longer than 1 minutes") == true)
+        #expect(throws: RunEngineError.self) { try h.engine.resolveLeadHold(try h.run(id), action: .continue) }
+
+        try h.engine.resolveLeadHold(try h.run(id), action: .fail)
+
+        #expect(try h.run(id).status == .failed)
+        #expect(try h.run(id).lastError == "“build” timed out")
+        #expect(try h.hold(id) == nil)
+        #expect(throws: RunEngineError.self) { try h.engine.resolveLeadHold(try h.run(id), action: .fail) }
+    }
+
+    @Test func aLoopLimitFailFromTheLeadFailsTheRunLikeTheUser() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let lead = LeadInbox(h)
+        h.driver.script("build", H.done(), H.done())
+        h.driver.script("qa", H.verdict(StepOutcome.failed, "1"), H.verdict(StepOutcome.failed, "2"))
+        let id = try await lead.start(Self.tightLoop)
+        #expect(throws: RunEngineError.self) { try h.engine.resolveLeadHold(try h.run(id), action: .retry) }
+
+        try h.engine.resolveLeadHold(try h.run(id), action: .fail)
+
+        #expect(try h.run(id).status == .failed)
+        #expect(try h.run(id).lastError == "“qa” sent work back to “build” 1 times")
+    }
+
+    @Test func anEndStepMergeConflictTellsTheLeadTheBranchAndFiles() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let driver = FinishFailingDriver(base: h.driver, error: WorkflowDriverError.mergeConflict(branch: "crew/builder-1/refunds", files: ["refunds.py", "totals.py"]))
+        let engine = RunEngine(database: h.database, driver: driver)
+        let lead = LeadInbox(h, engine: engine)
+        h.driver.script("build", H.done())
+
+        let id = try await lead.start(Self.oneBuild)
+
+        let hold = try #require(try h.hold(id))
+        #expect(hold.stepId == WorkflowDefinition.endStepID && hold.reason == .stepFailed && hold.handledBy == .lead)
+        #expect(try h.database.chatRequests(runId: id).isEmpty)
+        let brief = try #require(lead.briefs.first?.brief)
+        #expect(brief.contains("stopped at “Finish”"))
+        #expect(brief.contains("Branch: crew/builder-1/refunds"))
+        #expect(brief.contains("- refunds.py\n- totals.py"))
+    }
+
+    @Test func anUnsafeEndStepMergeGoesToTheLead() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let driver = FinishFailingDriver(base: h.driver, error: WorkflowDriverError.unsafeMerge("main has uncommitted changes."))
+        let engine = RunEngine(database: h.database, driver: driver)
+        let lead = LeadInbox(h, engine: engine)
+        h.driver.script("build", H.done())
+
+        let id = try await lead.start(Self.oneBuild)
+
+        #expect(try h.hold(id)?.handledBy == .lead)
+        #expect(lead.briefs.first?.brief.contains("## Unsafe merge") == true)
+        #expect(lead.briefs.first?.brief.contains("main has uncommitted changes.") == true)
+    }
+
+    @Test func theThirdHoldOnAStepGoesStraightToTheUser() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let lead = LeadInbox(h)
+        h.driver.script("build", .failure("boom 1"), .failure("boom 2"), .failure("boom 3"))
+        let id = try await lead.start(Self.oneBuild)
+
+        for _ in 0..<2 {
+            #expect(try h.hold(id)?.handledBy == .lead)
+            try h.engine.resolveLeadHold(try h.run(id), action: .retry)
+            await h.settle(id)
+        }
+
+        let hold = try #require(try h.hold(id))
+        #expect(hold.handledBy == .user)
+        #expect(lead.briefs.count == 2)
+        let card = try #require(try h.database.chatRequests(runId: id).last)
+        #expect(card.kind == .failure && card.title == "“build” failed" && card.id == hold.requestId)
+        #expect(card.body.hasPrefix("boom 3 Retry the step, or fail the run."))
+        #expect(card.body.contains("lead already tried to fix this step twice"))
+        #expect(throws: RunEngineError.self) { try h.engine.resolveLeadHold(try h.run(id), action: .retry) }
+    }
+
+    @Test func escalatingPostsTheOriginalCardWithTheLeadsQuestion() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let lead = LeadInbox(h)
+        h.driver.script("build", .failure("tests need a database"), H.done())
+        let id = try await lead.start(Self.oneBuild)
+
+        try h.engine.escalateToUser(try h.run(id), note: "Can I start Postgres locally?")
+
+        let hold = try #require(try h.hold(id))
+        #expect(hold.handledBy == .user)
+        let card = try #require(try h.database.chatRequests(runId: id).last)
+        #expect(card.kind == .failure && card.title == "“build” failed" && card.id == hold.requestId)
+        #expect(card.body == "tests need a database Retry the step, or fail the run.\n\nThe lead asks: Can I start Postgres locally?")
+        #expect(throws: RunEngineError.self) { try h.engine.escalateToUser(try h.run(id), note: nil) }
+
+        try h.engine.resolveFailure(try h.run(id), retry: true)
+        await h.settle(id)
+        #expect(try h.run(id).status == .succeeded)
+        #expect(try h.database.chatRequest(id: try #require(card.id))?.status == .answered)
+    }
+
+    @Test func aRunWithoutAChatLeadStillAsksTheUser() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        var briefs: [String] = []
+        h.engine.leadShouldHandle = { _, _, brief in briefs.append(brief) }
+        h.driver.script("build", .failure("nope"))
+
+        let id = try await h.start(Self.oneBuild)
+
+        #expect(try h.hold(id)?.handledBy == .user)
+        #expect(try h.database.chatRequests(runId: id).map(\.kind) == [.failure])
+        #expect(briefs.isEmpty)
+    }
+
+    @Test func approvalHoldsStayWithTheUserInALeadChat() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let lead = LeadInbox(h)
+        h.driver.script("plan", .result(.plan(H.plan)))
+        let id = try await lead.start(try h.workflow("feature-delivery"))
+
+        #expect(try h.hold(id)?.reason == .planApproval)
+        #expect(try h.hold(id)?.handledBy == .user)
+        #expect(try h.database.chatRequests(runId: id).map(\.kind) == [.planApproval])
+        #expect(lead.briefs.isEmpty)
+    }
+
+    @Test func aFailedManualMergeStillThrowsAndTellsTheLead() async throws {
+        let h = try H.make()
+        defer { h.cleanUp() }
+        let lead = LeadInbox(h)
+        h.driver.script("build", H.done())
+        h.driver.finishReplies = [.success(FinishResult(deliveryBranch: "crew/delivery", baseBranch: "main"))]
+        h.driver.mergeReplies = [.failure(ScriptedFailure(message: "CONFLICT (content): Merge conflict in refunds.py"))]
+        let id = try await lead.start(Self.oneBuild)
+
+        await #expect(throws: ScriptedFailure.self) { try await h.engine.mergeDelivery(try h.run(id), method: .squash) }
+
+        #expect(lead.merges.map(\.error) == ["CONFLICT (content): Merge conflict in refunds.py"])
+        #expect(lead.merges.first?.run.deliveryBranch == "crew/delivery")
+        #expect(try h.run(id).mergedAt == nil)
+    }
+
+    @Test func holdsSavedBeforeLeadHandlingDecodeAsUserHolds() throws {
+        let json = #"{"hold":{"reason":"step_failed","stepId":"build","message":"“build” failed"},"loopCounts":{}}"#
+        let state = try JSONDecoder().decode(RunEngineState.self, from: Data(json.utf8))
+        #expect(state.hold?.handledBy == .user)
+        #expect(state.hold?.body == nil)
+        #expect(state.leadAttempts.isEmpty)
+    }
+}
+
+@MainActor
+final class LeadInbox {
+    let harness: WorkflowHarness
+    let engine: RunEngine
+    var briefs: [(run: Run, hold: RunHold, brief: String)] = []
+    var merges: [(run: Run, error: String)] = []
+
+    init(_ harness: WorkflowHarness, engine: RunEngine? = nil) {
+        self.harness = harness
+        self.engine = engine ?? harness.engine
+        self.engine.leadShouldHandle = { [unowned self] run, hold, brief in briefs.append((run, hold, brief)) }
+        self.engine.mergeFailed = { [unowned self] run, error in merges.append((run, error)) }
+    }
+
+    func start(_ workflow: WorkflowDefinition) async throws -> Int64 {
+        let task = try harness.makeTask()
+        _ = try harness.database.insert(Agent(
+            projectId: task.projectId, role: AgentKind.lead.rawValue, name: "Lead", status: .idle, readOnly: true, taskId: task.id, createdAt: .now, updatedAt: .now
+        ))
+        let run = try engine.start(task: task, workflow: workflow, project: harness.project)
+        let id = try #require(run.id)
+        await engine.waitUntilIdle(runID: id)
+        return id
+    }
+}
+
+@MainActor
+final class FinishFailingDriver: WorkflowDriver {
+    let base: ScriptedWorkflowDriver
+    let error: any Error
+
+    init(base: ScriptedWorkflowDriver, error: any Error) {
+        self.base = base
+        self.error = error
+    }
+
+    func runAgentStep(_ context: StepContext) async throws -> StepResult { try await base.runAgentStep(context) }
+    func runSpawnStep(_ context: SpawnContext) async throws -> StepResult { try await base.runSpawnStep(context) }
+    func runCheckStep(_ context: StepContext) async throws -> StepResult { try await base.runCheckStep(context) }
+    func runGateStep(_ context: StepContext) async throws -> StepResult { try await base.runGateStep(context) }
+    func diffInfo(_ run: Run) async -> DiffInfo { await base.diffInfo(run) }
+    func finish(_ run: Run, end: WorkflowEnd) async throws -> FinishResult { throw error }
+    func cancel(_ run: Run) async { await base.cancel(run) }
+    func mergeDelivery(_ run: Run, method: MergeMethod) async throws -> String { try await base.mergeDelivery(run, method: method) }
+    func pushBase(_ run: Run) async throws -> String { try await base.pushBase(run) }
 }

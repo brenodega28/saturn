@@ -93,9 +93,13 @@ extension DaemonWorkspace {
     }
 
     func runNeedsYou(_ run: Run) -> Bool {
-        if run.status == .waitingOnYou { return true }
-        guard let runID = run.id else { return false }
+        guard let runID = run.id else { return run.status == .waitingOnYou }
+        if run.status == .waitingOnYou, leadFixing(runID: runID) == nil { return true }
         return needsYouItems.contains { $0.runId == runID }
+    }
+
+    func leadFixing(runID: Int64) -> String? {
+        connection.leadHolds[runID]?.leadFixingTitle
     }
 
     func agentNeedsYou(_ agent: Agent) -> Bool {

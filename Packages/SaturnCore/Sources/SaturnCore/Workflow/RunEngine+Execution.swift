@@ -281,7 +281,7 @@ extension RunEngine {
             #if DEBUG
             traceFailureAction(loaded, stepId: stepId, action: "ask_after_timeout")
             #endif
-            try hold(&loaded, .timedOut, stepId: stepId, runStepId: runStepID, title: "“\(title)” timed out", body: "\(message) Retry the step, or fail the run.", steps: steps)
+            try hold(&loaded, .timedOut, stepId: stepId, runStepId: runStepID, title: "“\(title)” timed out", body: "\(message) Retry the step, or fail the run.", steps: steps, error: error)
             return false
         }
         switch onFailure {
@@ -303,23 +303,92 @@ extension RunEngine {
             #if DEBUG
             traceFailureAction(loaded, stepId: stepId, action: "ask")
             #endif
-            try hold(&loaded, .stepFailed, stepId: stepId, runStepId: runStepID, title: "“\(title)” failed", body: "\(message) Retry the step, or fail the run.", steps: steps)
+            try hold(&loaded, .stepFailed, stepId: stepId, runStepId: runStepID, title: "“\(title)” failed", body: "\(message) Retry the step, or fail the run.", steps: steps, error: error)
             return false
         }
     }
 
     func hold(
         _ loaded: inout LoadedRun, _ reason: HoldReason, stepId: String, runStepId: Int64? = nil, outcome: String? = nil,
-        title: String, body: String, steps: [RunStep] = []
+        title: String, body: String, steps: [RunStep] = [], error: (any Error)? = nil
     ) throws {
-        loaded.state.hold = RunHold(reason: reason, stepId: stepId, runStepId: runStepId, outcome: outcome, message: title)
+        let handler = handler(for: reason, stepId: stepId, run: loaded)
+        let body = handler == .user && leadTriedTwice(reason, stepId: stepId, run: loaded)
+            ? body + "\n\nThe chat’s lead already tried to fix this step twice."
+            : body
+        let hold = RunHold(reason: reason, stepId: stepId, runStepId: runStepId, outcome: outcome, message: title, body: body, handledBy: handler)
+        loaded.state.hold = hold
+        if handler == .lead { loaded.state.leadAttempts[stepId, default: 0] += 1 }
         loaded.run.status = .waitingOnYou
-        let item = ChatRequest(projectId: loaded.run.projectId, runId: loaded.run.id, kind: reason.requestKind, title: title, body: body, createdAt: clock())
+        let item = handler == .user ? ChatRequest(projectId: loaded.run.projectId, runId: loaded.run.id, kind: reason.requestKind, title: title, body: body, createdAt: clock()) : nil
         try commit(loaded, steps: steps, request: item)
         loaded.state = try database.engineState(runId: try loaded.id)
         #if DEBUG
         traceHold(loaded, title: title, body: body)
         #endif
+        if handler == .lead {
+            leadShouldHandle?(loaded.run, hold, leadBrief(loaded, hold: hold, error: error))
+        }
+    }
+
+    func handler(for reason: HoldReason, stepId: String, run loaded: LoadedRun) -> HoldHandler {
+        guard reason.leadCanFix, hasLead(loaded.run), (loaded.state.leadAttempts[stepId] ?? 0) < RunEngineState.leadAttemptLimit else { return .user }
+        return .lead
+    }
+
+    private func leadTriedTwice(_ reason: HoldReason, stepId: String, run loaded: LoadedRun) -> Bool {
+        reason.leadCanFix && (loaded.state.leadAttempts[stepId] ?? 0) >= RunEngineState.leadAttemptLimit
+    }
+
+    func hasLead(_ run: Run) -> Bool {
+        leadShouldHandle != nil && (try? database.leadAgent(taskId: run.taskId)) != nil
+    }
+
+    func leadBrief(_ loaded: LoadedRun, hold: RunHold, error: (any Error)?) -> String {
+        let run = loaded.run
+        let runID = run.id ?? 0
+        let step = RunTimeline.title(ofStep: hold.stepId, in: loaded.workflow)
+        var parts = [
+            "Saturn note (not written by the user): run \(runID) “\(run.title)” stopped at “\(step)” because \(Self.cause(of: hold.reason)). Saturn sent it to you instead of the user.",
+            "## What happened\n\(hold.message)\n\(hold.body ?? "")",
+        ]
+        switch error as? WorkflowDriverError {
+        case .mergeConflict(let branch, let files)?:
+            parts.append("## Merge conflict\nBranch: \(branch)\nBase: \(run.baseBranch ?? "the base branch")\nConflicting files:\n" + files.map { "- \($0)" }.joined(separator: "\n"))
+        case .unsafeMerge(let reason)?:
+            parts.append("## Unsafe merge\nBranch: \(run.deliveryBranch ?? "the delivery branch")\nBase: \(run.baseBranch ?? "the base branch")\n\(reason)")
+        default:
+            break
+        }
+        if let verdict = latestVerdict(runID: runID) {
+            var lines = ["## Latest verdict (\(verdict.outcome))", verdict.summary]
+            lines += verdict.issues.map { issue in
+                let place = [issue.agent, issue.file].compactMap(\.self)
+                return "- \(issue.description)" + (place.isEmpty ? "" : " (\(place.joined(separator: ", ")))")
+            }
+            parts.append(lines.filter { !$0.isEmpty }.joined(separator: "\n"))
+        }
+        let actions = hold.reason.leadActions.map { "`\($0.rawValue)`" }.joined(separator: " or ")
+        parts.append("""
+            ## What to do
+            - Fix the problem: tell the builders what to change with `\(HandoffTool.messageAgent.qualifiedName)`, start new agents with `\(HandoffTool.spawnAgent.qualifiedName)`, or change the code yourself after `\(HandoffTool.openWorktree.qualifiedName)`.
+            - Then call `\(HandoffTool.resolveRunHold.qualifiedName)` with run_id \(runID) and action \(actions).
+            - If you can’t fix it, call `\(HandoffTool.askHuman.qualifiedName)` with what you need; Saturn then shows the user this decision with your question.
+            """)
+        return parts.joined(separator: "\n\n")
+    }
+
+    private func latestVerdict(runID: Int64) -> Verdict? {
+        ((try? database.runSteps(runId: runID)) ?? []).reversed().lazy.compactMap { self.decodeOutput($0.output).verdict }.first
+    }
+
+    static func cause(of reason: HoldReason) -> String {
+        switch reason {
+        case .stepFailed: "the step failed"
+        case .timedOut: "the step timed out"
+        case .loopLimit: "it reached its loop limit"
+        case .planApproval, .approval, .gates: "it needs a decision"
+        }
     }
 
     private func beginStep(_ loaded: inout LoadedRun, stepId: String, cursor: RunCursor, status: RunStepStatus, input: String? = nil) throws -> RunStep {
@@ -404,7 +473,10 @@ extension RunEngine {
     }
 
     func changesWaitingOnYou(projectID: Int64, excluding runID: Int64) -> Int {
-        runs.values.filter { $0.projectId == projectID && $0.id != runID && holds[$0.id ?? -1]?.reason == .approval }.count
+        runs.values.filter { run in
+            guard run.projectId == projectID, run.id != runID, let hold = holds[run.id ?? -1] else { return false }
+            return hold.reason == .approval && !hold.isLeadFixing
+        }.count
     }
 
     private func waitForReviewCapacity(runID: Int64, project: Project) async throws {

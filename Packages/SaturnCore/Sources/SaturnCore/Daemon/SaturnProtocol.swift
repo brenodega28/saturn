@@ -192,6 +192,7 @@ public enum CommandErrorCode: String, Codable, Sendable {
     case unknownCommand
     case invalidArguments
     case failed
+    case forbidden
 }
 
 public struct CommandFailure: Codable, Sendable, Error, LocalizedError, Equatable {

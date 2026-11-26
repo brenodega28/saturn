@@ -51,7 +51,10 @@ final class CommandRouter {
 
     var names: [String] { handlers.keys.sorted() }
 
-    func handle(_ envelope: CommandEnvelope) async -> ResultEnvelope {
+    func handle(_ envelope: CommandEnvelope, origin: ClientOrigin = .local) async -> ResultEnvelope {
+        if origin.isRemote, !RemoteAccessPolicy.allows(command: envelope.name) {
+            return ResultEnvelope(id: envelope.id, ok: nil, error: RemoteAccessPolicy.forbidden(envelope.name))
+        }
         guard let handler = handlers[envelope.name] else {
             return ResultEnvelope(id: envelope.id, ok: nil, error: CommandFailure(code: .unknownCommand, message: "This daemon doesn’t know the command \(envelope.name). Update the daemon."))
         }

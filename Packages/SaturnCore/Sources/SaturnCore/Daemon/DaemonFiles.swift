@@ -2,9 +2,11 @@ import Foundation
 
 public struct DaemonSettings: Codable, Sendable, Hashable {
     public var providerMode: ProviderMode?
+    public var remoteAccess: RemoteAccessSettings?
 
-    public init(providerMode: ProviderMode? = nil) {
+    public init(providerMode: ProviderMode? = nil, remoteAccess: RemoteAccessSettings? = nil) {
         self.providerMode = providerMode
+        self.remoteAccess = remoteAccess
     }
 }
 

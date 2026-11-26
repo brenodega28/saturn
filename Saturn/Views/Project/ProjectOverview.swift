@@ -255,36 +255,54 @@ private struct AgentsStrip: View {
     let manage: () -> Void
 
     var body: some View {
-        let sessions = workspace.liveAgents(in: project)
-        if !sessions.isEmpty {
-            let working = sessions.count { $0.isRunning }
+        let types = workspace.agentTypes(in: project)
+        if !types.isEmpty {
+            let total = types.reduce(0) { $0 + $1.count }
+            let working = types.reduce(0) { $0 + $1.workingCount }
             VStack(alignment: .leading, spacing: 10) {
-                ProjectSectionHeading(title: "Agents", detail: "\(sessions.count) · \(working) working") {
-                    ProjectLinkButton(title: "Manage", action: manage)
+                ProjectSectionHeading(title: "Agents", detail: "\(types.count) types · \(total) agents · \(working) working") {
+                    ProjectLinkButton(title: "Manage") {
+                        workspace.setAgentTypeFilter(nil, in: project)
+                        manage()
+                    }
                 }
                 FlowLayout(spacing: 8) {
-                    ForEach(sessions, id: \.id) { session in
-                        avatar(session)
+                    ForEach(types) { type in
+                        avatar(type)
                     }
                 }
             }
         }
     }
 
-    private func avatar(_ session: LiveAgentSession) -> some View {
-        let status = session.isRunning ? AgentStatus.working : workspace.displayStatus(of: session.agent)
-        let name = workspace.displayName(of: session.agent, in: project)
-        return Button { workspace.openAgent(session, in: project) } label: {
-            AgentAvatar(size: 32, appearance: RoleAppearance(role: workspace.role(for: session.agent, in: project)), isFailing: status == .failed)
+    private func avatar(_ type: AgentType) -> some View {
+        let label = "\(type.title) ×\(type.count), \(type.status.label)"
+        return Button { workspace.openAgentType(type.roleID, in: project) } label: {
+            AgentAvatar(size: 32, appearance: RoleAppearance(role: type.role), isFailing: type.sessions.contains { $0.agent.status == .failed })
                 .overlay(alignment: .bottomTrailing) {
-                    Circle().fill(status.projectColor).frame(width: 9, height: 9)
+                    Circle().fill(type.status.color).frame(width: 9, height: 9)
                         .overlay(Circle().stroke(Tokens.window, lineWidth: 2))
                         .offset(x: 1, y: 1)
                 }
+                .overlay(alignment: .topTrailing) {
+                    if type.count > 1 { countBadge(type.count) }
+                }
         }
         .buttonStyle(.plain)
-        .help("\(name) · \(status.label)")
-        .accessibilityLabel("\(name), \(status.label)")
+        .help("\(type.title) · \(type.summary)")
+        .accessibilityLabel(label)
+    }
+
+    private func countBadge(_ count: Int) -> some View {
+        Text("\(count)")
+            .font(.system(size: 9.5, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(Tokens.text)
+            .padding(.horizontal, 4)
+            .frame(minWidth: 15, minHeight: 15)
+            .background(Tokens.fill2, in: Capsule())
+            .overlay(Capsule().stroke(Tokens.window, lineWidth: 2))
+            .offset(x: 5, y: -4)
     }
 }
 

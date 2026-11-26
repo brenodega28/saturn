@@ -82,10 +82,10 @@ final class TestClock: Sendable {
 
     @Test func allowlistMatchesTheSpec() {
         for name in ["chat.send", "chat.approveSpec", "run.merge", "run.push", "approval.answerQuestion", "approval.answerPermission",
-                     "agent.send", "agent.perform", "agent.setModel", "settings.status", "code.readFile"] {
+                     "agent.send", "agent.perform", "agent.setModel", "settings.status"] {
             #expect(RemoteAccessPolicy.allows(command: name), "\(name)")
         }
-        for name in ["chat.delete", "run.stageForMergeTool", "code.exec", "code.writeFile", "code.removeItem", "code.git",
+        for name in ["chat.delete", "run.stageForMergeTool", "code.readFile", "code.exec", "code.writeFile", "code.removeItem", "code.git",
                      "settings.saveAPIKey", "settings.shutdown", "settings.get", "agent.delete", "agent.spawn", "project.open",
                      "remote.status", "remote.setEnabled", "remote.beginPairing", "remote.revoke", "chatty", ""] {
             #expect(!RemoteAccessPolicy.allows(command: name), "\(name)")
@@ -105,6 +105,24 @@ final class TestClock: Sendable {
         #expect(!RemoteAccessAddresses.isTailscale("10.0.0.1"))
         #expect(!RemoteAccessAddresses.isAllowed("0.0.0.0"))
         #expect(RemoteAccessAddresses.tailscale().allSatisfy(RemoteAccessAddresses.isTailscale))
+    }
+
+    @Test func onlyTailscaleUtunInterfacesCount() {
+        typealias Entry = RemoteAccessAddresses.InterfaceAddress
+        let interfaces = [
+            Entry(interface: "lo0", address: "127.0.0.1"),
+            Entry(interface: "en0", address: "100.72.10.4"),
+            Entry(interface: "bridge100", address: "100.80.0.1"),
+            Entry(interface: "utun3", address: "10.8.0.2"),
+            Entry(interface: "utun4", address: "100.101.102.103"),
+            Entry(interface: "utun5", address: "100.101.102.103"),
+            Entry(interface: "utun6", address: "100.64.0.9"),
+        ]
+        #expect(RemoteAccessAddresses.tailscale(in: interfaces) == ["100.101.102.103", "100.64.0.9"])
+        #expect(RemoteAccessAddresses.tailscale(in: []).isEmpty)
+        let live = RemoteAccessAddresses.ipv4Interfaces()
+        let expected = live.filter { $0.interface.hasPrefix("utun") && RemoteAccessAddresses.isTailscale($0.address) }.map(\.address)
+        #expect(Set(RemoteAccessAddresses.tailscale()) == Set(expected))
     }
 
     @Test func deviceNamesComeFromTheUserAgent() {

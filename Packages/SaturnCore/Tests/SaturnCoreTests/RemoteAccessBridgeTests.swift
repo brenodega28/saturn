@@ -107,8 +107,14 @@ import Testing
 
         let status = try await socket.perform(SettingsCommands.Status())
         #expect(status.error == nil)
-        let read = try await socket.perform(CodeCommands.ReadFile(path: kept.path))
-        #expect(try CommandCoding.response(of: CodeCommands.ReadFile.self, from: read) == Data("keep me".utf8))
+        let secret = scratch.appending(path: "id_ed25519")
+        try "PRIVATE KEY".write(to: secret, atomically: true, encoding: .utf8)
+        let read = try await socket.perform(CodeCommands.ReadFile(path: secret.path))
+        #expect(read.ok == nil)
+        #expect(read.error?.code == .forbidden)
+        #expect(!socket.frames.contains { $0.contains(Data("PRIVATE KEY".utf8).base64EncodedString()) })
+        let localRead = try await h.host.perform(CodeCommands.ReadFile(path: secret.path))
+        #expect(localRead == Data("PRIVATE KEY".utf8))
 
         let local = try await h.host.perform(CodeCommands.FileExists(path: kept.path))
         #expect(local)
